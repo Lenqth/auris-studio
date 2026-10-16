@@ -33,6 +33,8 @@ use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled
 pub enum PromptTarget {
     /// A reusable sound captured from a track.
     SaveSound(TrackId),
+    /// The saved user sound retained by this prompt.
+    RenameSound,
     /// A track's name.
     Track(TrackId),
     /// A clip's name.
@@ -247,6 +249,7 @@ impl PromptTarget {
             | PromptTarget::DrumLaneNote { .. } => Notation::MidiNote,
             PromptTarget::Position => Notation::Position,
             PromptTarget::SaveSound(_)
+            | PromptTarget::RenameSound
             | PromptTarget::Track(_)
             | PromptTarget::Clip(_)
             | PromptTarget::DrumLaneName { .. }
@@ -547,6 +550,17 @@ pub enum Answer {
 /// A question the sheet is asking, and what turns on the answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Question {
+    /// Replaces an exact library entry with a snapshot captured before confirmation.
+    OverwriteSound {
+        /// The entry whose previous contents were shown to the user.
+        expected: std::sync::Arc<auris_session::SoundPreset>,
+        /// Complete captured instrument and inserts, independent of later selection changes.
+        replacement: std::sync::Arc<auris_session::SoundPreset>,
+        /// Source track name shown in the confirmation.
+        source: String,
+    },
+    /// Removes an exact saved library entry without changing applied project settings.
+    DeleteSound(std::sync::Arc<auris_session::SoundPreset>),
     /// Optional restricted model use; consent applies to this invocation only.
     Muscriptor {
         /// Audio clip selected when the notice was opened.
@@ -630,6 +644,8 @@ pub struct Prompt {
     vocabulary: Option<Vec<String>>,
     /// The key that names and colours the dynamic chord vocabulary.
     chord_key: Option<MusicalKey>,
+    /// The original entry for a rename, so concurrent library edits are detected on commit.
+    sound: Option<std::sync::Arc<auris_session::SoundPreset>>,
 }
 
 impl Prompt {
@@ -649,7 +665,18 @@ impl Prompt {
             completing: None,
             vocabulary: None,
             chord_key: None,
+            sound: None,
         }
+    }
+
+    /// Edits a saved sound's name while retaining the exact entry being renamed.
+    pub fn rename_sound(
+        title: impl Into<SharedString>,
+        sound: std::sync::Arc<auris_session::SoundPreset>,
+    ) -> Self {
+        let mut prompt = Self::new(title, PromptTarget::RenameSound, sound.name.clone());
+        prompt.sound = Some(sound);
+        prompt
     }
 
     /// A prompt asking a question rather than taking a name.
@@ -661,6 +688,7 @@ impl Prompt {
             completing: None,
             vocabulary: None,
             chord_key: None,
+            sound: None,
         }
     }
 
@@ -676,6 +704,7 @@ impl Prompt {
             completing: None,
             vocabulary: None,
             chord_key: None,
+            sound: None,
         }
     }
 
@@ -869,6 +898,36 @@ impl AurisApp {
             return;
         }
         let outcome = match target {
+            PromptTarget::RenameSound => {
+                let result = prompt
+                    .sound
+                    .as_deref()
+                    .ok_or(SessionError::SoundLibraryChanged)
+                    .and_then(|sound| {
+                        auris_session::SoundBook::rename_sound(
+                            &auris_session::SoundBook::path(),
+                            sound,
+                            &text,
+                        )
+                    });
+                match result {
+                    Ok(book) => {
+                        self.sounds = book;
+                        self.sound_library_error = None;
+                        // The old name would hide the renamed entry in search.
+                        self.leave_library_search();
+                        Ok(())
+                    }
+                    Err(error) => {
+                        if let Ok(book) =
+                            auris_session::SoundBook::read(&auris_session::SoundBook::path())
+                        {
+                            self.sounds = book;
+                        }
+                        Err(error)
+                    }
+                }
+            }
             PromptTarget::SaveSound(track) => {
                 match self
                     .session
@@ -1327,6 +1386,8 @@ impl AurisApp {
                     | PromptTarget::DrumLaneNote { .. }
             ) {
                 Key::EditSetDrumAssignment
+            } else if matches!(target, PromptTarget::SaveSound(_)) {
+                Key::SaveSound
             } else {
                 Key::Rename
             };
@@ -1402,6 +1463,43 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         match (question, answer) {
+            (
+                Question::OverwriteSound {
+                    expected,
+                    replacement,
+                    source,
+                },
+                Answer::Confirm,
+            ) => {
+                let result = auris_session::SoundBook::overwrite_sound(
+                    &auris_session::SoundBook::path(),
+                    &expected,
+                    (*replacement).clone(),
+                );
+                self.finish_sound_change(
+                    result,
+                    messages::overwrite_sound_title(self.language(), &expected.name),
+                    Question::OverwriteSound {
+                        expected,
+                        replacement,
+                        source,
+                    },
+                    Key::OverwriteSound,
+                );
+            }
+            (Question::DeleteSound(sound), Answer::Confirm) => {
+                let result = auris_session::SoundBook::delete_sound(
+                    &auris_session::SoundBook::path(),
+                    &sound,
+                );
+                self.finish_sound_change(
+                    result,
+                    messages::delete_sound_title(self.language(), &sound.name),
+                    Question::DeleteSound(sound),
+                    Key::DeleteSound,
+                );
+            }
+            (Question::OverwriteSound { .. } | Question::DeleteSound(_), Answer::Deny) => {}
             (Question::Muscriptor { clip, generation }, Answer::Confirm) => {
                 self.choose_mixture_model(clip, generation, cx)
             }
@@ -1439,6 +1537,30 @@ impl AurisApp {
                 }
             }
             (Question::RemovePluginPath(_), Answer::Deny) => {}
+        }
+    }
+
+    /// Keeps a failed library operation visible and refreshes a stale browser snapshot.
+    fn finish_sound_change(
+        &mut self,
+        result: Result<auris_session::SoundBook, SessionError>,
+        title: String,
+        question: Question,
+        action: Key,
+    ) {
+        match result {
+            Ok(book) => {
+                self.sounds = book;
+                self.sound_library_error = None;
+            }
+            Err(error) => {
+                if let Ok(book) = auris_session::SoundBook::read(&auris_session::SoundBook::path())
+                {
+                    self.sounds = book;
+                }
+                self.open_prompt(Prompt::ask(title, question));
+                self.reject_prompt(self.failure(action, &error));
+            }
         }
     }
 
@@ -1641,6 +1763,8 @@ impl AurisApp {
                 &prompt.body,
                 PromptBody::Ask(
                     Question::Recovery(_)
+                        | Question::OverwriteSound { .. }
+                        | Question::DeleteSound(_)
                         | Question::RemovePluginPath(_)
                         | Question::NewAgentConversation
                 )
@@ -1694,6 +1818,7 @@ impl AurisApp {
                     // rename something; the lyric field composes, and a button that said
                     // Rename over it would be answering a different question.
                     match target {
+                        PromptTarget::SaveSound(_) => self.t(Key::CmdSave).into(),
                         PromptTarget::ComposeLyrics => self.t(Key::PromptComposeLyrics).into(),
                         PromptTarget::DrumAssignment { .. }
                         | PromptTarget::NewDrumLane(_)
@@ -1737,7 +1862,10 @@ impl AurisApp {
                         confirm,
                         if matches!(
                             question,
-                            Question::RemovePluginPath(_) | Question::NewAgentConversation
+                            Question::RemovePluginPath(_)
+                                | Question::NewAgentConversation
+                                | Question::OverwriteSound { .. }
+                                | Question::DeleteSound(_)
                         ) {
                             ButtonStyle::Danger
                         } else {
@@ -2096,6 +2224,16 @@ impl AurisApp {
         question: &Question,
     ) -> (SharedString, SharedString, Option<SharedString>) {
         match question {
+            Question::OverwriteSound { source, .. } => (
+                messages::overwrite_sound_body(self.language(), source).into(),
+                self.t(Key::OverwriteSoundConfirm).into(),
+                None,
+            ),
+            Question::DeleteSound(_) => (
+                self.t(Key::DeleteSoundBody).into(),
+                self.t(Key::DeleteSoundConfirm).into(),
+                None,
+            ),
             Question::Muscriptor { .. } => (
                 self.t(Key::MuscriptorWarning).into(),
                 self.t(Key::MuscriptorAgree).into(),
@@ -2401,6 +2539,7 @@ mod tests {
     /// is added to the returned list.
     fn every_target() -> Vec<PromptTarget> {
         let representatives = vec![
+            PromptTarget::RenameSound,
             PromptTarget::SaveSound(TrackId(1)),
             PromptTarget::Track(TrackId(1)),
             PromptTarget::Clip(ClipId(1)),
@@ -2452,6 +2591,7 @@ mod tests {
         for target in &representatives {
             match target {
                 PromptTarget::SaveSound(_)
+                | PromptTarget::RenameSound
                 | PromptTarget::Track(_)
                 | PromptTarget::Clip(_)
                 | PromptTarget::Key(_)

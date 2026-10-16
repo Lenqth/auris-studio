@@ -5,6 +5,18 @@ Select an instrument or drum track, adjust its instrument and insert effects, th
 library's **User sounds** section and in library search, and remain available after restarting.
 Names must be nonempty and unique; an existing sound is never overwritten implicitly.
 
+Choose **Manage** beside a user sound in the library or search results to:
+
+- **Overwrite from selected track…**: select an instrument or drum track first. Its current
+  instrument settings and inserts are captured, then a confirmation names the saved sound and
+  source track. Confirming retains the saved name and replaces its contents.
+- **Rename sound…**: enter a nonempty name that is not used by another user sound.
+- **Delete sound…**: confirm removal from the library. Overwrite and deletion cannot be undone.
+
+Rename and deletion also work without a track selected. These library edits do not change
+settings already applied to projects, and factory presets remain available. If another window
+changes the same saved sound before confirmation, the edit is refused and the library is refreshed.
+
 Choose a saved sound with a destination instrument track selected. The command replaces its
 instrument settings and complete insert chain, including effect order, parameters and bypass
 switches. Undo restores the previous sound and its automation in one step. Notes, track level,

@@ -277,6 +277,18 @@ strings! {
     FactorySounds { en: "Presets", ja: "プリセット" }
     SaveSound { en: "Save as user sound…", ja: "ユーザ定義音源として保存…" }
     SoundName { en: "User sound name", ja: "ユーザ定義音源の名前" }
+    ManageSound { en: "Manage", ja: "操作" }
+    SoundNameUnavailable { en: "Choose a nonempty name that is not already used by another sound.", ja: "ほかの音源と重複しない名前を入力してください。空の名前は使用できません。" }
+    SoundLibraryChanged { en: "This saved sound has changed or been removed. Close this dialog and reopen the sound's menu to try again.", ja: "この音源は別の場所で変更または削除されました。この画面を閉じ、音源の操作メニューを開き直してください。" }
+    OverwriteSound { en: "Overwrite from selected track…", ja: "選択中のトラックで上書き…" }
+    OverwriteSoundConfirm { en: "Overwrite", ja: "上書き保存" }
+    RenameSound { en: "Rename sound…", ja: "音源名を変更…" }
+    DeleteSound { en: "Delete sound…", ja: "音源を削除…" }
+    DeleteSoundConfirm { en: "Delete sound", ja: "音源を削除" }
+    DeleteSoundBody {
+        en: "This removes the saved sound from your library. Settings already applied to projects stay unchanged. This cannot be undone.",
+        ja: "保存した音源をライブラリから削除します。プロジェクトに適用済みの設定はそのまま残ります。この操作は取り消せません。"
+    }
     SoundContents { en: "Replace instrument settings and insert effects", ja: "音源の設定とインサートエフェクトを置き換え" }
     UserSoundsEmpty { en: "Save an instrument and its inserts from the track inspector", ja: "トラックのインスペクタから音源とエフェクトを保存できます" }
     BrowserEffects { en: "Effects", ja: "エフェクト" }

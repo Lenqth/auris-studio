@@ -13,6 +13,238 @@ fn prepare_library(app: &mut AurisApp) {
 }
 
 #[gpui::test]
+fn overwriting_a_user_sound_confirms_and_uses_the_captured_track(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    let (original, replacement) = app.update(cx, |this, _| {
+        prepare_library(this);
+        this.select_track(track);
+        let original = this
+            .session
+            .capture_sound(track, "Management overwrite fixture")
+            .unwrap();
+        this.sounds = auris_session::SoundBook::save_sound(
+            &auris_session::SoundBook::path(),
+            original.clone(),
+        )
+        .unwrap();
+        this.session
+            .apply_sound(track, &auris_session::factory_sounds()[2])
+            .unwrap();
+        this.session
+            .add_effect(Some(track), "auris.fx.reverb")
+            .unwrap();
+        let replacement = this.session.capture_sound(track, &original.name).unwrap();
+        (original, replacement)
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    cx.simulate_input("Management overwrite fixture");
+    paint(&app, cx);
+    click("manage-user-sound:Management overwrite fixture", cx);
+    paint(&app, cx);
+    click("menu-item-0", cx);
+    paint(&app, cx);
+    app.read_with(cx, |this, _| {
+        assert!(this.prompt.as_ref().unwrap().title.contains(&original.name));
+        assert!(matches!(
+            &this.prompt.as_ref().unwrap().body,
+            crate::ui::prompt::PromptBody::Ask(crate::ui::prompt::Question::OverwriteSound {
+                expected, replacement: captured, source,
+            }) if **expected == original && **captured == replacement && source == "Test"
+        ));
+    });
+    cx.simulate_keystrokes("escape");
+    assert!(
+        auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .contains(&original)
+    );
+    paint(&app, cx);
+    click("manage-user-sound:Management overwrite fixture", cx);
+    paint(&app, cx);
+    // The menu and confirmation also accept the keyboard.
+    cx.simulate_keystrokes("down enter");
+    let before = app.update(cx, |this, _| {
+        assert!(this.prompt.is_some());
+        this.selected_track = None;
+        this.session
+            .apply_sound(track, &auris_session::factory_sounds()[0])
+            .unwrap();
+        this.session.forget_history();
+        this.project().clone()
+    });
+    paint(&app, cx);
+    click("prompt-ok", cx);
+    app.update(cx, |this, _| {
+        assert!(this.prompt.is_none());
+        assert!(this.sounds.entries().contains(&replacement));
+        assert_eq!(*this.project(), before);
+        assert!(this.session.undo().is_none());
+    });
+    assert!(
+        auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .contains(&replacement)
+    );
+}
+
+#[gpui::test]
+fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    let (original, before) = app.update(cx, |this, _| {
+        prepare_library(this);
+        let original = this
+            .session
+            .capture_sound(track, "Management rename fixture")
+            .unwrap();
+        this.session.apply_sound(track, &original).unwrap();
+        assert!(this.session.sound_is_applied(track, &original));
+        auris_session::SoundBook::save_sound(&auris_session::SoundBook::path(), original.clone())
+            .unwrap();
+        this.sounds = this
+            .session
+            .save_sound(
+                track,
+                "Management taken fixture",
+                &auris_session::SoundBook::path(),
+            )
+            .unwrap();
+        this.selected_track = None;
+        this.session.forget_history();
+        (original, this.project().clone())
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    cx.simulate_input("Management rename fixture");
+    paint(&app, cx);
+    click("manage-user-sound:Management rename fixture", cx);
+    paint(&app, cx);
+    click("menu-item-0", cx);
+    app.read_with(cx, |this, _| {
+        assert!(this.menu.is_some());
+        assert!(this.prompt.is_none());
+    });
+    // Rename is the first enabled item when there is no source track.
+    cx.simulate_keystrokes("down enter");
+    paint(&app, cx);
+    cx.simulate_input("Management taken fixture");
+    cx.simulate_keystrokes("enter");
+    paint(&app, cx);
+    assert!(cx.debug_bounds("prompt-error").is_some());
+    cx.simulate_keystrokes("secondary-a");
+    cx.simulate_input(" ");
+    cx.simulate_keystrokes("enter");
+    app.read_with(cx, |this, _| assert!(this.prompt.is_some()));
+    cx.simulate_keystrokes("escape");
+    assert!(
+        auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .contains(&original)
+    );
+    paint(&app, cx);
+    click("manage-user-sound:Management rename fixture", cx);
+    paint(&app, cx);
+    click("menu-item-1", cx);
+    paint(&app, cx);
+    cx.simulate_input("Management renamed fixture");
+    cx.simulate_keystrokes("enter");
+    let mut renamed = original;
+    renamed.name = "Management renamed fixture".into();
+    app.read_with(cx, |this, _| {
+        assert!(this.prompt.is_none());
+        assert!(this.sounds.entries().contains(&renamed));
+        assert_eq!(*this.project(), before);
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    cx.simulate_input("Management renamed fixture");
+    paint(&app, cx);
+    click("manage-user-sound:Management renamed fixture", cx);
+    paint(&app, cx);
+    click("menu-item-2", cx);
+    paint(&app, cx);
+    app.read_with(cx, |this, _| {
+        assert!(this.prompt.as_ref().unwrap().title.contains(&renamed.name))
+    });
+    click("prompt-cancel", cx);
+    assert!(
+        auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .contains(&renamed)
+    );
+    paint(&app, cx);
+    click("manage-user-sound:Management renamed fixture", cx);
+    paint(&app, cx);
+    click("menu-item-2", cx);
+    paint(&app, cx);
+    click("prompt-ok", cx);
+    app.update(cx, |this, _| {
+        assert!(this.prompt.is_none());
+        assert!(!this.sounds.entries().contains(&renamed));
+        assert!(this.session.sound_is_applied(track, &renamed));
+        assert_eq!(*this.project(), before);
+        assert!(this.session.undo().is_none());
+    });
+    assert!(
+        !auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .contains(&renamed)
+    );
+}
+
+#[gpui::test]
+fn a_stale_user_sound_confirmation_preserves_the_external_edit(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    let original = app.update(cx, |this, _| {
+        prepare_library(this);
+        let original = this
+            .session
+            .capture_sound(track, "Management stale fixture")
+            .unwrap();
+        this.sounds = auris_session::SoundBook::save_sound(
+            &auris_session::SoundBook::path(),
+            original.clone(),
+        )
+        .unwrap();
+        original
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    cx.simulate_input("Management stale fixture");
+    paint(&app, cx);
+    click("manage-user-sound:Management stale fixture", cx);
+    paint(&app, cx);
+    click("menu-item-2", cx);
+    let updated = auris_session::SoundBook::rename_sound(
+        &auris_session::SoundBook::path(),
+        &original,
+        "Management external fixture",
+    )
+    .unwrap();
+    paint(&app, cx);
+    click("prompt-ok", cx);
+    paint(&app, cx);
+    assert!(cx.debug_bounds("prompt-error").is_some());
+    app.read_with(cx, |this, _| {
+        assert!(this.prompt.is_some());
+        // Other tests may save unrelated entries concurrently; compare the target only.
+        assert!(!this.sounds.entries().contains(&original));
+        let external = updated
+            .entries()
+            .iter()
+            .find(|sound| sound.name == "Management external fixture")
+            .unwrap();
+        assert!(this.sounds.entries().contains(external));
+    });
+    cx.simulate_keystrokes("escape");
+}
+
+#[gpui::test]
 fn saving_and_searching_a_user_sound_restores_its_chain_and_supports_undo(cx: &mut TestAppContext) {
     let (app, cx, track, _) = with_a_clip(cx);
     app.update(cx, |this, _| {

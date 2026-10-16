@@ -26,6 +26,9 @@
 //! including bypass switches and opaque hosted-plugin state. [`crate::SoundBook`] keeps named
 //! user sounds in the installation's configuration directory. Applying a sound copies its
 //! settings into the document: playback and project reopening never depend on the user library.
+//! Library edits reload under a cross-process lock and write atomically. Overwrite, rename and
+//! delete require the exact previously displayed entry, refusing stale edits from another window.
+//! These operations change only the library; applied project settings and factory patches survive.
 //! SoundFont references use resolved file paths and bank/program pairs; applying remaps the font
 //! to the receiving project's identity. Hosted binaries remain external library references.
 //!

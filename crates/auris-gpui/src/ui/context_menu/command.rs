@@ -20,6 +20,17 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// Captures a track before asking to replace a saved user sound.
+    OverwriteSound {
+        /// Exact library entry shown when the menu opened.
+        sound: std::sync::Arc<auris_session::SoundPreset>,
+        /// Source selected when the menu opened; absent when overwrite is unavailable.
+        track: Option<TrackId>,
+    },
+    /// Renames the exact saved user sound shown by the menu.
+    RenameSound(std::sync::Arc<auris_session::SoundPreset>),
+    /// Asks to remove the exact saved user sound shown by the menu.
+    DeleteSound(std::sync::Arc<auris_session::SoundPreset>),
     /// Independent note expression, without rewriting the score.
     SetExpressionSettings { clip: ClipId, settings: Expression },
     /// Snapshot a reference MIDI clip's groove.
@@ -939,6 +950,41 @@ impl AurisApp {
                 Err(error) => self.set_failed_status(self.failure(Key::MenuDuplicate, &error)),
             },
             MenuCommand::RenameTrack(track) => self.prompt_to_rename_track(track),
+            MenuCommand::OverwriteSound { sound, track } => {
+                if let Some(track) = track {
+                    let Some(source) = self.project().track(track).map(|track| track.name.clone())
+                    else {
+                        return;
+                    };
+                    match self.session.capture_sound(track, &sound.name) {
+                        Ok(replacement) => {
+                            self.open_prompt(Prompt::ask(
+                                messages::overwrite_sound_title(self.language(), &sound.name),
+                                crate::ui::prompt::Question::OverwriteSound {
+                                    expected: sound,
+                                    replacement: std::sync::Arc::new(replacement),
+                                    source,
+                                },
+                            ));
+                        }
+                        Err(error) => {
+                            self.set_failed_status(self.failure(Key::OverwriteSound, &error))
+                        }
+                    }
+                }
+            }
+            MenuCommand::RenameSound(sound) => {
+                self.open_prompt(Prompt::rename_sound(
+                    messages::rename_sound_title(self.language(), &sound.name),
+                    sound,
+                ));
+            }
+            MenuCommand::DeleteSound(sound) => {
+                self.open_prompt(Prompt::ask(
+                    messages::delete_sound_title(self.language(), &sound.name),
+                    crate::ui::prompt::Question::DeleteSound(sound),
+                ));
+            }
             MenuCommand::ConvertTrackToAudio(track) => self.convert_track_to_audio(track, cx),
             MenuCommand::DeleteTrack(track) => {
                 self.select_track(track);

@@ -238,6 +238,8 @@ pub fn track_kind_key(kind: &TrackKind) -> Key {
 pub fn error_text(error: &SessionError, language: Language) -> String {
     let with = |key: Key, detail: String| messages::detailed(language, key.get(language), &detail);
     match error {
+        SessionError::SoundNameUnavailable => Key::SoundNameUnavailable.get(language).to_string(),
+        SessionError::SoundLibraryChanged => Key::SoundLibraryChanged.get(language).to_string(),
         SessionError::EmptyGroove => Key::PerformGrooveEmpty.get(language).to_string(),
         SessionError::InvalidRhythm => Key::ErrorRhythm.get(language).to_string(),
         SessionError::SongLyrics(detail) => with(Key::SongLyricsMatch, detail.clone()),

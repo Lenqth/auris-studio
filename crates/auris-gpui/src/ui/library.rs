@@ -2308,7 +2308,8 @@ impl AurisApp {
             .is_some_and(|track| self.session.sound_is_applied(track, sound));
         let enabled = self.selected_track_takes_an_instrument();
         let theme = self.theme.clone();
-        let sound = sound.clone();
+        let saved = std::sync::Arc::new(sound.clone());
+        let sound = saved.clone();
         let row = crate::ui::widgets::bounded_button_enabled(
             gpui::SharedString::from(id.clone()),
             name,
@@ -2329,10 +2330,12 @@ impl AurisApp {
             }),
         )
         .debug_selector(move || format!("lib-{id}"))
-        .w_full()
+        .flex_1()
         .justify_start();
         let searching = !self.library_search.content().trim().is_empty();
         div()
+            .flex()
+            .w_full()
             .min_w_0()
             .flex_shrink_0()
             .pl(if searching {
@@ -2341,7 +2344,47 @@ impl AurisApp {
                 indent(if factory { 4 } else { 1 }) + DISCLOSURE_SPACE
             })
             .child(row)
+            .when(!factory, |row| {
+                let selector = format!("manage-user-sound:{}", saved.name);
+                row.child(
+                    button(
+                        gpui::SharedString::from(selector.clone()),
+                        self.t(Key::ManageSound),
+                        ButtonStyle::Ghost,
+                        false,
+                        theme.accent,
+                        &theme,
+                        Self::opens_menu(cx, move |this, at| {
+                            this.user_sound_menu(at, saved.clone())
+                        }),
+                    )
+                    .debug_selector(move || selector.clone()),
+                )
+            })
             .into_any_element()
+    }
+
+    /// Library management remains available even without a destination instrument track.
+    fn user_sound_menu(
+        &self,
+        at: gpui::Point<Pixels>,
+        sound: std::sync::Arc<auris_session::SoundPreset>,
+    ) -> crate::ui::context_menu::ContextMenu {
+        use crate::ui::context_menu::{ContextMenu, MenuCommand};
+        ContextMenu::new(at, sound.name.clone())
+            .item_greyed_unless(
+                self.selected_track_takes_an_instrument(),
+                self.t(Key::OverwriteSound),
+                MenuCommand::OverwriteSound {
+                    sound: sound.clone(),
+                    track: self.selected_track,
+                },
+            )
+            .item(
+                self.t(Key::RenameSound),
+                MenuCommand::RenameSound(sound.clone()),
+            )
+            .item(self.t(Key::DeleteSound), MenuCommand::DeleteSound(sound))
     }
     /// The effects section: every registered effect, under its category.
     fn effect_rows(
