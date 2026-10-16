@@ -40,6 +40,9 @@ macro_rules! strings {
 }
 
 strings! {
+    TrackGrid { en: "Track grid", ja: "トラックグリッド" }
+    TrackTimeline { en: "Timeline", ja: "タイムライン" }
+    TrackGridEmpty { en: "Add a track to see its sound here.", ja: "トラックを追加すると、音源の動きや波形をここに表示します。" }
     ToolbarHeading { en: "Top toolbar", ja: "上部ツールバー" }
     ToolbarNote { en: "Show or hide items and change their order within each group.", ja: "項目の表示を切り替え、グループ内の順序を変更できます。" }
     ToolbarPlayback { en: "Playback controls", ja: "再生操作" }

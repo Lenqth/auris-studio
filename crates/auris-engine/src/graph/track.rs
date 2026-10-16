@@ -130,9 +130,16 @@ pub struct RenderTrack {
     /// `None` for a track nobody listens to, which is nearly all of them — so a project with no
     /// sidechain in it does not copy a single buffer for this.
     pub(crate) tap: Option<usize>,
+    pub(crate) overview_scope: Option<Arc<crate::Scope>>,
 }
 
 impl RenderTrack {
+    /// Attaches an optional post-fader reader for a simultaneous track overview.
+    /// Attach on the building thread, before handing the graph to audio.
+    pub fn set_overview_scope(&mut self, scope: Arc<crate::Scope>) {
+        self.overview_scope = Some(scope);
+    }
+
     /// Reader for the live instrument's optional mechanical observation.
     /// Call while the graph is owned by the building thread, before handing it to audio.
     pub fn motion_monitor(&self) -> Option<Arc<auris_core::motion::MotionMonitor>> {

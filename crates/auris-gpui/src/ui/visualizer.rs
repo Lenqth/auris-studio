@@ -19,6 +19,27 @@ const CORRELATION_HISTORY: Duration = Duration::from_secs(3);
 const SPECTRUM_AVERAGE_SECONDS: f32 = 0.2;
 const STEREO_TRAIL_FRAMES: usize = 5;
 
+/// A compact stereo scope using the same trigger and amplitude scale as the utility window.
+pub(crate) fn waveform_thumbnail(frame: Option<VisualizerFrame>, theme: Theme) -> gpui::AnyElement {
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, cx| {
+            paint_oscilloscope(
+                window,
+                cx,
+                bounds,
+                frame.as_ref(),
+                OscilloscopeSpan::Full,
+                OscilloscopeGain::Unity,
+                &theme,
+                false,
+            );
+        },
+    )
+    .size_full()
+    .into_any_element()
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum VisualizerCommand {
     Toggle,

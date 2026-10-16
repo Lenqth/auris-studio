@@ -41,6 +41,8 @@ pub struct MenuState {
     pub metronome: bool,
     /// The computer keyboard is playing notes.
     pub musical_typing: bool,
+    /// The central workspace shows all tracks as visual tiles.
+    pub track_grid: bool,
 }
 
 /// One row of a menu.
@@ -490,6 +492,12 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
             MenuRow::Separator,
             // Every row from here to the zoom is a switch whose label is a noun. "Mixer" cannot
             // say whether the mixer is showing; the tick beside it can.
+            toggle(
+                t(Key::TrackGrid),
+                actions::ToggleTrackGrid,
+                "view.track_grid",
+                state.track_grid,
+            ),
             toggle(
                 t(Key::CmdShowLibrary),
                 actions::ToggleLibrary,

@@ -13,11 +13,11 @@
 //! previous window, which nobody can see at 60 frames a second, and the audio thread pays nothing
 //! at all for it.
 //!
-//! # Why only one strip at a time
+//! # Independent readers
 //!
-//! Analysis exists for a window that is open, and at most one plugin editor is. Publishing every
-//! strip would mean a ring each and a copy per block for readings nothing is drawing; instead the
-//! UI names the strip it is looking at and the renderer fills only that one.
+//! The plugin editor and the utility visualizer each select one strip. The track overview
+//! attaches a separate scope to each render track and enables publication only while displayed.
+//! Each scope has one audio-thread producer; independent readers never change one another's source.
 
 use std::sync::atomic::{AtomicI64, AtomicU32, AtomicUsize, Ordering};
 

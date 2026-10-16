@@ -36,6 +36,15 @@ clip gain, fades and track effects are applied during playback. Long recordings 
 time overview that preserves peaks. Choose **Waveform** to return to the default display.
 Display choices apply to the current window and reset when opening a project.
 
+## Track grid
+
+Choose **Track grid** above the arrangement, or **View → Track grid** (`⌘⌥G` /
+`Ctrl+Alt+G`), to see all tracks in a responsive grid. Physical instruments show their live
+mechanical motion; other instruments, audio tracks, singers and buses show their own post-fader
+stereo waveform. Select a track by its name, use its **Mute** and **Solo** buttons, or right-click
+for its usual track menu. **Freeze** holds the displays without stopping playback. **Timeline**
+returns to clip editing. These display choices do not change the saved project.
+
 ## Dragging files in
 
 Drop an audio file on the window and it arrives on a **new audio track**. Drop an `.sf2` and it

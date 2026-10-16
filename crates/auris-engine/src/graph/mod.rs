@@ -555,6 +555,7 @@ impl RenderGraph {
                 // Filled in below, once every strip in the project has been asked what it is
                 // listening to.
                 tap: None,
+                overview_scope: None,
             });
         }
 

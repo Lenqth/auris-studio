@@ -9,6 +9,17 @@
 //! each crate's own front page explains what that crate is for, and this one explains why the
 //! boundaries between them are where they are.
 //!
+//! # Track overview
+//!
+//! [`crate::Session::watch_track_overview`] enables simultaneous observation of the tracks.
+//! Each render track publishes its own post-fader stereo signal into a preallocated, lock-free
+//! scope, independently of the plugin editor and the single-source audio visualizer. Readers
+//! are replaced on graph rebuilds so removed or replaced sources cannot leave stale audio.
+//! [`crate::Session::track_overview_frame`] copies samples on the caller's thread without an FFT.
+//! Mechanical observation is the union of overview and instrument-editor requests; closing one
+//! reader leaves the other active. Observation does not edit the project or its undo history.
+//! The desktop owns the grid layout, selection, display freeze and mechanical projections.
+//!
 //! # Authored note replacement
 //!
 //! [`crate::Session::replace_notes`] validates a complete note sequence before replacing

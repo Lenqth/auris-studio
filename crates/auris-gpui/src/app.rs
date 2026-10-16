@@ -1630,6 +1630,7 @@ pub struct AurisApp {
     pub(crate) music_analysis: crate::ui::music_analysis::MusicAnalysisState,
     pub(crate) visualizer: crate::ui::visualizer::VisualizerState,
     pub(crate) physical_view: crate::ui::physical_model::PhysicalView,
+    pub(crate) track_grid: crate::ui::track_grid::TrackGrid,
     pub(crate) timbre_map: crate::ui::timbre_map::TimbreMapState,
     /// Invalidates results started before a voice or its connection settings changed.
     pub(crate) sung_preview_generation: u64,
@@ -1984,6 +1985,7 @@ impl AurisApp {
                         this.sample_input_level();
                         this.poll_visualizer();
                         this.poll_physical_view();
+                        this.poll_track_grid();
                         // Separate from `poll` on purpose: that is housekeeping and this writes
                         // to disk. A success says nothing: it is a private recovery snapshot, and
                         // announcing one every half minute would drown out useful status. A
@@ -2074,6 +2076,7 @@ impl AurisApp {
             music_analysis: Default::default(),
             visualizer: Default::default(),
             physical_view: Default::default(),
+            track_grid: Default::default(),
             timbre_map: Default::default(),
             sung_preview_generation: 0,
             sung_geometry: std::collections::HashMap::new(),
@@ -3096,6 +3099,7 @@ impl AurisApp {
             monitoring: self.session.monitoring(),
             metronome: self.session.metronome(),
             musical_typing: self.session.typing_keyboard().enabled(),
+            track_grid: self.track_grid.open,
         };
         cx.set_menus(crate::menu::menus(self.language, &self.panels, state));
         self.native_menu_snapshot = Some((self.language, self.panels.clone(), state));

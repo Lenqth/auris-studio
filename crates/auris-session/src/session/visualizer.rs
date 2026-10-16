@@ -50,6 +50,54 @@ pub struct VisualizerFrame {
 }
 
 impl Session {
+    /// Enables simultaneous post-fader audio and mechanical observation of all tracks.
+    /// Independent of the plugin editor and the single-source visualizer; no document edit.
+    pub fn watch_track_overview(&mut self, enabled: bool) {
+        if self.overview_watched == enabled {
+            return;
+        }
+        self.overview_watched = enabled;
+        for (index, track) in self.project.tracks.iter().enumerate() {
+            if let Some(scope) = self.overview_scopes.get(&track.id) {
+                scope.watch(if enabled {
+                    auris_engine::ScopeSource::Track(index)
+                } else {
+                    auris_engine::ScopeSource::Off
+                });
+            }
+        }
+        self.refresh_motion_watches();
+    }
+
+    /// Reads one track's own stereo waveform without an FFT or waiting for audio.
+    /// Returns no frame until the overview is enabled and audio has been published.
+    pub fn track_overview_frame(&self, track: TrackId) -> Option<VisualizerFrame> {
+        if !self.overview_watched {
+            return None;
+        }
+        let scope = self.overview_scopes.get(&track)?;
+        let sample_rate = scope.sample_rate();
+        if sample_rate <= 0.0 {
+            return None;
+        }
+        let mut left = vec![0.; auris_engine::SCOPE_HISTORY];
+        let mut right = vec![0.; left.len()];
+        if !scope.read_stereo(&mut left, &mut right) {
+            return None;
+        }
+        Some(VisualizerFrame {
+            correlation: correlation(
+                &left[auris_engine::SCOPE_WINDOW..],
+                &right[auris_engine::SCOPE_WINDOW..],
+            ),
+            window_samples: auris_engine::SCOPE_WINDOW,
+            left: left.into(),
+            right: right.into(),
+            sample_rate,
+            spectrum: Arc::default(),
+        })
+    }
+
     /// Selects the independent visualizer's post-fader signal. `None` means master.
     pub fn watch_visualizer(&self, track: Option<TrackId>) {
         let source = match track {
@@ -182,6 +230,81 @@ fn analyze_channel(analyzer: &mut SpectrumAnalyzer, samples: &[f32], bins: &mut 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overview_waveforms_follow_track_identity_across_rebuilds() {
+        let mut session = super::super::fixtures::session();
+        let first = session.add_default_instrument_track("First").unwrap();
+        let second = session.add_audio_track("Second");
+        session.watch_track_overview(true);
+        session.overview_scopes[&first].publish_stereo(&[0.25; 2048], &[-0.25; 2048], 48000.);
+        session.overview_scopes[&second].publish_stereo(&[0.5; 2048], &[0.5; 2048], 48000.);
+        let first_frame = session.track_overview_frame(first).unwrap();
+        let second_frame = session.track_overview_frame(second).unwrap();
+        assert!(first_frame.left.iter().all(|&value| value == 0.25));
+        assert!(first_frame.right.iter().all(|&value| value == -0.25));
+        assert!(second_frame.left.iter().all(|&value| value == 0.5));
+        let retired = Arc::clone(&session.overview_scopes[&first]);
+        session.move_track(first, 1).unwrap();
+        assert_eq!(retired.watching(), auris_engine::ScopeSource::Off);
+        assert!(session.track_overview_frame(first).is_none());
+        assert_eq!(
+            session.overview_scopes[&first].watching(),
+            auris_engine::ScopeSource::Track(1)
+        );
+        session.overview_scopes[&first].publish_stereo(&[0.75; 2048], &[0.75; 2048], 48000.);
+        assert!(
+            session
+                .track_overview_frame(first)
+                .unwrap()
+                .left
+                .iter()
+                .all(|&value| value == 0.75)
+        );
+        session.remove_track(second).unwrap();
+        assert!(session.track_overview_frame(second).is_none());
+        session.watch_track_overview(false);
+        assert!(session.track_overview_frame(first).is_none());
+    }
+
+    #[test]
+    fn overview_and_editor_motion_watches_coexist_and_do_not_edit_the_document() {
+        let mut session = super::super::fixtures::session();
+        let violin = session
+            .add_instrument_track("Violin", "auris.physical.violin")
+            .unwrap();
+        let guitar = session
+            .add_instrument_track("Guitar", "auris.physical.guitar")
+            .unwrap();
+        let before = session.project().clone();
+        let undo = super::super::fixtures::undo_depth(&mut session);
+        session.watch_instrument_motion(Some(violin));
+        session.watch_track_overview(true);
+        session.watch_instrument_motion(None);
+        assert!(
+            session
+                .motion_monitors
+                .values()
+                .all(|monitor| monitor.is_watched())
+        );
+        session.watch_instrument_motion(Some(guitar));
+        session.watch_track_overview(false);
+        assert!(!session.motion_monitors[&violin].is_watched());
+        assert!(session.motion_monitors[&guitar].is_watched());
+        session.watch_track_overview(true);
+        session.rebuild_graph();
+        assert!(
+            session
+                .motion_monitors
+                .values()
+                .all(|monitor| monitor.is_watched())
+        );
+        session.watch_track_overview(false);
+        assert!(!session.motion_monitors[&violin].is_watched());
+        assert!(session.motion_monitors[&guitar].is_watched());
+        assert_eq!(session.project(), &before);
+        assert_eq!(super::super::fixtures::undo_depth(&mut session), undo);
+    }
 
     #[test]
     fn visualizer_and_plugin_scopes_are_independent() {
