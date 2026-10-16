@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 use auris_core::PluginState;
 use serde::{Deserialize, Serialize};
 
+mod factory;
+
+pub use factory::{SoundFamily, factory_sound_families, factory_sounds};
+
 use crate::SessionError;
 use crate::settings::{config_dir, read_config_text, write_config_bytes};
 
@@ -128,50 +132,6 @@ impl SoundBook {
     }
 }
 
-/// Editable starting patches for the bowed-string family, using the same format as user sounds.
-pub fn factory_sounds() -> Vec<SoundPreset> {
-    use auris_core::Parameterized;
-    static DEFAULT: std::sync::OnceLock<PluginState> = std::sync::OnceLock::new();
-    let defaults = DEFAULT.get_or_init(|| {
-        let instrument = auris_synth::Physical::new(auris_synth::Model::Violin);
-        let mut state = PluginState::empty();
-        for param in instrument.parameters() {
-            state.params.insert(param.key.to_string(), param.default);
-        }
-        state
-    });
-    [
-        ("Violin", 0.65, 0.359_287, 0.336_820, 0.203_998, 0.12),
-        ("Viola", 0.72, 0.42, 0.38, 0.24, 0.18),
-        ("Cello", 0.85, 0.5, 0.42, 0.28, 0.3),
-        ("Contrabass", 0.95, 0.62, 0.48, 0.32, 0.4),
-    ]
-    .into_iter()
-    .map(|(name, body, damping, pressure, speed, release)| {
-        let mut state = defaults.clone();
-        if name != "Violin" {
-            for (key, value) in [
-                ("body", body),
-                ("damping", damping),
-                ("bow_pressure", pressure),
-                ("bow_speed", speed),
-                ("release", release),
-            ] {
-                state.params.insert(key.into(), value);
-            }
-        }
-        SoundPreset {
-            name: name.into(),
-            instrument_id: auris_synth::Model::Violin.id().into(),
-            state,
-            file: None,
-            soundfont: None,
-            effects: Vec::new(),
-        }
-    })
-    .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,6 +163,7 @@ mod tests {
         let path = scratch.path().join("sounds.json");
         let threads: Vec<_> = factory_sounds()
             .into_iter()
+            .take(4)
             .map(|sound| {
                 let path = path.clone();
                 std::thread::spawn(move || SoundBook::save_sound(&path, sound).unwrap())

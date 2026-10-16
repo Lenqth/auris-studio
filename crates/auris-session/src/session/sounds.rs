@@ -395,6 +395,75 @@ mod tests {
     use crate::{SoundBook, factory_sounds};
 
     #[test]
+    fn every_factory_family_has_audible_distinct_patches_that_can_be_saved_as_user_sounds() {
+        use auris_core::{Note, time::Ticks};
+        for family in crate::factory_sound_families() {
+            let mut session = session();
+            let track = session.add_default_instrument_track("Family").unwrap();
+            let clip = session
+                .add_midi_clip(track, "Note", Ticks::ZERO, Ticks::from_beats(2.0))
+                .unwrap();
+            let pitch = if family.instrument_id == auris_synth::DrumKit::ID {
+                36
+            } else {
+                60
+            };
+            session
+                .add_note(clip, Note::new(pitch, Ticks::ZERO, Ticks::QUARTER))
+                .unwrap();
+            let mut reference: Option<Vec<f32>> = None;
+            for sound in &family.presets {
+                session.apply_sound(track, sound).unwrap();
+                let audio = session
+                    .render_job()
+                    .render(&Default::default(), &mut Default::default())
+                    .unwrap();
+                assert!(
+                    audio.peak().is_finite() && audio.peak() > 0.0001,
+                    "{}: peak {}",
+                    sound.name,
+                    audio.peak()
+                );
+                assert!(
+                    audio
+                        .channels()
+                        .iter()
+                        .flatten()
+                        .all(|sample| sample.is_finite()),
+                    "{}",
+                    sound.name
+                );
+                if let Some(reference) = &reference {
+                    let difference: f64 = reference
+                        .iter()
+                        .zip(audio.channel(0))
+                        .map(|(a, b)| f64::from(a - b).powi(2))
+                        .sum();
+                    let energy: f64 = reference
+                        .iter()
+                        .map(|sample| f64::from(*sample).powi(2))
+                        .sum();
+                    assert!(
+                        difference / energy > 0.0001,
+                        "{}: no meaningful audio difference",
+                        sound.name
+                    );
+                } else {
+                    reference = Some(audio.channel(0).to_vec());
+                }
+                let saved = session.capture_sound(track, &sound.name).unwrap();
+                let restored: SoundPreset =
+                    serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap();
+                assert_eq!(restored, *sound);
+                assert!(session.sound_is_applied(track, &restored));
+                if family.instrument_id == auris_synth::DrumKit::ID {
+                    assert!(auris_core::DrumMap::load(&saved.state).is_some());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn factory_strings_produce_distinct_finite_audio_and_survive_project_reopening() {
         let mut session = session();
         let track = session.add_default_instrument_track("Strings").unwrap();
@@ -426,8 +495,8 @@ mod tests {
             .clips
             .clone();
         let mut renders = Vec::new();
-        for sound in factory_sounds() {
-            session.apply_sound(track, &sound).unwrap();
+        for sound in &crate::factory_sound_families()[0].presets {
+            session.apply_sound(track, sound).unwrap();
             let audio = session
                 .render_job()
                 .render(&Default::default(), &mut Default::default())

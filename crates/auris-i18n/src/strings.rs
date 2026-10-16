@@ -274,7 +274,7 @@ strings! {
     // different: it collapses the section the instruction is about.
     BrowserInstruments { en: "Instruments", ja: "音源" }
     UserSounds { en: "User sounds", ja: "ユーザ定義音源" }
-    FactorySounds { en: "Strings presets", ja: "ストリングスのプリセット" }
+    FactorySounds { en: "Presets", ja: "プリセット" }
     SaveSound { en: "Save as user sound…", ja: "ユーザ定義音源として保存…" }
     SoundName { en: "User sound name", ja: "ユーザ定義音源の名前" }
     SoundContents { en: "Replace instrument settings and insert effects", ja: "音源の設定とインサートエフェクトを置き換え" }

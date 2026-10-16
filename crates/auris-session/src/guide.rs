@@ -34,8 +34,11 @@
 //! undoable command, allocating fresh effect identities and removing the old instrument/effect
 //! automation. Notes, track faders, pan, routing and sends belong to the song and stay in place.
 //! Sidechain track identities also belong to the song and are not part of a reusable sound.
-//! Factory bowed-string patches use the same data and application path as user sounds. The
-//! displayed family is Strings; its existing stored plugin identity remains stable.
+//! [`crate::factory_sound_families`] groups editable starting patches beneath every physical
+//! instrument. Each family's first patch keeps the engine's existing default parameters; other
+//! patches override exposed controls. All use the same data and application path as user sounds.
+//! The browser can collapse families and search their translated patch names. Family display
+//! names may broaden, while stored plugin identities and existing project settings stay stable.
 //!
 //! # Live instrument discovery
 //!

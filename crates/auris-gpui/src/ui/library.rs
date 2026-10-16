@@ -92,6 +92,8 @@ enum PluginContents<T> {
 /// A branch of the library — anything that can be open or shut.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Branch {
+    /// Starting patches beneath one physical instrument, in the shared catalog's order.
+    InstrumentPresets(usize),
     /// Reusable sounds saved by the user.
     UserSounds,
     /// The instruments section.
@@ -119,9 +121,8 @@ pub(crate) enum Branch {
 impl Branch {
     /// Whether this branch is open before anybody has said otherwise.
     ///
-    /// Everything except a font, its banks, and an installed plugin file. The built-in plugins
-    /// all fit on screen at once, and a browser that hides them is one you have to operate before
-    /// you can look at it; a font's sounds run to three figures and are worth asking for.
+    /// Basic instruments stay visible; their starting patches, fonts, banks and installed
+    /// plugin files expand on request so one family's patches do not bury the other families.
     ///
     /// A native plugin file is shut for a stronger reason than size. Opening one explicitly
     /// starts isolated metadata inspection, rather than probing every installed binary merely
@@ -129,7 +130,10 @@ impl Branch {
     fn opens_by_default(self) -> bool {
         !matches!(
             self,
-            Branch::Font(_) | Branch::Bank(..) | Branch::PluginFile(_)
+            Branch::Font(_)
+                | Branch::Bank(..)
+                | Branch::PluginFile(_)
+                | Branch::InstrumentPresets(_)
         )
     }
 }
@@ -2203,7 +2207,10 @@ impl AurisApp {
             }
             for plugin in members {
                 let id = plugin.id.clone();
-                let strings = id == "auris.physical.violin" && target == LibraryTarget::Track;
+                let family = auris_session::factory_sound_families()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, family)| family.instrument_id == id);
                 rows.push(self.plugin_row(
                     target,
                     &plugin,
@@ -2214,10 +2221,33 @@ impl AurisApp {
                         cx.notify();
                     }),
                 ));
-                if strings {
-                    rows.push(self.note_row(3, self.t(Key::FactorySounds)));
-                    for sound in auris_session::factory_sounds() {
-                        rows.push(self.sound_row(&sound, true, cx));
+                if target == LibraryTarget::Track
+                    && let Some((index, family)) = family
+                {
+                    let branch = Branch::InstrumentPresets(index);
+                    let open = self.library_tree(target).is_open(branch);
+                    rows.push(
+                        div()
+                            .pl(indent(3))
+                            .child(crate::ui::widgets::disclosure(
+                                gpui::SharedString::from(format!(
+                                    "lib-family-{}",
+                                    family.instrument_id
+                                )),
+                                self.t(Key::FactorySounds),
+                                open,
+                                &self.theme,
+                                cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                                    this.set_library_branch(target, branch, !open);
+                                    cx.notify();
+                                }),
+                            ))
+                            .into_any_element(),
+                    );
+                    if open {
+                        for sound in &family.presets {
+                            rows.push(self.sound_row(sound, true, cx));
+                        }
                     }
                 }
             }
@@ -2308,7 +2338,7 @@ impl AurisApp {
             .pl(if searching {
                 indent(0)
             } else {
-                indent(if factory { 3 } else { 1 }) + DISCLOSURE_SPACE
+                indent(if factory { 4 } else { 1 }) + DISCLOSURE_SPACE
             })
             .child(row)
             .into_any_element()
@@ -3027,6 +3057,7 @@ fn branch_key(branch: Branch) -> usize {
         // Far past anything the plugin-file counter reaches; the key only has to be stable.
         Branch::Voices => 1_000_000,
         Branch::UserSounds => 1_000_001,
+        Branch::InstrumentPresets(index) => 1_000_002 + index,
     }
 }
 
@@ -3165,6 +3196,7 @@ mod tests {
         assert!(tree.is_open(Branch::SoundFonts));
         assert!(tree.is_open(Branch::EffectCategory(PluginCategory::Reverb)));
         assert!(!tree.is_open(Branch::Font(SoundFontId(1))));
+        assert!(!tree.is_open(Branch::InstrumentPresets(0)));
         assert!(!tree.is_open(Branch::Bank(SoundFontId(1), 0)));
     }
 
@@ -3255,6 +3287,9 @@ mod tests {
                     .map(Branch::InstrumentCategory),
             )
             .chain(PluginCategory::ALL.into_iter().map(Branch::EffectCategory))
+            .chain(
+                (0..auris_session::factory_sound_families().len()).map(Branch::InstrumentPresets),
+            )
             .map(branch_key)
             .collect();
         let count = keys.len();

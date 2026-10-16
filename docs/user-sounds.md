@@ -16,8 +16,26 @@ remember their binary paths and opaque plugin state. Those libraries must remain
 Applied settings are embedded in the project, so moving or deleting the user sound library
 does not change an existing project.
 
-The physical bowed-string instrument appears as **Strings**, with **Violin**, **Viola**,
-**Cello** and **Contrabass** starting patches beneath it. These are editable parameter variants
-of the existing bowed-string model. They do not transpose the score; write notes in the
-instrument's intended register. Each can be edited, combined with effects and saved as a new
-user sound.
+Every physical instrument has a **Presets** disclosure beneath its basic instrument row.
+Open it to choose a starting patch, or search directly by its name. Each can be edited,
+combined with effects and saved as a new user sound.
+
+| Basic instrument | Starting patches |
+| --- | --- |
+| Strings | Violin, Viola, Cello, Contrabass |
+| Piano | Grand piano, Felt piano, Bright piano |
+| Guitar | Acoustic guitar, Nylon guitar, Muted guitar |
+| Electric guitar | Clean electric guitar, Warm electric guitar, Bright electric guitar |
+| Bass | Finger bass, Pick bass, Muted bass |
+| Bell | Classic bell, Soft bell, Bright bell |
+| Mallet | Rounded mallet, Hard mallet, Muted mallet |
+| Reed winds | Clarinet, Soft clarinet, Breathy clarinet |
+| Hammered strings | Hammered dulcimer, Bright dulcimer, Muted dulcimer |
+| Whistles | Tin whistle, Soft whistle, Airy whistle |
+| Choir | Mixed choir, Soprano choir, Tenor choir, Bass choir |
+| Drums | Natural drum kit, Dry drum kit, Resonant drum kit |
+
+These are editable parameter variants of their existing physical models. The first patch in
+each family keeps its previous default parameters. Names describe the intended timbre or
+playing style; the variants share the same underlying model. They do not transpose the score,
+so write notes in the intended register. Existing projects keep their stored settings.

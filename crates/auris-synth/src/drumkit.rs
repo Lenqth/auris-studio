@@ -515,7 +515,7 @@ impl Instrument for DrumKit {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor::instrument(
             Self::ID,
-            "Drum Kit",
+            "Physical Drums",
             "Struck membranes, snappy wires and metal plates with shared hat choking",
             PluginCategory::Drum,
         )

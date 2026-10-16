@@ -293,7 +293,7 @@ impl Instrument for Clarinet {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor::instrument(
             Self::ID,
-            "Physical Clarinet",
+            "Physical Reeds",
             "Closed-open cylindrical bore with nonlinear reed and breath noise",
             PluginCategory::Synth,
         )

@@ -95,6 +95,90 @@ fn strings_presets_are_searchable_in_japanese(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn a_physical_family_opens_its_own_presets_and_applies_an_undoable_derivative(
+    cx: &mut TestAppContext,
+) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    let before = app.update(cx, |this, _| {
+        prepare_library(this);
+        this.select_track(track);
+        this.project().clone()
+    });
+    paint(&app, cx);
+    assert!(cx.debug_bounds("lib-factory-sound:Pick bass").is_none());
+    click("lib-family-auris.physical.bass", cx);
+    paint(&app, cx);
+    app.read_with(cx, |this, _| assert_eq!(*this.project(), before));
+    click("lib-factory-sound:Pick bass", cx);
+    app.update(cx, |this, _| {
+        let sound = auris_session::factory_sounds()
+            .into_iter()
+            .find(|sound| sound.name == "Pick bass")
+            .unwrap();
+        assert!(this.session.sound_is_applied(track, &sound));
+        assert_eq!(
+            this.session.undo(),
+            Some(auris_session::Edit::ApplySoundPreset)
+        );
+        assert_eq!(*this.project(), before);
+    });
+    click("lib-family-auris.physical.bass", cx);
+    app.read_with(cx, |this, _| {
+        let (index, _) = auris_session::factory_sound_families()
+            .iter()
+            .enumerate()
+            .find(|(_, family)| family.instrument_id == "auris.physical.bass")
+            .unwrap();
+        assert!(!this.library.is_open(Branch::InstrumentPresets(index)));
+    });
+}
+
+#[gpui::test]
+fn other_physical_family_presets_are_searchable_in_japanese(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    app.update(cx, |this, _| {
+        prepare_library(this);
+        this.select_track(track);
+    });
+    for (query, selector, name) in [
+        (
+            "フェルトピアノ",
+            "lib-factory-sound:Felt piano",
+            "Felt piano",
+        ),
+        (
+            "ミュートダルシマー",
+            "lib-factory-sound:Muted dulcimer",
+            "Muted dulcimer",
+        ),
+        (
+            "ドライドラムキット",
+            "lib-factory-sound:Dry drum kit",
+            "Dry drum kit",
+        ),
+        (
+            "ソプラノ合唱",
+            "lib-factory-sound:Soprano choir",
+            "Soprano choir",
+        ),
+    ] {
+        paint(&app, cx);
+        click("library-search", cx);
+        paint(&app, cx);
+        cx.simulate_input(query);
+        paint(&app, cx);
+        click(selector, cx);
+        app.read_with(cx, |this, _| {
+            let sound = auris_session::factory_sounds()
+                .into_iter()
+                .find(|sound| sound.name == name)
+                .unwrap();
+            assert!(this.session.sound_is_applied(track, &sound), "{name}");
+        });
+    }
+}
+
+#[gpui::test]
 fn plugin_discovery_error_offers_a_retry_that_clears_the_failed_state(cx: &mut TestAppContext) {
     let (app, cx) = open(cx);
     app.update(cx, |this, _| {
@@ -318,7 +402,15 @@ fn a_category_disclosure_hides_and_restores_its_instrument_rows(cx: &mut TestApp
         );
         assert_eq!(
             this.instrument_rows(LibraryTarget::Track, cx).len(),
-            expanded_rows - category_members - auris_session::factory_sounds().len() - 1
+            expanded_rows
+                - category_members
+                - auris_session::factory_sound_families()
+                    .iter()
+                    .filter(|family| this
+                        .registry()
+                        .descriptor(&family.instrument_id)
+                        .is_some_and(|descriptor| descriptor.category == PluginCategory::Synth))
+                    .count()
         );
     });
 
