@@ -14,10 +14,7 @@ use super::{
     visualizer::waveform_thumbnail,
     widgets::{ButtonStyle, button},
 };
-use crate::{
-    app::{AurisApp, Pane},
-    theme::Metrics,
-};
+use crate::{app::AurisApp, theme::Metrics};
 
 #[derive(Default)]
 pub(crate) struct TrackGrid {
@@ -100,7 +97,7 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
-        let mut controls = div()
+        let controls = div()
             .flex()
             .flex_shrink_0()
             .flex_wrap()
@@ -108,30 +105,8 @@ impl AurisApp {
             .gap_2()
             .p_2()
             .border_b_1()
-            .border_color(theme.border_subtle);
-        for (id, key, open) in [
-            ("track-view-timeline", Key::TrackTimeline, false),
-            ("track-view-grid", Key::TrackGrid, true),
-        ] {
-            controls = controls.child(
-                button(
-                    id,
-                    self.t(key),
-                    ButtonStyle::Ghost,
-                    self.track_grid.open == open,
-                    theme.accent,
-                    &theme,
-                    cx.listener(move |this, _, window, cx| {
-                        this.set_track_grid(open);
-                        this.focus_pane(Pane::Arrangement, window);
-                        cx.notify();
-                    }),
-                )
-                .tooltip(self.tip(key, "view.track_grid")),
-            );
-        }
-        if self.track_grid.open {
-            controls = controls.child(button(
+            .border_color(theme.border_subtle)
+            .child(button(
                 "track-grid-freeze",
                 self.t(Key::VisualizerFreeze),
                 ButtonStyle::Normal,
@@ -144,7 +119,6 @@ impl AurisApp {
                     cx.notify();
                 }),
             ));
-        }
         let content = if self.track_grid.open {
             self.render_track_grid(window, cx)
         } else {
@@ -157,7 +131,7 @@ impl AurisApp {
             .min_w_0()
             .min_h(crate::dock::PanelLayout::MIN_ARRANGEMENT)
             .bg(theme.surface)
-            .child(controls)
+            .when(self.track_grid.open, |workspace| workspace.child(controls))
             .child(content)
             .into_any_element()
     }
@@ -411,6 +385,54 @@ mod tests {
         cx.simulate_click(bounds.center(), Modifiers::none());
     }
 
+    fn toggle_grid_from_palette(cx: &mut VisualTestContext) {
+        cx.simulate_keystrokes("secondary-shift-p");
+        cx.simulate_input("Track grid");
+        cx.simulate_keystrokes("enter");
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn grid_is_accessible_through_the_palette_without_visible_switches_or_a_default_shortcut(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = harness::open(cx);
+        let action = crate::actions::BINDABLE
+            .iter()
+            .find(|action| action.id == "view.track_grid")
+            .unwrap();
+        assert!(action.default.is_none());
+        assert!(cx.debug_bounds("track-view-grid").is_none());
+        assert!(cx.debug_bounds("track-view-timeline").is_none());
+        for language in [
+            auris_i18n::Language::English,
+            auris_i18n::Language::Japanese,
+        ] {
+            app.update(cx, |app, _| app.language = language);
+            paint(&app, cx);
+            app.read_with(cx, |app, _| {
+                assert!(
+                    app.menu_model()
+                        .iter()
+                        .flat_map(|menu| &menu.rows)
+                        .all(|row| {
+                            !matches!(
+                                row,
+                                crate::menu::MenuRow::Command {
+                                    binding: "view.track_grid",
+                                    ..
+                                }
+                            )
+                        })
+                );
+            });
+            toggle_grid_from_palette(cx);
+            app.read_with(cx, |app, _| assert!(app.track_grid.open));
+            toggle_grid_from_palette(cx);
+            app.read_with(cx, |app, _| assert!(!app.track_grid.open));
+        }
+    }
+
     #[test]
     fn columns_keep_tiles_readable_at_narrow_and_zoomed_widths() {
         assert_eq!(columns(12.), 1);
@@ -430,7 +452,7 @@ mod tests {
             app.selected_track = None;
         });
         paint(&app, cx);
-        click("track-view-grid", cx);
+        toggle_grid_from_palette(cx);
         paint(&app, cx);
         app.read_with(cx, |app, _| {
             assert!(app.track_grid.open);
@@ -467,7 +489,7 @@ mod tests {
         });
         paint(&app, cx);
         let before = app.read_with(cx, |app, _| app.project().clone());
-        click("track-view-grid", cx);
+        toggle_grid_from_palette(cx);
         paint(&app, cx);
         app.read_with(cx, |app, _| assert!(app.canvas.lanes.get().is_none()));
         assert!(
@@ -493,7 +515,7 @@ mod tests {
         });
         click("track-grid-freeze", cx);
         app.read_with(cx, |app, _| assert!(app.track_grid.frozen));
-        click("track-view-timeline", cx);
+        toggle_grid_from_palette(cx);
         paint(&app, cx);
         app.read_with(cx, |app, _| {
             assert!(!app.track_grid.open);
@@ -502,6 +524,8 @@ mod tests {
         });
         app.read_with(cx, |app, _| assert!(app.canvas.lanes.get().is_some()));
         cx.simulate_keystrokes("secondary-alt-g");
+        app.read_with(cx, |app, _| assert!(!app.track_grid.open));
+        toggle_grid_from_palette(cx);
         app.read_with(cx, |app, _| assert!(app.track_grid.open));
     }
 
@@ -519,7 +543,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         });
-        click("track-view-grid", cx);
+        toggle_grid_from_palette(cx);
         for width in [1920., 900., 640.] {
             harness::resize(&app, cx, size(px(width), px(900.)));
             // A second layout consumes the region measured by the first.

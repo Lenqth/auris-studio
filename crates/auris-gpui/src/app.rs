@@ -3099,7 +3099,6 @@ impl AurisApp {
             monitoring: self.session.monitoring(),
             metronome: self.session.metronome(),
             musical_typing: self.session.typing_keyboard().enabled(),
-            track_grid: self.track_grid.open,
         };
         cx.set_menus(crate::menu::menus(self.language, &self.panels, state));
         self.native_menu_snapshot = Some((self.language, self.panels.clone(), state));

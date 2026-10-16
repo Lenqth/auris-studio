@@ -533,7 +533,7 @@ bindable! {
         "view.inspector",       GroupView,      CmdShowInspector,      "i"           => ToggleInspector;
         "view.piano_roll",      GroupView,      CmdShowPianoRoll,      "p"           => TogglePianoRoll;
         "view.mixer",           GroupView,      CmdShowMixer,          "m"           => ToggleMixer;
-        "view.track_grid",      GroupView,      TrackGrid,             "secondary-alt-g" => ToggleTrackGrid;
+        "view.track_grid",      GroupView,      TrackGrid,             ""            => ToggleTrackGrid;
         // Out on `secondary-alt-` with the arrangement furniture rather than on a bare letter
         // like its three sibling panels: the log is opened on the day something is wrong and left
         // alone every other day, and a plain letter is worth more to something reached mid-take.

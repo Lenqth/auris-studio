@@ -136,7 +136,6 @@ impl Render for AurisApp {
                 monitoring: self.session.monitoring(),
                 metronome: self.session.metronome(),
                 musical_typing: self.session.typing_keyboard().enabled(),
-                track_grid: self.track_grid.open,
             };
             let snapshot = (self.language(), self.panels.clone(), state);
             if self.native_menu_snapshot.as_ref() != Some(&snapshot) {

@@ -193,7 +193,6 @@ impl AurisApp {
                 monitoring: self.session.monitoring(),
                 metronome: self.session.metronome(),
                 musical_typing: self.session.typing_keyboard().enabled(),
-                track_grid: self.track_grid.open,
             },
         )
     }

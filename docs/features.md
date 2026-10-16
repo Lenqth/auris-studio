@@ -38,12 +38,12 @@ Display choices apply to the current window and reset when opening a project.
 
 ## Track grid
 
-Choose **Track grid** above the arrangement, or **View → Track grid** (`⌘⌥G` /
-`Ctrl+Alt+G`), to see all tracks in a responsive grid. Physical instruments show their live
+Run **Track grid** from the command palette to see all tracks in a responsive grid.
+Run the same command again to return to the timeline. Physical instruments show their live
 mechanical motion; other instruments, audio tracks, singers and buses show their own post-fader
 stereo waveform. Select a track by its name, use its **Mute** and **Solo** buttons, or right-click
-for its usual track menu. **Freeze** holds the displays without stopping playback. **Timeline**
-returns to clip editing. These display choices do not change the saved project.
+for its usual track menu. **Freeze** holds the displays without stopping playback.
+These display choices do not change the saved project.
 
 ## Dragging files in
 
