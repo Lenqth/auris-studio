@@ -2345,20 +2345,9 @@ impl AurisApp {
             })
             .child(row)
             .when(!factory, |row| {
-                let selector = format!("manage-user-sound:{}", saved.name);
-                row.child(
-                    button(
-                        gpui::SharedString::from(selector.clone()),
-                        self.t(Key::ManageSound),
-                        ButtonStyle::Ghost,
-                        false,
-                        theme.accent,
-                        &theme,
-                        Self::opens_menu(cx, move |this, at| {
-                            this.user_sound_menu(at, saved.clone())
-                        }),
-                    )
-                    .debug_selector(move || selector.clone()),
+                row.on_mouse_down(
+                    MouseButton::Right,
+                    Self::opens_menu(cx, move |this, at| this.user_sound_menu(at, saved.clone())),
                 )
             })
             .into_any_element()

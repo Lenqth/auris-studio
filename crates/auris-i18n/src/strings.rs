@@ -277,9 +277,8 @@ strings! {
     FactorySounds { en: "Presets", ja: "プリセット" }
     SaveSound { en: "Save as user sound…", ja: "ユーザ定義音源として保存…" }
     SoundName { en: "User sound name", ja: "ユーザ定義音源の名前" }
-    ManageSound { en: "Manage", ja: "操作" }
     SoundNameUnavailable { en: "Choose a nonempty name that is not already used by another sound.", ja: "ほかの音源と重複しない名前を入力してください。空の名前は使用できません。" }
-    SoundLibraryChanged { en: "This saved sound has changed or been removed. Close this dialog and reopen the sound's menu to try again.", ja: "この音源は別の場所で変更または削除されました。この画面を閉じ、音源の操作メニューを開き直してください。" }
+    SoundLibraryChanged { en: "This saved sound has changed or been removed. Close this dialog and right-click the sound to try again.", ja: "この音源は別の場所で変更または削除されました。この画面を閉じ、音源を右クリックしてやり直してください。" }
     OverwriteSound { en: "Overwrite from selected track…", ja: "選択中のトラックで上書き…" }
     OverwriteSoundConfirm { en: "Overwrite", ja: "上書き保存" }
     RenameSound { en: "Rename sound…", ja: "音源名を変更…" }

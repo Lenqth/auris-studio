@@ -5,7 +5,7 @@ Select an instrument or drum track, adjust its instrument and insert effects, th
 library's **User sounds** section and in library search, and remain available after restarting.
 Names must be nonempty and unique; an existing sound is never overwritten implicitly.
 
-Choose **Manage** beside a user sound in the library or search results to:
+Right-click a user sound in the library or search results to:
 
 - **Overwrite from selected track…**: select an instrument or drum track first. Its current
   instrument settings and inserts are captured, then a confirmation names the saved sound and

@@ -5,6 +5,15 @@ use crate::harness::{click, open, paint, with_a_clip};
 use auris_i18n::Language;
 use gpui::TestAppContext;
 
+fn right_click(selector: &'static str, cx: &mut gpui::VisualTestContext) {
+    let at = cx
+        .debug_bounds(selector)
+        .expect("the sound row is visible")
+        .center();
+    cx.simulate_mouse_down(at, gpui::MouseButton::Right, gpui::Modifiers::none());
+    cx.simulate_mouse_up(at, gpui::MouseButton::Right, gpui::Modifiers::none());
+}
+
 fn prepare_library(app: &mut AurisApp) {
     app.panels = crate::dock::PanelLayout::default();
     app.language = Language::Japanese;
@@ -40,7 +49,7 @@ fn overwriting_a_user_sound_confirms_and_uses_the_captured_track(cx: &mut TestAp
     click("library-search", cx);
     cx.simulate_input("Management overwrite fixture");
     paint(&app, cx);
-    click("manage-user-sound:Management overwrite fixture", cx);
+    right_click("lib-user-sound:Management overwrite fixture", cx);
     paint(&app, cx);
     click("menu-item-0", cx);
     paint(&app, cx);
@@ -61,7 +70,7 @@ fn overwriting_a_user_sound_confirms_and_uses_the_captured_track(cx: &mut TestAp
             .contains(&original)
     );
     paint(&app, cx);
-    click("manage-user-sound:Management overwrite fixture", cx);
+    right_click("lib-user-sound:Management overwrite fixture", cx);
     paint(&app, cx);
     // The menu and confirmation also accept the keyboard.
     cx.simulate_keystrokes("down enter");
@@ -119,7 +128,7 @@ fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut Test
     click("library-search", cx);
     cx.simulate_input("Management rename fixture");
     paint(&app, cx);
-    click("manage-user-sound:Management rename fixture", cx);
+    right_click("lib-user-sound:Management rename fixture", cx);
     paint(&app, cx);
     click("menu-item-0", cx);
     app.read_with(cx, |this, _| {
@@ -145,7 +154,7 @@ fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut Test
             .contains(&original)
     );
     paint(&app, cx);
-    click("manage-user-sound:Management rename fixture", cx);
+    right_click("lib-user-sound:Management rename fixture", cx);
     paint(&app, cx);
     click("menu-item-1", cx);
     paint(&app, cx);
@@ -162,7 +171,7 @@ fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut Test
     click("library-search", cx);
     cx.simulate_input("Management renamed fixture");
     paint(&app, cx);
-    click("manage-user-sound:Management renamed fixture", cx);
+    right_click("lib-user-sound:Management renamed fixture", cx);
     paint(&app, cx);
     click("menu-item-2", cx);
     paint(&app, cx);
@@ -177,7 +186,7 @@ fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut Test
             .contains(&renamed)
     );
     paint(&app, cx);
-    click("manage-user-sound:Management renamed fixture", cx);
+    right_click("lib-user-sound:Management renamed fixture", cx);
     paint(&app, cx);
     click("menu-item-2", cx);
     paint(&app, cx);
@@ -217,7 +226,7 @@ fn a_stale_user_sound_confirmation_preserves_the_external_edit(cx: &mut TestAppC
     click("library-search", cx);
     cx.simulate_input("Management stale fixture");
     paint(&app, cx);
-    click("manage-user-sound:Management stale fixture", cx);
+    right_click("lib-user-sound:Management stale fixture", cx);
     paint(&app, cx);
     click("menu-item-2", cx);
     let updated = auris_session::SoundBook::rename_sound(
