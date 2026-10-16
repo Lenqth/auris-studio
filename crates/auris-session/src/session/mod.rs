@@ -34,6 +34,7 @@ mod accompany;
 mod agent_instruments;
 mod setup_tracks;
 mod sound_search;
+mod sounds;
 pub use setup_tracks::{SetupClip, SetupTrack, SetupTrackKind};
 pub use sound_search::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
 mod analysis;
@@ -1130,13 +1131,13 @@ impl Session {
             return None;
         }
         let edit = self.history.undo_edit()?;
-        if edit == Edit::Compose {
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
             self.collect_hosted_state().ok()?;
         }
         let project = self.history.undo(&self.project)?;
-        if edit == Edit::Compose {
-            // The two songs can reuse a track id and plugin id while holding different native
-            // presets. Fresh slots restore the history snapshot rather than the outgoing sound.
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
+            // Either snapshot can reuse track and plugin ids while holding different native
+            // patches. Fresh slots restore the history snapshot rather than the outgoing sound.
             self.hosted.clear();
             self.vst3.clear();
         }
@@ -1157,11 +1158,11 @@ impl Session {
             return None;
         }
         let edit = self.history.redo_edit()?;
-        if edit == Edit::Compose {
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
             self.collect_hosted_state().ok()?;
         }
         let project = self.history.redo(&self.project)?;
-        if edit == Edit::Compose {
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
             self.hosted.clear();
             self.vst3.clear();
         }

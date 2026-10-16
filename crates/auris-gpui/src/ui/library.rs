@@ -92,6 +92,8 @@ enum PluginContents<T> {
 /// A branch of the library — anything that can be open or shut.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Branch {
+    /// Reusable sounds saved by the user.
+    UserSounds,
     /// The instruments section.
     Instruments,
     /// One category of instrument.
@@ -498,6 +500,8 @@ impl<'a, T> BestMatches<'a, T> {
 
 /// One thing a search turned up, and enough to draw and act on it.
 enum Found {
+    /// A factory or user-defined instrument and insert chain.
+    Sound(auris_session::SoundPreset, bool),
     /// A built-in instrument, with the category it is filed under.
     Instrument(LibraryPlugin, PluginCategory),
     /// A built-in effect, likewise.
@@ -1043,6 +1047,9 @@ impl AurisApp {
         }
         let theme = self.theme.clone();
         let mut rows = self.instrument_rows(target, cx);
+        if target == LibraryTarget::Track {
+            rows.extend(self.user_sound_rows(cx));
+        }
         rows.push(divider(&theme).into_any_element());
         let font_row_offset = rows.len();
         rows.extend(self.soundfont_rows(target, font_row_offset, cx));
@@ -1075,6 +1082,15 @@ impl AurisApp {
         cx: &mut gpui::Context<Self>,
     ) -> Vec<AnyElement> {
         let mut entries = BestMatches::new(query, SEARCH_LIMIT + 1);
+        if target == LibraryTarget::Track {
+            for sound in auris_session::factory_sounds() {
+                let name = plugin_search_name(&sound.name, self.language());
+                entries.consider(&name, || Found::Sound(sound, true));
+            }
+            for sound in self.sounds.entries() {
+                entries.consider(&sound.name, || Found::Sound(sound.clone(), false));
+            }
+        }
         for descriptor in self
             .registry()
             .instruments()
@@ -1147,6 +1163,7 @@ impl AurisApp {
         let mut rows: Vec<AnyElement> = found
             .into_iter()
             .map(|entry| match entry {
+                Found::Sound(sound, factory) => self.sound_row(&sound, factory, cx),
                 Found::Instrument(plugin, category) => {
                     let id = plugin.id.clone();
                     self.plugin_row(
@@ -2186,6 +2203,7 @@ impl AurisApp {
             }
             for plugin in members {
                 let id = plugin.id.clone();
+                let strings = id == "auris.physical.violin" && target == LibraryTarget::Track;
                 rows.push(self.plugin_row(
                     target,
                     &plugin,
@@ -2196,11 +2214,105 @@ impl AurisApp {
                         cx.notify();
                     }),
                 ));
+                if strings {
+                    rows.push(self.note_row(3, self.t(Key::FactorySounds)));
+                    for sound in auris_session::factory_sounds() {
+                        rows.push(self.sound_row(&sound, true, cx));
+                    }
+                }
             }
         }
         rows
     }
 
+    fn user_sound_rows(&self, cx: &mut gpui::Context<Self>) -> Vec<AnyElement> {
+        let mut rows = vec![self.section_row(
+            LibraryTarget::Track,
+            Branch::UserSounds,
+            Key::UserSounds,
+            Icon::Keyboard,
+            self.sounds.entries().len(),
+            cx,
+        )];
+        if self
+            .library_tree(LibraryTarget::Track)
+            .is_open(Branch::UserSounds)
+        {
+            if let Some(error) = &self.sound_library_error {
+                rows.push(self.note_row(1, error));
+            }
+            if self.sounds.entries().is_empty() {
+                rows.push(self.note_row(1, self.t(Key::UserSoundsEmpty)));
+            } else {
+                rows.push(self.note_row(1, self.t(Key::SoundContents)));
+            }
+            for sound in self.sounds.entries() {
+                rows.push(self.sound_row(sound, false, cx));
+            }
+        }
+        rows
+    }
+
+    fn sound_row(
+        &self,
+        sound: &auris_session::SoundPreset,
+        factory: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let id = format!(
+            "{}:{}",
+            if factory {
+                "factory-sound"
+            } else {
+                "user-sound"
+            },
+            sound.name
+        );
+        let name = if factory {
+            audio_name(self, &sound.name)
+        } else {
+            sound.name.clone()
+        };
+        let selected = self
+            .selected_track
+            .is_some_and(|track| self.session.sound_is_applied(track, sound));
+        let enabled = self.selected_track_takes_an_instrument();
+        let theme = self.theme.clone();
+        let sound = sound.clone();
+        let row = crate::ui::widgets::bounded_button_enabled(
+            gpui::SharedString::from(id.clone()),
+            name,
+            ButtonStyle::Ghost,
+            crate::ui::widgets::ButtonState::available(selected, enabled),
+            theme.accent_soft,
+            &theme,
+            cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                if let Some(track) = this.selected_track {
+                    match this.session.apply_sound(track, &sound) {
+                        Ok(()) => this.leave_library_search(),
+                        Err(error) => {
+                            this.set_failed_status(this.failure(Key::EditChoosePreset, &error))
+                        }
+                    }
+                }
+                cx.notify();
+            }),
+        )
+        .debug_selector(move || format!("lib-{id}"))
+        .w_full()
+        .justify_start();
+        let searching = !self.library_search.content().trim().is_empty();
+        div()
+            .min_w_0()
+            .flex_shrink_0()
+            .pl(if searching {
+                indent(0)
+            } else {
+                indent(if factory { 3 } else { 1 }) + DISCLOSURE_SPACE
+            })
+            .child(row)
+            .into_any_element()
+    }
     /// The effects section: every registered effect, under its category.
     fn effect_rows(
         &mut self,
@@ -2914,6 +3026,7 @@ fn branch_key(branch: Branch) -> usize {
         Branch::PluginFile(index) => 5 + 2 * PluginCategory::ALL.len() + index,
         // Far past anything the plugin-file counter reaches; the key only has to be stable.
         Branch::Voices => 1_000_000,
+        Branch::UserSounds => 1_000_001,
     }
 }
 

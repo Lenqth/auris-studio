@@ -1663,6 +1663,10 @@ pub struct AurisApp {
     pub(crate) progressions: auris_session::progressions::ProgressionBook,
     /// Drum maps remembered per sound source and copied into each project that uses them.
     pub(crate) drum_maps: auris_session::DrumMapBook,
+    /// Installation-wide saved sounds offered by the library.
+    pub(crate) sounds: auris_session::SoundBook,
+    /// A loading failure shown without replacing the existing library file.
+    pub(crate) sound_library_error: Option<String>,
     /// Notes currently sounding because the user is holding a key, dragging one, or pressing a
     /// chord on the harmony lane.
     pub(crate) auditioning: Option<(TrackId, Vec<u8>)>,
@@ -2027,6 +2031,11 @@ impl AurisApp {
                 .map(|clip| clip.id)
         });
 
+        let (sounds, sound_library_error) =
+            match auris_session::SoundBook::read(&auris_session::SoundBook::path()) {
+                Ok(book) => (book, None),
+                Err(error) => (Default::default(), Some(error.to_string())),
+            };
         let mut app = Self {
             session,
             theme,
@@ -2089,6 +2098,8 @@ impl AurisApp {
             song_lyrics_reveal: None,
             progressions: auris_session::progressions::ProgressionBook::load(),
             drum_maps: auris_session::DrumMapBook::load(),
+            sounds,
+            sound_library_error,
             auditioning: None,
             note_selection_preview: None,
             focus: cx.focus_handle(),

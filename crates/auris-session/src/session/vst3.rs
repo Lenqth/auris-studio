@@ -313,6 +313,14 @@ impl Vst3Plugins {
         Ok(state)
     }
 
+    /// Retires one instrument so the next graph restores the document's opaque patch.
+    pub(super) fn forget_instrument(&mut self, track: TrackId) {
+        if let Some(slot) = self.instruments.remove(&track) {
+            self.retiring.push(slot.plugin);
+        }
+        self.sweep();
+    }
+
     pub(super) fn clear(&mut self) {
         self.render_error = None;
         self.retiring.extend(

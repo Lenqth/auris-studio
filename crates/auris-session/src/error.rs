@@ -7,6 +7,9 @@ use thiserror::Error;
 /// Anything that can go wrong while driving a session.
 #[derive(Debug, Error)]
 pub enum SessionError {
+    /// A reusable sound is incomplete, unavailable, or has an invalid name or parameter.
+    #[error("sound preset: {0}")]
+    SoundPreset(String),
     /// The requested whole-mix level cannot be measured or safely applied.
     #[error("mix normalization: {0}")]
     MixNormalization(String),

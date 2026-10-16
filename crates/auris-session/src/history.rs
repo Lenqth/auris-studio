@@ -18,6 +18,8 @@ use crate::param::ParamTarget;
 /// variant makes every frontend's `match` fail to compile, which is the reminder we want.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Edit {
+    /// A reusable instrument patch and its insert chain were applied.
+    ApplySoundPreset,
     /// A measured drum assignment was applied, optionally remapping generated drum notes.
     ApplyDrumMap,
     /// A musical drum role's assigned MIDI key was added, changed or removed.

@@ -239,6 +239,30 @@ impl AurisApp {
                     ))
                     .into_any_element(),
             );
+            sections.push(
+                crate::ui::widgets::bounded_button_enabled(
+                    "save-user-sound",
+                    self.t(Key::SaveSound),
+                    crate::ui::widgets::ButtonStyle::Ghost,
+                    crate::ui::widgets::ButtonState::available(false, true),
+                    theme.accent_soft,
+                    &theme,
+                    cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        let initial = this
+                            .project()
+                            .track(track_id)
+                            .map(|track| track.name.clone())
+                            .unwrap_or_default();
+                        this.open_prompt(crate::ui::prompt::Prompt::new(
+                            this.t(Key::SoundName),
+                            crate::ui::prompt::PromptTarget::SaveSound(track_id),
+                            initial,
+                        ));
+                        cx.notify();
+                    }),
+                )
+                .into_any_element(),
+            );
             if is_drum {
                 sections.extend(self.drum_assignment_rows(track_id, cx));
             }

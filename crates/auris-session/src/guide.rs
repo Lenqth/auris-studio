@@ -20,6 +20,23 @@
 //! JSON file, and checkpoints only changed documents. File paths refer to the MCP server;
 //! the source JSON is input, not a retained asset. Both doors share pitch notation parsing.
 //!
+//! # Reusable sounds
+//!
+//! [`crate::SoundPreset`] holds an instrument's complete state and its ordered insert effects,
+//! including bypass switches and opaque hosted-plugin state. [`crate::SoundBook`] keeps named
+//! user sounds in the installation's configuration directory. Applying a sound copies its
+//! settings into the document: playback and project reopening never depend on the user library.
+//! SoundFont references use resolved file paths and bank/program pairs; applying remaps the font
+//! to the receiving project's identity. Hosted binaries remain external library references.
+//!
+//! [`crate::Session::capture_sound`] and [`crate::Session::apply_sound`] own this workflow for
+//! every frontend. Applying replaces the target's instrument and complete insert chain as one
+//! undoable command, allocating fresh effect identities and removing the old instrument/effect
+//! automation. Notes, track faders, pan, routing and sends belong to the song and stay in place.
+//! Sidechain track identities also belong to the song and are not part of a reusable sound.
+//! Factory bowed-string patches use the same data and application path as user sounds. The
+//! displayed family is Strings; its existing stored plugin identity remains stable.
+//!
 //! # Live instrument discovery
 //!
 //! [`crate::Session::sound_library_job`] snapshots loaded fonts and configured plugin search roots for a

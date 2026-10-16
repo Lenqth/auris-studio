@@ -13,6 +13,88 @@ fn prepare_library(app: &mut AurisApp) {
 }
 
 #[gpui::test]
+fn saving_and_searching_a_user_sound_restores_its_chain_and_supports_undo(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    app.update(cx, |this, _| {
+        prepare_library(this);
+        this.select_track(track);
+        this.session
+            .apply_sound(track, &auris_session::factory_sounds()[2])
+            .unwrap();
+        this.session
+            .add_effect(Some(track), "auris.fx.reverb")
+            .unwrap();
+    });
+    paint(&app, cx);
+    click("save-user-sound", cx);
+    paint(&app, cx);
+    cx.simulate_input("Window sound fixture");
+    cx.simulate_keystrokes("enter");
+    app.update(cx, |this, _| {
+        assert!(this.prompt.is_none());
+        assert!(
+            this.sounds
+                .entries()
+                .iter()
+                .any(|sound| sound.name == "Window sound fixture")
+        );
+        this.session
+            .apply_sound(track, &auris_session::factory_sounds()[0])
+            .unwrap();
+        this.session.forget_history();
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    paint(&app, cx);
+    cx.simulate_input("Window sound fixture");
+    paint(&app, cx);
+    click("lib-user-sound:Window sound fixture", cx);
+    app.update(cx, |this, _| {
+        let sound = this
+            .sounds
+            .entries()
+            .iter()
+            .find(|sound| sound.name == "Window sound fixture")
+            .unwrap();
+        assert!(this.session.sound_is_applied(track, sound));
+        assert_eq!(this.project().track(track).unwrap().mixer.effects.len(), 1);
+        assert_eq!(
+            this.session.undo(),
+            Some(auris_session::Edit::ApplySoundPreset)
+        );
+        assert!(
+            this.project()
+                .track(track)
+                .unwrap()
+                .mixer
+                .effects
+                .is_empty()
+        );
+    });
+}
+
+#[gpui::test]
+fn strings_presets_are_searchable_in_japanese(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    app.update(cx, |this, _| {
+        prepare_library(this);
+        this.select_track(track);
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    paint(&app, cx);
+    cx.simulate_input("チェロ");
+    paint(&app, cx);
+    click("lib-factory-sound:Cello", cx);
+    app.read_with(cx, |this, _| {
+        assert!(
+            this.session
+                .sound_is_applied(track, &auris_session::factory_sounds()[2])
+        );
+    });
+}
+
+#[gpui::test]
 fn plugin_discovery_error_offers_a_retry_that_clears_the_failed_state(cx: &mut TestAppContext) {
     let (app, cx) = open(cx);
     app.update(cx, |this, _| {
@@ -23,7 +105,9 @@ fn plugin_discovery_error_offers_a_retry_that_clears_the_failed_state(cx: &mut T
         // Keep the retry in the viewport. `debug_bounds` also reports clipped descendants,
         // while a pointer gesture at their off-window coordinates correctly hits nothing.
         this.library.set_open(Branch::Instruments, false);
+        this.library.set_open(Branch::UserSounds, false);
         this.library.set_open(Branch::SoundFonts, false);
+        this.library.set_open(Branch::Voices, false);
         this.library.set_open(Branch::Effects, false);
     });
 
@@ -234,7 +318,7 @@ fn a_category_disclosure_hides_and_restores_its_instrument_rows(cx: &mut TestApp
         );
         assert_eq!(
             this.instrument_rows(LibraryTarget::Track, cx).len(),
-            expanded_rows - category_members
+            expanded_rows - category_members - auris_session::factory_sounds().len() - 1
         );
     });
 
@@ -544,6 +628,7 @@ fn plugin_folder_removal_names_the_folder_and_requires_confirmation(cx: &mut Tes
         // below a clipped scroll view would only prove that off-screen controls do not click.
         for branch in [
             Branch::Instruments,
+            Branch::UserSounds,
             Branch::SoundFonts,
             Branch::Voices,
             Branch::Effects,

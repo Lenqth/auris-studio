@@ -31,6 +31,8 @@ use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled
 /// `F#m`, interpreting the latter in the key at that point on the timeline.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PromptTarget {
+    /// A reusable sound captured from a track.
+    SaveSound(TrackId),
     /// A track's name.
     Track(TrackId),
     /// A clip's name.
@@ -244,7 +246,8 @@ impl PromptTarget {
             | PromptTarget::NewDrumLane(_)
             | PromptTarget::DrumLaneNote { .. } => Notation::MidiNote,
             PromptTarget::Position => Notation::Position,
-            PromptTarget::Track(_)
+            PromptTarget::SaveSound(_)
+            | PromptTarget::Track(_)
             | PromptTarget::Clip(_)
             | PromptTarget::DrumLaneName { .. }
             | PromptTarget::SongTitle
@@ -866,6 +869,19 @@ impl AurisApp {
             return;
         }
         let outcome = match target {
+            PromptTarget::SaveSound(track) => {
+                match self
+                    .session
+                    .save_sound(track, &text, &auris_session::SoundBook::path())
+                {
+                    Ok(book) => {
+                        self.sounds = book;
+                        self.sound_library_error = None;
+                        Ok(())
+                    }
+                    Err(error) => Err(error),
+                }
+            }
             PromptTarget::Track(track) => self.session.rename_track(track, text),
             PromptTarget::Clip(clip) => self.session.rename_clip(clip, text),
             PromptTarget::Lyric { clip, index } => {
@@ -2385,6 +2401,7 @@ mod tests {
     /// is added to the returned list.
     fn every_target() -> Vec<PromptTarget> {
         let representatives = vec![
+            PromptTarget::SaveSound(TrackId(1)),
             PromptTarget::Track(TrackId(1)),
             PromptTarget::Clip(ClipId(1)),
             PromptTarget::Key(AT),
@@ -2434,7 +2451,8 @@ mod tests {
         ];
         for target in &representatives {
             match target {
-                PromptTarget::Track(_)
+                PromptTarget::SaveSound(_)
+                | PromptTarget::Track(_)
                 | PromptTarget::Clip(_)
                 | PromptTarget::Key(_)
                 | PromptTarget::Chord(_)

@@ -123,6 +123,11 @@ const PLUGIN_NAMES: &[(&str, &str)] = &[
     ("Physical Bell", "ベル"),
     ("Physical Mallet", "マレット"),
     ("Physical Violin", "バイオリン"),
+    ("Physical Strings", "ストリングス"),
+    ("Violin", "バイオリン"),
+    ("Viola", "ビオラ"),
+    ("Cello", "チェロ"),
+    ("Contrabass", "コントラバス"),
     ("Physical Clarinet", "クラリネット"),
     ("Physical Hammered Dulcimer", "ハンマー・ダルシマー"),
     ("Physical Tin Whistle", "ティンホイッスル"),
@@ -146,6 +151,10 @@ const PLUGIN_NAMES: &[(&str, &str)] = &[
 
 /// Japanese versions of the one-line descriptions shown in the plugin browser.
 const PLUGIN_DESCRIPTIONS: &[(&str, &str)] = &[
+    (
+        "Bowed strings: nonlinear friction, bow pressure, position and body",
+        "弓で弦を擦るストリングス音源。弓の圧力、位置、胴の共鳴を調整",
+    ),
     (
         "Hammer-excited coupled string courses with passive bridge coupling",
         "ハンマーで複数の弦を叩くダルシマー音源。弦同士の共鳴と調律差を再現",

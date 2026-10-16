@@ -203,7 +203,7 @@ pub fn edit_key(edit: Edit) -> Key {
         Edit::ImportAudio => Key::EditImportAudio,
         Edit::RecordTake => Key::EditRecordTake,
         Edit::ImportSoundFont => Key::EditImportSoundFont,
-        Edit::ChoosePreset => Key::EditChoosePreset,
+        Edit::ChoosePreset | Edit::ApplySoundPreset => Key::EditChoosePreset,
         Edit::SetKey => Key::EditSetKey,
         Edit::SetChord => Key::EditSetChord,
         Edit::MoveChord => Key::EditMoveChord,
@@ -250,6 +250,7 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
         | SessionError::RenderSource(detail)
         | SessionError::OutputPreview(detail)
         | SessionError::InvalidDrumAssignment(detail)
+        | SessionError::SoundPreset(detail)
         | SessionError::DrumAnalysis(detail)
         | SessionError::PluginDiscovery(detail)
         | SessionError::MusicAnalysis(detail) => with(Key::ErrorDocument, detail.clone()),

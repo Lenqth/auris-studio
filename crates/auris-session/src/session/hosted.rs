@@ -272,6 +272,27 @@ impl HostedPlugins {
         plugin.save_state().map(Some)
     }
 
+    /// Captures both opaque state and current parameter values for a reusable patch.
+    pub(super) fn sound_state(
+        &mut self,
+        which: PluginWindow,
+        saved: &PluginState,
+    ) -> Result<PluginState, SessionError> {
+        let plugin = self
+            .window_slot(which)
+            .and_then(HostedSlot::plugin_mut)
+            .ok_or_else(|| SessionError::SoundPreset("the CLAP plugin is unavailable".into()))?;
+        let mut state = saved.clone();
+        state.set_hosted_bytes(&plugin.save_state()?);
+        for descriptor in plugin.parameters().to_vec() {
+            let value = plugin.value(descriptor.id).ok_or_else(|| {
+                SessionError::SoundPreset("the CLAP plugin could not snapshot a parameter".into())
+            })?;
+            state.params.insert(descriptor.key.to_string(), value);
+        }
+        Ok(state)
+    }
+
     /// The same, for a track's hosted instrument.
     pub(super) fn save_instrument_state(
         &mut self,
@@ -287,8 +308,15 @@ impl HostedPlugins {
         plugin.save_state().map(Some)
     }
 
-    /// Forgets every slot. Called when a *different* document takes over — see
-    /// [`Session::open`]; an undo restoring a variant of the same document keeps its slots.
+    /// Retires one instrument so the next graph restores the document's opaque patch.
+    pub(super) fn forget_instrument(&mut self, track: TrackId) {
+        if let Some(slot) = self.instruments.remove(&track) {
+            slot.retire_into(&mut self.retiring);
+        }
+        self.sweep_retired();
+    }
+
+    /// Forgets every slot when a document or a saved patch snapshot takes over.
     pub(super) fn clear(&mut self) {
         for slot in std::mem::take(&mut self.slots).into_values() {
             slot.retire_into(&mut self.retiring);
@@ -1187,6 +1215,83 @@ mod tests {
     use auris_core::plugin::{Effect, ProcessContext};
     use auris_core::time::Ticks;
     use auris_core::{AssetPath, AudioBuffer};
+
+    #[test]
+    fn reusable_sound_captures_effect_values_changed_inside_the_plugin() {
+        let scratch = super::super::fixtures::Scratch::new("reusable-clap-effect");
+        let file = scratch.join("gain.clap");
+        std::fs::write(&file, b"fixture").unwrap();
+        let mut session = super::super::fixtures::session();
+        session
+            .hosted
+            .libraries
+            .insert(file.clone(), fixture_library());
+        let source = session.add_default_instrument_track("Source").unwrap();
+        let slot = session
+            .add_hosted_effect(Some(source), &file, FIXTURE_ID)
+            .unwrap();
+        session.set_param(
+            crate::ParamTarget::Effect {
+                track: Some(source),
+                slot,
+                param: ParamId(0),
+            },
+            0.9,
+        );
+        session
+            .hosted
+            .slots
+            .get_mut(&slot)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .load_state(&0.25f32.to_le_bytes())
+            .unwrap();
+        let sound = session.capture_sound(source, "Quarter gain").unwrap();
+        assert_eq!(sound.effects[0].state.params["clap.4242"], 0.25);
+        let target = session.add_default_instrument_track("Target").unwrap();
+        session.apply_sound(target, &sound).unwrap();
+        let slot = session.project.track(target).unwrap().mixer.effects[0].id;
+        session.hosted.refresh_values(PluginWindow::Effect(slot));
+        assert_eq!(
+            session.hosted.value(PluginWindow::Effect(slot), ParamId(0)),
+            Some(0.25)
+        );
+    }
+
+    #[test]
+    fn reusable_sound_restores_a_different_opaque_patch_on_the_same_plugin_and_undoes() {
+        let scratch = super::super::fixtures::Scratch::new("reusable-clap");
+        let file = scratch.join("tone.clap");
+        std::fs::write(&file, b"fixture").unwrap();
+        let mut session = super::super::fixtures::session();
+        session
+            .hosted
+            .libraries
+            .insert(file.clone(), instrument_library());
+        let track = session.add_default_instrument_track("Tone").unwrap();
+        session
+            .set_hosted_instrument(track, &file, TONE_ID)
+            .unwrap();
+        let original = session.capture_sound(track, "Unity").unwrap();
+        session
+            .hosted
+            .instruments
+            .get_mut(&track)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .load_state(&0.25f32.to_le_bytes())
+            .unwrap();
+        let quiet = session.capture_sound(track, "Quiet").unwrap();
+        assert_ne!(original.state.hosted_bytes(), quiet.state.hosted_bytes());
+        session.apply_sound(track, &original).unwrap();
+        assert_eq!(session.capture_sound(track, "Unity").unwrap(), original);
+        assert_eq!(session.undo(), Some(Edit::ApplySoundPreset));
+        assert_eq!(session.capture_sound(track, "Quiet").unwrap(), quiet);
+        assert_eq!(session.redo(), Some(Edit::ApplySoundPreset));
+        assert_eq!(session.capture_sound(track, "Unity").unwrap(), original);
+    }
 
     fn composed_instrument_spec(path: &Path, plugin_id: &str) -> auris_compose::SongSpec {
         let mut spec =
