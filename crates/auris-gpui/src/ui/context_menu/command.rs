@@ -20,6 +20,12 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// Changes the piano roll's grid without changing the arrangement or document.
+    PianoRollGrid(auris_session::PianoRollGrid),
+    /// Selects relative or absolute positioning for note drags.
+    RelativeNoteSnap(bool),
+    /// Enables or disables grid snapping for note ends.
+    SnapNoteEnds(bool),
     /// Captures a track before asking to replace a saved user sound.
     OverwriteSound {
         /// Exact library entry shown when the menu opened.
@@ -837,6 +843,15 @@ impl AurisApp {
             return;
         }
         match command {
+            MenuCommand::PianoRollGrid(grid) => {
+                self.settings.piano_roll_grid = grid;
+                self.remember_note_snap();
+            }
+            MenuCommand::RelativeNoteSnap(relative) => {
+                self.settings.relative_note_snap = relative;
+                self.remember_note_snap();
+            }
+            MenuCommand::SnapNoteEnds(enabled) => self.apply_snap_note_lengths(enabled),
             MenuCommand::SetExpressionSettings { clip, settings } => {
                 if let Ok(stack) = self.session.clip_transforms(clip) {
                     let next = crate::ui::expression::with_expression_settings(stack, settings);

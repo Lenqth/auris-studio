@@ -581,11 +581,19 @@ strings! {
         en: "Keeps a recovery copy in private working storage about every 30 seconds. The project file is changed only when you save it.",
         ja: "約30秒ごとに、復旧用のコピーを作業用キャッシュへ保存します。プロジェクト本体は、手動で保存したときだけ更新されます。"
     }
-    SnapNoteLengths { en: "Snap Note Lengths", ja: "ノートの長さをスナップ" }
-    SnapNoteLengthsShort { en: "Length Snap", ja: "長さスナップ" }
+    PianoRollSnap { en: "Piano Roll Snap…", ja: "ピアノロールのスナップ…" }
+    SnapShort { en: "Snap", ja: "スナップ" }
+    SnapSmart { en: "Smart", ja: "スマート" }
+    SnapBar { en: "Bar", ja: "小節" }
+    SnapBeat { en: "Beat", ja: "拍" }
+    SnapDivision { en: "Division", ja: "ディビジョン" }
+    SnapAbsolute { en: "Absolute", ja: "絶対" }
+    SnapRelative { en: "Relative", ja: "相対" }
+    SnapNoteLengths { en: "Snap Note Ends", ja: "ノートの終端をスナップ" }
+    SnapNoteLengthsShort { en: "Snap ends", ja: "終端スナップ" }
     SnapNoteLengthsNote {
-        en: "Rounds a note's duration to the editing grid while its right edge is dragged.",
-        ja: "ノートの右端をドラッグしたとき、長さを編集グリッドに合わせます。"
+        en: "Snaps a note's right edge using the piano roll's grid and absolute or relative mode.",
+        ja: "ノートの右端をドラッグすると、ピアノロールのグリッドと絶対・相対の設定に従ってスナップします。"
     }
     CurrentChord { en: "Chord", ja: "コード" }
     JapaneseDictionaryHeading { en: "Japanese Dictionary", ja: "日本語辞書" }

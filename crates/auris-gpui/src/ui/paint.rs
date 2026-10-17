@@ -311,9 +311,35 @@ pub fn time_grid(
     signatures: &[SignatureSpan],
     theme: &Theme,
 ) {
+    time_grid_using(window, bounds, view, signatures, theme, |signature| {
+        view.grid_step(signature, px(7.0))
+    });
+}
+
+/// Draws a grid whose subdivision is supplied by the editor's snap policy.
+/// Dense fixed grids show a subset of their lines; Off retains the ruler's visual guides.
+pub(crate) fn time_grid_using(
+    window: &mut Window,
+    bounds: Bounds<Pixels>,
+    view: &TimelineView,
+    signatures: &[SignatureSpan],
+    theme: &Theme,
+    spacing: impl Fn(TimeSignature) -> Ticks,
+) {
     let (start, end) = view.visible_range(bounds.size.width);
     for (span, stop) in visible_spans(signatures, start, end) {
-        let step = view.grid_step(span.signature, px(7.0)).raw().max(1);
+        let requested = spacing(span.signature).raw().max(1);
+        let mut step = if requested == 1 {
+            view.grid_step(span.signature, px(7.0)).raw().max(1)
+        } else {
+            requested
+        };
+        while step as f32 * view.pixels_per_tick() < 7.0 {
+            let Some(wider) = step.checked_mul(2) else {
+                break;
+            };
+            step = wider;
+        }
         let ticks_per_bar = span.signature.ticks_per_bar().0.max(1);
         let ticks_per_beat = span.signature.ticks_per_beat().0.max(1);
 

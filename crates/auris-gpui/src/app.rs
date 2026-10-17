@@ -661,6 +661,8 @@ pub enum Drag {
         index: usize,
         /// Original start and length of every note affected by this gesture.
         origins: Vec<(usize, Ticks, Ticks)>,
+        /// Clip-relative pointer tick at the press, preserving where the edge was grabbed.
+        origin_tick: Ticks,
         /// Creating a note: its creation modifier must not also disable length snapping.
         drawing: bool,
         /// Where the button went down, until the pointer has travelled far enough to mean it.
