@@ -192,7 +192,7 @@ impl Render for AurisApp {
         let title_bar = self.render_title_bar(window, cx);
         let menu_bar = self.render_menu_bar(window, cx);
         let transport = self.render_transport(window, cx);
-        let arrangement = self.render_arrangement(window, cx);
+        let arrangement = self.render_track_workspace(window, cx);
         self.sync_auxiliary_windows(cx);
         if Panel::ALL.into_iter().any(|panel| {
             self.panels.is_detached(panel) && self.pane_focused(panel.pane(), window, cx)
@@ -463,6 +463,14 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_toggle_inspector))
                     .on_action(Self::window_listener(cx, Self::on_toggle_piano_roll))
                     .on_action(Self::window_listener(cx, Self::on_toggle_mixer))
+                    .on_action(Self::window_listener(
+                        cx,
+                        |this, _: &actions::ToggleTrackGrid, window, cx| {
+                            this.set_track_grid(!this.track_grid.open);
+                            this.focus_pane(Pane::Arrangement, window);
+                            cx.notify();
+                        },
+                    ))
                     .on_action(Self::window_listener(cx, Self::on_toggle_log))
                     .on_action(Self::window_listener(cx, Self::on_toggle_agent))
                     .on_action(Self::window_listener(cx, Self::on_toggle_structure_lane))

@@ -1630,6 +1630,7 @@ pub struct AurisApp {
     pub(crate) music_analysis: crate::ui::music_analysis::MusicAnalysisState,
     pub(crate) visualizer: crate::ui::visualizer::VisualizerState,
     pub(crate) physical_view: crate::ui::physical_model::PhysicalView,
+    pub(crate) track_grid: crate::ui::track_grid::TrackGrid,
     pub(crate) timbre_map: crate::ui::timbre_map::TimbreMapState,
     /// Invalidates results started before a voice or its connection settings changed.
     pub(crate) sung_preview_generation: u64,
@@ -1663,6 +1664,10 @@ pub struct AurisApp {
     pub(crate) progressions: auris_session::progressions::ProgressionBook,
     /// Drum maps remembered per sound source and copied into each project that uses them.
     pub(crate) drum_maps: auris_session::DrumMapBook,
+    /// Installation-wide saved sounds offered by the library.
+    pub(crate) sounds: auris_session::SoundBook,
+    /// A loading failure shown without replacing the existing library file.
+    pub(crate) sound_library_error: Option<String>,
     /// Notes currently sounding because the user is holding a key, dragging one, or pressing a
     /// chord on the harmony lane.
     pub(crate) auditioning: Option<(TrackId, Vec<u8>)>,
@@ -1984,6 +1989,7 @@ impl AurisApp {
                         this.sample_input_level();
                         this.poll_visualizer();
                         this.poll_physical_view();
+                        this.poll_track_grid();
                         // Separate from `poll` on purpose: that is housekeeping and this writes
                         // to disk. A success says nothing: it is a private recovery snapshot, and
                         // announcing one every half minute would drown out useful status. A
@@ -2027,6 +2033,11 @@ impl AurisApp {
                 .map(|clip| clip.id)
         });
 
+        let (sounds, sound_library_error) =
+            match auris_session::SoundBook::read(&auris_session::SoundBook::path()) {
+                Ok(book) => (book, None),
+                Err(error) => (Default::default(), Some(error.to_string())),
+            };
         let mut app = Self {
             session,
             theme,
@@ -2074,6 +2085,7 @@ impl AurisApp {
             music_analysis: Default::default(),
             visualizer: Default::default(),
             physical_view: Default::default(),
+            track_grid: Default::default(),
             timbre_map: Default::default(),
             sung_preview_generation: 0,
             sung_geometry: std::collections::HashMap::new(),
@@ -2089,6 +2101,8 @@ impl AurisApp {
             song_lyrics_reveal: None,
             progressions: auris_session::progressions::ProgressionBook::load(),
             drum_maps: auris_session::DrumMapBook::load(),
+            sounds,
+            sound_library_error,
             auditioning: None,
             note_selection_preview: None,
             focus: cx.focus_handle(),

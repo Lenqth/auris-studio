@@ -34,6 +34,7 @@ mod accompany;
 mod agent_instruments;
 mod setup_tracks;
 mod sound_search;
+mod sounds;
 pub use setup_tracks::{SetupClip, SetupTrack, SetupTrackKind};
 pub use sound_search::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
 mod analysis;
@@ -393,6 +394,9 @@ pub struct Session {
     scope: Arc<auris_engine::Scope>,
     visualizer_scope: Arc<auris_engine::Scope>,
     motion_monitors: HashMap<TrackId, Arc<auris_core::motion::MotionMonitor>>,
+    overview_scopes: HashMap<TrackId, Arc<auris_engine::Scope>>,
+    overview_watched: bool,
+    motion_track: Option<TrackId>,
     /// Turns the window the engine publishes into a spectrum.
     ///
     /// Here rather than in a frontend because a frontend may not name `auris-dsp` — and because
@@ -644,6 +648,9 @@ impl Session {
             scope: Arc::new(auris_engine::Scope::new()),
             visualizer_scope: Arc::new(auris_engine::Scope::new()),
             motion_monitors: HashMap::new(),
+            overview_scopes: HashMap::new(),
+            overview_watched: false,
+            motion_track: None,
             analyzer: auris_dsp::SpectrumAnalyzer::new(auris_engine::SCOPE_WINDOW),
             param_cache: HashMap::new(),
             keyed_cache: HashMap::new(),
@@ -940,11 +947,16 @@ impl Session {
         self.scope.watch(auris_engine::ScopeSource::Off);
     }
 
-    /// Enables mechanical observation for one track and disables all other instrument readers.
-    /// Invalid or nonphysical tracks disable observation rather than retaining another source.
-    pub fn watch_instrument_motion(&self, track: Option<TrackId>) {
+    /// Selects the instrument editor's mechanical observation independently of the overview.
+    /// Invalid or nonphysical tracks clear the editor request rather than retaining a source.
+    pub fn watch_instrument_motion(&mut self, track: Option<TrackId>) {
+        self.motion_track = track;
+        self.refresh_motion_watches();
+    }
+
+    fn refresh_motion_watches(&self) {
         for (id, monitor) in &self.motion_monitors {
-            monitor.watch(Some(*id) == track);
+            monitor.watch(self.overview_watched || Some(*id) == self.motion_track);
         }
     }
 
@@ -1130,13 +1142,13 @@ impl Session {
             return None;
         }
         let edit = self.history.undo_edit()?;
-        if edit == Edit::Compose {
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
             self.collect_hosted_state().ok()?;
         }
         let project = self.history.undo(&self.project)?;
-        if edit == Edit::Compose {
-            // The two songs can reuse a track id and plugin id while holding different native
-            // presets. Fresh slots restore the history snapshot rather than the outgoing sound.
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
+            // Either snapshot can reuse track and plugin ids while holding different native
+            // patches. Fresh slots restore the history snapshot rather than the outgoing sound.
             self.hosted.clear();
             self.vst3.clear();
         }
@@ -1157,11 +1169,11 @@ impl Session {
             return None;
         }
         let edit = self.history.redo_edit()?;
-        if edit == Edit::Compose {
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
             self.collect_hosted_state().ok()?;
         }
         let project = self.history.redo(&self.project)?;
-        if edit == Edit::Compose {
+        if matches!(edit, Edit::Compose | Edit::ApplySoundPreset) {
             self.hosted.clear();
             self.vst3.clear();
         }
@@ -1316,6 +1328,24 @@ impl Session {
             .tracks()
             .iter()
             .filter_map(|track| Some((track.id, track.motion_monitor()?)))
+            .collect();
+        self.refresh_motion_watches();
+        // Fresh readers prevent a replaced instrument from inheriting the previous signal.
+        for scope in self.overview_scopes.values() {
+            scope.watch(auris_engine::ScopeSource::Off);
+        }
+        self.overview_scopes = graph
+            .tracks_mut()
+            .iter_mut()
+            .enumerate()
+            .map(|(index, track)| {
+                let scope = Arc::new(auris_engine::Scope::new());
+                if self.overview_watched {
+                    scope.watch(auris_engine::ScopeSource::Track(index));
+                }
+                track.set_overview_scope(Arc::clone(&scope));
+                (track.id, scope)
+            })
             .collect();
         graph.set_scope(Arc::clone(&self.scope));
         graph.set_visualizer_scope(Arc::clone(&self.visualizer_scope));

@@ -510,7 +510,7 @@ impl Instrument for TinWhistle {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor::instrument(
             Self::ID,
-            "Physical Tin Whistle",
+            "Physical Whistles",
             "Fipple jet driving an open-open metal bore",
             PluginCategory::Synth,
         )

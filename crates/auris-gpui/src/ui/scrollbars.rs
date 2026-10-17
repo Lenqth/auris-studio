@@ -33,17 +33,20 @@ pub(crate) enum ScrollPanel {
     Mixer,
     /// The agent conversation on the right.
     Agent,
+    /// The central overview of all tracks.
+    TrackGrid,
 }
 
 impl ScrollPanel {
     /// Every panel there is, in the order that indexes the arrays keyed by one.
-    pub(crate) const ALL: [ScrollPanel; 6] = [
+    pub(crate) const ALL: [ScrollPanel; 7] = [
         ScrollPanel::Library,
         ScrollPanel::Inspector,
         ScrollPanel::Log,
         ScrollPanel::Lanes,
         ScrollPanel::Mixer,
         ScrollPanel::Agent,
+        ScrollPanel::TrackGrid,
     ];
 
     /// How many there are.
@@ -71,6 +74,7 @@ impl ScrollPanel {
             ScrollPanel::Lanes => "lanes-scrollbar",
             ScrollPanel::Mixer => "mixer-scrollbar",
             ScrollPanel::Agent => "agent-scrollbar",
+            ScrollPanel::TrackGrid => "track-grid-scrollbar",
         }
     }
 }
@@ -118,6 +122,7 @@ impl AurisApp {
             ScrollPanel::Log => Some(&self.log_scroll),
             ScrollPanel::Mixer => Some(&self.mixer_scroll),
             ScrollPanel::Agent => Some(&self.agent_chat.scroll),
+            ScrollPanel::TrackGrid => Some(&self.track_grid.scroll),
             ScrollPanel::Lanes => None,
         }
     }

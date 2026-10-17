@@ -7,6 +7,15 @@ use thiserror::Error;
 /// Anything that can go wrong while driving a session.
 #[derive(Debug, Error)]
 pub enum SessionError {
+    /// A saved sound name is empty or already used by another entry.
+    #[error("choose a new, nonempty sound name")]
+    SoundNameUnavailable,
+    /// A library edit no longer describes the saved entry shown by the frontend.
+    #[error("the saved sound has changed or been removed; reopen its menu and try again")]
+    SoundLibraryChanged,
+    /// A reusable sound is incomplete, unavailable, or has an invalid name or parameter.
+    #[error("sound preset: {0}")]
+    SoundPreset(String),
     /// The requested whole-mix level cannot be measured or safely applied.
     #[error("mix normalization: {0}")]
     MixNormalization(String),

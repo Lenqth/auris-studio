@@ -390,6 +390,40 @@ fn is_drum_model(id: &str) -> bool {
     id == "auris.synth.drumkit"
 }
 
+/// Reuses the editor's mechanical projection for one track's overview tile.
+pub(crate) fn model_thumbnail(
+    id: String,
+    frame: Option<MotionFrame>,
+    language: Language,
+    theme: Theme,
+) -> AnyElement {
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, cx| {
+            draw_motion(
+                bounds,
+                &MotionDrawing {
+                    frame: &frame.unwrap_or_default(),
+                    history: &[],
+                    gain: 24.,
+                    theme: &theme,
+                    held: Key::PhysicalHeld.get(language),
+                    released: Key::PhysicalReleased.get(language),
+                    language,
+                    drums: is_drum_model(&id),
+                    piano: id == "auris.physical.piano",
+                    layout: string_layout(&id),
+                    effects: false,
+                },
+                window,
+                cx,
+            );
+        },
+    )
+    .size_full()
+    .into_any_element()
+}
+
 fn next_drum_preview(pitch: u8, forward: bool) -> u8 {
     const KEYS: [u8; 12] = [36, 38, 42, 46, 49, 51, 41, 43, 45, 47, 48, 50];
     let current = KEYS.iter().position(|key| *key == pitch).unwrap_or(0);

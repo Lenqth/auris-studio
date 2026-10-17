@@ -40,6 +40,8 @@ macro_rules! strings {
 }
 
 strings! {
+    TrackGrid { en: "Track grid", ja: "トラックグリッド" }
+    TrackGridEmpty { en: "Add a track to see its sound here.", ja: "トラックを追加すると、音源の動きや波形をここに表示します。" }
     ToolbarHeading { en: "Top toolbar", ja: "上部ツールバー" }
     ToolbarNote { en: "Show or hide items and change their order within each group.", ja: "項目の表示を切り替え、グループ内の順序を変更できます。" }
     ToolbarPlayback { en: "Playback controls", ja: "再生操作" }
@@ -273,6 +275,25 @@ strings! {
     // to set on the selected track" — on the one row where clicking does something quite
     // different: it collapses the section the instruction is about.
     BrowserInstruments { en: "Instruments", ja: "音源" }
+    UserSounds { en: "User sounds", ja: "ユーザ定義音源" }
+    FactorySounds { en: "Presets", ja: "プリセット" }
+    SaveSound { en: "Save as user sound…", ja: "ユーザ定義音源として保存…" }
+    SoundName { en: "User sound name", ja: "ユーザ定義音源の名前" }
+    SoundNameUnavailable { en: "Choose a nonempty name that is not already used by another sound.", ja: "ほかの音源と重複しない名前を入力してください。空の名前は使用できません。" }
+    SoundLibraryChanged { en: "This saved sound has changed or been removed. Close this dialog and right-click the sound to try again.", ja: "この音源は別の場所で変更または削除されました。この画面を閉じ、音源を右クリックしてやり直してください。" }
+    OverwriteSound { en: "Overwrite from selected track…", ja: "選択中のトラックで上書き…" }
+    OverwriteSoundConfirm { en: "Overwrite", ja: "上書き保存" }
+    RenameSound { en: "Rename sound…", ja: "音源名を変更…" }
+    DuplicateSound { en: "Duplicate sound…", ja: "音源を複製…" }
+    DuplicateSoundConfirm { en: "Duplicate", ja: "複製" }
+    DeleteSound { en: "Delete sound…", ja: "音源を削除…" }
+    DeleteSoundConfirm { en: "Delete sound", ja: "音源を削除" }
+    DeleteSoundBody {
+        en: "This removes the saved sound from your library. Settings already applied to projects stay unchanged. This cannot be undone.",
+        ja: "保存した音源をライブラリから削除します。プロジェクトに適用済みの設定はそのまま残ります。この操作は取り消せません。"
+    }
+    SoundContents { en: "Replace instrument settings and insert effects", ja: "音源の設定とインサートエフェクトを置き換え" }
+    UserSoundsEmpty { en: "Save an instrument and its inserts from the track inspector", ja: "トラックのインスペクタから音源とエフェクトを保存できます" }
     BrowserEffects { en: "Effects", ja: "エフェクト" }
     BrowserSoundFonts { en: "SoundFonts", ja: "サウンドフォント" }
     // Under the heading, where it belongs: a line about the rows rather than about the row it is

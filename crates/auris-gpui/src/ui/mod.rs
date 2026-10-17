@@ -56,6 +56,7 @@ pub(crate) mod timbre_map;
 pub mod timeline;
 pub mod title_bar;
 pub mod tooltip;
+pub(crate) mod track_grid;
 pub mod transport_bar;
 pub mod typing_panel;
 pub(crate) mod visualizer;

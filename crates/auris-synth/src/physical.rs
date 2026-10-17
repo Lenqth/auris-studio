@@ -112,7 +112,7 @@ impl Model {
             Self::Bass => "Physical Bass",
             Self::Bell => "Physical Bell",
             Self::Mallet => "Physical Mallet",
-            Self::Violin => "Physical Violin",
+            Self::Violin => "Physical Strings",
         }
     }
 
@@ -126,9 +126,7 @@ impl Model {
             Self::Bass => "Plucked bass string: finger/pick hardness, damping and body",
             Self::Bell => "Struck bell: inharmonic shell modes, beater hardness and decay",
             Self::Mallet => "Mallet bar: bending modes, beater hardness and damping",
-            Self::Violin => {
-                "Bowed violin string: nonlinear friction, bow pressure, position and body"
-            }
+            Self::Violin => "Bowed strings: nonlinear friction, bow pressure, position and body",
         }
     }
 

@@ -388,7 +388,7 @@ impl Instrument for HammeredDulcimer {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor::instrument(
             Self::ID,
-            "Physical Hammered Dulcimer",
+            "Physical Hammered Strings",
             "Hammer-excited coupled string courses with passive bridge coupling",
             PluginCategory::Synth,
         )

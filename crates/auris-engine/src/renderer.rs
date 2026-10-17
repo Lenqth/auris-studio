@@ -158,6 +158,18 @@ fn render_segment(
             // whenever the track is unmuted. Silenced, not freed: the buffer stays in its
             // slot for the UI thread's next swap.
             track.stop_one_shot();
+            // A skipped strip still needs to move its displayed history into silence.
+            if let Some(scope) = &track.overview_scope
+                && scope.watching() != crate::ScopeSource::Off
+            {
+                track.scratch.set_frame_count(frames);
+                track.scratch.clear();
+                scope.publish_stereo(
+                    track.scratch.channel(0),
+                    track.scratch.channel(1),
+                    ctx.sample_rate,
+                );
+            }
             continue;
         }
         track.scratch.set_frame_count(frames);
@@ -215,6 +227,13 @@ fn render_segment(
         }
 
         track.peak = track.peak.max(track.scratch.peak());
+        if let Some(scope) = &track.overview_scope {
+            scope.publish_stereo(
+                track.scratch.channel(0),
+                track.scratch.channel(1),
+                ctx.sample_rate,
+            );
+        }
         // A spectrum display, if one is open on this strip, reads what the strip actually sends
         // to the bus — the chain applied, the fader applied. The check is one relaxed load per
         // block, hoisted out of the loop, so a graph nobody is looking at pays nothing.
@@ -614,6 +633,53 @@ mod tests {
             &testkit::registry(),
             block,
         )
+    }
+
+    #[test]
+    fn overview_scopes_publish_independent_post_fader_tracks_without_changing_audio() {
+        let mut project = one_note_project(Ticks::ZERO, Ticks::from_beats(8.));
+        let first = project.tracks[0].id;
+        let second = project.duplicate_track(first).unwrap();
+        project.track_mut(second).unwrap().mixer.gain_db = -12.;
+        let mut baseline = build(&project, 256);
+        let mut observed = build(&project, 256);
+        let scopes: Vec<_> = (0..2)
+            .map(|index| {
+                let scope = Arc::new(crate::Scope::new());
+                scope.watch(crate::ScopeSource::Track(index));
+                observed.tracks_mut()[index].set_overview_scope(Arc::clone(&scope));
+                scope
+            })
+            .collect();
+        let mut baseline_transport = Transport::playing_from(0);
+        let mut observed_transport = Transport::playing_from(0);
+        let mut expected = AudioBuffer::new(RENDER_CHANNELS, 256, SAMPLE_RATE);
+        let mut actual = expected.clone();
+        for _ in 0..16 {
+            render_block(&mut baseline, &mut baseline_transport, &mut expected, false);
+            let heap = testkit::count_heap_operations(|| {
+                render_block(&mut observed, &mut observed_transport, &mut actual, false);
+            });
+            assert_eq!(heap, (0, 0));
+            assert_eq!(actual.channels(), expected.channels());
+        }
+        let (mut first_wave, mut second_wave) = ([0.; 1024], [0.; 1024]);
+        assert!(scopes[0].read(&mut first_wave));
+        assert!(scopes[1].read(&mut second_wave));
+        let peak = first_wave.iter().copied().map(f32::abs).fold(0., f32::max);
+        assert!(peak > 0.01);
+        for (first, second) in first_wave.into_iter().zip(second_wave) {
+            assert!((second - first * db_to_gain(-12.)).abs() < 1e-5);
+        }
+        observed.tracks_mut()[0].strip_mut().set_mute(true);
+        let heap = testkit::count_heap_operations(|| {
+            for _ in 0..8 {
+                render_block(&mut observed, &mut observed_transport, &mut actual, false);
+            }
+        });
+        assert_eq!(heap, (0, 0));
+        assert!(scopes[0].read(&mut first_wave));
+        assert!(first_wave.iter().all(|value| value.abs() < 1e-6));
     }
 
     #[test]

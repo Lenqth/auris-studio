@@ -203,7 +203,7 @@ pub fn edit_key(edit: Edit) -> Key {
         Edit::ImportAudio => Key::EditImportAudio,
         Edit::RecordTake => Key::EditRecordTake,
         Edit::ImportSoundFont => Key::EditImportSoundFont,
-        Edit::ChoosePreset => Key::EditChoosePreset,
+        Edit::ChoosePreset | Edit::ApplySoundPreset => Key::EditChoosePreset,
         Edit::SetKey => Key::EditSetKey,
         Edit::SetChord => Key::EditSetChord,
         Edit::MoveChord => Key::EditMoveChord,
@@ -238,6 +238,8 @@ pub fn track_kind_key(kind: &TrackKind) -> Key {
 pub fn error_text(error: &SessionError, language: Language) -> String {
     let with = |key: Key, detail: String| messages::detailed(language, key.get(language), &detail);
     match error {
+        SessionError::SoundNameUnavailable => Key::SoundNameUnavailable.get(language).to_string(),
+        SessionError::SoundLibraryChanged => Key::SoundLibraryChanged.get(language).to_string(),
         SessionError::EmptyGroove => Key::PerformGrooveEmpty.get(language).to_string(),
         SessionError::InvalidRhythm => Key::ErrorRhythm.get(language).to_string(),
         SessionError::SongLyrics(detail) => with(Key::SongLyricsMatch, detail.clone()),
@@ -250,6 +252,7 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
         | SessionError::RenderSource(detail)
         | SessionError::OutputPreview(detail)
         | SessionError::InvalidDrumAssignment(detail)
+        | SessionError::SoundPreset(detail)
         | SessionError::DrumAnalysis(detail)
         | SessionError::PluginDiscovery(detail)
         | SessionError::MusicAnalysis(detail) => with(Key::ErrorDocument, detail.clone()),

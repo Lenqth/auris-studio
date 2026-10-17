@@ -76,6 +76,11 @@ pub mod registry;
 pub mod render;
 pub mod session;
 pub mod settings;
+pub mod sounds;
+pub use sounds::{
+    SoundBook, SoundFamily, SoundPreset, SoundPresetEffect, SoundPresetFont,
+    factory_sound_families, factory_sounds,
+};
 pub mod singer_portrait;
 pub mod transient_id;
 pub mod voice_setup;

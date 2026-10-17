@@ -9,6 +9,17 @@
 //! each crate's own front page explains what that crate is for, and this one explains why the
 //! boundaries between them are where they are.
 //!
+//! # Track overview
+//!
+//! [`crate::Session::watch_track_overview`] enables simultaneous observation of the tracks.
+//! Each render track publishes its own post-fader stereo signal into a preallocated, lock-free
+//! scope, independently of the plugin editor and the single-source audio visualizer. Readers
+//! are replaced on graph rebuilds so removed or replaced sources cannot leave stale audio.
+//! [`crate::Session::track_overview_frame`] copies samples on the caller's thread without an FFT.
+//! Mechanical observation is the union of overview and instrument-editor requests; closing one
+//! reader leaves the other active. Observation does not edit the project or its undo history.
+//! The desktop owns the grid layout, selection, display freeze and mechanical projections.
+//!
 //! # Authored note replacement
 //!
 //! [`crate::Session::replace_notes`] validates a complete note sequence before replacing
@@ -19,6 +30,31 @@
 //! MCP's toolbox translates song-relative bar/beat inputs, optionally read from a bounded
 //! JSON file, and checkpoints only changed documents. File paths refer to the MCP server;
 //! the source JSON is input, not a retained asset. Both doors share pitch notation parsing.
+//!
+//! # Reusable sounds
+//!
+//! [`crate::SoundPreset`] holds an instrument's complete state and its ordered insert effects,
+//! including bypass switches and opaque hosted-plugin state. [`crate::SoundBook`] keeps named
+//! user sounds in the installation's configuration directory. Applying a sound copies its
+//! settings into the document: playback and project reopening never depend on the user library.
+//! Library edits reload under a cross-process lock and write atomically. Overwrite, rename and
+//! delete require the exact previously displayed entry, refusing stale edits from another window.
+//! These operations change only the library; applied project settings and factory patches survive.
+//! Duplication copies the selected saved entry under a new name, including its insert chain and
+//! external references, without reading a selected track or changing the original entry.
+//! SoundFont references use resolved file paths and bank/program pairs; applying remaps the font
+//! to the receiving project's identity. Hosted binaries remain external library references.
+//!
+//! [`crate::Session::capture_sound`] and [`crate::Session::apply_sound`] own this workflow for
+//! every frontend. Applying replaces the target's instrument and complete insert chain as one
+//! undoable command, allocating fresh effect identities and removing the old instrument/effect
+//! automation. Notes, track faders, pan, routing and sends belong to the song and stay in place.
+//! Sidechain track identities also belong to the song and are not part of a reusable sound.
+//! [`crate::factory_sound_families`] groups editable starting patches beneath every physical
+//! instrument. Each family's first patch keeps the engine's existing default parameters; other
+//! patches override exposed controls. All use the same data and application path as user sounds.
+//! The browser can collapse families and search their translated patch names. Family display
+//! names may broaden, while stored plugin identities and existing project settings stay stable.
 //!
 //! # Live instrument discovery
 //!

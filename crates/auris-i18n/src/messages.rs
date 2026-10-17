@@ -76,6 +76,42 @@ macro_rules! messages {
 }
 
 messages! {
+    /// Names the saved sound whose contents will be replaced.
+    fn overwrite_sound_title(name: &str) {
+        en: "Overwrite “{name}”?",
+        ja: "「{name}」を上書きしますか？"
+    }
+
+    /// Identifies the captured source track and the scope of the library edit.
+    fn overwrite_sound_body(track: &str) {
+        en: "Replace the saved instrument settings and insert effects with those captured from track “{track}”. Settings already applied to projects stay unchanged. This cannot be undone.",
+        ja: "トラック「{track}」から取得した音源設定とインサートエフェクトで上書きします。プロジェクトに適用済みの設定はそのまま残ります。この操作は取り消せません。"
+    }
+
+    /// Names the saved sound being renamed.
+    fn rename_sound_title(name: &str) {
+        en: "Rename “{name}”",
+        ja: "「{name}」の名前を変更"
+    }
+
+    /// Names the saved sound being duplicated.
+    fn duplicate_sound_title(name: &str) {
+        en: "Duplicate “{name}”",
+        ja: "「{name}」を複製"
+    }
+
+    /// Suggests the name of a new independent copy of a saved sound.
+    fn sound_copy_name(name: &str) {
+        en: "{name} copy",
+        ja: "{name}のコピー"
+    }
+
+    /// Names the saved sound being deleted.
+    fn delete_sound_title(name: &str) {
+        en: "Delete “{name}”?",
+        ja: "「{name}」を削除しますか？"
+    }
+
     /// Names the exact plugin folder a removal confirmation applies to.
     fn remove_plugin_folder_title(path: &str) {
         en: "Remove plugin folder “{path}”?",
