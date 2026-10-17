@@ -282,6 +282,8 @@ strings! {
     OverwriteSound { en: "Overwrite from selected track…", ja: "選択中のトラックで上書き…" }
     OverwriteSoundConfirm { en: "Overwrite", ja: "上書き保存" }
     RenameSound { en: "Rename sound…", ja: "音源名を変更…" }
+    DuplicateSound { en: "Duplicate sound…", ja: "音源を複製…" }
+    DuplicateSoundConfirm { en: "Duplicate", ja: "複製" }
     DeleteSound { en: "Delete sound…", ja: "音源を削除…" }
     DeleteSoundConfirm { en: "Delete sound", ja: "音源を削除" }
     DeleteSoundBody {

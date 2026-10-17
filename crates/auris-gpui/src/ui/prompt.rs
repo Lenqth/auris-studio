@@ -35,6 +35,8 @@ pub enum PromptTarget {
     SaveSound(TrackId),
     /// The saved user sound retained by this prompt.
     RenameSound,
+    /// A new copy of the saved user sound retained by this prompt.
+    DuplicateSound,
     /// A track's name.
     Track(TrackId),
     /// A clip's name.
@@ -250,6 +252,7 @@ impl PromptTarget {
             PromptTarget::Position => Notation::Position,
             PromptTarget::SaveSound(_)
             | PromptTarget::RenameSound
+            | PromptTarget::DuplicateSound
             | PromptTarget::Track(_)
             | PromptTarget::Clip(_)
             | PromptTarget::DrumLaneName { .. }
@@ -644,7 +647,7 @@ pub struct Prompt {
     vocabulary: Option<Vec<String>>,
     /// The key that names and colours the dynamic chord vocabulary.
     chord_key: Option<MusicalKey>,
-    /// The original entry for a rename, so concurrent library edits are detected on commit.
+    /// The source entry for a library edit, so concurrent changes are detected on commit.
     sound: Option<std::sync::Arc<auris_session::SoundPreset>>,
 }
 
@@ -675,6 +678,17 @@ impl Prompt {
         sound: std::sync::Arc<auris_session::SoundPreset>,
     ) -> Self {
         let mut prompt = Self::new(title, PromptTarget::RenameSound, sound.name.clone());
+        prompt.sound = Some(sound);
+        prompt
+    }
+
+    /// Names a new copy while retaining the exact source entry being duplicated.
+    pub fn duplicate_sound(
+        title: impl Into<SharedString>,
+        sound: std::sync::Arc<auris_session::SoundPreset>,
+        name: String,
+    ) -> Self {
+        let mut prompt = Self::new(title, PromptTarget::DuplicateSound, name);
         prompt.sound = Some(sound);
         prompt
     }
@@ -898,23 +912,25 @@ impl AurisApp {
             return;
         }
         let outcome = match target {
-            PromptTarget::RenameSound => {
+            PromptTarget::RenameSound | PromptTarget::DuplicateSound => {
                 let result = prompt
                     .sound
                     .as_deref()
                     .ok_or(SessionError::SoundLibraryChanged)
                     .and_then(|sound| {
-                        auris_session::SoundBook::rename_sound(
-                            &auris_session::SoundBook::path(),
-                            sound,
-                            &text,
-                        )
+                        let path = auris_session::SoundBook::path();
+                        match target {
+                            PromptTarget::DuplicateSound => {
+                                auris_session::SoundBook::duplicate_sound(&path, sound, &text)
+                            }
+                            _ => auris_session::SoundBook::rename_sound(&path, sound, &text),
+                        }
                     });
                 match result {
                     Ok(book) => {
                         self.sounds = book;
                         self.sound_library_error = None;
-                        // The old name would hide the renamed entry in search.
+                        // The old search query could hide the new name.
                         self.leave_library_search();
                         Ok(())
                     }
@@ -1388,6 +1404,8 @@ impl AurisApp {
                 Key::EditSetDrumAssignment
             } else if matches!(target, PromptTarget::SaveSound(_)) {
                 Key::SaveSound
+            } else if matches!(target, PromptTarget::DuplicateSound) {
+                Key::DuplicateSound
             } else {
                 Key::Rename
             };
@@ -1819,6 +1837,7 @@ impl AurisApp {
                     // Rename over it would be answering a different question.
                     match target {
                         PromptTarget::SaveSound(_) => self.t(Key::CmdSave).into(),
+                        PromptTarget::DuplicateSound => self.t(Key::DuplicateSoundConfirm).into(),
                         PromptTarget::ComposeLyrics => self.t(Key::PromptComposeLyrics).into(),
                         PromptTarget::DrumAssignment { .. }
                         | PromptTarget::NewDrumLane(_)
@@ -2539,6 +2558,7 @@ mod tests {
     /// is added to the returned list.
     fn every_target() -> Vec<PromptTarget> {
         let representatives = vec![
+            PromptTarget::DuplicateSound,
             PromptTarget::RenameSound,
             PromptTarget::SaveSound(TrackId(1)),
             PromptTarget::Track(TrackId(1)),
@@ -2592,6 +2612,7 @@ mod tests {
             match target {
                 PromptTarget::SaveSound(_)
                 | PromptTarget::RenameSound
+                | PromptTarget::DuplicateSound
                 | PromptTarget::Track(_)
                 | PromptTarget::Clip(_)
                 | PromptTarget::Key(_)

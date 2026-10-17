@@ -11,9 +11,11 @@ Right-click a user sound in the library or search results to:
   instrument settings and inserts are captured, then a confirmation names the saved sound and
   source track. Confirming retains the saved name and replaces its contents.
 - **Rename sound…**: enter a nonempty name that is not used by another user sound.
+- **Duplicate sound…**: save the sound's complete settings and insert chain under a new name.
+  The name field suggests an unused copy name; you can change it before saving.
 - **Delete sound…**: confirm removal from the library. Overwrite and deletion cannot be undone.
 
-Rename and deletion also work without a track selected. These library edits do not change
+Rename, duplication and deletion also work without a track selected. These library edits do not change
 settings already applied to projects, and factory presets remain available. If another window
 changes the same saved sound before confirmation, the edit is refused and the library is refreshed.
 

@@ -173,7 +173,7 @@ fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut Test
     paint(&app, cx);
     right_click("lib-user-sound:Management renamed fixture", cx);
     paint(&app, cx);
-    click("menu-item-2", cx);
+    click("menu-item-3", cx);
     paint(&app, cx);
     app.read_with(cx, |this, _| {
         assert!(this.prompt.as_ref().unwrap().title.contains(&renamed.name))
@@ -188,7 +188,7 @@ fn user_sounds_can_be_renamed_and_deleted_without_a_selected_track(cx: &mut Test
     paint(&app, cx);
     right_click("lib-user-sound:Management renamed fixture", cx);
     paint(&app, cx);
-    click("menu-item-2", cx);
+    click("menu-item-3", cx);
     paint(&app, cx);
     click("prompt-ok", cx);
     app.update(cx, |this, _| {
@@ -228,7 +228,7 @@ fn a_stale_user_sound_confirmation_preserves_the_external_edit(cx: &mut TestAppC
     paint(&app, cx);
     right_click("lib-user-sound:Management stale fixture", cx);
     paint(&app, cx);
-    click("menu-item-2", cx);
+    click("menu-item-3", cx);
     let updated = auris_session::SoundBook::rename_sound(
         &auris_session::SoundBook::path(),
         &original,
@@ -251,6 +251,87 @@ fn a_stale_user_sound_confirmation_preserves_the_external_edit(cx: &mut TestAppC
         assert!(this.sounds.entries().contains(external));
     });
     cx.simulate_keystrokes("escape");
+}
+
+#[gpui::test]
+fn duplicating_a_saved_sound_preserves_its_source_and_project_without_a_selected_track(
+    cx: &mut TestAppContext,
+) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    let (original, before) = app.update(cx, |this, _| {
+        prepare_library(this);
+        this.session
+            .apply_sound(track, &auris_session::factory_sounds()[2])
+            .unwrap();
+        this.session
+            .add_effect(Some(track), "auris.fx.reverb")
+            .unwrap();
+        let original = this
+            .session
+            .capture_sound(track, "Duplicate fixture")
+            .unwrap();
+        auris_session::SoundBook::save_sound(&auris_session::SoundBook::path(), original.clone())
+            .unwrap();
+        let mut existing = original.clone();
+        existing.name = "Duplicate fixtureのコピー".into();
+        this.sounds =
+            auris_session::SoundBook::save_sound(&auris_session::SoundBook::path(), existing)
+                .unwrap();
+        this.selected_track = None;
+        this.session.forget_history();
+        (original, this.project().clone())
+    });
+    paint(&app, cx);
+    click("library-search", cx);
+    cx.simulate_input("Duplicate fixture");
+    paint(&app, cx);
+    right_click("lib-user-sound:Duplicate fixture", cx);
+    paint(&app, cx);
+    click("menu-item-2", cx);
+    paint(&app, cx);
+    app.read_with(cx, |this, _| {
+        let prompt = this.prompt.as_ref().unwrap();
+        assert!(prompt.title.contains(&original.name));
+        assert_eq!(
+            prompt.field().unwrap().content(),
+            "Duplicate fixtureのコピー (2)"
+        );
+    });
+    cx.simulate_keystrokes("escape");
+    assert!(
+        !auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .iter()
+            .any(|sound| sound.name == "Duplicate fixtureのコピー (2)")
+    );
+    paint(&app, cx);
+    right_click("lib-user-sound:Duplicate fixture", cx);
+    paint(&app, cx);
+    click("menu-item-2", cx);
+    paint(&app, cx);
+    cx.simulate_input("Duplicate fixture");
+    cx.simulate_keystrokes("enter");
+    paint(&app, cx);
+    assert!(cx.debug_bounds("prompt-error").is_some());
+    cx.simulate_keystrokes("secondary-a");
+    cx.simulate_input("Duplicate fixtureのコピー (2)");
+    cx.simulate_keystrokes("enter");
+    let mut copy = original.clone();
+    copy.name = "Duplicate fixtureのコピー (2)".into();
+    app.update(cx, |this, _| {
+        assert!(this.prompt.is_none());
+        assert!(this.sounds.entries().contains(&original));
+        assert!(this.sounds.entries().contains(&copy));
+        assert_eq!(*this.project(), before);
+        assert!(this.session.undo().is_none());
+    });
+    assert!(
+        auris_session::SoundBook::read(&auris_session::SoundBook::path())
+            .unwrap()
+            .entries()
+            .contains(&copy)
+    );
 }
 
 #[gpui::test]

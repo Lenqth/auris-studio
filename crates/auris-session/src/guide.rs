@@ -29,6 +29,8 @@
 //! Library edits reload under a cross-process lock and write atomically. Overwrite, rename and
 //! delete require the exact previously displayed entry, refusing stale edits from another window.
 //! These operations change only the library; applied project settings and factory patches survive.
+//! Duplication copies the selected saved entry under a new name, including its insert chain and
+//! external references, without reading a selected track or changing the original entry.
 //! SoundFont references use resolved file paths and bank/program pairs; applying remaps the font
 //! to the receiving project's identity. Hosted binaries remain external library references.
 //!

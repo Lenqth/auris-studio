@@ -94,6 +94,18 @@ messages! {
         ja: "「{name}」の名前を変更"
     }
 
+    /// Names the saved sound being duplicated.
+    fn duplicate_sound_title(name: &str) {
+        en: "Duplicate “{name}”",
+        ja: "「{name}」を複製"
+    }
+
+    /// Suggests the name of a new independent copy of a saved sound.
+    fn sound_copy_name(name: &str) {
+        en: "{name} copy",
+        ja: "{name}のコピー"
+    }
+
     /// Names the saved sound being deleted.
     fn delete_sound_title(name: &str) {
         en: "Delete “{name}”?",

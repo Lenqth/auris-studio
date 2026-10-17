@@ -2373,6 +2373,10 @@ impl AurisApp {
                 self.t(Key::RenameSound),
                 MenuCommand::RenameSound(sound.clone()),
             )
+            .item(
+                self.t(Key::DuplicateSound),
+                MenuCommand::DuplicateSound(sound.clone()),
+            )
             .item(self.t(Key::DeleteSound), MenuCommand::DeleteSound(sound))
     }
     /// The effects section: every registered effect, under its category.

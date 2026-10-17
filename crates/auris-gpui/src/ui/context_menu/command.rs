@@ -29,6 +29,8 @@ pub enum MenuCommand {
     },
     /// Renames the exact saved user sound shown by the menu.
     RenameSound(std::sync::Arc<auris_session::SoundPreset>),
+    /// Saves an independent named copy of an exact library entry.
+    DuplicateSound(std::sync::Arc<auris_session::SoundPreset>),
     /// Asks to remove the exact saved user sound shown by the menu.
     DeleteSound(std::sync::Arc<auris_session::SoundPreset>),
     /// Independent note expression, without rewriting the score.
@@ -977,6 +979,20 @@ impl AurisApp {
                 self.open_prompt(Prompt::rename_sound(
                     messages::rename_sound_title(self.language(), &sound.name),
                     sound,
+                ));
+            }
+            MenuCommand::DuplicateSound(sound) => {
+                let base = messages::sound_copy_name(self.language(), &sound.name);
+                let mut name = base.clone();
+                let mut suffix = 2;
+                while self.sounds.entries().iter().any(|entry| entry.name == name) {
+                    name = format!("{base} ({suffix})");
+                    suffix += 1;
+                }
+                self.open_prompt(Prompt::duplicate_sound(
+                    messages::duplicate_sound_title(self.language(), &sound.name),
+                    sound,
+                    name,
                 ));
             }
             MenuCommand::DeleteSound(sound) => {

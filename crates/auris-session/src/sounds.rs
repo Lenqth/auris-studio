@@ -139,6 +139,20 @@ impl SoundBook {
         })
     }
 
+    /// Copies a saved sound under a new name, refusing duplicates and a stale source.
+    pub fn duplicate_sound(
+        path: &Path,
+        expected: &SoundPreset,
+        name: &str,
+    ) -> Result<Self, SessionError> {
+        Self::update(path, |book| {
+            let index = book.expected_index(expected)?;
+            let mut copy = book.0[index].clone();
+            copy.name = name.into();
+            book.insert(copy)
+        })
+    }
+
     /// Deletes only the selected library entry, refusing a stale selection.
     pub fn delete_sound(path: &Path, expected: &SoundPreset) -> Result<Self, SessionError> {
         Self::update(path, |book| {
@@ -187,6 +201,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn duplicating_a_sound_copies_all_settings_without_linking_the_entries() {
+        let scratch = tempfile::tempdir().unwrap();
+        let path = scratch.path().join("sounds.json");
+        let mut original = factory_sounds().remove(0);
+        original.soundfont = Some(SoundPresetFont {
+            path: scratch.path().join("library.sf2"),
+            bank: 4,
+            patch: 17,
+        });
+        original.state.extra = serde_json::json!({"settings": [1, 3, 5]});
+        original.effects.push(SoundPresetEffect {
+            effect_id: "hosted.effect".into(),
+            enabled: false,
+            state: PluginState {
+                params: [("mix".into(), 0.25)].into(),
+                extra: serde_json::json!({"hosted": "opaque state"}),
+            },
+            file: Some(scratch.path().join("effect.clap")),
+        });
+        SoundBook::save_sound(&path, original.clone()).unwrap();
+        let book = SoundBook::duplicate_sound(&path, &original, "  Independent copy  ").unwrap();
+        let mut copy = original.clone();
+        copy.name = "Independent copy".into();
+        assert_eq!(book.entries().len(), 2);
+        assert!(book.entries().contains(&original));
+        assert!(book.entries().contains(&copy));
+        assert_eq!(SoundBook::read(&path).unwrap(), book);
+        let book = SoundBook::overwrite_sound(&path, &copy, factory_sounds().remove(2)).unwrap();
+        assert!(book.entries().contains(&original));
+        assert!(!book.entries().contains(&copy));
+    }
+
+    #[test]
     fn saved_sound_management_round_trips_contents_names_and_order() {
         let scratch = tempfile::tempdir().unwrap();
         let path = scratch.path().join("sounds.json");
@@ -225,6 +272,7 @@ mod tests {
         let bytes = std::fs::read(&path).unwrap();
         for name in ["  ", &sounds[1].name] {
             assert!(SoundBook::rename_sound(&path, &sounds[0], name).is_err());
+            assert!(SoundBook::duplicate_sound(&path, &sounds[0], name).is_err());
             assert_eq!(std::fs::read(&path).unwrap(), bytes);
         }
         let mut invalid = sounds[2].clone();
@@ -235,6 +283,7 @@ mod tests {
         let changed = std::fs::read(&path).unwrap();
         assert!(SoundBook::overwrite_sound(&path, &sounds[0], sounds[1].clone()).is_err());
         assert!(SoundBook::rename_sound(&path, &sounds[0], "Stale").is_err());
+        assert!(SoundBook::duplicate_sound(&path, &sounds[0], "Stale copy").is_err());
         assert!(SoundBook::delete_sound(&path, &sounds[0]).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), changed);
         assert!(SoundBook::delete_sound(&path, &sounds[3]).is_err());
@@ -250,6 +299,7 @@ mod tests {
         let sounds = factory_sounds();
         assert!(SoundBook::overwrite_sound(&path, &sounds[0], sounds[1].clone()).is_err());
         assert!(SoundBook::rename_sound(&path, &sounds[0], "Renamed").is_err());
+        assert!(SoundBook::duplicate_sound(&path, &sounds[0], "Copy").is_err());
         assert!(SoundBook::delete_sound(&path, &sounds[0]).is_err());
         assert_eq!(std::fs::read(path).unwrap(), bytes);
     }
