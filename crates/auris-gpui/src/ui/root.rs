@@ -16,20 +16,6 @@ use crate::menu::MenuRow;
 use crate::theme::Theme;
 use crate::ui::context_menu::MenuCommand;
 
-/// The clip-relative end written by a note-resize gesture.
-///
-/// Snapping the end itself is subtly wrong for an off-grid note: it changes the duration by the
-/// note's offset from the grid. The setting names the *length*, so round that number and then put
-/// the start back. A snapped duration never disappears; free editing keeps the one-tick document
-/// minimum that [`Session::resize_note`] enforces too.
-fn note_resize_end(end: Ticks, start: Ticks, grid: Ticks, snap: bool) -> Ticks {
-    let length = (end - start).max(Ticks(1));
-    let length = match snap {
-        true => length.snap_nearest(grid).max(grid),
-        false => length,
-    };
-    start + length
-}
 use crate::ui::drop::{drop_action, lanes_offset};
 use crate::ui::menu_bar;
 use crate::ui::music_analysis::AnalysisCommand;
@@ -445,6 +431,7 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_toggle_clip_mute))
                     .on_action(Self::window_listener(cx, Self::on_toggle_clip_loop))
                     .on_action(Self::window_listener(cx, Self::on_quantize_starts))
+                    .on_action(Self::window_listener(cx, Self::on_note_snap))
                     .on_action(Self::window_listener(cx, Self::on_quantize_lengths))
                     .on_action(Self::window_listener(cx, Self::on_quantize_notes))
                     .on_action(Self::window_listener(cx, Self::on_next_tool))
@@ -1596,6 +1583,7 @@ impl AurisApp {
             }
             Drag::NoteMove {
                 clip,
+                grabbed,
                 origin_tick,
                 origin_pitch,
                 ref origins,
@@ -1604,6 +1592,7 @@ impl AurisApp {
             }
             | Drag::NoteCopy {
                 clip,
+                grabbed,
                 origin_tick,
                 origin_pitch,
                 ref origins,
@@ -1627,9 +1616,13 @@ impl AurisApp {
                 let Some(clip_start) = self.session.midi_clip(clip).map(|c| c.start) else {
                     return;
                 };
-                let delta_ticks = self.snap_unless_held(tick - clip_start, event.modifiers)
-                    - self.snap(origin_tick);
+                let travel = tick - clip_start - origin_tick;
                 if self.editing_a_drum_clip() {
+                    let delta_ticks = if event.modifiers.secondary() {
+                        travel
+                    } else {
+                        self.snap(tick - clip_start) - self.snap(origin_tick)
+                    };
                     self.drag_drum_notes(
                         clip,
                         origin_pitch,
@@ -1640,6 +1633,22 @@ impl AurisApp {
                     cx.notify();
                     return;
                 }
+                let Some((_, start, _)) = origins.iter().find(|(index, _, _)| *index == grabbed)
+                else {
+                    return;
+                };
+                // A vertical drag must not quantize an off-grid phrase because the pointer wobbled.
+                let travel = if f32::from(self.timeline.duration_to_width(travel)).abs()
+                    < f32::from(crate::gestures::DRAG_THRESHOLD)
+                {
+                    Ticks::ZERO
+                } else {
+                    travel
+                };
+                let song_start = clip_start + *start;
+                let delta_ticks = self
+                    .note_snap(song_start + travel, event.modifiers, false)
+                    .delta(song_start, travel);
                 let delta_pitch = pitch as i32 - origin_pitch as i32;
                 let _ = self
                     .session
@@ -1754,6 +1763,7 @@ impl AurisApp {
                 clip,
                 index,
                 ref origins,
+                origin_tick,
                 drawing,
                 pressed_at,
             } => {
@@ -1776,18 +1786,32 @@ impl AurisApp {
                 else {
                     return;
                 };
-                let snap =
-                    self.settings.snap_note_lengths && (drawing || !event.modifiers.secondary());
-                let end =
-                    note_resize_end(tick - clip_start, *note_start, self.project().grid, snap);
+                let original_end = *note_start + *original_length;
+                let travel = tick - clip_start - origin_tick;
+                let target = if drawing {
+                    tick
+                } else {
+                    clip_start + original_end + travel
+                };
+                let mut snap = self.note_snap(target, event.modifiers, drawing);
+                if !self.settings.snap_note_lengths {
+                    snap.grid = Ticks(1);
+                }
+                let end = if drawing {
+                    snap.position(target) - clip_start
+                } else {
+                    original_end + snap.delta(clip_start + original_end, travel)
+                }
+                .max(*note_start + Ticks(1));
                 let length = end - *note_start;
                 let delta = length - *original_length;
                 let ends: Vec<_> = origins
                     .iter()
                     .map(|(index, start, original)| {
-                        let end = if event.modifiers.shift && event.modifiers.alt {
+                        let align = event.modifiers.shift && !event.modifiers.control;
+                        let end = if align && event.modifiers.alt {
                             *start + length
-                        } else if event.modifiers.shift {
+                        } else if align {
                             end
                         } else {
                             *start + (*original + delta).max(Ticks(1))
@@ -3559,33 +3583,10 @@ mod window_tests {
     use auris_session::prelude::{AudioExportFormat, Mp3Bitrate, Ticks, WavBitDepth};
     use gpui::{TestAppContext, px, size};
 
-    use super::note_resize_end;
     use crate::actions;
     use crate::app::{AudioExportTarget, ExportState};
     use crate::dock::Panel;
     use crate::harness::{WINDOW, click, open, paint, resize, with_a_clip};
-
-    #[test]
-    fn note_length_snapping_is_relative_to_the_notes_start() {
-        let grid = Ticks(240);
-        let start = Ticks(70);
-
-        assert_eq!(
-            note_resize_end(auris_session::prelude::Ticks(430), start, grid, true),
-            auris_session::prelude::Ticks(550),
-            "a 360-tick length rounds to 480 without moving the off-grid start"
-        );
-        assert_eq!(
-            note_resize_end(auris_session::prelude::Ticks(430), start, grid, false),
-            auris_session::prelude::Ticks(430),
-            "turning the preference off preserves the exact pointer position"
-        );
-        assert_eq!(
-            note_resize_end(start, start, grid, true),
-            start + grid,
-            "snapping never rounds a note away"
-        );
-    }
 
     #[gpui::test]
     fn audio_export_choices_are_tentative_until_the_dialog_is_confirmed(cx: &mut TestAppContext) {
@@ -3888,7 +3889,7 @@ mod window_tests {
             for (panel, controls) in [
                 (
                     Panel::PianoRoll,
-                    ["roll-snap-length", "roll-lanes", "roll-zoom"].as_slice(),
+                    ["roll-snap", "roll-lanes", "roll-zoom"].as_slice(),
                 ),
                 (Panel::Log, ["log-clear"].as_slice()),
             ] {

@@ -20,6 +20,17 @@
 //! reader leaves the other active. Observation does not edit the project or its undo history.
 //! The desktop owns the grid layout, selection, display freeze and mechanical projections.
 //!
+//! # Piano-roll editing
+//!
+//! The desktop's piano roll keeps its snap grid and absolute/relative preference in
+//! [`crate::Settings`], independently of the arrangement's project division. Grid, zoom,
+//! pointer anchors and temporary modifier overrides are presentation policy; the session
+//! receives concrete note positions through `move_notes`, `duplicate_notes_at_offset` and
+//! `resize_notes`. Selected notes share the grabbed note's delta, preserving phrase timing.
+//! Creation uses absolute song positions; relative dragging preserves the original start
+//! or end offset, rather than quantizing a note's duration. These gestures are undoable
+//! document commands, while changing the editor's snap preferences is not a document edit.
+//!
 //! # Authored note replacement
 //!
 //! [`crate::Session::replace_notes`] validates a complete note sequence before replacing

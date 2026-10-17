@@ -131,11 +131,6 @@ struct NoteEditTag {
     lines: [String; 3],
 }
 
-/// Clip-relative note start snapped to the song grid drawn behind it.
-fn snapped_note_start(tick: Ticks, clip_start: Ticks, grid: Ticks) -> Ticks {
-    (tick.snap_nearest(grid) - clip_start).max_zero()
-}
-
 /// Which of a track's clips are drawn faintly behind the one being edited.
 ///
 /// Every *other* clip on the track with any part of itself on screen. Not only the two touching
@@ -685,6 +680,8 @@ impl AurisApp {
         let velocity_tag = editable.then(|| self.velocity_tag()).flatten();
         let edit_tag = editable.then(|| self.note_edit_tag()).flatten();
         let tempo = self.project().tempo_map.clone();
+        let snap_grid = self.settings.piano_roll_grid;
+        let division = self.project().grid;
         // Built before the chain rather than inside it: each one needs `&mut self`, and the
         // builder below is already holding a borrow of it.
         let curve_lanes = if editable {
@@ -791,18 +788,27 @@ impl AurisApp {
                             }),
                     )
                     .when(editable, |row| {
-                        row.child(button(
-                            "roll-snap-length",
-                            self.t(Key::SnapNoteLengthsShort),
-                            ButtonStyle::Ghost,
-                            self.settings.snap_note_lengths,
-                            theme.accent_soft,
-                            &theme,
-                            cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.apply_snap_note_lengths(!this.settings.snap_note_lengths);
-                                cx.notify();
-                            }),
-                        ))
+                        row.child(
+                            button(
+                                "roll-snap",
+                                self.note_snap_label(),
+                                ButtonStyle::Ghost,
+                                self.menu
+                                    .as_ref()
+                                    .is_some_and(|menu| menu.title == self.t(Key::PianoRollSnap)),
+                                theme.accent_soft,
+                                &theme,
+                                Self::opens_menu(cx, |this, at| this.note_snap_menu(at)),
+                            )
+                            .w_24()
+                            .min_w_0()
+                            .truncate()
+                            .tooltip(crate::ui::tooltip::keyed_tip(
+                                self.note_snap_tip(),
+                                "",
+                                &theme,
+                            )),
+                        )
                     })
                     .when(editable, |row| {
                         row.child(button(
@@ -913,12 +919,17 @@ impl AurisApp {
                                         paint::clipped(window, bounds, |window| {
                                             paint::rect(window, bounds, theme.surface_sunken);
                                             paint::pitch_rows(window, bounds, &pitch_view, &theme);
-                                            paint::time_grid(
+                                            paint::time_grid_using(
                                                 window,
                                                 bounds,
                                                 &view,
                                                 &signatures,
                                                 &theme,
+                                                |signature| {
+                                                    super::note_snap::grid_step(
+                                                        &view, signature, snap_grid, division,
+                                                    )
+                                                },
                                             );
                                             paint_clip_extent(
                                                 window,
@@ -1476,6 +1487,7 @@ impl AurisApp {
                         clip: clip_id,
                         index,
                         origins,
+                        origin_tick: local_tick,
                         drawing: false,
                         pressed_at: Some(event.position),
                     });
@@ -1507,16 +1519,18 @@ impl AurisApp {
             }
             None => match empty_press(self.pointer, event) {
                 EmptyPress::Create => {
-                    let start = snapped_note_start(tick, clip_start, self.project().grid);
+                    let snap = self.note_snap(tick, event.modifiers, true);
+                    let start = (snap.position(tick) - clip_start).max_zero();
                     let length = self
                         .last_note_length
-                        .unwrap_or_else(|| default_note_length(self.project().grid));
+                        .unwrap_or_else(|| default_note_length(snap.grid));
                     // The new note and the resize that follows it are one gesture, so the
                     // transaction opens first and the note lands inside it.
                     self.begin_drag(Drag::NoteResize {
                         clip: clip_id,
                         index: 0,
                         origins: Vec::new(),
+                        origin_tick: local_tick,
                         drawing: true,
                         pressed_at: None,
                     });
@@ -1531,6 +1545,7 @@ impl AurisApp {
                         clip: clip_id,
                         index,
                         origins: vec![(index, start, length)],
+                        origin_tick: local_tick,
                         drawing: true,
                         pressed_at: Some(event.position),
                     });
@@ -2096,7 +2111,11 @@ impl AurisApp {
             event.position,
             under_pointer,
             pitch,
-            snapped_note_start(tick, clip_start, self.project().grid),
+            (self
+                .note_snap(tick, gpui::Modifiers::none(), true)
+                .position(tick)
+                - clip_start)
+                .max_zero(),
         );
         self.open_menu(menu);
         cx.notify();
@@ -3005,14 +3024,6 @@ mod tests {
     }
 
     #[test]
-    fn new_notes_snap_to_the_song_grid_before_becoming_clip_relative() {
-        let grid = Ticks(480);
-        let clip_start = Ticks(100);
-        assert_eq!(snapped_note_start(Ticks(700), clip_start, grid), Ticks(380));
-        assert_eq!(clip_start + Ticks(380), Ticks(480));
-    }
-
-    #[test]
     fn ornament_hit_testing_matches_the_drawn_square() {
         assert!(within_ornament_handle(3.0, -3.0));
         assert!(!within_ornament_handle(3.1, 0.0));
@@ -3910,6 +3921,8 @@ mod window_tests {
             // Another window test can save its preferences in this process's config directory.
             // Length gestures start from the same snap preference regardless of test order.
             this.settings.snap_note_lengths = true;
+            this.settings.piano_roll_grid = auris_session::PianoRollGrid::Sixteenth;
+            this.settings.relative_note_snap = false;
             this.open_clip_in_editor(clip);
         });
         paint(&app, cx);
@@ -3946,6 +3959,215 @@ mod window_tests {
         drag(cx, from, to);
         app.read_with(cx, |this, _| assert_eq!(this.selected_notes, [0, 1].into()));
         (app, cx, clip)
+    }
+
+    #[gpui::test]
+    fn moving_an_off_grid_note_snaps_the_grabbed_start_and_keeps_the_phrase(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, Ticks(70), BEAT))
+                .unwrap();
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C + 4, Ticks(430), BEAT))
+                .unwrap();
+            this.selected_notes = [0, 1].into();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, Ticks(550), MIDDLE_C);
+        let to = roll_point(&app, cx, Ticks(790), MIDDLE_C);
+        drag(cx, from, to);
+        let moved = notes(&app, cx);
+        assert_eq!(moved[0].start, Ticks(240));
+        assert_eq!(moved[1].start - moved[0].start, Ticks(360));
+        app.update(cx, |this, _| {
+            this.session.undo();
+        });
+        assert_eq!(notes(&app, cx)[0].start, Ticks(70));
+    }
+
+    #[gpui::test]
+    fn resizing_an_off_grid_note_snaps_the_song_relative_end(cx: &mut TestAppContext) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, Ticks(70), Ticks(330)))
+                .unwrap();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, Ticks(380), MIDDLE_C);
+        let to = roll_point(&app, cx, Ticks(460), MIDDLE_C);
+        drag(cx, from, to);
+        let resized = notes(&app, cx);
+        assert_eq!(resized[0].start, Ticks(70));
+        assert_eq!(resized[0].end(), Ticks(480));
+    }
+
+    #[gpui::test]
+    fn free_movement_uses_the_original_grab_point_without_a_grid_offset(cx: &mut TestAppContext) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, Ticks(70), BEAT))
+                .unwrap();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, Ticks(550), MIDDLE_C);
+        let to = roll_point(&app, cx, Ticks(750), MIDDLE_C);
+        drag_with(cx, from, to, creating());
+        assert!((notes(&app, cx)[0].start.raw() - 270).abs() <= 1);
+    }
+
+    #[gpui::test]
+    fn relative_movement_preserves_the_notes_original_offset(cx: &mut TestAppContext) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.settings.relative_note_snap = true;
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, Ticks(70), BEAT))
+                .unwrap();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, Ticks(550), MIDDLE_C);
+        let to = roll_point(&app, cx, Ticks(790), MIDDLE_C);
+        drag(cx, from, to);
+        assert_eq!(notes(&app, cx)[0].start, Ticks(310));
+    }
+
+    #[gpui::test]
+    fn snap_menu_works_from_the_command_palette_and_keeps_the_document_clean(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, _) = with_the_roll_open(cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        cx.dispatch_action(crate::actions::PianoRollSnap);
+        app.read_with(cx, |this, _| {
+            let menu = this.menu.as_ref().expect("the snap command opens the menu");
+            assert!(menu.entries.iter().any(|entry| matches!(entry,
+                crate::ui::context_menu::MenuEntry::Item(item)
+                    if item.command == MenuCommand::PianoRollGrid(auris_session::PianoRollGrid::Sixteenth)
+                    && item.checked
+            )));
+        });
+        cx.simulate_keystrokes("escape");
+        app.update(cx, |this, cx| {
+            this.run_menu_command(
+                MenuCommand::PianoRollGrid(auris_session::PianoRollGrid::SixteenthTriplet),
+                cx,
+            );
+            this.run_menu_command(MenuCommand::RelativeNoteSnap(true), cx);
+        });
+        app.read_with(cx, |this, _| {
+            assert!(this.menu.is_none());
+            assert_eq!(
+                this.settings.piano_roll_grid,
+                auris_session::PianoRollGrid::SixteenthTriplet
+            );
+            assert!(this.settings.relative_note_snap);
+            assert_eq!(*this.project(), before);
+        });
+    }
+
+    #[gpui::test]
+    fn copying_an_off_grid_note_uses_the_same_absolute_snap_as_moving(cx: &mut TestAppContext) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, Ticks(70), BEAT))
+                .unwrap();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, Ticks(550), MIDDLE_C);
+        let to = roll_point(&app, cx, Ticks(790), MIDDLE_C + 2);
+        drag_with(
+            cx,
+            from,
+            to,
+            gpui::Modifiers {
+                alt: true,
+                ..gpui::Modifiers::none()
+            },
+        );
+        let copied = notes(&app, cx);
+        assert_eq!(copied.len(), 2);
+        assert_eq!(copied[0].start, Ticks(70));
+        assert_eq!(copied[1].start, Ticks(240));
+        assert_eq!(copied[1].pitch, MIDDLE_C + 2);
+    }
+
+    #[gpui::test]
+    fn creating_in_an_offset_clip_uses_the_roll_grid_independently_of_the_arrangement(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, _) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            let track = this.selected_track.unwrap();
+            let clip = this
+                .session
+                .add_midi_clip(track, "Offset", Ticks(100), BEAT * 4)
+                .unwrap();
+            this.settings.piano_roll_grid = auris_session::PianoRollGrid::Eighth;
+            this.session.set_grid(BEAT);
+            this.open_clip_in_editor(clip);
+        });
+        paint(&app, cx);
+        show_pitch(&app, cx, MIDDLE_C);
+        let at = roll_point(&app, cx, Ticks(700), MIDDLE_C);
+        click_at(cx, at, creating());
+        assert_eq!(notes(&app, cx)[0].start, Ticks(380));
+        app.read_with(cx, |this, _| assert_eq!(this.project().grid, BEAT));
+    }
+
+    #[gpui::test]
+    fn control_shift_refines_group_resizing_without_matching_their_ends(cx: &mut TestAppContext) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, BEAT, BEAT))
+                .unwrap();
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C + 4, BEAT * 2, BEAT * 2))
+                .unwrap();
+            this.selected_notes = [0, 1].into();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, BEAT * 2 - Ticks(20), MIDDLE_C);
+        let to = roll_point(&app, cx, BEAT * 2 + Ticks(80), MIDDLE_C);
+        drag_with(
+            cx,
+            from,
+            to,
+            gpui::Modifiers {
+                control: true,
+                shift: true,
+                ..gpui::Modifiers::none()
+            },
+        );
+        let resized = notes(&app, cx);
+        assert!((resized[0].length.raw() - (BEAT.raw() + 100)).abs() <= 1);
+        assert_eq!(resized[1].length - resized[0].length, BEAT);
+        assert_eq!(resized[1].end() - resized[0].end(), BEAT * 2);
+    }
+
+    #[gpui::test]
+    fn a_vertical_drag_preserves_an_off_grid_start_despite_horizontal_wobble(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, clip) = with_the_roll_open(cx);
+        app.update(cx, |this, _| {
+            this.session
+                .add_note(clip, Note::new(MIDDLE_C, Ticks(70), BEAT))
+                .unwrap();
+        });
+        paint(&app, cx);
+        let from = roll_point(&app, cx, Ticks(550), MIDDLE_C);
+        let mut to = roll_point(&app, cx, Ticks(550), MIDDLE_C + 2);
+        to.x += gpui::px(1.0);
+        drag(cx, from, to);
+        assert_eq!(notes(&app, cx)[0].start, Ticks(70));
+        assert_eq!(notes(&app, cx)[0].pitch, MIDDLE_C + 2);
     }
 
     #[gpui::test]
@@ -4292,7 +4514,9 @@ mod window_tests {
     #[gpui::test]
     fn drawing_snaps_lengths_even_while_the_create_modifier_is_held(cx: &mut TestAppContext) {
         let (app, cx, _) = with_the_roll_open(cx);
-        app.update(cx, |this, _| this.session.set_grid(HALF_BEAT));
+        app.update(cx, |this, _| {
+            this.settings.piano_roll_grid = auris_session::PianoRollGrid::Eighth;
+        });
         let from = roll_point(&app, cx, BEAT, MIDDLE_C);
         let to = roll_point(&app, cx, BEAT * 3 + Ticks(HALF_BEAT.raw() / 3), MIDDLE_C);
         drag_with(cx, from, to, creating());
@@ -4324,7 +4548,7 @@ mod window_tests {
     fn length_snap_toggle_and_fine_resize_use_the_same_grid(cx: &mut TestAppContext) {
         let (app, cx, clip) = with_the_roll_open(cx);
         app.update(cx, |this, _| {
-            this.session.set_grid(HALF_BEAT);
+            this.settings.piano_roll_grid = auris_session::PianoRollGrid::Eighth;
             this.session
                 .add_note(clip, Note::new(MIDDLE_C, BEAT, BEAT))
                 .unwrap();
@@ -4345,7 +4569,9 @@ mod window_tests {
             this.session.undo();
         });
         paint(&app, cx);
-        crate::harness::click("roll-snap-length", cx);
+        crate::harness::click("roll-snap", cx);
+        // The snap menu keeps the end toggle keyboard-reachable after the grid and mode choices.
+        cx.simulate_keystrokes("up enter");
         app.read_with(cx, |this, _| assert!(!this.settings.snap_note_lengths));
         drag(cx, edge, end);
         assert!(notes(&app, cx)[0].length > BEAT * 2);

@@ -146,6 +146,8 @@ actions!(
         QuantizeNoteLengths,
         /// Snap both of the selected notes' numbers onto the editing grid.
         QuantizeNotes,
+        /// Choose the piano roll's snap grid and absolute or relative positioning.
+        PianoRollSnap,
         /// Put the next of the piano roll's tools in hand.
         NextTool,
         /// Type the tempo of the stretch the playhead is in.
@@ -532,6 +534,7 @@ bindable! {
         "view.library",         GroupView,      CmdShowLibrary,        "y"           => ToggleLibrary;
         "view.inspector",       GroupView,      CmdShowInspector,      "i"           => ToggleInspector;
         "view.piano_roll",      GroupView,      CmdShowPianoRoll,      "p"           => TogglePianoRoll;
+        "edit.note_snap",       GroupNotes,     PianoRollSnap,        ""            => PianoRollSnap;
         "view.mixer",           GroupView,      CmdShowMixer,          "m"           => ToggleMixer;
         "view.track_grid",      GroupView,      TrackGrid,             ""            => ToggleTrackGrid;
         // Out on `secondary-alt-` with the arrangement furniture rather than on a bare letter

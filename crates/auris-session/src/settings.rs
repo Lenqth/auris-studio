@@ -379,6 +379,51 @@ impl AgentPreferences {
     }
 }
 
+/// The piano roll's independent snap grid.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PianoRollGrid {
+    /// Follow the ruler's visible subdivision as the editor is zoomed.
+    #[default]
+    Smart,
+    /// One bar in the time signature at the edit position.
+    Bar,
+    /// One beat in the time signature at the edit position.
+    Beat,
+    /// Follow the project's division setting.
+    Division,
+    /// A whole note.
+    Whole,
+    /// A half note.
+    Half,
+    /// A quarter note.
+    Quarter,
+    /// An eighth note.
+    Eighth,
+    /// A sixteenth note.
+    Sixteenth,
+    /// A thirty-second note.
+    ThirtySecond,
+    /// A sixty-fourth note.
+    SixtyFourth,
+    /// A whole-note triplet.
+    WholeTriplet,
+    /// A half-note triplet.
+    HalfTriplet,
+    /// A quarter-note triplet.
+    QuarterTriplet,
+    /// An eighth-note triplet.
+    EighthTriplet,
+    /// A sixteenth-note triplet.
+    SixteenthTriplet,
+    /// A thirty-second-note triplet.
+    ThirtySecondTriplet,
+    /// A sixty-fourth-note triplet.
+    SixtyFourthTriplet,
+    /// Free editing at the document's one-tick resolution.
+    Off,
+}
+
 /// Everything the application remembers between runs.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -398,12 +443,16 @@ pub struct Settings {
     /// On unless turned off. The snapshot never replaces the user-chosen project file; see
     /// [`should_autosave`](crate::session::should_autosave).
     pub autosave: bool,
-    /// Snap a note's duration to the editing grid while its right edge is dragged.
+    /// Snap a note's right edge to the piano roll's editing grid while it is dragged.
     ///
     /// On by default. This is an editing preference rather than project data: two people can
     /// shape the same notes with different pointer behaviour without changing the file merely by
     /// opening it.
     pub snap_note_lengths: bool,
+    /// Piano-roll grid, independent of the arrangement's division.
+    pub piano_roll_grid: PianoRollGrid,
+    /// Preserve off-grid timing when dragging notes or their ends. Defaults to absolute snapping.
+    pub relative_note_snap: bool,
     /// Visibility and ordering of the desktop toolbar's controls.
     pub toolbar: ToolbarPreferences,
     /// How a bounce is written.
@@ -460,6 +509,8 @@ impl Default for Settings {
             // this value.
             autosave: true,
             snap_note_lengths: true,
+            piano_roll_grid: PianoRollGrid::default(),
+            relative_note_snap: false,
             toolbar: ToolbarPreferences::default(),
             export: ExportPreferences::default(),
             window: None,
@@ -673,9 +724,23 @@ mod tests {
         assert_eq!(settings.audio.host, None);
         assert_eq!(settings.audio.sample_rate, None);
         assert!(settings.snap_note_lengths);
+        assert_eq!(settings.piano_roll_grid, PianoRollGrid::Smart);
+        assert!(!settings.relative_note_snap);
 
         let empty: Settings = serde_json::from_str("{}").unwrap();
         assert_eq!(empty, Settings::default());
+    }
+
+    #[test]
+    fn piano_roll_snapping_preferences_survive_a_settings_round_trip() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"piano_roll_grid":"sixteenth_triplet","relative_note_snap":true,"snap_note_lengths":false}"#,
+        ).unwrap();
+        assert_eq!(settings.piano_roll_grid, PianoRollGrid::SixteenthTriplet);
+        assert!(settings.relative_note_snap);
+        assert!(!settings.snap_note_lengths);
+        let saved = serde_json::to_string(&settings).unwrap();
+        assert_eq!(serde_json::from_str::<Settings>(&saved).unwrap(), settings);
     }
 
     #[test]
