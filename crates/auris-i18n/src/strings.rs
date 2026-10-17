@@ -583,7 +583,7 @@ strings! {
     }
     PianoRollSnap { en: "Piano Roll Snap…", ja: "ピアノロールのスナップ…" }
     SnapShort { en: "Snap", ja: "スナップ" }
-    SnapSmart { en: "Smart", ja: "Smart" }
+    SnapSmart { en: "Smart", ja: "スマート" }
     SnapBar { en: "Bar", ja: "小節" }
     SnapBeat { en: "Beat", ja: "拍" }
     SnapDivision { en: "Division", ja: "ディビジョン" }
