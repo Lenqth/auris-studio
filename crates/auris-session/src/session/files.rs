@@ -389,11 +389,20 @@ impl SaveJob {
         }
 
         if self.collect_assets {
-            if self.policy == SaveAsPolicy::RefuseReplacement
-                && self.document.exists()
-                && self.original_path.as_deref() != Some(self.document.as_path())
-            {
-                return Err(SessionError::WouldReplace(self.document));
+            if self.document.exists() {
+                if self.policy == SaveAsPolicy::RefuseReplacement
+                    && self.original_path.as_deref() != Some(self.document.as_path())
+                {
+                    return Err(SessionError::WouldReplace(self.document));
+                }
+                // Save As can target the document already open (for example when a native
+                // chooser returns its full path). Treat that as an in-place overwrite.
+                if self.policy == SaveAsPolicy::RefuseReplacement
+                    && self.original_path.as_deref() == Some(self.document.as_path())
+                    && load_project(&self.document)? != self.saved_project
+                {
+                    return Err(SessionError::ExternalChanges(self.document));
+                }
             }
         } else if (self.document.exists() || self.had_disk_fingerprint)
             && load_project(&self.document)? != self.saved_project
@@ -2430,6 +2439,29 @@ mod tests {
         session.add_default_instrument_track("Bass").unwrap();
         let again = session.save_as(&document).expect("saves over itself");
         assert_eq!(again.document, document);
+    }
+
+    #[test]
+    fn saving_back_over_this_project_detects_external_changes() {
+        let scratch = Scratch::new("save-over-itself-external");
+        let mut live = session();
+        let chosen = scratch.join("Ballad.auris");
+        let document = live.save_as(&chosen).expect("saves").document;
+        let mut outside = session();
+        outside.open(&document).unwrap();
+        outside.add_default_instrument_track("Outside").unwrap();
+        outside.save_in_place().unwrap();
+
+        let external = load_project(&document).unwrap();
+        for destination in [&chosen, &document] {
+            assert!(matches!(
+                live.save_as(destination),
+                Err(SessionError::ExternalChanges(path)) if path == document
+            ));
+            assert_eq!(load_project(&document).unwrap(), external);
+        }
+        live.save_as_replacing(&document)
+            .expect("explicit replacement permits the overwrite");
     }
 
     #[test]
