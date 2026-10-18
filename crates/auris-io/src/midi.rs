@@ -442,15 +442,17 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
                         MidiMessage::Controller { controller, value }
                             if is_performance_controller(controller.as_int()) =>
                         {
-                            budget.automation_point(limits)?;
                             if let Some(part) = parts.get_mut(&key) {
-                                part.controllers
-                                    .entry(controller.as_int())
-                                    .or_default()
-                                    .push(CurvePoint {
+                                push_controller_point(
+                                    part.controllers.entry(controller.as_int()).or_default(),
+                                    controller.as_int(),
+                                    CurvePoint {
                                         at: scale(at, per_quarter),
                                         value: f32::from(value.as_int()) / 127.0,
-                                    });
+                                    },
+                                    &mut budget,
+                                    limits,
+                                )?;
                             }
                         }
                         MidiMessage::Controller { controller, value } => {
@@ -1104,6 +1106,47 @@ fn message(channel: u4, pitch: u8, vel: u7) -> TrackEventKind<'static> {
 /// Two, which is MIDI's default and what a receiver assumes when nothing has told it otherwise.
 /// Larger exported bends explicitly select an octave through RPN 0.
 const BEND_RANGE: f32 = 2.0;
+
+/// Sustain is held until the next MIDI message, rather than interpolated towards it.
+const SUSTAIN_PEDAL: u8 = 64;
+
+fn push_controller_point(
+    points: &mut Vec<CurvePoint>,
+    number: u8,
+    point: CurvePoint,
+    budget: &mut ImportBudget,
+    limits: ImportLimits,
+) -> Result<()> {
+    budget.automation_point(limits)?;
+    if number == SUSTAIN_PEDAL {
+        if points.is_empty() && point.at > Ticks::ZERO {
+            // Ordinary curves hold their first value backwards. A late pedal press must leave
+            // the preceding notes unpedalled, so anchor the MIDI default at the song's start.
+            budget.automation_point(limits)?;
+            points.push(CurvePoint {
+                at: Ticks::ZERO,
+                value: 0.0,
+            });
+        }
+        if let Some(previous) = points.last_mut() {
+            if previous.at == point.at {
+                // Several source events can also collapse onto one project tick when scaled.
+                previous.value = point.value;
+                return Ok(());
+            }
+            let hold_at = point.at - Ticks(1);
+            if previous.value != point.value && hold_at > previous.at {
+                let value = previous.value;
+                // Ticks are integral: holding through the preceding tick represents the MIDI
+                // step exactly without duplicate-time points or a new stored curve format.
+                budget.automation_point(limits)?;
+                points.push(CurvePoint { at: hold_at, value });
+            }
+        }
+    }
+    points.push(point);
+    Ok(())
+}
 
 /// Whether a controller shapes a performance, rather than addressing an instrument.
 ///
@@ -2585,6 +2628,104 @@ mod tests {
 
     /// Controller 64, the sustain pedal.
     const SUSTAIN: u8 = 64;
+
+    #[test]
+    fn imported_sustain_holds_until_each_authored_pedal_change() {
+        for (press, release) in [(0, 480), (240, 493)] {
+            let imported = metrical(vec![vec![
+                note_on(0, 60, 100),
+                event(press, controller_message(u4::new(0), SUSTAIN, 1.0)),
+                event(
+                    release - press,
+                    controller_message(u4::new(0), SUSTAIN, 0.0),
+                ),
+                note_off(480, 60),
+            ]]);
+            let press = scale(u64::from(press), u32::from(PPQ));
+            let release = scale(u64::from(release), u32::from(PPQ));
+            let events = auris_core::project::curve_events(
+                &imported.tracks[0].controllers[&SUSTAIN],
+                imported.end(),
+                CURVE_STEP,
+            );
+            assert!(events.contains(&(press, 1.0)), "missing press: {events:?}");
+            assert!(
+                events.contains(&(release, 0.0)),
+                "missing release: {events:?}"
+            );
+            for (at, value) in events {
+                let expected = f32::from(at >= press && at < release);
+                assert_eq!(value, expected, "pedal changed at {at:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_last_sustain_message_at_one_tick_wins() {
+        let imported = metrical(vec![vec![
+            note_on(0, 60, 100),
+            event(0, controller_message(u4::new(0), SUSTAIN, 1.0)),
+            event(0, controller_message(u4::new(0), SUSTAIN, 0.0)),
+            event(480, controller_message(u4::new(0), SUSTAIN, 1.0)),
+            event(0, controller_message(u4::new(0), SUSTAIN, 0.0)),
+            note_off(480, 60),
+        ]]);
+        let points = &imported.tracks[0].controllers[&SUSTAIN];
+        assert!(points.windows(2).all(|pair| pair[0].at < pair[1].at));
+        assert!(
+            auris_core::project::curve_events(points, imported.end(), CURVE_STEP)
+                .iter()
+                .all(|(_, value)| *value == 0.0)
+        );
+    }
+
+    #[test]
+    fn sustain_hold_points_share_the_import_automation_budget() {
+        let result = import_with_limits(
+            vec![vec![
+                note_on(0, 60, 100),
+                event(0, controller_message(u4::new(0), SUSTAIN, 1.0)),
+                event(480, controller_message(u4::new(0), SUSTAIN, 0.0)),
+                note_off(480, 60),
+            ]],
+            ImportLimits {
+                automation_points: 2,
+                ..generous_limits()
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(IoError::MidiImportTooLarge {
+                resource: MidiImportResource::AutomationPoints,
+                observed: 3,
+                limit: 2,
+            })
+        ));
+    }
+
+    #[test]
+    fn sustain_hold_points_share_the_import_output_event_budget() {
+        let result = import_with_limits(
+            vec![vec![
+                note_on(0, 60, 100),
+                event(0, controller_message(u4::new(0), SUSTAIN, 1.0)),
+                event(480, controller_message(u4::new(0), SUSTAIN, 0.0)),
+                note_off(480, 60),
+            ]],
+            ImportLimits {
+                output_events: 3,
+                ..generous_limits()
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(IoError::MidiImportTooLarge {
+                resource: MidiImportResource::OutputEvents,
+                observed: 4,
+                limit: 3,
+            })
+        ));
+    }
 
     #[test]
     fn what_goes_out_comes_back_as_the_same_notes() {
