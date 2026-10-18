@@ -204,6 +204,8 @@ where
         .id(id)
         .debug_selector(move || selector.to_string())
         .tab_index(0)
+        .key_context("AurisDisclosure")
+        .on_action(|_: &ClaimDisclosureActivation, _, _| {})
         .focus(|this| this.border_1().border_color(theme.selection))
         .flex()
         .items_center()
@@ -941,6 +943,11 @@ pub struct SliderKeyboardEvent {
 /// The ordinary keyboard increment for controls whose displayed resolution is one percent.
 pub const SLIDER_PERCENT_STEP: f32 = 0.01;
 
+/// Claims activation key-downs while the disclosure's click handler acts on key-up.
+#[derive(Clone, Debug, PartialEq, gpui::Action)]
+#[action(namespace = auris_disclosure, no_json)]
+pub(crate) struct ClaimDisclosureActivation;
+
 /// A slider-local action carrying the standard key that requested an adjustment.
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = auris_slider, no_json)]
@@ -950,9 +957,9 @@ pub(crate) struct AdjustSlider {
 
 /// Bindings installed independently of the editable application keymap.
 ///
-/// The dedicated context is below the pane and window contexts in the focus path, so these win
-/// before actions such as Right-to-move-the-playhead while a slider itself owns focus.
-pub(crate) fn key_bindings() -> [gpui::KeyBinding; 8] {
+/// Control contexts are below pane and window contexts in the focus path. Sliders claim their
+/// adjustment keys, and disclosures reserve Enter/Space for activation instead of transport.
+pub(crate) fn key_bindings() -> [gpui::KeyBinding; 10] {
     [
         gpui::KeyBinding::new("left", AdjustSlider { key: "left" }, Some("AurisSlider")),
         gpui::KeyBinding::new("down", AdjustSlider { key: "down" }, Some("AurisSlider")),
@@ -970,6 +977,8 @@ pub(crate) fn key_bindings() -> [gpui::KeyBinding; 8] {
         ),
         gpui::KeyBinding::new("home", AdjustSlider { key: "home" }, Some("AurisSlider")),
         gpui::KeyBinding::new("end", AdjustSlider { key: "end" }, Some("AurisSlider")),
+        gpui::KeyBinding::new("enter", ClaimDisclosureActivation, Some("AurisDisclosure")),
+        gpui::KeyBinding::new("space", ClaimDisclosureActivation, Some("AurisDisclosure")),
     ]
 }
 

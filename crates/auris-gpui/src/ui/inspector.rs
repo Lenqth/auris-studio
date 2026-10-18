@@ -20,7 +20,7 @@ use crate::ui::plugin_editor::{
 };
 use crate::ui::plugin_window::PluginSubject;
 use crate::ui::scrollbars::ScrollPanel;
-use crate::ui::widgets::{chain_button, disclosure};
+use crate::ui::widgets::{bounded_picker_label, chain_button, disclosure};
 
 /// Stable groups whose disclosure state belongs to the view, not the selected document object.
 #[derive(Clone, Copy)]
@@ -186,6 +186,7 @@ impl AurisApp {
             .flex()
             .flex_col()
             .flex_shrink_0()
+            .min_w_0()
             .gap_1()
             .px_2()
             .py_2()
@@ -195,12 +196,14 @@ impl AurisApp {
                 div()
                     .id("inspector-selected-track")
                     .debug_selector(|| "inspector-selected-track".into())
+                    .w_full()
+                    .min_w_0()
+                    .h_5()
                     .text_sm()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.text)
-                    .truncate()
                     .tooltip(crate::ui::tooltip::keyed_tip(track_name.clone(), "", theme))
-                    .child(track_name),
+                    .child(bounded_picker_label(track_name)),
             );
         if let Some(name) = self.selected_clip.and_then(|clip| {
             self.project()
@@ -218,6 +221,8 @@ impl AurisApp {
                     .id("inspector-selected-clip")
                     .debug_selector(|| "inspector-selected-clip".into())
                     .flex()
+                    .min_w_0()
+                    .h_4()
                     .items_center()
                     .gap_2()
                     .text_xs()
@@ -228,9 +233,9 @@ impl AurisApp {
                             .id("inspector-clip-name")
                             .flex_1()
                             .min_w_0()
-                            .truncate()
+                            .h_full()
                             .tooltip(crate::ui::tooltip::keyed_tip(name.clone(), "", theme))
-                            .child(name),
+                            .child(bounded_picker_label(name)),
                     ),
             );
         }
@@ -1070,6 +1075,60 @@ mod tests {
     use super::*;
     use crate::harness::{click, paint, resize, with_a_clip};
     use gpui::{TestAppContext, point, px, size};
+
+    #[gpui::test]
+    fn inspector_disclosure_activation_does_not_dispatch_transport_commands(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, track, clip) = with_a_clip(cx);
+        app.update(cx, |this, _| {
+            this.select_track(track);
+            this.select_clip(Some(clip));
+        });
+        paint(&app, cx);
+        // There is no audio thread in the harness. Observe the dispatched action rather than
+        // a transport atomic that would never acknowledge playback here.
+        let transport_commands = std::rc::Rc::new(std::cell::Cell::new(0));
+        let observed = transport_commands.clone();
+        cx.update(|_, cx| {
+            cx.observe_keystrokes(move |event, _, _| {
+                if event.action.as_ref().is_some_and(|action| {
+                    action.as_any().is::<crate::actions::TogglePlay>()
+                        || action.as_any().is::<crate::actions::ReturnToZero>()
+                }) {
+                    observed.set(observed.get() + 1);
+                }
+            })
+            .detach();
+        });
+        cx.simulate_keystrokes("enter");
+        assert_eq!(
+            transport_commands.get(),
+            1,
+            "the observer sees the window's binding"
+        );
+        transport_commands.set(0);
+        click("inspector-performance", cx);
+        paint(&app, cx);
+        for (key, collapsed) in [("enter", false), ("space", true)] {
+            cx.simulate_keystrokes(key);
+            cx.simulate_event(gpui::KeyUpEvent {
+                keystroke: gpui::Keystroke::parse(key).unwrap(),
+            });
+            paint(&app, cx);
+            app.read_with(cx, |this, _| {
+                assert_eq!(
+                    this.inspector_collapsed[InspectorSection::Performance as usize],
+                    collapsed
+                );
+            });
+        }
+        assert_eq!(
+            transport_commands.get(),
+            0,
+            "activation belongs to the focused disclosure"
+        );
+    }
 
     #[gpui::test]
     fn inspector_disclosures_keep_their_state_across_selection_without_editing_the_song(
