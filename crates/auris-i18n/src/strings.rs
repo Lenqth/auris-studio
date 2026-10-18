@@ -186,6 +186,12 @@ strings! {
     MenuWriteLyrics { en: "Write Lyrics…", ja: "歌詞をまとめて入力…" }
     Mixer { en: "Mixer", ja: "ミキサー" }
     Inspector { en: "Inspector", ja: "インスペクタ" }
+    InspectorClip { en: "Clip", ja: "クリップ" }
+    InspectorGeneration { en: "Generation", ja: "生成" }
+    InspectorSound { en: "Sound", ja: "音源" }
+    InspectorUnmodified { en: "Unmodified", ja: "未調整" }
+    InspectorEmptyHint { en: "Select a track or clip to edit its settings.", ja: "トラックやクリップを選ぶと設定を編集できます。" }
+    InspectorEffects { en: "Effects", ja: "エフェクト" }
     Master { en: "Master", ja: "マスター" }
     // Beside the master meter and the same width, so the caption has to be short enough not to
     // push the number off the end of its row.

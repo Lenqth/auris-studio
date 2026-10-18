@@ -500,12 +500,13 @@ where
     .on_mouse_down(gpui::MouseButton::Left, on_drag_start)
 }
 
-/// Which half of a labelled row is a fixed column. The other half takes what is left.
+/// How a labelled row shares its width between the caption and control.
 ///
-/// The two shapes a row of "this is what it is, press to choose another" comes in, and the choice
-/// is about the panel rather than about the control. Both are drawn by [`picker_row`].
+/// A panel chooses equal lanes or one fixed column through [`picker_row`].
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum RowColumn {
+    /// Equal label and value lanes, matching the geometry of a labelled value slider.
+    Equal,
     /// The label is a column this wide. For a panel of a fixed width whose values are long — a
     /// key, a groove, a progression — where the button wants every pixel the label does not.
     Label(Pixels),
@@ -653,6 +654,12 @@ where
         .gap_2()
         .h(Metrics::CONTROL_HEIGHT);
     match column {
+        RowColumn::Equal => row
+            .gap_1p5()
+            .border_1()
+            .border_color(gpui::transparent_black())
+            .child(caption.flex_1().min_w_0())
+            .child(div().flex_1().min_w_0().child(control)),
         RowColumn::Label(width) => row
             .child(caption.w(width).flex_shrink_0())
             .child(div().flex_1().min_w_0().child(control)),

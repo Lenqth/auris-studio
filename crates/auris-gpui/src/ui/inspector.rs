@@ -1,4 +1,4 @@
-//! The right-hand inspector: the selected track's instrument and its effect chain.
+//! The inspector: a fixed selection header and collapsible clip and track settings.
 //!
 //! The list of everything that *could* go on it is the library, on the other side of the
 //! arrangement — see [`crate::ui::library`]. The two panels share [`panel_header`], because they
@@ -8,7 +8,7 @@ use auris_i18n::Key;
 use auris_session::Session;
 use auris_session::prelude::*;
 
-use gpui::{AnyElement, IntoElement, MouseDownEvent, Pixels, Window, div, prelude::*, px};
+use gpui::{AnyElement, IntoElement, MouseDownEvent, Pixels, Window, div, prelude::*};
 
 use crate::app::{AurisApp, Drag};
 use crate::theme::Metrics;
@@ -20,7 +20,36 @@ use crate::ui::plugin_editor::{
 };
 use crate::ui::plugin_window::PluginSubject;
 use crate::ui::scrollbars::ScrollPanel;
-use crate::ui::widgets::{chain_button, divider};
+use crate::ui::widgets::{chain_button, disclosure};
+
+/// Stable groups whose disclosure state belongs to the view, not the selected document object.
+#[derive(Clone, Copy)]
+enum InspectorSection {
+    Generation,
+    Performance,
+    Sound,
+    Effects,
+}
+
+impl InspectorSection {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Generation => "inspector-generation",
+            Self::Performance => "inspector-performance",
+            Self::Sound => "inspector-sound",
+            Self::Effects => "inspector-effects",
+        }
+    }
+
+    fn title(self) -> Key {
+        match self {
+            Self::Generation => Key::InspectorGeneration,
+            Self::Performance => Key::PerformHeading,
+            Self::Sound => Key::InspectorSound,
+            Self::Effects => Key::InspectorEffects,
+        }
+    }
+}
 
 /// One row of a channel strip's insert list.
 #[derive(Clone, Debug, PartialEq)]
@@ -122,53 +151,208 @@ impl AurisApp {
         let theme = self.theme.clone();
         let body = self.render_track_inspector(cx);
 
-        // One page now, with no tab bar. The plugin browser that used to share this panel is the
-        // library on the left: a picker that hid the thing it was editing had to be dismissed
-        // before its own result could be seen.
-        //
-        // The header names the panel rather than what is in it. It said "Track" until the selected
-        // clip's recipe joined the track's own controls here, and a panel showing two things under
-        // the name of one of them is worse than a panel that says which panel it is — the groups
-        // inside carry their own headings.
-        //
-        // The width comes from the parent, which owns the resizable panel geometry, and the
-        // divider line is drawn by the splitter beside it.
+        // The selection stays outside the scrolling region so every visible setting has a target.
         div()
             .flex()
             .flex_col()
             .size_full()
             .bg(theme.surface)
             .child(panel_header(self.t(Key::Inspector), &theme))
+            .child(self.inspector_selection())
             .child(
                 self.scrolling(
                     ScrollPanel::Inspector,
                     div()
                         .id("inspector-body")
                         .overflow_y_scroll()
-                        .p_2()
+                        .px_2()
+                        .pb_3()
                         .child(body),
                     cx,
                 ),
             )
     }
 
+    fn inspector_selection(&self) -> AnyElement {
+        let theme = &self.theme;
+        let track = self.selected_track.and_then(|id| self.project().track(id));
+        let track_name: gpui::SharedString = track
+            .map_or(self.t(Key::NoTrackSelected), |track| track.name.as_str())
+            .to_string()
+            .into();
+        let mut header = div()
+            .id("inspector-selection")
+            .debug_selector(|| "inspector-selection".into())
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .gap_1()
+            .px_2()
+            .py_2()
+            .border_b_1()
+            .border_color(theme.border)
+            .child(
+                div()
+                    .id("inspector-selected-track")
+                    .debug_selector(|| "inspector-selected-track".into())
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.text)
+                    .truncate()
+                    .tooltip(crate::ui::tooltip::keyed_tip(track_name.clone(), "", theme))
+                    .child(track_name),
+            );
+        if let Some(name) = self.selected_clip.and_then(|clip| {
+            self.project()
+                .midi_clip(clip)
+                .map(|(_, clip)| clip.name.clone())
+                .or_else(|| {
+                    self.project()
+                        .audio_clip(clip)
+                        .map(|clip| clip.name.clone())
+                })
+        }) {
+            let name: gpui::SharedString = name.into();
+            header = header.child(
+                div()
+                    .id("inspector-selected-clip")
+                    .debug_selector(|| "inspector-selected-clip".into())
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .text_xs()
+                    .text_color(theme.text_muted)
+                    .child(div().flex_shrink_0().child(self.t(Key::InspectorClip)))
+                    .child(
+                        div()
+                            .id("inspector-clip-name")
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .tooltip(crate::ui::tooltip::keyed_tip(name.clone(), "", theme))
+                            .child(name),
+                    ),
+            );
+        }
+        header.into_any_element()
+    }
+
+    fn inspector_section(
+        &self,
+        section: InspectorSection,
+        summary: String,
+        rows: Vec<AnyElement>,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let expanded = !self.inspector_collapsed[section as usize];
+        div()
+            .debug_selector(move || format!("{}-section", section.id()))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .min_w_0()
+            .child(
+                disclosure(
+                    section.id(),
+                    self.t(section.title()),
+                    expanded,
+                    &self.theme,
+                    cx.listener(move |this, _, _, cx| {
+                        this.inspector_collapsed[section as usize] = expanded;
+                        cx.notify();
+                    }),
+                )
+                .h_7()
+                .px_0()
+                .border_1()
+                .border_color(gpui::transparent_black())
+                .child(
+                    div()
+                        .id(("inspector-summary", section as usize))
+                        .debug_selector(move || format!("{}-summary", section.id()))
+                        .max_w(gpui::relative(0.55))
+                        .min_w_0()
+                        .truncate()
+                        .text_color(self.theme.text_muted)
+                        .tooltip(crate::ui::tooltip::keyed_tip(
+                            summary.clone(),
+                            "",
+                            &self.theme,
+                        ))
+                        .child(summary),
+                ),
+            )
+            .when(expanded, |this| {
+                this.child(div().flex().flex_col().gap_1().min_w_0().children(rows))
+            })
+            .into_any_element()
+    }
+
+    fn inspector_scope(&self, title: Key) -> impl IntoElement + use<> {
+        div()
+            .pt_3()
+            .pb_1()
+            .text_xs()
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(self.theme.text)
+            .child(self.t(title))
+    }
+
     fn render_track_inspector(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
-        // The selected clip's recipe, when it has one, above the track that plays it. That order
-        // is the order of the sentence it makes: this part, on this instrument, through these
-        // effects. It is also what was just clicked, and so what the eye is already on. The
-        // performance dials follow the part's for the same sentence — played like this — and
-        // appear for every MIDI clip, because a phrase played by hand takes a swing exactly as
-        // a written one does.
-        let mut sections: Vec<AnyElement> = self.part_rows(cx);
-        sections.extend(self.perform_rows(cx));
+        let mut sections: Vec<AnyElement> = Vec::new();
+        if let Some(clip) = self
+            .selected_clip
+            .filter(|clip| self.project().midi_clip(*clip).is_some())
+        {
+            sections.push(self.inspector_scope(Key::InspectorClip).into_any_element());
+            if let Some(recipe) = self.session.clip_recipe(clip) {
+                let mut summary = self
+                    .t(crate::ui::context_menu::preset_key(recipe.preset))
+                    .to_string();
+                if self.session.clip_hand_edited(clip) {
+                    summary.push_str(" · ");
+                    summary.push_str(self.t(Key::PartEditedByHand));
+                }
+                let rows = self.part_rows(cx);
+                sections.push(self.inspector_section(
+                    InspectorSection::Generation,
+                    summary,
+                    rows,
+                    cx,
+                ));
+            }
+            let summary = self
+                .session
+                .clip_transforms(clip)
+                .map(|stack| {
+                    if stack.is_empty() {
+                        self.t(Key::InspectorUnmodified).to_string()
+                    } else {
+                        let summary = auris_i18n::messages::inspector_performance(
+                            self.language(),
+                            stack.len(),
+                        );
+                        let swing = crate::ui::performance::swing_percent(stack);
+                        if swing > crate::ui::part::SWING_MIN {
+                            format!("{} {swing}% · {summary}", self.t(Key::PartSwing))
+                        } else {
+                            summary
+                        }
+                    }
+                })
+                .unwrap_or_default();
+            let rows = self.perform_rows(cx);
+            sections.push(self.inspector_section(InspectorSection::Performance, summary, rows, cx));
+        }
 
         let Some(track_id) = self.selected_track else {
             sections.push(
                 div()
                     .text_xs()
                     .text_color(theme.text_muted)
-                    .child(self.t(Key::NoTrackSelected))
+                    .pt_3()
+                    .child(self.t(Key::InspectorEmptyHint))
                     .into_any_element(),
             );
             return div()
@@ -186,8 +370,8 @@ impl AurisApp {
                 .children(sections)
                 .into_any_element();
         };
-        let track_name = track.name.clone();
         let is_drum = track.kind.is_drum();
+        let is_singer = track.kind.is_singer();
         let instrument_id = track
             .kind
             .as_instrument()
@@ -199,47 +383,45 @@ impl AurisApp {
             .map(|slot| (slot.id, slot.effect_id.clone(), slot.enabled))
             .collect();
 
-        sections.push(self.group_heading(Key::Track).into_any_element());
-        sections.push(
-            div()
-                .text_sm()
-                .text_color(theme.text)
-                .pb_2()
-                .child(track_name)
-                .into_any_element(),
-        );
-
-        sections.extend(self.singer_rows(track_id, cx));
+        sections.push(self.inspector_scope(Key::Track).into_any_element());
+        let sound_summary = if is_singer {
+            if self
+                .auto_sing
+                .as_ref()
+                .is_some_and(|job| job.track == track_id)
+            {
+                self.t(Key::TakeRendering).to_string()
+            } else if self.sung_retry.contains(&track_id) {
+                self.t(Key::SingerQueued).to_string()
+            } else if let Some(failure) = self.singer_failure(track_id) {
+                failure.to_string()
+            } else {
+                self.singer_voice_label(track_id)
+                    .unwrap_or_else(|| self.t(Key::SingerNoVoice).to_string())
+            }
+        } else {
+            instrument_id
+                .as_ref()
+                .map(|id| self.instrument_label(track_id, id))
+                .unwrap_or_default()
+        };
+        let mut sound_rows = self.singer_rows(track_id, cx);
 
         if let Some(instrument_id) = instrument_id {
             let name = self.instrument_label(track_id, &instrument_id);
-            sections.push(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .h(px(24.0))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .child(self.t(Key::Instrument)),
-                    )
-                    .child(crate::ui::widgets::button(
-                        "inst-open",
-                        name,
-                        crate::ui::widgets::ButtonStyle::Ghost,
-                        false,
-                        theme.accent_soft,
-                        &theme,
-                        cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            this.open_plugin_window(PluginSubject::Instrument(track_id));
-                            cx.notify();
-                        }),
-                    ))
-                    .into_any_element(),
+            sound_rows.push(
+                self.command_row(
+                    "inst-open",
+                    Key::Instrument,
+                    name,
+                    cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        this.open_plugin_window(PluginSubject::Instrument(track_id));
+                        cx.notify();
+                    }),
+                )
+                .into_any_element(),
             );
-            sections.push(
+            sound_rows.push(
                 crate::ui::widgets::bounded_button_enabled(
                     "save-user-sound",
                     self.t(Key::SaveSound),
@@ -264,25 +446,18 @@ impl AurisApp {
                 .into_any_element(),
             );
             if is_drum {
-                sections.extend(self.drum_assignment_rows(track_id, cx));
+                sound_rows.extend(self.drum_assignment_rows(track_id, cx));
             }
-            sections.push(divider(&theme).into_any_element());
         }
-
-        sections.push(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .h(px(24.0))
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(theme.text_muted)
-                        .child(self.t(Key::Inserts)),
-                )
-                .into_any_element(),
-        );
+        if !sound_rows.is_empty() {
+            sections.push(self.inspector_section(
+                InspectorSection::Sound,
+                sound_summary,
+                sound_rows,
+                cx,
+            ));
+        }
+        let mut insert_controls = Vec::new();
 
         // Logic's shape: the slots that are filled, then one empty one that adds another. The
         // empty slot replaces both the old "+ Add" button in this heading and the "No effects"
@@ -297,7 +472,7 @@ impl AurisApp {
                     enabled,
                 } => (slot, effect_id, enabled),
                 Insert::Empty => {
-                    sections.push(
+                    insert_controls.push(
                         // Wrapped so the empty slot can be dragged onto as well as clicked: the
                         // row that adds the next effect is also where the end of the chain is,
                         // and it is the only way to say "last" with the pointer.
@@ -335,7 +510,7 @@ impl AurisApp {
             // strips where the same row has room for none of them. Losing them to the right-click
             // menu everywhere would be a real reduction in discoverability, and this panel has
             // the width to keep them.
-            sections.push(
+            insert_controls.push(
                 div()
                     .flex()
                     .items_center()
@@ -432,6 +607,21 @@ impl AurisApp {
                     .into_any_element(),
             );
         }
+
+        let summary = auris_i18n::messages::inspector_effects(
+            self.language(),
+            effect_slots
+                .iter()
+                .filter(|(_, _, enabled)| *enabled)
+                .count(),
+            effect_slots.len(),
+        );
+        sections.push(self.inspector_section(
+            InspectorSection::Effects,
+            summary,
+            insert_controls,
+            cx,
+        ));
 
         div()
             .flex()
@@ -878,6 +1068,143 @@ fn target_element_key(target: ParamTarget, param: ParamId) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::harness::{click, paint, resize, with_a_clip};
+    use gpui::{TestAppContext, point, px, size};
+
+    #[gpui::test]
+    fn inspector_disclosures_keep_their_state_across_selection_without_editing_the_song(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, track, _) = with_a_clip(cx);
+        let (generated, other, before) = app.update(cx, |this, _| {
+            this.session
+                .stamp_named_progression("axis", Ticks::ZERO, 4)
+                .unwrap();
+            let generated = this
+                .session
+                .generate_clip(
+                    track,
+                    Ticks::ZERO,
+                    Ticks::QUARTER * 16,
+                    ClipRecipe::new(ClipPreset::Bass, 12),
+                )
+                .unwrap();
+            let other = this.session.add_default_instrument_track("Other").unwrap();
+            this.session
+                .add_midi_clip(other, "Other clip", Ticks::ZERO, Ticks::QUARTER * 4)
+                .unwrap();
+            this.select_track(track);
+            this.select_clip(Some(generated));
+            (generated, other, this.project().clone())
+        });
+        resize(&app, cx, size(px(1920.0), px(3000.0)));
+        // GPUI retains old selectors in its debug map. Compare the section that is painted in
+        // both states rather than asking whether a previously painted child disappeared.
+        for (section, region) in [
+            ("inspector-generation", "inspector-generation-section"),
+            ("inspector-performance", "inspector-performance-section"),
+            ("inspector-sound", "inspector-sound-section"),
+            ("inspector-effects", "inspector-effects-section"),
+        ] {
+            let expanded = cx.debug_bounds(region).unwrap().size.height;
+            click(section, cx);
+            paint(&app, cx);
+            assert!(
+                cx.debug_bounds(region).unwrap().size.height < expanded,
+                "{section} must hide its rows"
+            );
+        }
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.inspector_collapsed, [true; 4])
+        });
+
+        app.update(cx, |this, _| this.select_track(other));
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.inspector_collapsed, [true; 4])
+        });
+        app.update(cx, |this, _| {
+            this.select_track(track);
+            this.select_clip(Some(generated));
+        });
+        paint(&app, cx);
+        for selector in [
+            "inspector-generation-disclosure-collapsed",
+            "inspector-performance-summary",
+            "inspector-sound-summary",
+            "inspector-effects-summary",
+        ] {
+            assert!(cx.debug_bounds(selector).is_some(), "{selector}");
+        }
+        click("inspector-sound", cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(!this.inspector_collapsed[InspectorSection::Sound as usize])
+        });
+        // The disclosure keeps keyboard focus after the pointer opens it.
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.inspector_collapsed[InspectorSection::Sound as usize])
+        });
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(!this.inspector_collapsed[InspectorSection::Sound as usize])
+        });
+        cx.simulate_keystrokes("shift-tab");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(!this.inspector_collapsed[InspectorSection::Performance as usize])
+        });
+        app.read_with(cx, |this, _| assert_eq!(this.project(), &before));
+    }
+
+    #[gpui::test]
+    fn inspector_selection_stays_above_scrolled_settings_and_drops_a_deselected_clip(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, track, clip) = with_a_clip(cx);
+        app.update(cx, |this, _| {
+            this.select_track(track);
+            this.select_clip(Some(clip));
+            for _ in 0..18 {
+                this.session
+                    .add_effect(Some(track), "auris.fx.gain")
+                    .unwrap();
+            }
+        });
+        resize(&app, cx, size(px(960.0), px(720.0)));
+        app.update(cx, |this, _| {
+            this.inspector_scroll.set_offset(point(px(0.0), px(-200.0)))
+        });
+        paint(&app, cx);
+        let selection = cx.debug_bounds("inspector-selection").unwrap();
+        let viewport = app.read_with(cx, |this, _| this.inspector_scroll.bounds());
+        app.read_with(cx, |this, _| {
+            assert!(this.inspector_scroll.offset().y < px(0.0))
+        });
+        assert!(
+            selection.bottom() <= viewport.top(),
+            "the target is outside the scrolling settings"
+        );
+        assert!(cx.debug_bounds("inspector-selected-track").is_some());
+        assert!(cx.debug_bounds("inspector-selected-clip").is_some());
+        app.update(cx, |this, _| this.select_clip(None));
+        paint(&app, cx);
+        app.read_with(cx, |this, _| assert_eq!(this.selected_clip, None));
+        assert!(cx.debug_bounds("inspector-selected-track").is_some());
+        assert!(
+            cx.debug_bounds("inspector-selection").unwrap().size.height < selection.size.height
+        );
+    }
 
     #[test]
     fn dragging_an_effect_onto_a_row_moves_it_exactly_that_far() {

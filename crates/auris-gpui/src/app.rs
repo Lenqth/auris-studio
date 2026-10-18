@@ -1700,6 +1700,8 @@ pub struct AurisApp {
     pub(crate) library_scroll: gpui::ScrollHandle,
     /// The same, for the inspector's column of settings.
     pub(crate) inspector_scroll: gpui::ScrollHandle,
+    /// Collapsed inspector groups, retained when the selected object changes.
+    pub(crate) inspector_collapsed: [bool; 4],
     /// The same, for the log's lines.
     pub(crate) log_scroll: gpui::ScrollHandle,
     /// The viewport of the open custom menu-bar dropdown.
@@ -2117,6 +2119,7 @@ impl AurisApp {
             mixer_scroll: gpui::ScrollHandle::new(),
             library_scroll: gpui::ScrollHandle::new(),
             inspector_scroll: gpui::ScrollHandle::new(),
+            inspector_collapsed: [false; 4],
             log_scroll: gpui::ScrollHandle::new(),
             menu_bar_scroll: gpui::ScrollHandle::new(),
             menu: None,
