@@ -7,6 +7,49 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.9.0 — 2026-10-19
+
+### Instruments and arrangements
+
+* **Play built-in physical instruments without downloading samples.** Piano, acoustic and
+  electric guitar, bass, bell, mallet, violin, clarinet, hammered dulcimer and tin whistle provide
+  instrument-specific controls. Physical Choir adds wordless ensemble vowels, and the drum kit
+  uses modeled percussion voices. Instrument visualizers show the relevant controls and motion.
+* **Compose with instrument-aware presets.** Arrangements use physical instrument themes,
+  developed sections, dedicated drum patterns and preset effect chains. The grand piano and
+  other physical models gain calibrated responses and improved performance controls.
+* **Keep your own sounds.** Save instrument settings as named user presets, organize them in
+  the sound library and reuse them on other tracks.
+
+### Editing and desktop
+
+* **Choose a track grid or the existing track list.** The grid offers another way to browse
+  and select tracks while keeping the same project and editing commands.
+* **Control piano-roll snapping more precisely.** Smart and fixed grids, relative or absolute
+  snapping, and temporary snap overrides support both aligned notes and intentional offsets.
+  Toolbar customization and note preview controls make common editing actions easier to reach.
+* **Keep the selected object visible in the inspector.** Track and clip context stays above
+  scrollable settings, with collapsible sections, clearer hierarchy and corrected label
+  truncation. macOS window behavior and collapsed picker labels are also improved.
+
+### Singing, files and rendering
+
+* **Use DiffSinger and LeapSinger voicebanks.** DiffSinger runs acoustic and vocoder ONNX
+  models, including supported variance predictors. LeapSinger setup exposes model paths and
+  frame settings, with validation before rendering.
+* **Preserve imported MIDI expression.** Controller and pitch-bend state before the first
+  note carries into the imported clip, and sustain changes keep their authored timing.
+* **Protect files and cancel background work reliably.** Saving over the current project
+  detects external edits, and drum analysis workers honor cancellation. Mix normalization
+  and encoded WAV checks improve rendered-audio handling.
+
+### Compatibility
+
+* Projects continue to use format 31. Optional voice models are configured separately from
+  the application download.
+* Source builds require Rust 1.95 or newer. Workspace dependencies have been refreshed;
+  Windows release builds continue to include ASIO support.
+
 ## 0.8.0 — 2026-09-19
 
 ### Composition and editing
