@@ -338,8 +338,9 @@ impl FlowGraph {
                             return;
                         }
 
-                        // Handle selection
-                        if !multi {
+                        // Preserve a selected group when dragging any of its nodes.
+                        let selected = state.get_node(&node_id).is_some_and(|n| n.selected);
+                        if !multi && !selected {
                             for n in &mut state.nodes {
                                 n.selected = false;
                             }

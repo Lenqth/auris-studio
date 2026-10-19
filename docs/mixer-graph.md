@@ -59,6 +59,11 @@ a sidechain. Gain, pan, mute, solo, meters and send levels are on the track node
 A send's context menu changes its pre/post-fader tap or removes it.
 
 Drag nodes to arrange the workspace, or drag/scroll the background to pan.
+Hold Shift and drag the background to select nodes in a rectangle. Selected
+nodes have highlighted borders; drag any selected node to move the group while
+preserving its spacing. The entire group movement is one Undo/Redo step.
+Click an unselected node to select it alone, or click empty space to clear the
+selection. Ctrl-click (Command-click on macOS) toggles individual nodes.
 **Arrange nodes** places dependencies from left to right. **Console** provides
 the channel strips; **Signal flow** returns to the graph. Both views edit the
 same project and share undo/redo. Keyboard focus moves through the controls with

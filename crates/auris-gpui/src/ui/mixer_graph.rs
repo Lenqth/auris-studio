@@ -1067,10 +1067,13 @@ impl AurisApp {
             MixerNode::Strip(t) | MixerNode::Effect(t, _) => t,
         };
         let theme = self.theme.clone();
-        let zoom = self
-            .mixer_canvas
-            .as_ref()
-            .map_or(1.0, |canvas| canvas.state.read(cx).viewport.zoom);
+        let (zoom, selected) = self.mixer_canvas.as_ref().map_or((1.0, false), |canvas| {
+            let state = canvas.state.read(cx);
+            (
+                state.viewport.zoom,
+                state.get_node(id).is_some_and(|node| node.selected),
+            )
+        });
         let name = owner.and_then(|id| self.project().track(id)).map_or_else(
             || self.t(Key::Master).to_string(),
             |track| track.name.clone(),
@@ -1084,11 +1087,7 @@ impl AurisApp {
             .gap_1()
             .bg(theme.surface)
             .border_1()
-            .border_color(if self.selected_track == owner {
-                theme.accent
-            } else {
-                theme.border
-            })
+            .border_color(if selected { theme.accent } else { theme.border })
             .rounded(Metrics::RADIUS_MD)
             .text_xs()
             .text_color(theme.text)

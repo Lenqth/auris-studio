@@ -656,8 +656,10 @@ pub mod architecture {
     //! Node positions, zoom and canvas-local pan are stored in `Project::mixer_graph_view`,
     //! keyed by the same stable node identities as the model tools. Old files default to the
     //! automatic layout at 100%. Camera navigation marks the project unsaved without an undo
-    //! step. A node drag records one `Edit::MoveMixerNodes` transaction, including all pointer
-    //! updates; automatic arrangement records one `Edit::ArrangeMixerNodes`. No-op gestures
+    //! step. Shift-dragging the background selects intersecting nodes; dragging any selected
+    //! node moves the complete selection, whose members use the selection border. A node drag
+    //! records one `Edit::MoveMixerNodes` transaction for all moved nodes and pointer updates;
+    //! automatic arrangement records one `Edit::ArrangeMixerNodes`. No-op gestures
     //! preserve history. Missing automatic coordinates seed snapshots before the first edit;
     //! subsequent camera synchronization never overwrites authored historical positions.
     //! Layout undo/redo and rollback restore coordinates without rebuilding audio, while camera
