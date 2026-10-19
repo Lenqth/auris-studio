@@ -170,6 +170,15 @@ impl Resonators {
         }
     }
 
+    pub(super) fn soften_ride_strike(&mut self) {
+        // The axisymmetric modes at 2.65 and 12.36 kHz dominate this reduced plate.
+        // Attenuate their excitation after energy normalization so the removed energy
+        // cannot boost the other modes. Keep their frequencies and decay unchanged.
+        for (index, gain) in [(0, 0.6), (8, 0.8)] {
+            self.modes[index].quadrature *= gain;
+        }
+    }
+
     pub(super) fn next(&mut self) -> f32 {
         let mut output = 0.0;
         for mode in self.modes.iter_mut().take(self.count) {
