@@ -204,6 +204,8 @@ where
         .id(id)
         .debug_selector(move || selector.to_string())
         .tab_index(0)
+        .key_context("AurisDisclosure")
+        .on_action(|_: &ClaimDisclosureActivation, _, _| {})
         .focus(|this| this.border_1().border_color(theme.selection))
         .flex()
         .items_center()
@@ -500,12 +502,13 @@ where
     .on_mouse_down(gpui::MouseButton::Left, on_drag_start)
 }
 
-/// Which half of a labelled row is a fixed column. The other half takes what is left.
+/// How a labelled row shares its width between the caption and control.
 ///
-/// The two shapes a row of "this is what it is, press to choose another" comes in, and the choice
-/// is about the panel rather than about the control. Both are drawn by [`picker_row`].
+/// A panel chooses equal lanes or one fixed column through [`picker_row`].
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum RowColumn {
+    /// Equal label and value lanes, matching the geometry of a labelled value slider.
+    Equal,
     /// The label is a column this wide. For a panel of a fixed width whose values are long — a
     /// key, a groove, a progression — where the button wants every pixel the label does not.
     Label(Pixels),
@@ -653,6 +656,12 @@ where
         .gap_2()
         .h(Metrics::CONTROL_HEIGHT);
     match column {
+        RowColumn::Equal => row
+            .gap_1p5()
+            .border_1()
+            .border_color(gpui::transparent_black())
+            .child(caption.flex_1().min_w_0())
+            .child(div().flex_1().min_w_0().child(control)),
         RowColumn::Label(width) => row
             .child(caption.w(width).flex_shrink_0())
             .child(div().flex_1().min_w_0().child(control)),
@@ -934,6 +943,11 @@ pub struct SliderKeyboardEvent {
 /// The ordinary keyboard increment for controls whose displayed resolution is one percent.
 pub const SLIDER_PERCENT_STEP: f32 = 0.01;
 
+/// Claims activation key-downs while the disclosure's click handler acts on key-up.
+#[derive(Clone, Debug, PartialEq, gpui::Action)]
+#[action(namespace = auris_disclosure, no_json)]
+pub(crate) struct ClaimDisclosureActivation;
+
 /// A slider-local action carrying the standard key that requested an adjustment.
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = auris_slider, no_json)]
@@ -943,9 +957,9 @@ pub(crate) struct AdjustSlider {
 
 /// Bindings installed independently of the editable application keymap.
 ///
-/// The dedicated context is below the pane and window contexts in the focus path, so these win
-/// before actions such as Right-to-move-the-playhead while a slider itself owns focus.
-pub(crate) fn key_bindings() -> [gpui::KeyBinding; 8] {
+/// Control contexts are below pane and window contexts in the focus path. Sliders claim their
+/// adjustment keys, and disclosures reserve Enter/Space for activation instead of transport.
+pub(crate) fn key_bindings() -> [gpui::KeyBinding; 10] {
     [
         gpui::KeyBinding::new("left", AdjustSlider { key: "left" }, Some("AurisSlider")),
         gpui::KeyBinding::new("down", AdjustSlider { key: "down" }, Some("AurisSlider")),
@@ -963,6 +977,8 @@ pub(crate) fn key_bindings() -> [gpui::KeyBinding; 8] {
         ),
         gpui::KeyBinding::new("home", AdjustSlider { key: "home" }, Some("AurisSlider")),
         gpui::KeyBinding::new("end", AdjustSlider { key: "end" }, Some("AurisSlider")),
+        gpui::KeyBinding::new("enter", ClaimDisclosureActivation, Some("AurisDisclosure")),
+        gpui::KeyBinding::new("space", ClaimDisclosureActivation, Some("AurisDisclosure")),
     ]
 }
 

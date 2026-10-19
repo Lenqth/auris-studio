@@ -133,12 +133,7 @@ pub mod analyze_drum_kit {
         let request = session
             .drum_probe_request(track, &options)
             .map_err(|error| error.to_string())?;
-        let report = auris_session::run_drum_probe_isolated(
-            &request,
-            &std::sync::atomic::AtomicBool::new(false),
-            std::time::Duration::from_secs(600),
-        )
-        .map_err(|error| error.to_string())?;
+        let report = run_probe(&request).map_err(|error| error.to_string())?;
         if args.apply {
             session
                 .apply_drum_map(&report, args.remap_clips)
@@ -150,6 +145,17 @@ pub mod analyze_drum_kit {
         } else {
             serde_json::to_string_pretty(&summary(&report)).map_err(|error| error.to_string())
         }
+    }
+
+    fn run_probe(
+        request: &auris_session::DrumProbeRequest,
+    ) -> Result<auris_session::DrumKitAnalysis, auris_session::SessionError> {
+        let cancellation = cancellation::current();
+        auris_session::run_drum_probe_isolated(
+            request,
+            cancellation.flag(),
+            std::time::Duration::from_secs(600),
+        )
     }
 
     fn summary(report: &auris_session::DrumKitAnalysis) -> serde_json::Value {
@@ -203,6 +209,32 @@ pub mod analyze_drum_kit {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn pre_cancelled_probe_stops_before_starting_a_worker() {
+            let mut session = Session::new(SessionOptions::headless()).unwrap();
+            let track = session
+                .add_drum_track("Cancelled", "auris.synth.drumkit")
+                .unwrap();
+            let request = session
+                .drum_probe_request(
+                    track,
+                    &auris_session::DrumScanOptions {
+                        notes: vec![36],
+                        velocities: vec![1.0],
+                        repetitions: 1,
+                        seconds_per_note: 0.25,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let control = std::sync::Arc::new(crate::Cancellation::new());
+            assert!(control.cancel());
+
+            let result = crate::with_cancellation(control, || run_probe(&request));
+
+            assert!(result.unwrap_err().to_string().contains("cancelled"));
+        }
 
         #[test]
         fn compact_report_keeps_evidence_ranges_and_explicit_silence() {

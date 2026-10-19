@@ -19,13 +19,8 @@ use crate::ui::paint;
 use crate::ui::prompt::{Prompt, PromptTarget};
 use crate::ui::widgets::{
     ButtonStyle, PickerBehavior, RowColumn, SLIDER_PERCENT_STEP, SliderFill, SliderKeyboardEvent,
-    button, divider, dragged, picker_row, value_slider,
+    button, dragged, picker_row, value_slider,
 };
-
-/// How wide the value button in one of this panel's rows is drawn.
-///
-/// A column, so the buttons line up down a panel whose width is the user's to change.
-const VALUE_WIDTH: Pixels = px(128.0);
 
 /// Straight eighths. Anything less would rush the offbeat, which is not a feel anybody asks for.
 pub const SWING_MIN: u8 = 50;
@@ -357,14 +352,7 @@ impl AurisApp {
         let has_pad = dials_for(&recipe).contains(&Dial::Density)
             && (!drummer || drum_control_applies(&recipe, Dial::Density));
 
-        let mut rows: Vec<AnyElement> = vec![
-            self.group_heading(if drummer {
-                Key::DrummerHeading
-            } else {
-                Key::PartPlayerHeading
-            })
-            .into_any_element(),
-        ];
+        let mut rows: Vec<AnyElement> = Vec::new();
         if !drummer {
             rows.push(self.melodic_preset_buttons(clip, recipe.preset, cx));
         }
@@ -567,7 +555,6 @@ impl AurisApp {
                 )))
                 .into_any_element(),
         );
-        rows.push(divider(&theme).into_any_element());
         rows
     }
 
@@ -952,7 +939,7 @@ impl AurisApp {
             id,
             self.t(label),
             value,
-            RowColumn::Value(VALUE_WIDTH),
+            RowColumn::Equal,
             PickerBehavior::Menu,
             &self.theme,
             on_click,
@@ -960,7 +947,7 @@ impl AurisApp {
     }
 
     /// A labelled row whose value runs a command instead of opening a choice list.
-    fn command_row<F>(
+    pub(crate) fn command_row<F>(
         &self,
         id: &'static str,
         label: Key,
@@ -974,7 +961,7 @@ impl AurisApp {
             id,
             self.t(label),
             value,
-            RowColumn::Value(VALUE_WIDTH),
+            RowColumn::Equal,
             PickerBehavior::Command,
             &self.theme,
             on_click,

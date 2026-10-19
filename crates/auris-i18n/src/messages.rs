@@ -76,6 +76,18 @@ macro_rules! messages {
 }
 
 messages! {
+    /// Summarizes the number of performance transforms applied to a clip.
+    fn inspector_performance(count: usize) {
+        en: "{count} applied",
+        ja: "{count}件を適用中"
+    }
+
+    /// Counts enabled inserts without hiding bypassed slots from the inspector summary.
+    fn inspector_effects(enabled: usize, total: usize) {
+        en: "{enabled}/{total} active",
+        ja: "{total}件中{enabled}件が有効"
+    }
+
     /// Names the saved sound whose contents will be replaced.
     fn overwrite_sound_title(name: &str) {
         en: "Overwrite “{name}”?",

@@ -311,19 +311,9 @@ impl MidiImportJob {
                         ..note.clone()
                     })
                     .collect();
-                let rebase = |points: &[CurvePoint]| -> Vec<CurvePoint> {
-                    points
-                        .iter()
-                        .filter(|point| point.at >= first && point.at <= last)
-                        .map(|point| CurvePoint {
-                            at: point.at - first,
-                            ..*point
-                        })
-                        .collect()
-                };
-                clip.bend = rebase(&track.bend);
+                clip.bend = rebase_curve(&track.bend, first, last);
                 for (number, points) in &track.controllers {
-                    let points = rebase(points);
+                    let points = rebase_curve(points, first, last);
                     if !points.is_empty() {
                         clip.controllers.insert(*number, points);
                     }
@@ -389,11 +379,20 @@ impl SaveJob {
         }
 
         if self.collect_assets {
-            if self.policy == SaveAsPolicy::RefuseReplacement
-                && self.document.exists()
-                && self.original_path.as_deref() != Some(self.document.as_path())
-            {
-                return Err(SessionError::WouldReplace(self.document));
+            if self.document.exists() {
+                if self.policy == SaveAsPolicy::RefuseReplacement
+                    && self.original_path.as_deref() != Some(self.document.as_path())
+                {
+                    return Err(SessionError::WouldReplace(self.document));
+                }
+                // Save As can target the document already open (for example when a native
+                // chooser returns its full path). Treat that as an in-place overwrite.
+                if self.policy == SaveAsPolicy::RefuseReplacement
+                    && self.original_path.as_deref() == Some(self.document.as_path())
+                    && load_project(&self.document)? != self.saved_project
+                {
+                    return Err(SessionError::ExternalChanges(self.document));
+                }
             }
         } else if (self.document.exists() || self.had_disk_fingerprint)
             && load_project(&self.document)? != self.saved_project
@@ -1474,6 +1473,34 @@ enum SaveAsPolicy {
     Replace,
 }
 
+fn rebase_curve(points: &[CurvePoint], first: Ticks, last: Ticks) -> Vec<CurvePoint> {
+    let mut rebased: Vec<_> = points
+        .iter()
+        .filter(|point| point.at >= first && point.at <= last)
+        .map(|point| CurvePoint {
+            at: point.at - first,
+            ..*point
+        })
+        .collect();
+    // Curves are channel state. Carry the latest value before the first note into the clip when
+    // no point exists exactly at that note.
+    if !rebased.iter().any(|point| point.at == Ticks::ZERO)
+        && let Some(point) = points
+            .iter()
+            .filter(|point| point.at < first)
+            .max_by_key(|point| point.at)
+    {
+        rebased.insert(
+            0,
+            CurvePoint {
+                at: Ticks::ZERO,
+                value: point.value,
+            },
+        );
+    }
+    rebased
+}
+
 fn relocate_composed_font_in_project(project: &mut Project, from: &AssetPath, to: &AssetPath) {
     let Some(text) = project.song_spec.as_ref() else {
         return;
@@ -1557,6 +1584,7 @@ mod tests {
 
     use super::*;
     use crate::session::fixtures::{Scratch, named_font, session};
+    use auris_core::project::TrackKind;
     use auris_io::AUDIO_DIR;
 
     fn directory_entries(path: &Path) -> Vec<PathBuf> {
@@ -2430,6 +2458,139 @@ mod tests {
         session.add_default_instrument_track("Bass").unwrap();
         let again = session.save_as(&document).expect("saves over itself");
         assert_eq!(again.document, document);
+    }
+
+    #[test]
+    fn saving_back_over_this_project_detects_external_changes() {
+        let scratch = Scratch::new("save-over-itself-external");
+        let mut live = session();
+        let chosen = scratch.join("Ballad.auris");
+        let document = live.save_as(&chosen).expect("saves").document;
+        let mut outside = session();
+        outside.open(&document).unwrap();
+        outside.add_default_instrument_track("Outside").unwrap();
+        outside.save_in_place().unwrap();
+
+        let external = load_project(&document).unwrap();
+        for destination in [&chosen, &document] {
+            assert!(matches!(
+                live.save_as(destination),
+                Err(SessionError::ExternalChanges(path)) if path == document
+            ));
+            assert_eq!(load_project(&document).unwrap(), external);
+        }
+        live.save_as_replacing(&document)
+            .expect("explicit replacement permits the overwrite");
+    }
+
+    #[test]
+    fn midi_import_carries_curve_state_into_the_first_note() {
+        let scratch = Scratch::new("midi-import-curve-state");
+        let midi = scratch.join("State.mid");
+        let mut source = Project::new("State", 48_000.0);
+        let track = source.add_instrument_track("MIDI", "fixture.instrument");
+        let clip = source
+            .add_midi_clip(track, "MIDI", Ticks::ZERO, Ticks::from_beats(4.0))
+            .unwrap();
+        let first = Ticks::from_beats(2.0);
+        source
+            .midi_clip_mut(clip)
+            .unwrap()
+            .notes
+            .push(Note::new(60, first, Ticks::QUARTER));
+        source.midi_clip_mut(clip).unwrap().bend = vec![CurvePoint {
+            at: Ticks::ZERO,
+            value: 3.0,
+        }];
+        source.midi_clip_mut(clip).unwrap().controllers.insert(
+            1,
+            vec![CurvePoint {
+                at: Ticks::ZERO,
+                value: 0.75,
+            }],
+        );
+        auris_io::write_midi_file(&midi, &source).unwrap();
+
+        let live = session();
+        let result = live
+            .begin_midi_import(&midi)
+            .unwrap()
+            .run(&AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        let imported = result.project;
+        let clip = imported
+            .tracks
+            .iter()
+            .find_map(|track| match &track.kind {
+                TrackKind::Instrument(track) | TrackKind::Drum(track) => track.clips.first(),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(clip.bend.first().map(|point| point.at), Some(Ticks::ZERO));
+        assert_eq!(clip.bend.first().map(|point| point.value), Some(3.0));
+        // The MIDI wire quantises the authored 0.75 to the closest seven-bit value.
+        assert_eq!(
+            clip.controllers
+                .get(&1)
+                .and_then(|points| points.first())
+                .map(|point| point.value),
+            Some(95.0 / 127.0)
+        );
+    }
+
+    #[test]
+    fn midi_curve_rebase_carries_latest_prior_state() {
+        let first = Ticks::from_beats(2.0);
+        let points = vec![
+            CurvePoint {
+                at: Ticks::ZERO,
+                value: 1.0,
+            },
+            CurvePoint {
+                at: Ticks::from_beats(1.0),
+                value: 3.0,
+            },
+            CurvePoint {
+                at: first + Ticks::QUARTER,
+                value: 5.0,
+            },
+        ];
+        assert_eq!(
+            rebase_curve(&points, first, first + Ticks::from_beats(2.0)),
+            vec![
+                CurvePoint {
+                    at: Ticks::ZERO,
+                    value: 3.0
+                },
+                CurvePoint {
+                    at: Ticks::QUARTER,
+                    value: 5.0
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn midi_curve_rebase_exact_first_point_wins_over_prior_state() {
+        let first = Ticks::from_beats(2.0);
+        let points = vec![
+            CurvePoint {
+                at: Ticks::from_beats(1.0),
+                value: 3.0,
+            },
+            CurvePoint {
+                at: first,
+                value: 7.0,
+            },
+        ];
+        assert_eq!(
+            rebase_curve(&points, first, first + Ticks::QUARTER),
+            vec![CurvePoint {
+                at: Ticks::ZERO,
+                value: 7.0
+            }]
+        );
     }
 
     #[test]
