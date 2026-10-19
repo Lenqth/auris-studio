@@ -1,5 +1,6 @@
 use crate::PixelsExt;
 use std::collections::HashMap;
+use std::{rc::Rc, time::Duration};
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
@@ -9,6 +10,7 @@ use crate::store::FlowState;
 use crate::types::*;
 
 type NodeRendererFn = Box<dyn Fn(&FlowNode, &mut Window, &mut App) -> AnyElement>;
+type EdgeTooltipFn = Box<dyn Fn(&EdgeId, &mut Window, &mut App) -> AnyView>;
 
 /// The top-level flow graph component.
 ///
@@ -18,6 +20,11 @@ pub struct FlowGraph {
     focus_handle: FocusHandle,
     node_renderers: HashMap<SharedString, NodeRendererFn>,
     default_renderer: Option<NodeRendererFn>,
+    edge_tooltip: Option<EdgeTooltipFn>,
+    hovered_edge: Option<EdgeId>,
+    hover_task: Option<Task<()>>,
+    hover_ready: bool,
+    tooltip_view: Option<AnyView>,
     /// Called when a new connection is completed.
     on_connect: Option<Box<dyn Fn(&Connection, &mut FlowState)>>,
     /// Custom validation for connections. Return false to reject.
@@ -52,6 +59,11 @@ impl FlowGraph {
             focus_handle: cx.focus_handle(),
             node_renderers: HashMap::new(),
             default_renderer: None,
+            edge_tooltip: None,
+            hovered_edge: None,
+            hover_task: None,
+            hover_ready: false,
+            tooltip_view: None,
             on_connect: None,
             is_valid_connection: None,
             show_node_chrome: true,
@@ -100,6 +112,50 @@ impl FlowGraph {
     pub fn on_connect(mut self, callback: impl Fn(&Connection, &mut FlowState) + 'static) -> Self {
         self.on_connect = Some(Box::new(callback));
         self
+    }
+
+    /// Supply a live tooltip view for a wire. Hover follows the painted path and label bounds.
+    pub fn edge_tooltip(
+        mut self,
+        renderer: impl Fn(&EdgeId, &mut Window, &mut App) -> AnyView + 'static,
+    ) -> Self {
+        self.edge_tooltip = Some(Box::new(renderer));
+        self
+    }
+
+    /// Dismiss a visible wire tooltip without moving focus. Returns whether a card was open.
+    pub fn dismiss_edge_tooltip(&mut self, cx: &mut Context<Self>) -> bool {
+        let visible = self.edge_tooltip_target().is_some();
+        self.hover_edge(None, cx);
+        visible
+    }
+
+    /// The route whose tooltip is currently open, excluding a pending hover delay.
+    pub fn edge_tooltip_target(&self) -> Option<&EdgeId> {
+        self.tooltip_view.as_ref().and(self.hovered_edge.as_ref())
+    }
+
+    fn hover_edge(&mut self, id: Option<EdgeId>, cx: &mut Context<Self>) {
+        if self.hovered_edge == id {
+            return;
+        }
+        self.hovered_edge = id;
+        self.hover_task = None;
+        self.hover_ready = false;
+        self.tooltip_view = None;
+        if self.hovered_edge.is_some() {
+            self.hover_task = Some(cx.spawn(async |this, cx| {
+                // Match GPUI's control tooltip delay; the canvas itself has no rectangular target.
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    this.hover_ready = true;
+                    cx.notify();
+                });
+            }));
+        }
+        cx.notify();
     }
 
     /// Hide the default node wrapper chrome (bg, border, shadow, padding).
@@ -720,6 +776,7 @@ impl Render for FlowGraph {
             selection_box,
             visible_nodes,
             edge_label_elements,
+            edge_label_bounds,
         ) = {
             let state = self.state.read(cx);
             let viewport = state.viewport;
@@ -761,6 +818,7 @@ impl Render for FlowGraph {
             // Edge labels
             let bg = self.bg_color;
             let mut edge_label_elements: Vec<AnyElement> = Vec::new();
+            let mut edge_label_bounds = Vec::new();
             for edge in &state.edges {
                 if edge.hidden {
                     continue;
@@ -779,6 +837,19 @@ impl Render for FlowGraph {
                             .text_system()
                             .shape_line(label.clone(), font_size, &[run], None)
                             .width;
+                        edge_label_bounds.push((
+                            edge.id.clone(),
+                            Bounds::new(
+                                point(
+                                    px(lx) - text_width / 2.0 - padding_x - px(1.0),
+                                    px(ly) - line_height / 2.0 - padding_y - px(1.0),
+                                ),
+                                size(
+                                    text_width + padding_x * 2.0 + px(2.0),
+                                    line_height + padding_y * 2.0 + px(2.0),
+                                ),
+                            ),
+                        ));
                         let label_id = edge.id.clone();
                         let select_id = edge.id.clone();
                         let menu_id = edge.id.clone();
@@ -867,8 +938,30 @@ impl Render for FlowGraph {
                 selection_box,
                 visible_nodes,
                 edge_label_elements,
+                edge_label_bounds,
             )
         }; // state borrow ends here
+
+        self.state
+            .update(cx, |state, _| state.edge_label_bounds = edge_label_bounds);
+        let mouse = window.mouse_position();
+        let hovered = edges::hit_test_hover_edges(
+            self.state.read(cx),
+            mouse.x.as_f32(),
+            mouse.y.as_f32(),
+            6.0,
+        );
+        if self.hovered_edge.is_some() && self.hovered_edge != hovered {
+            self.hover_edge(None, cx);
+        }
+        if self.hover_ready && self.tooltip_view.is_none() {
+            if let (Some(id), Some(builder)) = (&self.hovered_edge, &self.edge_tooltip) {
+                self.tooltip_view = Some(builder(id, window, cx));
+            }
+        }
+        let tooltip = self.hovered_edge.clone().zip(self.tooltip_view.clone());
+        let tooltip_graph = cx.entity().downgrade();
+        let hover_graph = tooltip_graph.clone();
 
         // Render only visible nodes
         let mut node_elements: Vec<AnyElement> = Vec::with_capacity(visible_nodes.len());
@@ -917,8 +1010,83 @@ impl Render for FlowGraph {
             // Background grid + edge painting layer
             .child(
                 canvas(
-                    |_bounds, _window, _cx| {},
-                    move |bounds, _: (), window, cx| {
+                    {
+                        let state = self.state.clone();
+                        move |bounds, window, cx| {
+                            state.update(cx, |state, _| {
+                                state.origin = (bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
+                                state.canvas_bounds = Some(bounds);
+                            });
+                            if let Some((id, view)) = tooltip {
+                                window.set_tooltip(AnyTooltip {
+                                    view,
+                                    mouse_position: window.mouse_position(),
+                                    check_visible_and_update: Rc::new(move |_, window, cx| {
+                                        tooltip_graph.upgrade().is_some_and(|graph| {
+                                            let graph = graph.read(cx);
+                                            let mouse = window.mouse_position();
+                                            graph.hovered_edge.as_ref() == Some(&id)
+                                                && graph.hover_ready
+                                                && edges::hit_test_hover_edges(
+                                                    graph.state.read(cx),
+                                                    mouse.x.as_f32(),
+                                                    mouse.y.as_f32(),
+                                                    6.0,
+                                                )
+                                                .as_ref()
+                                                    == Some(&id)
+                                        })
+                                    }),
+                                });
+                            }
+                            window.insert_hitbox(bounds, HitboxBehavior::Normal)
+                        }
+                    },
+                    move |bounds, hitbox, window, cx| {
+                        // Observe the whole window so leaving the panel also cancels the delay.
+                        window.on_mouse_event({
+                            let graph = hover_graph.clone();
+                            move |event: &MouseMoveEvent, phase, window, cx| {
+                                if phase == DispatchPhase::Capture {
+                                    let _ = graph.update(cx, |graph, cx| {
+                                        if graph.edge_tooltip.is_some() {
+                                            let id = event
+                                                .pressed_button
+                                                .is_none()
+                                                .then_some(())
+                                                .filter(|_| hitbox.is_hovered(window))
+                                                .and_then(|_| {
+                                                    edges::hit_test_hover_edges(
+                                                        graph.state.read(cx),
+                                                        event.position.x.as_f32(),
+                                                        event.position.y.as_f32(),
+                                                        6.0,
+                                                    )
+                                                });
+                                            graph.hover_edge(id, cx);
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                        window.on_mouse_event({
+                            let graph = hover_graph.clone();
+                            move |_: &MouseDownEvent, phase, _, cx| {
+                                if phase == DispatchPhase::Capture {
+                                    let _ =
+                                        graph.update(cx, |graph, cx| graph.hover_edge(None, cx));
+                                }
+                            }
+                        });
+                        window.on_mouse_event({
+                            let graph = hover_graph.clone();
+                            move |_: &ScrollWheelEvent, phase, _, cx| {
+                                if phase == DispatchPhase::Capture {
+                                    let _ =
+                                        graph.update(cx, |graph, cx| graph.hover_edge(None, cx));
+                                }
+                            }
+                        });
                         Self::paint_grid(
                             &bounds,
                             &viewport_for_canvas,
@@ -926,9 +1094,6 @@ impl Render for FlowGraph {
                             bg_pattern,
                             window,
                         );
-                        state_for_canvas.update(cx, |state, _| {
-                            state.origin = (bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
-                        });
                         let state = state_for_canvas.read(cx);
                         edges::paint_edges(state, window);
 

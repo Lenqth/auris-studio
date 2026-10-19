@@ -43,6 +43,10 @@ pub struct FlowState {
     pub allowed_connections: Option<HashSet<(NodeId, NodeId)>>,
     /// Canvas origin in window coordinates, for embedding in a dock panel.
     pub origin: (f32, f32),
+    /// Measured canvas bounds, used to keep hover queries inside the visible panel.
+    pub canvas_bounds: Option<Bounds<Pixels>>,
+    /// Painted label bounds, in paint order, for exact wire hover ownership.
+    pub edge_label_bounds: Vec<(EdgeId, Bounds<Pixels>)>,
     pub nodes: Vec<FlowNode>,
     pub edges: Vec<FlowEdge>,
     node_lookup: HashMap<NodeId, usize>,
@@ -102,6 +106,8 @@ impl FlowState {
             edge_flow: None,
             allowed_connections: None,
             origin: (0.0, 0.0),
+            canvas_bounds: None,
+            edge_label_bounds: Vec::new(),
             nodes,
             edges,
             node_lookup,

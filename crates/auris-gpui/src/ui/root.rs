@@ -3288,6 +3288,9 @@ impl AurisApp {
             cx.notify();
             return;
         }
+        if self.dismiss_mixer_wire_tooltip(cx) {
+            return;
+        }
         if self.export_dialog.take().is_some() {
             cx.notify();
             return;

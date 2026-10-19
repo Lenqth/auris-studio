@@ -553,6 +553,11 @@ back the tracks that *do not* pass through it, so the mix stays in step; and a t
 master dry while sending to that same bus has each copy delayed on its own, so the dry and the wet
 still arrive together instead of comb-filtering each other.
 
+In the mixer's graph view, hover over a wire or its label to see the connection's source,
+destination and live peak level in dBFS. Parallel wires have individual tooltips; sends include
+their ID. Silence reads **−∞ dBFS**. The card updates while open and closes on Escape or when
+the pointer leaves the wire.
+
 ## Setting the levels by listening
 
 **Compose → Balance the Mix** renders every track on its own, measures it, and moves its fader

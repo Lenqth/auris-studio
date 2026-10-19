@@ -27,6 +27,9 @@ const SIGNAL_FLOW_SPACING: f32 = 120.0;
 const SIGNAL_FLOW_LENGTH: f32 = 24.0;
 const SIGNAL_FLOW_SPEED: f64 = 90.0;
 
+#[path = "mixer_graph_tooltip.rs"]
+mod wire_tooltip;
+
 #[cfg(test)]
 #[path = "mixer_graph_wires_tests.rs"]
 mod wire_tests;
@@ -227,6 +230,14 @@ fn positions(graph: &MixerGraph) -> HashMap<MixerNode, FlowPoint> {
 }
 
 impl AurisApp {
+    /// Put away the live wire card before Escape falls through to the transport panic command.
+    pub(crate) fn dismiss_mixer_wire_tooltip(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+        self.mixer_canvas.as_ref().is_some_and(|canvas| {
+            canvas
+                .view
+                .update(cx, |view, cx| view.dismiss_edge_tooltip(cx))
+        })
+    }
     pub(crate) fn poll_mixer_signals(&mut self) {
         self.session.watch_mixer_signals(
             self.mixer_graph_visible && self.panels.is_open(crate::dock::Panel::Mixer),
@@ -253,9 +264,13 @@ impl AurisApp {
             })
             .detach();
             let app = cx.entity().downgrade();
+            let tooltip_app = app.clone();
             let view = cx.new(|cx| {
                 FlowGraph::new(state.clone(), cx)
                     .no_node_chrome()
+                    .edge_tooltip(move |id, _, cx| {
+                        wire_tooltip::build(tooltip_app.clone(), id.clone(), cx)
+                    })
                     .default_renderer(move |node, _, cx| {
                         app.update(cx, |this, cx| this.render_mixer_node(&node.id, cx))
                             .unwrap_or_else(|_| div().into_any_element())

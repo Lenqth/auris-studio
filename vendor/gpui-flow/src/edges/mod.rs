@@ -167,11 +167,58 @@ pub fn compute_edge_label_position(state: &FlowState, edge: &FlowEdge) -> Option
 
 /// Choose the nearest selectable route within the pointer tolerance, with painted order breaking ties.
 pub fn hit_test_edges(state: &FlowState, mx: f32, my: f32, threshold: f32) -> Option<EdgeId> {
+    nearest_edge(state, mx, my, threshold, true)
+}
+
+/// Resolve the visible wire or label under the pointer, including non-editable insert links.
+pub fn hit_test_hover_edges(state: &FlowState, mx: f32, my: f32, threshold: f32) -> Option<EdgeId> {
+    let point = gpui::point(gpui::px(mx), gpui::px(my));
+    if state
+        .canvas_bounds
+        .is_some_and(|bounds| !bounds.contains(&point))
+        || state.drag_state.is_some()
+        || state.pan_drag.is_some()
+        || state.connecting.is_some()
+        || state.selection_box.is_some()
+    {
+        return None;
+    }
+    // Labels paint above nodes and own their complete rectangle, even near a different lane.
+    if let Some((id, _)) = state.edge_label_bounds.iter().rev().find(|(id, bounds)| {
+        bounds.contains(&point)
+            && state
+                .edges
+                .iter()
+                .any(|edge| edge.id == *id && !edge.hidden)
+    }) {
+        return Some(id.clone());
+    }
+    if state.nodes.iter().filter(|node| !node.hidden).any(|node| {
+        let (x, y) = state.viewport.flow_to_screen(node.position);
+        let x = x + state.origin.0;
+        let y = y + state.origin.1;
+        mx >= x
+            && mx <= x + node.measured_width.map_or(150., |p| p.as_f32())
+            && my >= y
+            && my <= y + node.measured_height.map_or(50., |p| p.as_f32())
+    }) {
+        return None;
+    }
+    nearest_edge(state, mx, my, threshold, false)
+}
+
+fn nearest_edge(
+    state: &FlowState,
+    mx: f32,
+    my: f32,
+    threshold: f32,
+    selectable: bool,
+) -> Option<EdgeId> {
     state
         .edges
         .iter()
         .enumerate()
-        .filter(|(_, edge)| !edge.hidden && edge.selectable)
+        .filter(|(_, edge)| !edge.hidden && (!selectable || edge.selectable))
         .filter_map(|(index, edge)| {
             let distance = compute_edge_path(state, edge)?.distance((mx, my));
             (distance <= threshold).then_some((distance, index, edge.id.clone()))

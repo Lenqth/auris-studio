@@ -674,6 +674,10 @@ pub mod architecture {
     //! in the frontend; animation never schedules work on the audio thread. The graph's
     //! **Animate signals** control stores the motion preference in appearance settings; disabling
     //! it retains level glow, fixed arrows and every selection/edit interaction.
+    //! Hovering a wire or its label shows the named endpoints and the same measured peak in
+    //! dBFS, including insert links. The card reads current document names and levels at the
+    //! normal UI cadence; silence is negative infinity and levels above full scale stay visible.
+    //! Label bounds own their exact route, while bare strokes use nearest-path hit testing.
     //!
     //! A bus is a [`TrackKind`](auris_core::TrackKind), not a thing of its own. That is what gives
     //! it a fader, a pan, a mute, an effect chain, a colour and an automation lane without any of

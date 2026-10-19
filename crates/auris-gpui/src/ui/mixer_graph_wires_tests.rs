@@ -12,6 +12,210 @@ use gpui_flow::{
     },
 };
 
+#[test]
+fn wire_hover_includes_insert_links_and_respects_labels_nodes_bounds_and_gestures() {
+    use gpui_flow::edges::hit_test_hover_edges;
+    let nodes = vec![
+        measured_node("a", 0., 0., HandleDef::source(HandlePosition::Right)),
+        measured_node("b", 400., 0., HandleDef::target(HandlePosition::Left)),
+    ];
+    let mut edge = FlowEdge::new("insert", "a", "b");
+    edge.selectable = false;
+    let mut state = FlowState::new(nodes, vec![edge]);
+    state.origin = (30., 70.);
+    let at = compute_edge_label_position(&state, &state.edges[0]).unwrap();
+    assert_eq!(hit_test_edges(&state, at.0, at.1, 6.), None);
+    assert_eq!(
+        hit_test_hover_edges(&state, at.0, at.1, 6.),
+        Some("insert".into())
+    );
+    // A label owns its whole rectangle, including portions outside the stroke tolerance.
+    let bounds = gpui::Bounds::new(
+        gpui::point(px(at.0), px(at.1)),
+        gpui::size(px(90.), px(22.)),
+    );
+    state.edge_label_bounds.push(("insert".into(), bounds));
+    assert_eq!(
+        hit_test_hover_edges(&state, at.0 + 80., at.1 + 18., 6.),
+        Some("insert".into())
+    );
+    assert_eq!(hit_test_hover_edges(&state, 60., 100., 6.), None);
+    state.selection_box = Some(gpui_flow::SelectionBox {
+        start: at,
+        current: at,
+    });
+    assert_eq!(hit_test_hover_edges(&state, at.0, at.1, 6.), None);
+    state.selection_box = None;
+    state.edges[0].hidden = true;
+    assert_eq!(hit_test_hover_edges(&state, at.0, at.1, 6.), None);
+    state.edges[0].hidden = false;
+    state.canvas_bounds = Some(gpui::Bounds::new(
+        gpui::point(px(0.), px(0.)),
+        gpui::size(px(20.), px(20.)),
+    ));
+    assert_eq!(hit_test_hover_edges(&state, at.0, at.1, 6.), None);
+}
+
+#[gpui::test]
+fn wire_tooltip_tracks_parallel_routes_live_names_and_dismissal(cx: &mut TestAppContext) {
+    use gpui_flow::edges::hit_test_hover_edges;
+    let (app, cx) = open(cx);
+    // GPUI 0.2.2 retains debug-selector entries after elements disappear. Read the graph's
+    // actual tooltip target for dismissal, and use selectors only to verify newly painted text.
+    let tooltip_target = |cx: &gpui::VisualTestContext| {
+        app.read_with(cx, |this, cx| {
+            this.mixer_canvas
+                .as_ref()
+                .unwrap()
+                .view
+                .read(cx)
+                .edge_tooltip_target()
+                .cloned()
+        })
+    };
+    let (a, b, sends) = app.update(cx, |this, _| {
+        this.panels.set_detached(Panel::Mixer, false);
+        this.panels.move_to(Panel::Mixer, Dock::Bottom);
+        this.panels.set_size(Dock::Bottom, px(520.));
+        this.panels.show(Panel::Mixer);
+        let a = this.session.add_bus_track("Source");
+        let b = this.session.add_bus_track("Destination");
+        let sends = [
+            this.session.add_send(a, b).unwrap(),
+            this.session.add_send(a, b).unwrap(),
+        ];
+        (a, b, sends)
+    });
+    paint(&app, cx);
+    app.update(cx, |this, cx| {
+        let canvas = this.mixer_canvas.as_ref().unwrap();
+        canvas.state.update(cx, |state, _| {
+            for node in &mut state.nodes {
+                node.position = if node.id == node_id(MixerNode::Strip(Some(a))) {
+                    FlowPoint::new(24., 24.)
+                } else if node.id == node_id(MixerNode::Strip(Some(b))) {
+                    FlowPoint::new(600., 24.)
+                } else {
+                    FlowPoint::new(3000., 3000.)
+                };
+            }
+        });
+        canvas.view.update(cx, |_, cx| cx.notify());
+    });
+    paint(&app, cx);
+    for (index, send) in sends.into_iter().enumerate() {
+        let at = app.read_with(cx, |this, cx| {
+            let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+            let id: SharedString = format!("mix-send-{}", send.0).into();
+            if index == 0 {
+                // Hover the actual curve, away from its label.
+                let edge = state.edges.iter().find(|edge| edge.id == id).unwrap();
+                let path = compute_edge_path(state, edge).unwrap();
+                let at = path
+                    .points
+                    .iter()
+                    .copied()
+                    .find(|at| {
+                        hit_test_hover_edges(state, at.0, at.1, 6.).as_ref() == Some(&id)
+                            && !state.edge_label_bounds.iter().any(|(_, bounds)| {
+                                bounds.contains(&gpui::point(px(at.0), px(at.1)))
+                            })
+                    })
+                    .unwrap();
+                gpui::point(px(at.0), px(at.1))
+            } else {
+                // Hover the label's outer edge, where another curve might be closer.
+                let bounds = state
+                    .edge_label_bounds
+                    .iter()
+                    .find(|(label, _)| *label == id)
+                    .unwrap()
+                    .1;
+                gpui::point(bounds.right() - px(2.), bounds.center().y)
+            }
+        });
+        cx.simulate_mouse_move(at, None::<MouseButton>, Modifiers::none());
+        cx.run_until_parked();
+        assert!(tooltip_target(cx).is_none());
+        cx.background_executor
+            .advance_clock(Duration::from_millis(550));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("mixer-wire-tooltip").is_some());
+        assert_eq!(
+            tooltip_target(cx),
+            Some(format!("mix-send-{}", send.0).into())
+        );
+        let send_label = app.read_with(cx, |this, _| {
+            format!("mixer-wire-tooltip-kind:{} #{}", this.t(Key::Sends), send.0)
+        });
+        // GPUI's test selector API requires static strings, as do the harness's dynamic rows.
+        assert!(
+            cx.debug_bounds(Box::leak(send_label.into_boxed_str()))
+                .is_some()
+        );
+        for selector in [
+            format!("mixer-wire-tooltip-from:Source #{}", a.0),
+            format!("mixer-wire-tooltip-to:Destination #{}", b.0),
+            "mixer-wire-tooltip-level:−∞ dBFS".to_string(),
+        ] {
+            assert!(
+                cx.debug_bounds(Box::leak(selector.clone().into_boxed_str()))
+                    .is_some(),
+                "{selector}"
+            );
+        }
+        // The live view must keep reading the document without another mouse move.
+        app.update(cx, |this, cx| {
+            this.session.rename_track(b, "Renamed").unwrap();
+            cx.notify();
+        });
+        paint(&app, cx);
+        assert!(
+            cx.debug_bounds(Box::leak(
+                format!("mixer-wire-tooltip-to:Renamed #{}", b.0).into_boxed_str()
+            ))
+            .is_some()
+        );
+        cx.simulate_keystrokes("escape");
+        paint(&app, cx);
+        assert!(tooltip_target(cx).is_none());
+        cx.background_executor
+            .advance_clock(Duration::from_millis(600));
+        cx.run_until_parked();
+        assert!(tooltip_target(cx).is_none());
+        cx.simulate_mouse_move(at, None::<MouseButton>, Modifiers::none());
+        cx.run_until_parked();
+        cx.background_executor
+            .advance_clock(Duration::from_millis(550));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("mixer-wire-tooltip").is_some());
+        // Clicking through a tooltip still selects and deletes this exact parallel wire.
+        cx.simulate_click(at, Modifiers::none());
+        paint(&app, cx);
+        assert!(tooltip_target(cx).is_none());
+        cx.simulate_keystrokes("delete");
+        paint(&app, cx);
+        assert!(!app.read_with(cx, |this, _| {
+            this.session
+                .mixer_graph()
+                .edges
+                .iter()
+                .any(|edge| edge_id(edge).as_ref() == format!("mix-send-{}", send.0))
+        }));
+        cx.simulate_keystrokes("secondary-z");
+        app.update(cx, |this, _| {
+            this.session.rename_track(b, "Destination").unwrap();
+        });
+        paint(&app, cx);
+    }
+    let outside = gpui::point(px(1900.), px(80.));
+    cx.simulate_mouse_move(outside, None::<MouseButton>, Modifiers::none());
+    cx.background_executor
+        .advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(tooltip_target(cx).is_none());
+}
+
 fn measured_node(id: &str, x: f32, y: f32, handle: HandleDef) -> FlowNode {
     let mut node = FlowNode::new(id.to_string(), x, y).handles(vec![handle]);
     node.measured_width = Some(px(100.0));

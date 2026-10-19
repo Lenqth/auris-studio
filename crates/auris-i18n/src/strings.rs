@@ -252,6 +252,9 @@ strings! {
     TrackKindBus { en: "Bus", ja: "バス" }
     // A strip is 128 px wide and every label on it is an abbreviation for that reason.
     OutputShort { en: "Out", ja: "出力" }
+    MixerConnectionFrom { en: "From", ja: "接続元" }
+    MixerConnectionTo { en: "To", ja: "接続先" }
+    MixerSignalLevel { en: "Signal level (peak)", ja: "信号レベル（ピーク）" }
     Sends { en: "Sends", ja: "センド" }
     AddBusShort { en: "Bus", ja: "バス" }
     // Marks a send taken before the fader, in the room a send row has beside the bus name. Not an
