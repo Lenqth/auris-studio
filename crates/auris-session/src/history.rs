@@ -69,6 +69,10 @@ pub enum Edit {
     ConvertTrackToAudio,
     /// A track was moved up or down the list.
     MoveTrack,
+    /// Mixer nodes were moved in graph coordinates.
+    MoveMixerNodes,
+    /// Mixer nodes were automatically arranged.
+    ArrangeMixerNodes,
     /// A track was renamed.
     RenameTrack,
     /// A track was given a different colour.

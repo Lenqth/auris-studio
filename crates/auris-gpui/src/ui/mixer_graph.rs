@@ -1,6 +1,6 @@
 //! A graph presentation of the session's mixer, with document-authoritative connections.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use auris_i18n::Key;
@@ -46,6 +46,10 @@ mod zoom_tests;
 #[path = "mixer_graph_persistence_tests.rs"]
 mod persistence_tests;
 
+#[cfg(test)]
+#[path = "mixer_graph_layout_tests.rs"]
+mod layout_tests;
+
 /// Presentation state kept across paints and panel moves.
 pub(crate) struct MixerCanvas {
     state: Entity<FlowState>,
@@ -57,6 +61,8 @@ pub(crate) struct MixerCanvas {
     animation_started: Instant,
     last_view: MixerGraphView,
     persist_layout: bool,
+    layout_dragging: bool,
+    stored_nodes: BTreeMap<String, MixerNodePosition>,
 }
 
 impl MixerCanvas {
@@ -301,19 +307,37 @@ impl AurisApp {
             return;
         };
         let current = canvas.presentation(cx);
-        if current == canvas.last_view && !canvas.persist_layout {
+        let dragging = canvas.state.read(cx).drag_state.is_some();
+        let start = dragging && !canvas.layout_dragging;
+        let finish = !dragging && canvas.layout_dragging;
+        if current == canvas.last_view && !canvas.persist_layout && !start && !finish {
             return;
         }
         canvas.persist_layout = false;
-        // Retain positions of temporarily removed nodes so musical Undo restores their layout.
+        canvas.layout_dragging = dragging;
+        if start {
+            self.session
+                .seed_mixer_node_positions(&canvas.last_view.nodes);
+            self.session.begin_transaction(Edit::MoveMixerNodes);
+        }
+        if dragging || finish {
+            self.session.move_mixer_nodes(current.nodes.clone());
+        }
         let mut stored = self.session.project().mixer_graph_view.clone();
-        stored.nodes.extend(canvas.last_view.nodes.clone());
+        if !dragging && !finish {
+            // Passive synchronization retains the layout of temporarily removed identities.
+            stored.nodes.extend(canvas.last_view.nodes.clone());
+            stored.nodes.extend(current.nodes.clone());
+        }
         canvas.last_view = current.clone();
-        stored.nodes.extend(current.nodes);
         stored.zoom = current.zoom;
         stored.pan_x = current.pan_x;
         stored.pan_y = current.pan_y;
         self.session.set_mixer_graph_view(stored);
+        if finish {
+            self.session.end_transaction();
+        }
+        canvas.stored_nodes = self.session.project().mixer_graph_view.nodes.clone();
         cx.notify();
     }
 
@@ -349,6 +373,14 @@ impl AurisApp {
             });
             cx.observe(&state, |this, state, cx| {
                 this.apply_mixer_connections(&state, cx);
+                if let Some(view) = this
+                    .mixer_canvas
+                    .as_ref()
+                    .filter(|canvas| canvas.state == state)
+                    .map(|canvas| canvas.view.clone())
+                {
+                    this.store_mixer_view(&view, cx);
+                }
                 cx.notify();
             })
             .detach();
@@ -380,6 +412,8 @@ impl AurisApp {
                 animation_started: Instant::now(),
                 last_view: MixerGraphView::default(),
                 persist_layout: false,
+                layout_dragging: false,
+                stored_nodes: saved.nodes,
             });
         }
         self.sync_mixer_graph(&document, cx);
@@ -722,6 +756,28 @@ impl AurisApp {
             }
         }
         let theme = self.theme.clone();
+        let saved_nodes = &self.session.project().mixer_graph_view.nodes;
+        if let Some(canvas) = self.mixer_canvas.as_mut()
+            && canvas.stored_nodes != *saved_nodes
+        {
+            let layout = positions(document);
+            canvas.state.update(cx, |state, _| {
+                for node in &mut state.nodes {
+                    if let Some(identity) = canvas.by_id.get(&node.id) {
+                        let key = identity.key();
+                        if canvas.stored_nodes.get(&key) != saved_nodes.get(&key) {
+                            node.position = saved_nodes.get(&key).map_or_else(
+                                || layout.get(identity).copied().unwrap_or(node.position),
+                                |position| FlowPoint::new(position.x, position.y),
+                            );
+                        }
+                    }
+                }
+                state.edge_label_bounds.clear();
+            });
+            canvas.stored_nodes = saved_nodes.clone();
+            canvas.last_view = canvas.presentation(cx);
+        }
         let Some(mut canvas) = self.mixer_canvas.take() else {
             return;
         };
@@ -892,7 +948,22 @@ impl AurisApp {
 
     fn arrange_mixer_nodes(&mut self, cx: &mut gpui::Context<Self>) {
         let layout = positions(&self.session.mixer_graph());
-        if let Some(canvas) = &self.mixer_canvas {
+        if let Some(canvas) = &mut self.mixer_canvas {
+            let before = canvas.presentation(cx);
+            self.session.seed_mixer_node_positions(&before.nodes);
+            let nodes = layout
+                .iter()
+                .map(|(node, position)| {
+                    (
+                        node.key(),
+                        MixerNodePosition {
+                            x: position.x,
+                            y: position.y,
+                        },
+                    )
+                })
+                .collect();
+            self.session.arrange_mixer_nodes(nodes);
             canvas.state.update(cx, |state, _| {
                 for (node, position) in layout {
                     if let Some(node) = state.get_node_mut(&node_id(node)) {
@@ -902,6 +973,14 @@ impl AurisApp {
                 state.zoom_at(1.0, 0.0, 0.0);
                 state.viewport = Default::default();
             });
+            let current = canvas.presentation(cx);
+            let mut stored = self.session.project().mixer_graph_view.clone();
+            stored.zoom = current.zoom;
+            stored.pan_x = current.pan_x;
+            stored.pan_y = current.pan_y;
+            self.session.set_mixer_graph_view(stored);
+            canvas.last_view = current;
+            canvas.stored_nodes = self.session.project().mixer_graph_view.nodes.clone();
             canvas.view.update(cx, |_, cx| cx.notify());
         }
     }

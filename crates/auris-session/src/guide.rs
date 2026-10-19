@@ -655,9 +655,14 @@ pub mod architecture {
     //! follow the zoom immediately and are refined during prepaint before edges are painted.
     //! Node positions, zoom and canvas-local pan are stored in `Project::mixer_graph_view`,
     //! keyed by the same stable node identities as the model tools. Old files default to the
-    //! automatic layout at 100%. Navigation marks the project unsaved but consumes no undo step
-    //! and never rebuilds audio. Session history retains the current view through musical undo,
-    //! redo and gesture rollback. Opening another document discards the old canvas and restores
+    //! automatic layout at 100%. Camera navigation marks the project unsaved without an undo
+    //! step. A node drag records one `Edit::MoveMixerNodes` transaction, including all pointer
+    //! updates; automatic arrangement records one `Edit::ArrangeMixerNodes`. No-op gestures
+    //! preserve history. Missing automatic coordinates seed snapshots before the first edit;
+    //! subsequent camera synchronization never overwrites authored historical positions.
+    //! Layout undo/redo and rollback restore coordinates without rebuilding audio, while camera
+    //! navigation stays current. The desktop applies restored positions even when routing is
+    //! unchanged. Opening another document discards the old canvas and restores
     //! that project's view, including fit scales below 50%; new nodes use the automatic layout.
     //! **Fit graph** frames all visible nodes, flattened wire paths and measured labels with
     //! screen-space padding. It extends the minimum zoom below 50% when needed, while leaving

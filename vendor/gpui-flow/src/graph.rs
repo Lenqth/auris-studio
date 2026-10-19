@@ -376,6 +376,8 @@ impl FlowGraph {
                                     n.dragging = true;
                                 }
                             }
+                            // Hosts group the following position updates into one document edit.
+                            _cx.notify();
                         }
                     });
                 }
@@ -1350,6 +1352,7 @@ impl Render for FlowGraph {
                                 n.dragging = false;
                             }
                             changed = true;
+                            _cx.notify();
                         }
                         if state.pan_drag.is_some() {
                             state.pan_drag = None;
@@ -1363,13 +1366,17 @@ impl Render for FlowGraph {
                 }
             })
             .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
-                state_for_cancel.update(cx, |state, _| {
+                state_for_cancel.update(cx, |state, cx| {
+                    let was_dragging = state.drag_state.is_some();
                     state.connecting = None;
                     state.drag_state = None;
                     state.pan_drag = None;
                     state.selection_box = None;
                     for node in &mut state.nodes {
                         node.dragging = false;
+                    }
+                    if was_dragging {
+                        cx.notify();
                     }
                 });
                 cx.notify(entity_id);

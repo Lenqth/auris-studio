@@ -77,7 +77,7 @@ fn gestures_save_and_reopen_restore_each_node_and_the_canvas_camera(cx: &mut Tes
         assert!((position.x - original.x - 70.).abs() < 1e-3);
         assert!((position.y - original.y - 40.).abs() < 1e-3);
         assert!(this.session.is_dirty());
-        assert!(!this.session.can_undo());
+        assert!(this.session.can_undo());
     });
     let at = cx.debug_bounds(selector).unwrap().center();
     for (control, delta) in [
