@@ -174,6 +174,7 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         definition::<export_midi::Args>(export_midi::NAME, export_midi::DESCRIPTION),
         definition::<capabilities::Args>(capabilities::NAME, capabilities::DESCRIPTION),
         definition::<effects::Args>(effects::NAME, effects::DESCRIPTION),
+        definition::<mixer_graph::Args>(mixer_graph::NAME, mixer_graph::DESCRIPTION),
         definition::<automation::Args>(automation::NAME, automation::DESCRIPTION),
         definition::<analyze_music::Args>(analyze_music::NAME, analyze_music::DESCRIPTION),
         definition::<analyze_chords::Args>(analyze_chords::NAME, analyze_chords::DESCRIPTION),
@@ -292,6 +293,11 @@ pub mod tool_help {
             })?;
         let project = "/absolute/path/Song/Song.auris";
         let examples = match tool.name {
+            "mixer_graph" => serde_json::json!([
+                {"project":project,"operation":{"action":"read"}},
+                {"project":project,"operation":{"action":"connect","source":"track:1","target":"track:2","kind":"send"}},
+                {"project":project,"operation":{"action":"parameters","node":"effect:3"}}
+            ]),
             "add_track" => serde_json::json!([
                 {"project":project,"name":"Reverb","kind":"bus"},
                 {"project":project,"name":"Kit","kind":"drum"},
@@ -652,6 +658,7 @@ mod tests {
         check::<set_effect::Args>("set_effect");
         check::<automation::Args>("automation");
         check::<routing::Args>("routing");
+        check::<mixer_graph::Args>("mixer_graph");
         check::<listen::Args>("listen");
         check::<edit_notes::Args>("edit_notes");
         check::<replace_notes::Args>("replace_notes");

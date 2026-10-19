@@ -63,6 +63,14 @@ fn tool_schema(name: &str) -> std::sync::Arc<rmcp::model::JsonObject> {
 // come from the toolbox — this list is the door, not the furniture.
 #[tool_router]
 impl AurisMcp {
+    /// Reads or edits the mixer DAG using stable track/effect node IDs. Start with operation {"action":"read"}; follow next_offset for more nodes and outgoing edges. Track nodes contain fader controls; inserts still process before the fader. Connect output/send to bus track nodes (output also accepts track:master), or sidechain to an effect. All cycles are rejected before mutation. Parallel effects use bus branches. Set track fader/pan/mute/solo, add/remove/move/enable effects, read/set effect parameters, and set existing send levels/taps with operation objects. Reordering preserves node IDs. Disconnecting an output restores master. Changed operations are checkpointed and saved; reads and unchanged retries do not save.
+    #[tool(input_schema = tool_schema("mixer_graph"))]
+    async fn mixer_graph(
+        &self,
+        Parameters(args): Parameters<toolbox::mixer_graph::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::mixer_graph::run(&args)).await
+    }
     /// Open a saved project and return project_id for subsequent project arguments. Handles expire on server restart or after 64 distinct projects. Does not change files.
     #[tool(input_schema = tool_schema("open_project"))]
     async fn open_project(
@@ -946,6 +954,58 @@ mod tests {
         let bytes = std::fs::read(wav).unwrap();
         assert!(bytes.starts_with(b"RIFF"));
         assert_eq!(&bytes[8..12], b"WAVE");
+        client.cancel().await.unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn graph_tool_rejects_feedback_over_the_mcp_transport() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("Graph.auris");
+        let mut session =
+            auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
+        let a = session.add_bus_track("A");
+        let b = session.add_bus_track("B");
+        session.save(&path).unwrap();
+        drop(session);
+        let (server_transport, client_transport) = tokio::io::duplex(32768);
+        let server = tokio::spawn(async move {
+            AurisMcp::default()
+                .serve(server_transport)
+                .await
+                .unwrap()
+                .waiting()
+                .await
+                .unwrap();
+        });
+        let client = ().serve(client_transport).await.unwrap();
+        let forward = serde_json::json!({"project":path,"operation":{"action":"connect","source":format!("track:{}",a.0),"target":format!("track:{}",b.0),"kind":"send"}});
+        let accepted = client
+            .call_tool(
+                rmcp::model::CallToolRequestParams::new("mixer_graph")
+                    .with_arguments(forward.as_object().unwrap().clone()),
+            )
+            .await
+            .unwrap();
+        assert_ne!(accepted.is_error, Some(true));
+        let saved = std::fs::read(&path).unwrap();
+        let backward = serde_json::json!({"project":path,"operation":{"action":"connect","source":format!("track:{}",b.0),"target":format!("track:{}",a.0),"kind":"output"}});
+        let rejected = client
+            .call_tool(
+                rmcp::model::CallToolRequestParams::new("mixer_graph")
+                    .with_arguments(backward.as_object().unwrap().clone()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rejected.is_error, Some(true));
+        assert!(
+            rejected.content[0]
+                .as_text()
+                .unwrap()
+                .text
+                .contains("cycle")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), saved);
         client.cancel().await.unwrap();
         server.await.unwrap();
     }

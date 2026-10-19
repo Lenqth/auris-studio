@@ -1,0 +1,233 @@
+use super::*;
+
+fn session() -> Session {
+    Session::new(crate::SessionOptions::headless()).unwrap()
+}
+
+#[test]
+fn merged_track_controls_include_master_and_validate_before_one_undoable_edit() {
+    let mut session = session();
+    let track = session.add_bus_track("Bus");
+    let before = serde_json::to_value(session.project()).unwrap();
+    let node = MixerNode::Strip(Some(track)).key();
+    apply(
+        &mut session,
+        json!({"action":"set_strip","node":node,"gain_db":-12,"pan":0.25,"mute":true}),
+    )
+    .unwrap();
+    let strip = &session.project().track(track).unwrap().mixer;
+    assert_eq!((strip.gain_db, strip.pan, strip.mute), (-12.0, 0.25, true));
+    session.undo();
+    assert_eq!(serde_json::to_value(session.project()).unwrap(), before);
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"set_strip","node":node,"gain_db":-12,"pan":9,"mute":true})
+        )
+        .is_err()
+    );
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"set_strip","node":"track:master","gain_db":-3,"mute":true})
+        )
+        .is_err()
+    );
+    assert_eq!(serde_json::to_value(session.project()).unwrap(), before);
+    apply(
+        &mut session,
+        json!({"action":"set_strip","node":"track:master","gain_db":-3}),
+    )
+    .unwrap();
+    assert_eq!(session.project().master.gain_db, -3.0);
+}
+fn apply(session: &mut Session, value: Value) -> Result<Value, String> {
+    session.apply_mixer_graph(&serde_json::from_value(value).unwrap())
+}
+
+#[test]
+fn compact_graph_pages_are_topological_and_track_nodes_contain_faders() {
+    let mut session = session();
+    let source = session.add_bus_track("Source");
+    let bus = session.add_bus_track("Bus");
+    let slot = session
+        .add_effect(Some(source), "auris.fx.compressor")
+        .unwrap();
+    session.set_track_output(source, Output::Bus(bus)).unwrap();
+    let graph = session.mixer_graph_report(0, Some(64)).unwrap();
+    assert_eq!(graph["total_nodes"], 4);
+    let nodes = graph["nodes"].as_array().unwrap();
+    assert_eq!(nodes[0]["id"], MixerNode::Strip(Some(source)).key());
+    assert!(nodes[0]["controls"]["gain_db"].is_number());
+    assert_eq!(
+        nodes[0]["output_node"],
+        MixerNode::Effect(Some(source), slot).key()
+    );
+    let order: std::collections::HashMap<_, _> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, node)| (node["id"].as_str().unwrap(), i))
+        .collect();
+    for edge in graph["edges"].as_array().unwrap() {
+        assert!(order[edge["source"].as_str().unwrap()] < order[edge["target"].as_str().unwrap()]);
+    }
+    let mut paged_nodes = Vec::new();
+    let mut paged_edges = Vec::new();
+    for offset in 0..4 {
+        let page = session.mixer_graph_report(offset, Some(1)).unwrap();
+        paged_nodes.extend(page["nodes"].as_array().unwrap().iter().cloned());
+        paged_edges.extend(page["edges"].as_array().unwrap().iter().cloned());
+    }
+    assert_eq!(paged_nodes, *nodes);
+    assert_eq!(paged_edges, *graph["edges"].as_array().unwrap());
+}
+
+#[test]
+fn graph_actions_reject_mixed_cycles_and_wrong_ports_without_history_changes() {
+    let mut session = session();
+    let a = session.add_bus_track("A");
+    let b = session.add_bus_track("B");
+    let slot = session.add_effect(Some(b), "auris.fx.compressor").unwrap();
+    let from = MixerNode::Strip(Some(a)).key();
+    let to = MixerNode::Effect(Some(b), slot).key();
+    apply(
+        &mut session,
+        json!({"action":"connect","source":from,"target":to,"kind":"sidechain"}),
+    )
+    .unwrap();
+    let before = serde_json::to_value(session.project()).unwrap();
+    for kind in ["output", "send"] {
+        assert!(apply(&mut session, json!({"action":"connect","source":MixerNode::Strip(Some(b)).key(),"target":from,"kind":kind})).unwrap_err().contains("cycle"));
+    }
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"connect","source":from,"target":to,"kind":"output"})
+        )
+        .is_err()
+    );
+    assert_eq!(serde_json::to_value(session.project()).unwrap(), before);
+    session.undo();
+    assert_eq!(session.effect_sidechain(Some(b), slot), None);
+}
+
+#[test]
+fn effect_ids_survive_ordering_and_parameter_edits_target_the_same_slot() {
+    let mut session = session();
+    let track = session.add_bus_track("Bus");
+    let input = MixerNode::Strip(Some(track)).key();
+    let added = apply(
+        &mut session,
+        json!({"action":"add_effect","input":input,"effect":"auris.fx.compressor"}),
+    )
+    .unwrap();
+    let node = added["result"]["node"].as_str().unwrap();
+    let slot = session.graph_effect(node).unwrap().1;
+    session.add_effect(Some(track), "auris.fx.reverb").unwrap();
+    apply(
+        &mut session,
+        json!({"action":"move_effect","node":node,"position":2}),
+    )
+    .unwrap();
+    assert_eq!(
+        session.project().track(track).unwrap().mixer.effects[1].id,
+        slot
+    );
+    let params = apply(&mut session, json!({"action":"parameters","node":node})).unwrap();
+    assert!(
+        params["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["key"] == "threshold_db")
+    );
+    let set = apply(
+        &mut session,
+        json!({"action":"set_parameter","node":node,"param":"threshold_db","value":-18}),
+    )
+    .unwrap();
+    assert_eq!(set["result"]["value"], -18.0);
+    let before = serde_json::to_value(session.project()).unwrap();
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"set_parameter","node":node,"param":"threshold_db","value":9000})
+        )
+        .is_err()
+    );
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"move_effect","node":node,"position":0})
+        )
+        .is_err()
+    );
+    assert_eq!(serde_json::to_value(session.project()).unwrap(), before);
+    apply(&mut session, json!({"action":"remove_effect","node":node})).unwrap();
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"enable_effect","node":node,"enabled":true})
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn send_controls_undo_as_one_and_duplicate_connects_are_unchanged() {
+    let mut session = session();
+    let a = session.add_bus_track("A");
+    let b = session.add_bus_track("B");
+    let source = MixerNode::Strip(Some(a)).key();
+    let target = MixerNode::Strip(Some(b)).key();
+    let connect = json!({"action":"connect","source":source,"target":target,"kind":"send"});
+    apply(&mut session, connect.clone()).unwrap();
+    assert_eq!(apply(&mut session, connect).unwrap()["changed"], false);
+    let send = session.project().track(a).unwrap().sends[0].id;
+    let before = serde_json::to_value(session.project()).unwrap();
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"set_send","send_id":send.0,"level_db":5,"pre_fader":true})
+        )
+        .is_err()
+    );
+    assert_eq!(serde_json::to_value(session.project()).unwrap(), before);
+    apply(
+        &mut session,
+        json!({"action":"set_send","send_id":send.0,"level_db":-12,"pre_fader":true}),
+    )
+    .unwrap();
+    session.undo();
+    assert_eq!(serde_json::to_value(session.project()).unwrap(), before);
+    apply(&mut session,json!({"action":"disconnect","source":source,"target":target,"kind":"send","send_id":send.0})).unwrap();
+    assert!(session.project().track(a).unwrap().sends.is_empty());
+}
+
+#[test]
+fn disconnect_checks_the_existing_edge_and_output_returns_to_master() {
+    let mut session = session();
+    let a = session.add_bus_track("A");
+    let b = session.add_bus_track("B");
+    let source = MixerNode::Strip(Some(a)).key();
+    let target = MixerNode::Strip(Some(b)).key();
+    apply(
+        &mut session,
+        json!({"action":"connect","source":source,"target":target,"kind":"output"}),
+    )
+    .unwrap();
+    assert!(
+        apply(
+            &mut session,
+            json!({"action":"disconnect","source":source,"target":"track:master","kind":"output"})
+        )
+        .is_err()
+    );
+    assert_eq!(session.project().track(a).unwrap().output, Output::Bus(b));
+    apply(
+        &mut session,
+        json!({"action":"disconnect","source":source,"target":target,"kind":"output"}),
+    )
+    .unwrap();
+    assert_eq!(session.project().track(a).unwrap().output, Output::Master);
+}

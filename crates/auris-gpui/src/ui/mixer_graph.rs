@@ -17,7 +17,7 @@ use crate::ui::widgets::{ButtonStyle, button, db_to_meter_position, level_meter}
 
 const NODE_WIDTH: f32 = 176.0;
 const COLUMN: f32 = 240.0;
-const ROW: f32 = 240.0;
+const ROW: f32 = 280.0;
 
 /// Presentation state kept across paints and panel moves.
 pub(crate) struct MixerCanvas {
@@ -30,8 +30,8 @@ pub(crate) struct MixerCanvas {
 
 fn node_id(node: MixerNode) -> SharedString {
     match node {
-        MixerNode::Input(owner) => format!("mix-input-{}", owner.map_or(0, |id| id.0)),
-        MixerNode::Fader(owner) => format!("mix-fader-{}", owner.map_or(0, |id| id.0)),
+        MixerNode::Strip(owner) => format!("mix-track-{}", owner.map_or(0, |id| id.0)),
+
         MixerNode::Effect(_, slot) => format!("mix-effect-{}", slot.0),
     }
     .into()
@@ -39,7 +39,11 @@ fn node_id(node: MixerNode) -> SharedString {
 
 fn gesture(graph: &MixerGraph, connection: &Connection) -> Option<(TrackId, MixerNode)> {
     let source = graph.nodes.iter().find_map(|node| match node {
-        MixerNode::Fader(Some(track)) if node_id(*node) == connection.source => Some(*track),
+        MixerNode::Strip(Some(track)) | MixerNode::Effect(Some(track), _)
+            if node_id(*node) == connection.source =>
+        {
+            Some(*track)
+        }
         _ => None,
     })?;
     let target = graph
@@ -83,7 +87,7 @@ fn positions(graph: &MixerGraph) -> HashMap<MixerNode, FlowPoint> {
     let mut rows = HashMap::new();
     let mut y = 24.0;
     for node in &graph.nodes {
-        if let MixerNode::Input(owner) = node {
+        if let MixerNode::Strip(owner) = node {
             rows.insert(*owner, y);
             let sends = graph.edges.iter().filter(|edge| matches!(edge.kind, MixerEdgeKind::Send { track, .. } if Some(track) == *owner)).count();
             y += ROW + sends as f32 * 64.0;
@@ -95,7 +99,7 @@ fn positions(graph: &MixerGraph) -> HashMap<MixerNode, FlowPoint> {
         .enumerate()
         .map(|(i, node)| {
             let owner = match node {
-                MixerNode::Input(t) | MixerNode::Effect(t, _) | MixerNode::Fader(t) => t,
+                MixerNode::Strip(t) | MixerNode::Effect(t, _) => t,
             };
             (
                 *node,
@@ -286,11 +290,17 @@ impl AurisApp {
         let mut allowed = HashSet::new();
         if routing_changed {
             for node in &document.nodes {
-                if let MixerNode::Fader(Some(source)) = node {
+                let source = match node {
+                    MixerNode::Strip(Some(id)) | MixerNode::Effect(Some(id), _) => Some(*id),
+                    _ => None,
+                };
+                if let Some(source) = source
+                    && self.session.mixer_graph_output(Some(source)) == *node
+                {
                     for target in &document.nodes {
                         if self
                             .session
-                            .can_connect_mixer(*source, *target, self.mixer_connect_send)
+                            .can_connect_mixer(source, *target, self.mixer_connect_send)
                         {
                             allowed.insert((node_id(*node), node_id(*target)));
                         }
@@ -334,21 +344,31 @@ impl AurisApp {
                     let existing = state.get_node(&id).filter(|_| old_owners.contains(node));
                     let position = existing.map_or(layout[node], |n| n.position);
                     let handles = match node {
-                        MixerNode::Input(owner)
-                            if owner.is_none_or(|t| {
-                                self.session
-                                    .project()
-                                    .track(t)
-                                    .is_some_and(|t| t.kind.is_bus())
-                            }) =>
-                        {
-                            vec![HandleDef::target(HandlePosition::Left)]
+                        MixerNode::Strip(owner) => {
+                            let mut handles = Vec::new();
+                            if owner.is_some() && self.session.mixer_graph_output(*owner) == *node {
+                                handles.push(HandleDef::source(HandlePosition::Right));
+                            }
+                            if owner.is_none_or(|id| {
+                                self.project()
+                                    .track(id)
+                                    .is_some_and(|track| track.kind.is_bus())
+                            }) {
+                                handles.push(HandleDef::target(HandlePosition::Left));
+                            }
+                            handles
                         }
-                        MixerNode::Fader(Some(_)) => vec![HandleDef::source(HandlePosition::Right)],
-                        MixerNode::Effect(_, slot) if sidechain_slots.contains(slot) => {
-                            vec![HandleDef::target(HandlePosition::Top).id("sidechain")]
+                        MixerNode::Effect(owner, slot) => {
+                            let mut handles = Vec::new();
+                            if owner.is_some() && self.session.mixer_graph_output(*owner) == *node {
+                                handles.push(HandleDef::source(HandlePosition::Right));
+                            }
+                            if sidechain_slots.contains(slot) {
+                                handles
+                                    .push(HandleDef::target(HandlePosition::Top).id("sidechain"));
+                            }
+                            handles
                         }
-                        _ => Vec::new(),
                     };
                     let mut flow = FlowNode::new(id, position.x, position.y)
                         .size(NODE_WIDTH, 136.0)
@@ -442,7 +462,7 @@ impl AurisApp {
             return div().into_any_element();
         };
         let owner = match node {
-            MixerNode::Input(t) | MixerNode::Effect(t, _) | MixerNode::Fader(t) => t,
+            MixerNode::Strip(t) | MixerNode::Effect(t, _) => t,
         };
         let theme = self.theme.clone();
         let name = owner.and_then(|id| self.project().track(id)).map_or_else(
@@ -477,17 +497,6 @@ impl AurisApp {
             )
             .child(div().truncate().text_color(theme.text_muted).child(name));
         match node {
-            MixerNode::Input(_) => {
-                card = card.child(self.t(Key::MixerInput)).child(button(
-                    SharedString::from(format!("graph-add-fx-{id}")),
-                    self.t(Key::MenuAddEffect),
-                    ButtonStyle::Ghost,
-                    false,
-                    theme.accent_soft,
-                    &theme,
-                    Self::opens_menu(cx, move |this, at| this.effect_picker_menu(at, owner)),
-                ));
-            }
             MixerNode::Effect(_, slot) => {
                 let effect = owner
                     .and_then(|id| self.project().track(id))
@@ -540,13 +549,21 @@ impl AurisApp {
                         ));
                 }
             }
-            MixerNode::Fader(_) => {
+            MixerNode::Strip(_) => {
                 let strip = owner
                     .and_then(|id| self.project().track(id))
                     .map_or(&self.project().master, |t| &t.mixer);
                 let (gain, pan, muted, soloed) = (strip.gain_db, strip.pan, strip.mute, strip.solo);
                 card = card
-                    .child(self.t(Key::MixerFader))
+                    .child(button(
+                        SharedString::from(format!("graph-add-fx-{id}")),
+                        self.t(Key::MenuAddEffect),
+                        ButtonStyle::Ghost,
+                        false,
+                        theme.accent_soft,
+                        &theme,
+                        Self::opens_menu(cx, move |this, at| this.effect_picker_menu(at, owner)),
+                    ))
                     .child(self.fader(
                         SharedString::from(format!("graph-gain-{id}")),
                         self.t(Key::Volume),
@@ -704,7 +721,7 @@ mod tests {
             .debug_bounds(selector(format!("flow-handle-{}-0", node_id(from))))
             .unwrap();
         let target = cx
-            .debug_bounds(selector(format!("flow-handle-{}-0", node_id(to))))
+            .debug_bounds(selector(format!("flow-handle-{}-1", node_id(to))))
             .unwrap();
         let canvas = cx.debug_bounds("flow-graph").unwrap();
         assert!(
@@ -735,10 +752,10 @@ mod tests {
         expose_pair(
             &app,
             cx,
-            MixerNode::Fader(Some(a)),
-            MixerNode::Input(Some(b)),
+            MixerNode::Strip(Some(a)),
+            MixerNode::Strip(Some(b)),
         );
-        connect(cx, MixerNode::Fader(Some(a)), MixerNode::Input(Some(b)));
+        connect(cx, MixerNode::Strip(Some(a)), MixerNode::Strip(Some(b)));
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert_eq!(this.project().track(a).unwrap().output, Output::Bus(b))
@@ -761,6 +778,36 @@ mod tests {
     }
 
     #[gpui::test]
+    fn track_and_fader_controls_share_one_graph_node(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let track = app.update(cx, |this, _| {
+            show(this);
+            this.session.add_bus_track("Bus")
+        });
+        paint(&app, cx);
+        assert!(
+            cx.debug_bounds(selector(format!(
+                "graph-gain-{}",
+                node_id(MixerNode::Strip(Some(track)))
+            )))
+            .is_some()
+        );
+        app.read_with(cx, |this, _| {
+            let nodes = &this.mixer_canvas.as_ref().unwrap().document.nodes;
+            assert_eq!(nodes.len(), this.project().tracks.len() + 1);
+            assert_eq!(
+                nodes
+                    .iter()
+                    .filter(|node| **node == MixerNode::Strip(Some(track)))
+                    .count(),
+                1,
+                "a track and its fader have one shared node"
+            );
+            assert!(nodes.iter().all(|node| matches!(node, MixerNode::Strip(_))));
+        });
+    }
+
+    #[gpui::test]
     fn pointer_feedback_is_rejected_without_a_speculative_edge(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         let (a, b) = app.update(cx, |this, _| {
@@ -775,10 +822,10 @@ mod tests {
         expose_pair(
             &app,
             cx,
-            MixerNode::Fader(Some(b)),
-            MixerNode::Input(Some(a)),
+            MixerNode::Strip(Some(b)),
+            MixerNode::Strip(Some(a)),
         );
-        connect(cx, MixerNode::Fader(Some(b)), MixerNode::Input(Some(a)));
+        connect(cx, MixerNode::Strip(Some(b)), MixerNode::Strip(Some(a)));
         paint(&app, cx);
         app.read_with(cx, |this, cx| {
             assert_eq!(this.session.mixer_graph(), before);
@@ -803,10 +850,14 @@ mod tests {
         expose_pair(
             &app,
             cx,
-            MixerNode::Fader(Some(a)),
-            MixerNode::Input(Some(b)),
+            MixerNode::Effect(Some(a), slot),
+            MixerNode::Strip(Some(b)),
         );
-        connect(cx, MixerNode::Fader(Some(a)), MixerNode::Input(Some(b)));
+        connect(
+            cx,
+            MixerNode::Effect(Some(a), slot),
+            MixerNode::Strip(Some(b)),
+        );
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             let track = this.project().track(a).unwrap();
@@ -817,7 +868,7 @@ mod tests {
             &app,
             cx,
             MixerNode::Effect(Some(a), slot),
-            MixerNode::Input(Some(b)),
+            MixerNode::Strip(Some(b)),
         );
         click(
             selector(format!(

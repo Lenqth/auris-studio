@@ -74,6 +74,17 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.read_mixer_graph",
+    "edit_project.connect_mixer",
+    "edit_project.disconnect_mixer",
+    "edit_project.add_mixer_effect",
+    "edit_project.remove_mixer_effect",
+    "edit_project.move_mixer_effect",
+    "edit_project.enable_mixer_effect",
+    "edit_project.set_mixer_send",
+    "edit_project.mixer_effect_parameters",
+    "edit_project.set_mixer_effect_parameter",
+    "edit_project.set_mixer_track",
     "edit_project.inspect",
     "edit_project.inspect_audio",
     "edit_project.read_notes",
@@ -115,6 +126,13 @@ impl Operation {
             let parsed: crate::live_agent::Command =
                 serde_json::from_value(command.clone()).map_err(|e| e.to_string())?;
             let action = command["action"].as_str().ok_or("Missing action")?;
+            if let crate::live_agent::Command::MixerGraph { operation } = &parsed {
+                return Ok(Self {
+                    name: format!("edit_project.{}", operation.tool_name()),
+                    mutating: !operation.is_read_only(),
+                    confirm: operation.requires_confirmation(),
+                });
+            }
             let mutating = !matches!(
                 parsed,
                 crate::live_agent::Command::Inspect {}
@@ -211,6 +229,58 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graph_reads_edits_and_removals_use_the_live_permission_boundary() {
+        for (operation, read_only, removal) in [
+            (serde_json::json!({"action":"read"}), true, false),
+            (
+                serde_json::json!({"action":"parameters","node":"effect:3"}),
+                true,
+                false,
+            ),
+            (
+                serde_json::json!({"action":"connect","source":"track:1","target":"track:2","kind":"send"}),
+                false,
+                false,
+            ),
+            (
+                serde_json::json!({"action":"disconnect","source":"track:1","target":"track:2","kind":"send"}),
+                false,
+                true,
+            ),
+            (
+                serde_json::json!({"action":"remove_effect","node":"effect:3"}),
+                false,
+                true,
+            ),
+        ] {
+            let parsed = Operation::parse(
+                "edit_project",
+                &serde_json::json!({"command":{"action":"mixer_graph","operation":operation}}),
+            )
+            .unwrap();
+            assert!(OPERATIONS.contains(&parsed.name.as_str()));
+            assert_eq!(parsed.mutating, !read_only);
+            assert_eq!(parsed.confirm, removal);
+            for mode in [Mode::ReadOnly, Mode::Plan] {
+                let policy = Policy {
+                    mode,
+                    allow: vec!["edit_project.*".into()],
+                    deny: vec![],
+                };
+                assert_eq!(matches!(policy.decide(&parsed), Decision::Allow), read_only);
+            }
+            assert_eq!(
+                Policy::default().decide(&parsed),
+                if removal {
+                    Decision::Ask
+                } else {
+                    Decision::Allow
+                }
+            );
+        }
+    }
     fn edit() -> Operation {
         Operation::parse("edit_project", &serde_json::json!({"command":{"action":"add_track","name":"Lead","kind":"instrument"}})).unwrap()
     }

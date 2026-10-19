@@ -176,6 +176,7 @@ pub mod routing {
         let destination = |id: TrackId| {
             serde_json::json!({
                 "track": format!("id:{}", id.0),
+                "node": auris_session::mixer_graph::MixerNode::Strip(Some(id)).key(),
                 "name": project.track(id).map(|track| &track.name)
             })
         };
@@ -199,6 +200,7 @@ pub mod routing {
             .collect();
         serde_json::json!({
             "track": format!("id:{}", id.0),
+            "node": auris_session::mixer_graph::MixerNode::Strip(Some(id)).key(),
             "name": track.name,
             "output": track.output.bus().map(destination).unwrap_or_else(|| serde_json::json!({"track":"master"})),
             "sends": sends,

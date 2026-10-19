@@ -613,13 +613,22 @@ pub mod architecture {
     //! # How it gets there: outputs, buses and sends
     //!
     //! [`Session::mixer_graph`](crate::Session::mixer_graph) projects the document into stable
-    //! input, insert and fader nodes. Edges distinguish the serial insert chain, main output,
+    //! track and insert nodes. Each track node owns its source and fader controls; inserts
+    //! still process before gain and pan. The terminal insert is the output connection point,
+    //! or the track itself for an empty chain. Edges distinguish the serial insert chain, main output,
     //! pre/post-fader sends and sidechain keys. The graph editor connects these identities with
     //! [`Session::connect_mixer`](crate::Session::connect_mixer), which revalidates the complete
     //! routing before delegating to an ordinary undoable command. Parallel processing uses bus
     //! branches; inserts within each strip remain ordered. Layout belongs to the frontend and
     //! never changes signal order. The graph and console read the same saved document, so an
     //! undo, project load or model tool edit updates both views without a second routing store.
+    //! [`GraphAction`](crate::mixer_graph::commands::GraphAction) is the shared saved-file and
+    //! live-agent graph contract. Stable `track:N`, `track:master` and `effect:N` identities
+    //! survive renaming and reordering. Reads page nodes in processing order and include their
+    //! outgoing edges. The toolbox exposes `mixer_graph` to MCP; rig receives flat tools from
+    //! the same operation schema. The live permission policy classifies graph reads separately
+    //! from edits and connection/effect removal. Persistence stays with the caller: live edits
+    //! are undoable and unsaved, while MCP checkpoints actual changes once.
     //!
     //! A track's audio does not necessarily go to the master. Its
     //! [`Output`](auris_core::Output) is either the master or a **bus**, and it may also carry any

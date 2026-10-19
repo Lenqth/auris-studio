@@ -188,10 +188,8 @@ strings! {
     MixerGraph { en: "Signal flow", ja: "信号フロー" }
     MixerConsole { en: "Console", ja: "コンソール" }
     MixerLayout { en: "Arrange nodes", ja: "ノードを整列" }
-    MixerGraphHelp { en: "Drag from a fader’s right port to a bus input or an effect’s sidechain port. Drag the background to pan.", ja: "フェーダー右側の端子から、バスの入力やエフェクトのサイドチェイン端子へドラッグ。背景をドラッグすると移動できます。" }
+    MixerGraphHelp { en: "Drag from a track or its last effect’s output port to a bus or sidechain. Fader controls belong to the track and process after inserts. Drag the background to pan.", ja: "トラックまたは末尾のエフェクトの出力端子から、バスやサイドチェインへドラッグ。トラック内のフェーダーはエフェクト後に作用します。背景をドラッグすると移動できます。" }
     MixerConnectionRejected { en: "Cannot connect these nodes. Choose a bus input or sidechain that does not create a cycle.", ja: "このノードには接続できません。循環しないバス入力かサイドチェインを選んでください。" }
-    MixerInput { en: "Input", ja: "入力" }
-    MixerFader { en: "Fader", ja: "フェーダー" }
     Inspector { en: "Inspector", ja: "インスペクタ" }
     InspectorClip { en: "Clip", ja: "クリップ" }
     InspectorGeneration { en: "Generation", ja: "生成" }

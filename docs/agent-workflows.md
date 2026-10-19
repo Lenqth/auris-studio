@@ -30,6 +30,15 @@ storage indices with `remove_notes`. `set_level` requires both `gain_db` (-60..1
 Changes work before the first save and remain unsaved. Preserve existing music and inspect
 again to verify the arrangement before claiming completion.
 
+For routing and processing, use `read_mixer_graph` and copy its stable track/effect node IDs.
+Track nodes include fader controls; inserts still process before the fader. `connect_mixer`
+connects an output, send or sidechain, and rejects cycles across all three kinds of edge.
+Use `add_mixer_effect`, `move_mixer_effect`, `enable_mixer_effect`,
+`mixer_effect_parameters`, `set_mixer_effect_parameter` and `set_mixer_send` for processing.
+Parallel processing uses bus branches. The saved-file MCP tool `mixer_graph` uses the same
+session operations and saves actual changes with a checkpoint. See [Mixer signal flow](mixer-graph.md)
+for the full tool mapping, node IDs and paging contract.
+
 Use `inspect_audio` with `{"start_bar":1,"bars":4}` to inspect the actual rendered mix.
 An optional `track` ID selects solo routing. Each request is limited to eight bars and
 30 seconds. It returns peak/RMS levels, full-scale sample counts, bar-start harmony and
