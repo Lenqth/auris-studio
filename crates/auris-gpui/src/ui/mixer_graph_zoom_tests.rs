@@ -73,7 +73,7 @@ fn fit_leaves_an_empty_or_unmeasurable_canvas_unchanged() {
 }
 
 #[gpui::test]
-fn fit_button_frames_all_nodes_curves_and_labels_without_rearranging_or_editing(
+fn fit_button_frames_all_nodes_curves_and_labels_without_rearranging_or_editing_audio(
     cx: &mut TestAppContext,
 ) {
     let (app, cx) = open(cx);
@@ -131,7 +131,7 @@ fn fit_button_frames_all_nodes_curves_and_labels_without_rearranging_or_editing(
     let before = app.read_with(cx, |this, cx| {
         let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
         (
-            serde_json::to_value(this.project()).unwrap(),
+            musical_document(this.project()),
             state
                 .nodes
                 .iter()
@@ -187,7 +187,7 @@ fn fit_button_frames_all_nodes_curves_and_labels_without_rearranging_or_editing(
                 "{id}"
             );
         }
-        assert_eq!(serde_json::to_value(this.project()).unwrap(), before.0);
+        assert_eq!(musical_document(this.project()), before.0);
         assert_eq!(
             state
                 .nodes
@@ -235,6 +235,18 @@ fn fit_button_frames_all_nodes_curves_and_labels_without_rearranging_or_editing(
             .abs()
             < 1e-6
     );
+    let saved = app.update(cx, |this, cx| {
+        let saved = this.mixer_canvas.as_ref().unwrap().presentation(cx);
+        assert_eq!(this.project().mixer_graph_view, saved);
+        this.session.forget_history();
+        this.reset_view();
+        saved
+    });
+    paint(&app, cx);
+    app.read_with(cx, |this, cx| {
+        assert_eq!(this.mixer_canvas.as_ref().unwrap().presentation(cx), saved);
+        assert!(!this.session.is_dirty());
+    });
 }
 
 #[test]
@@ -266,7 +278,7 @@ fn zoom_keeps_the_pointer_anchor_and_cached_node_bounds_consistent_at_both_limit
 }
 
 #[gpui::test]
-fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing(
+fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing_audio(
     cx: &mut TestAppContext,
 ) {
     let (app, cx) = open(cx);
@@ -301,7 +313,7 @@ fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing(
     let node_before = cx.debug_bounds(node_selector).unwrap();
     let gain_before = cx.debug_bounds(gain_selector).unwrap();
     let handle_before = cx.debug_bounds(handle_selector).unwrap();
-    let document = app.read_with(cx, |this, _| serde_json::to_value(this.project()).unwrap());
+    let document = app.read_with(cx, |this, _| musical_document(this.project()));
     let at = node_before.center();
     let before = app.read_with(cx, |this, cx| {
         let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
@@ -338,7 +350,7 @@ fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing(
     assert!((gain_after.size.height / gain_before.size.height - zoom).abs() < 0.02);
     assert!((handle_after.size.width / handle_before.size.width - zoom).abs() < 0.02);
     assert_eq!(
-        app.read_with(cx, |this, _| serde_json::to_value(this.project()).unwrap()),
+        app.read_with(cx, |this, _| musical_document(this.project())),
         document
     );
     // Ordinary wheel input pans, including over a fader, without changing the gain or zoom.
@@ -360,7 +372,7 @@ fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing(
         zoom
     );
     assert_eq!(
-        app.read_with(cx, |this, _| serde_json::to_value(this.project()).unwrap()),
+        app.read_with(cx, |this, _| musical_document(this.project())),
         document
     );
     // A scaled fader still edits and resets through the real pointer handlers.
@@ -417,4 +429,11 @@ fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing(
             .abs()
             < 1e-6
     );
+}
+
+// Camera and layout are saved metadata; these checks protect the audible document.
+fn musical_document(project: &Project) -> serde_json::Value {
+    let mut value = serde_json::to_value(project).unwrap();
+    value.as_object_mut().unwrap().remove("mixer_graph_view");
+    value
 }

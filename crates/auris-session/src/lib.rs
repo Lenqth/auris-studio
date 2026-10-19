@@ -293,7 +293,8 @@ pub mod prelude {
     // range it is drawing against, and may not reach past this crate to find out.
     pub use auris_core::plugin::{CC_MODULATION, CONTROLLER_MAX};
     pub use auris_core::project::{
-        BEND_LIMIT, CONTROLLER_LIMIT, CURVE_STEP, ClipCurve, CurvePoint, curve_at,
+        BEND_LIMIT, CONTROLLER_LIMIT, CURVE_STEP, ClipCurve, CurvePoint, MixerGraphView,
+        MixerNodePosition, curve_at,
     };
 
     /// Every chord progression the composer knows by name.

@@ -32,6 +32,25 @@ use crate::session::PluginWindow;
 use super::Session;
 
 impl Session {
+    /// Stores mixer node positions and camera without rebuilding audio or recording an undo step.
+    /// View changes mark the document unsaved and survive musical undo/redo and gesture rollback.
+    pub fn set_mixer_graph_view(&mut self, view: auris_core::project::MixerGraphView) {
+        let view = view.sanitized();
+        if self.project.mixer_graph_view == view {
+            return;
+        }
+        self.history
+            .for_each_project_mut(|project| project.mixer_graph_view = view.clone());
+        if let Some(transaction) = &mut self.transaction {
+            transaction.before.mixer_graph_view = view.clone();
+            transaction.dirty_before = true;
+        }
+        self.project.mixer_graph_view = view;
+        self.dirty = true;
+        // A staged save must not overwrite navigation that happened after it was captured.
+        self.revision = self.revision.wrapping_add(1);
+    }
+
     /// Measures individual mixer connections while a graph reader is visible.
     /// This is transient observation and never creates a document edit or an undo step.
     pub fn watch_mixer_signals(&mut self, watched: bool) {
@@ -951,6 +970,70 @@ mod tests {
 
     /// The compressor's registry id, which is the one built-in that listens to a key.
     const COMPRESSOR: &str = "auris.fx.compressor";
+
+    #[test]
+    fn mixer_view_is_saved_without_audio_rebuild_or_musical_history_changes() {
+        use auris_core::project::{MixerGraphView, MixerNodePosition};
+        let mut session = session();
+        session.forget_history();
+        let meters = Arc::clone(&session.signal_meters);
+        let view = MixerGraphView {
+            nodes: [(
+                "track:master".into(),
+                MixerNodePosition { x: -72.0, y: 800.0 },
+            )]
+            .into(),
+            zoom: 0.125,
+            pan_x: 31.0,
+            pan_y: -700.0,
+        };
+        session.set_mixer_graph_view(view.clone());
+        assert!(session.is_dirty());
+        assert!(!session.can_undo());
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+        let revision = session.revision();
+        session.set_mixer_graph_view(view.clone());
+        assert_eq!(session.revision(), revision);
+
+        session.add_bus_track("Undoable");
+        session.undo().unwrap();
+        let mut moved = view.clone();
+        moved.pan_x = 500.0;
+        session.set_mixer_graph_view(moved.clone());
+        assert!(session.can_redo());
+        session.redo().unwrap();
+        assert_eq!(session.project().mixer_graph_view, moved);
+        session.undo().unwrap();
+        assert_eq!(session.project().mixer_graph_view, moved);
+
+        session.begin_transaction(Edit::ExternalChanges);
+        session.set_mixer_graph_view(view.clone());
+        assert!(!session.end_transaction());
+        assert!(!session.can_undo());
+        assert!(session.is_dirty());
+
+        let scratch = Scratch::new("mixer-view");
+        let report = session.save_as(&scratch.join("View.auris")).unwrap();
+        assert!(!session.is_dirty());
+        session.new_project();
+        assert_eq!(
+            session.project().mixer_graph_view,
+            MixerGraphView::default()
+        );
+        session.open(&report.document).unwrap();
+        assert_eq!(session.project().mixer_graph_view, view);
+        assert!(!session.is_dirty());
+
+        let job = session.begin_save_in_place().unwrap();
+        let result = job
+            .run(&std::sync::atomic::AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        session.set_mixer_graph_view(moved.clone());
+        assert!(session.continue_save(result).is_none());
+        assert_eq!(session.project().mixer_graph_view, moved);
+        assert!(session.is_dirty());
+    }
 
     #[test]
     fn signal_observation_is_transient_and_follows_graph_rebuilds_and_undo() {

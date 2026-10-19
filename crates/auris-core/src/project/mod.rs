@@ -50,8 +50,10 @@ mod volume_contour;
 pub use ghost::{GhostNotes, GhostPattern};
 pub use pitch_performance::PitchPerformance;
 pub use volume_contour::{VolumeContour, VolumeContourPreset};
+mod mixer_view;
 mod recipe;
 mod routing;
+pub use mixer_view::{MixerGraphView, MixerNodePosition};
 mod track;
 mod transform;
 
@@ -215,6 +217,9 @@ pub struct Project {
     pub tracks: Vec<Track>,
     /// Master bus strip.
     pub master: MixerStrip,
+    /// Mixer graph node positions and camera, restored independently of the audio graph.
+    #[serde(default)]
+    pub mixer_graph_view: MixerGraphView,
     /// Imported file metadata by id.
     pub audio_sources: BTreeMap<SourceId, AudioSource>,
     /// Imported SoundFont metadata by id.
@@ -310,6 +315,7 @@ impl Project {
             automation: crate::automation::Automation::new(),
             tracks: Vec::new(),
             master: MixerStrip::default(),
+            mixer_graph_view: MixerGraphView::default(),
             audio_sources: BTreeMap::new(),
             soundfonts: BTreeMap::new(),
             loop_region: None,

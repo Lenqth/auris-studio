@@ -680,7 +680,8 @@ fn overlapping_output_sends_and_sidechain_are_individually_selected_deleted_and_
         assert_eq!(output.stroke, EdgeStroke::Solid);
         assert_ne!(output.color, sidechain.color);
     });
-    let original = app.read_with(cx, |this, _| serde_json::to_value(this.project()).unwrap());
+    let mut original = app.read_with(cx, |this, _| serde_json::to_value(this.project()).unwrap());
+    original.as_object_mut().unwrap().remove("mixer_graph_view");
     let wires: Vec<_> = app.read_with(cx, |this, _| {
         this.session
             .mixer_graph()
@@ -758,7 +759,14 @@ fn overlapping_output_sends_and_sidechain_are_individually_selected_deleted_and_
         cx.dispatch_action(crate::actions::Undo);
         paint(&app, cx);
         app.read_with(cx, |this, _| {
-            assert_eq!(serde_json::to_value(this.project()).unwrap(), original)
+            let mut restored = serde_json::to_value(this.project()).unwrap();
+            restored.as_object_mut().unwrap().remove("mixer_graph_view");
+            assert_eq!(restored, original);
+            // Musical Undo keeps the zoom selected for this iteration.
+            assert_eq!(
+                this.project().mixer_graph_view.zoom,
+                [0.75, 1.25, 1.5, 0.5][index]
+            );
         });
     }
     app.read_with(cx, |this, _| {

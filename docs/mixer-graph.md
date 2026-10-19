@@ -65,8 +65,13 @@ same project and share undo/redo. Keyboard focus moves through the controls with
 Tab; routing and effect menus also provide keyboard access to connections.
 
 The saved project contains the routing, effect order, parameters and send tap
-points. Existing projects open with the same processing paths. The system's
-architecture is documented in `auris_session::guide`.
+points, plus node positions, zoom and pan. Save after arranging or navigating
+the graph to restore the same view next time. This includes scales below 50%
+chosen by **Fit graph**. View changes mark the project unsaved and leave musical
+Undo/Redo intact. New nodes use the automatic layout; nodes restored by Undo
+keep their previous positions. Projects without a saved view start with the
+automatic layout at 100%. The system's architecture is documented in
+`auris_session::guide`.
 
 ## MCP and live agents
 

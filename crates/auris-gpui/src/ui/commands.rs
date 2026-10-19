@@ -993,6 +993,7 @@ impl AurisApp {
     /// no command for going back — the scroll is not part of the document, so nothing restored
     /// it either.
     pub(crate) fn reset_view(&mut self) {
+        self.mixer_canvas = None;
         // The observed editor closes on the next draw, before reused clip ids can be edited.
         self.rhythm_window = None;
         self.export_dialog = None;

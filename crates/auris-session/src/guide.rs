@@ -653,7 +653,12 @@ pub mod architecture {
     //! the zoom and restores 100% about the canvas centre. Nodes scope rem-based typography and
     //! spacing to their viewport, with matching control and port dimensions. Cached node bounds
     //! follow the zoom immediately and are refined during prepaint before edges are painted.
-    //! Zoom and pan are view state and do not change the document or consume an undo step.
+    //! Node positions, zoom and canvas-local pan are stored in `Project::mixer_graph_view`,
+    //! keyed by the same stable node identities as the model tools. Old files default to the
+    //! automatic layout at 100%. Navigation marks the project unsaved but consumes no undo step
+    //! and never rebuilds audio. Session history retains the current view through musical undo,
+    //! redo and gesture rollback. Opening another document discards the old canvas and restores
+    //! that project's view, including fit scales below 50%; new nodes use the automatic layout.
     //! **Fit graph** frames all visible nodes, flattened wire paths and measured labels with
     //! screen-space padding. It extends the minimum zoom below 50% when needed, while leaving
     //! node positions and the session's routing untouched.

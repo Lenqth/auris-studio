@@ -42,6 +42,10 @@ mod wire_tests;
 #[path = "mixer_graph_zoom_tests.rs"]
 mod zoom_tests;
 
+#[cfg(test)]
+#[path = "mixer_graph_persistence_tests.rs"]
+mod persistence_tests;
+
 /// Presentation state kept across paints and panel moves.
 pub(crate) struct MixerCanvas {
     state: Entity<FlowState>,
@@ -51,6 +55,34 @@ pub(crate) struct MixerCanvas {
     send: bool,
     palette: [u32; 4],
     animation_started: Instant,
+    last_view: MixerGraphView,
+    persist_layout: bool,
+}
+
+impl MixerCanvas {
+    fn presentation(&self, cx: &gpui::App) -> MixerGraphView {
+        let state = self.state.read(cx);
+        MixerGraphView {
+            nodes: state
+                .nodes
+                .iter()
+                .filter_map(|node| {
+                    self.by_id.get(&node.id).map(|identity| {
+                        (
+                            identity.key(),
+                            MixerNodePosition {
+                                x: node.position.x,
+                                y: node.position.y,
+                            },
+                        )
+                    })
+                })
+                .collect(),
+            zoom: state.viewport.zoom,
+            pan_x: state.viewport.x,
+            pan_y: state.viewport.y,
+        }
+    }
 }
 
 fn wire_style(kind: MixerEdgeKind, theme: &Theme) -> (gpui::Hsla, EdgeStroke) {
@@ -260,6 +292,31 @@ fn positions(graph: &MixerGraph) -> HashMap<MixerNode, FlowPoint> {
 }
 
 impl AurisApp {
+    fn store_mixer_view(&mut self, view: &Entity<FlowGraph>, cx: &mut gpui::Context<Self>) {
+        let Some(canvas) = self
+            .mixer_canvas
+            .as_mut()
+            .filter(|canvas| canvas.view == *view)
+        else {
+            return;
+        };
+        let current = canvas.presentation(cx);
+        if current == canvas.last_view && !canvas.persist_layout {
+            return;
+        }
+        canvas.persist_layout = false;
+        // Retain positions of temporarily removed nodes so musical Undo restores their layout.
+        let mut stored = self.session.project().mixer_graph_view.clone();
+        stored.nodes.extend(canvas.last_view.nodes.clone());
+        canvas.last_view = current.clone();
+        stored.nodes.extend(current.nodes);
+        stored.zoom = current.zoom;
+        stored.pan_x = current.pan_x;
+        stored.pan_y = current.pan_y;
+        self.session.set_mixer_graph_view(stored);
+        cx.notify();
+    }
+
     /// Put away the live wire card before Escape falls through to the transport panic command.
     pub(crate) fn dismiss_mixer_wire_tooltip(&mut self, cx: &mut gpui::Context<Self>) -> bool {
         self.mixer_canvas.as_ref().is_some_and(|canvas| {
@@ -279,11 +336,15 @@ impl AurisApp {
         self.poll_mixer_signals();
         let document = self.session.mixer_graph();
         if self.mixer_canvas.is_none() {
+            let saved = self.project().mixer_graph_view.clone().sanitized();
             let state = cx.new(|_| {
                 let mut state = FlowState::new(Vec::new(), Vec::new());
                 state.externally_managed = true;
-                state.min_zoom = MIN_ZOOM;
+                state.min_zoom = MIN_ZOOM.min(saved.zoom);
                 state.max_zoom = MAX_ZOOM;
+                state.zoom_at(saved.zoom, 0.0, 0.0);
+                state.viewport.x = saved.pan_x;
+                state.viewport.y = saved.pan_y;
                 state
             });
             cx.observe(&state, |this, state, cx| {
@@ -304,6 +365,8 @@ impl AurisApp {
                             .unwrap_or_else(|_| div().into_any_element())
                     })
             });
+            cx.observe(&view, |this, view, cx| this.store_mixer_view(&view, cx))
+                .detach();
             self.mixer_canvas = Some(MixerCanvas {
                 state,
                 view,
@@ -315,6 +378,8 @@ impl AurisApp {
                 send: !self.mixer_connect_send,
                 palette: [0; 4],
                 animation_started: Instant::now(),
+                last_view: MixerGraphView::default(),
+                persist_layout: false,
             });
         }
         self.sync_mixer_graph(&document, cx);
@@ -673,6 +738,7 @@ impl AurisApp {
             self.mixer_canvas = Some(canvas);
             return;
         }
+        let saved = self.project().mixer_graph_view.clone().sanitized();
         let layout = positions(document);
         let lanes = wire_lanes(document);
         let old_owners: HashSet<_> = canvas.document.nodes.iter().copied().collect();
@@ -691,7 +757,15 @@ impl AurisApp {
                 .map(|node| {
                     let id = node_id(*node);
                     let existing = state.get_node(&id).filter(|_| old_owners.contains(node));
-                    let position = existing.map_or(layout[node], |n| n.position);
+                    let position = existing
+                        .map(|n| n.position)
+                        .or_else(|| {
+                            saved
+                                .nodes
+                                .get(&node.key())
+                                .map(|p| FlowPoint::new(p.x, p.y))
+                        })
+                        .unwrap_or(layout[node]);
                     let handles = match node {
                         MixerNode::Strip(owner) => {
                             let mut handles = Vec::new();
@@ -788,6 +862,10 @@ impl AurisApp {
                 state.allowed_connections = Some(allowed);
             }
         });
+        let initial = canvas.document.nodes.is_empty();
+        // A route edit may change automatic columns/rows without moving existing cards.
+        // Persist those cards too, otherwise reopening would silently rearrange them.
+        canvas.persist_layout |= !initial && canvas.document != *document;
         canvas.document = document.clone();
         canvas.by_id = document
             .nodes
@@ -796,7 +874,20 @@ impl AurisApp {
             .collect();
         canvas.send = self.mixer_connect_send;
         canvas.palette = palette;
+        // Opening a canvas must not turn a clean project into an unsaved document.
+        if initial {
+            canvas.last_view = canvas.presentation(cx);
+        }
+        let persist = canvas.persist_layout.then(|| canvas.view.clone());
         self.mixer_canvas = Some(canvas);
+        if let Some(view) = persist {
+            // GPUI suppresses observer notifications during drawing. Store structural layout
+            // changes after paint, even when they did not require a pointer gesture.
+            let app = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                let _ = app.update(cx, |this, cx| this.store_mixer_view(&view, cx));
+            });
+        }
     }
 
     fn arrange_mixer_nodes(&mut self, cx: &mut gpui::Context<Self>) {
@@ -833,7 +924,7 @@ impl AurisApp {
         cx.notify();
     }
 
-    /// Frame the entire graph without rearranging nodes or editing the mixer document.
+    /// Frame the entire graph without rearranging nodes or editing audio routing.
     fn fit_mixer_view(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
         self.fit_mixer_view_pass(window, cx, 2);
     }
