@@ -1,168 +1,137 @@
 use crate::PixelsExt;
 pub mod bezier;
+mod geometry;
 pub mod smooth_step;
 pub mod straight;
 
+use crate::{EdgeId, EdgeStroke, FlowEdge, FlowNode, FlowState, HandlePosition, HandleType};
+pub use geometry::{EdgePath, compute_edge_path};
 use gpui::{Background, PathBuilder, Point, SharedString, Window, px};
-
-use crate::store::FlowState;
-use crate::types::Viewport;
-use crate::types::*;
-
-use self::bezier::get_bezier_path;
-use self::smooth_step::get_smooth_step_path;
-use self::straight::get_straight_path;
 
 const ARROW_SIZE: f32 = 6.0;
 
-/// Paint all edges for the flow graph.
+/// Paint edges using the same flattened routes as labels and hit testing.
 pub fn paint_edges(state: &FlowState, window: &mut Window) {
-    // Viewport culling bounds
-    let win_size = window.viewport_size();
-    let win_w = win_size.width.as_f32();
-    let win_h = win_size.height.as_f32();
+    let size = window.viewport_size();
     let margin = 100.0;
-    let edge_color: Background = gpui::rgb(0xb1b1b7).into();
-    let selected_color: Background =
-        gpui::rgb(state.edge_selection_color.unwrap_or(0x555555)).into();
-
     for edge in &state.edges {
         if edge.hidden {
             continue;
         }
-
-        // Find source and target nodes (single lookup each)
-        let source_node = match state.get_node(&edge.source) {
-            Some(n) => n,
-            None => continue,
+        let Some(path) = compute_edge_path(state, edge) else {
+            continue;
         };
-        let target_node = match state.get_node(&edge.target) {
-            Some(n) => n,
-            None => continue,
-        };
-
-        // Compute handle positions and screen coordinates inline
-        let source_handle_pos =
-            find_handle_position(source_node, &edge.source_handle, HandleType::Source);
-        let target_handle_pos =
-            find_handle_position(target_node, &edge.target_handle, HandleType::Target);
-
-        let mut viewport = state.viewport;
-        viewport.x += state.origin.0;
-        viewport.y += state.origin.1;
-        let (sx, sy) = handle_center_from_node(source_node, source_handle_pos, &viewport);
-        let (tx, ty) = handle_center_from_node(target_node, target_handle_pos, &viewport);
-
-        // Cull edges where both endpoints are off-screen
-        let both_off_x =
-            (sx < -margin && tx < -margin) || (sx > win_w + margin && tx > win_w + margin);
-        let both_off_y =
-            (sy < -margin && ty < -margin) || (sy > win_h + margin && ty > win_h + margin);
-        if both_off_x || both_off_y {
+        if path.points.iter().all(|p| p.0 < -margin)
+            || path
+                .points
+                .iter()
+                .all(|p| p.0 > size.width.as_f32() + margin)
+            || path.points.iter().all(|p| p.1 < -margin)
+            || path
+                .points
+                .iter()
+                .all(|p| p.1 > size.height.as_f32() + margin)
+        {
             continue;
         }
-
-        let color: Background = if edge.selected {
-            selected_color.clone()
-        } else if let Some(c) = edge.color {
-            gpui::rgb(c).into()
-        } else {
-            edge_color.clone()
-        };
-        let stroke = edge.stroke_width.unwrap_or(2.0) + if edge.selected { 1.5 } else { 0.0 };
-
-        match edge.edge_type {
-            EdgeType::Bezier { curvature } => {
-                let bezier = get_bezier_path(
-                    sx,
-                    sy,
-                    source_handle_pos,
-                    tx,
-                    ty,
-                    target_handle_pos,
-                    curvature,
-                );
-
-                let mut builder = PathBuilder::stroke(px(stroke));
-                builder.move_to(Point::new(px(bezier.source.0), px(bezier.source.1)));
-                builder.cubic_bezier_to(
-                    Point::new(px(bezier.target.0), px(bezier.target.1)),
-                    Point::new(px(bezier.source_control.0), px(bezier.source_control.1)),
-                    Point::new(px(bezier.target_control.0), px(bezier.target_control.1)),
-                );
-
-                if let Ok(path) = builder.build() {
-                    window.paint_path(path, color.clone());
-                }
-
-                // Draw arrowhead at target
-                paint_arrowhead(
-                    window,
-                    bezier.target.0,
-                    bezier.target.1,
-                    bezier.target_control.0,
-                    bezier.target_control.1,
-                    color,
-                );
-            }
-            EdgeType::Straight => {
-                let straight = get_straight_path(sx, sy, tx, ty);
-
-                let mut builder = PathBuilder::stroke(px(stroke));
-                builder.move_to(Point::new(px(straight.source.0), px(straight.source.1)));
-                builder.line_to(Point::new(px(straight.target.0), px(straight.target.1)));
-
-                if let Ok(path) = builder.build() {
-                    window.paint_path(path, color.clone());
-                }
-
-                paint_arrowhead(
-                    window,
-                    straight.target.0,
-                    straight.target.1,
-                    straight.source.0,
-                    straight.source.1,
-                    color,
-                );
-            }
-            EdgeType::SmoothStep {
-                border_radius: _,
-                offset,
-            } => {
-                let step = get_smooth_step_path(
-                    sx,
-                    sy,
-                    source_handle_pos,
-                    tx,
-                    ty,
-                    target_handle_pos,
-                    offset,
-                );
-
-                if step.points.len() < 2 {
-                    continue;
-                }
-
-                let n = step.points.len();
-                let last = step.points[n - 1];
-                let prev = step.points[n - 2];
-
-                let mut builder = PathBuilder::stroke(px(stroke));
-                builder.move_to(Point::new(px(step.points[0].0), px(step.points[0].1)));
-                for i in 1..n {
-                    builder.line_to(Point::new(px(step.points[i].0), px(step.points[i].1)));
-                }
-
-                if let Ok(path) = builder.build() {
-                    window.paint_path(path, color.clone());
-                }
-
-                paint_arrowhead(window, last.0, last.1, prev.0, prev.1, color);
+        let color: Background = gpui::rgb(edge.color.unwrap_or(0xb1b1b7)).into();
+        let width = edge.stroke_width.unwrap_or(2.0);
+        if edge.selected {
+            paint_edge_path(
+                &path,
+                edge.stroke,
+                width + 3.0,
+                gpui::rgb(state.edge_selection_color.unwrap_or(0x555555)).into(),
+                window,
+            );
+        }
+        paint_edge_path(&path, edge.stroke, width, color.clone(), window);
+        if let Some(pair) = path.points.get(path.points.len().saturating_sub(2)..) {
+            if pair.len() == 2 {
+                paint_arrowhead(window, pair[1].0, pair[1].1, pair[0].0, pair[0].1, color);
             }
         }
     }
 }
 
+/// Paint a solid, dashed or dotted route; patterns continue across segment boundaries.
+pub fn paint_edge_path(
+    path: &EdgePath,
+    stroke: EdgeStroke,
+    width: f32,
+    color: Background,
+    window: &mut Window,
+) {
+    let Some(first) = path.points.first() else {
+        return;
+    };
+    let mut builder = PathBuilder::stroke(px(width));
+    builder.move_to(Point::new(px(first.0), px(first.1)));
+    let pattern: Option<(f32, f32)> = match stroke {
+        EdgeStroke::Solid => None,
+        EdgeStroke::Dashed => Some((8.0, 5.0)),
+        EdgeStroke::Dotted => Some((2.0, 5.0)),
+    };
+    if let Some((dash, gap)) = pattern {
+        let mut remaining = dash;
+        let mut drawing = true;
+        for pair in path.points.windows(2) {
+            let dx = pair[1].0 - pair[0].0;
+            let dy = pair[1].1 - pair[0].1;
+            let length = dx.hypot(dy);
+            let mut at = 0.0;
+            while at < length {
+                let step = remaining.min(length - at);
+                let next = at + step;
+                if next <= at {
+                    break;
+                }
+                at = next;
+                remaining -= step;
+                let point = Point::new(
+                    px(pair[0].0 + dx * at / length),
+                    px(pair[0].1 + dy * at / length),
+                );
+                if drawing {
+                    builder.line_to(point);
+                } else {
+                    builder.move_to(point);
+                }
+                if remaining <= f32::EPSILON {
+                    drawing = !drawing;
+                    remaining = if drawing { dash } else { gap };
+                }
+            }
+        }
+    } else {
+        for point in path.points.iter().skip(1) {
+            builder.line_to(Point::new(px(point.0), px(point.1)));
+        }
+    }
+    if let Ok(path) = builder.build() {
+        window.paint_path(path, color);
+    }
+}
+
+/// Resolve the label anchor from the visible route.
+pub fn compute_edge_label_position(state: &FlowState, edge: &FlowEdge) -> Option<(f32, f32)> {
+    Some(compute_edge_path(state, edge)?.label)
+}
+
+/// Choose the nearest selectable route within the pointer tolerance, with painted order breaking ties.
+pub fn hit_test_edges(state: &FlowState, mx: f32, my: f32, threshold: f32) -> Option<EdgeId> {
+    state
+        .edges
+        .iter()
+        .enumerate()
+        .filter(|(_, edge)| !edge.hidden && edge.selectable)
+        .filter_map(|(index, edge)| {
+            let distance = compute_edge_path(state, edge)?.distance((mx, my));
+            (distance <= threshold).then_some((distance, index, edge.id.clone()))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then_with(|| b.1.cmp(&a.1)))
+        .map(|(_, _, id)| id)
+}
 /// Paint a filled triangle arrowhead pointing from (from_x, from_y) toward (tip_x, tip_y).
 fn paint_arrowhead(
     window: &mut Window,
@@ -209,151 +178,6 @@ fn paint_arrowhead(
     }
 }
 
-/// Compute the label position (midpoint) for an edge.
-pub fn compute_edge_label_position(state: &FlowState, edge: &FlowEdge) -> Option<(f32, f32)> {
-    let source_node = state.get_node(&edge.source)?;
-    let target_node = state.get_node(&edge.target)?;
-    let source_handle_pos =
-        find_handle_position(source_node, &edge.source_handle, HandleType::Source);
-    let target_handle_pos =
-        find_handle_position(target_node, &edge.target_handle, HandleType::Target);
-    let (sx, sy) =
-        state.find_handle_center(&edge.source, &edge.source_handle, source_handle_pos)?;
-    let (tx, ty) =
-        state.find_handle_center(&edge.target, &edge.target_handle, target_handle_pos)?;
-
-    match edge.edge_type {
-        EdgeType::Bezier { curvature } => {
-            let bezier = get_bezier_path(
-                sx,
-                sy,
-                source_handle_pos,
-                tx,
-                ty,
-                target_handle_pos,
-                curvature,
-            );
-            Some((bezier.label_x, bezier.label_y))
-        }
-        EdgeType::Straight | EdgeType::SmoothStep { .. } => {
-            let straight = get_straight_path(sx, sy, tx, ty);
-            Some((straight.label_x, straight.label_y))
-        }
-    }
-}
-
-/// Hit test all edges — return the ID of the first edge within `threshold` pixels of (mx, my).
-pub fn hit_test_edges(state: &FlowState, mx: f32, my: f32, threshold: f32) -> Option<EdgeId> {
-    for edge in &state.edges {
-        if edge.hidden || !edge.selectable {
-            continue;
-        }
-
-        let source_node = match state.get_node(&edge.source) {
-            Some(n) => n,
-            None => continue,
-        };
-        let target_node = match state.get_node(&edge.target) {
-            Some(n) => n,
-            None => continue,
-        };
-
-        let source_handle_pos =
-            find_handle_position(source_node, &edge.source_handle, HandleType::Source);
-        let target_handle_pos =
-            find_handle_position(target_node, &edge.target_handle, HandleType::Target);
-
-        let (sx, sy) =
-            match state.find_handle_center(&edge.source, &edge.source_handle, source_handle_pos) {
-                Some(pos) => pos,
-                None => continue,
-            };
-        let (tx, ty) =
-            match state.find_handle_center(&edge.target, &edge.target_handle, target_handle_pos) {
-                Some(pos) => pos,
-                None => continue,
-            };
-
-        let dist = match edge.edge_type {
-            EdgeType::Bezier { curvature } => {
-                let bezier = get_bezier_path(
-                    sx,
-                    sy,
-                    source_handle_pos,
-                    tx,
-                    ty,
-                    target_handle_pos,
-                    curvature,
-                );
-                point_to_cubic_bezier_distance(
-                    mx,
-                    my,
-                    bezier.source.0,
-                    bezier.source.1,
-                    bezier.source_control.0,
-                    bezier.source_control.1,
-                    bezier.target_control.0,
-                    bezier.target_control.1,
-                    bezier.target.0,
-                    bezier.target.1,
-                    20,
-                )
-            }
-            EdgeType::Straight | EdgeType::SmoothStep { .. } => {
-                point_to_segment_distance(mx, my, sx, sy, tx, ty)
-            }
-        };
-
-        if dist <= threshold {
-            return Some(edge.id.clone());
-        }
-    }
-    None
-}
-
-/// Distance from point to line segment.
-fn point_to_segment_distance(px: f32, py: f32, x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
-    let dx = x2 - x1;
-    let dy = y2 - y1;
-    let len_sq = dx * dx + dy * dy;
-    if len_sq < 0.001 {
-        return ((px - x1).powi(2) + (py - y1).powi(2)).sqrt();
-    }
-    let t = ((px - x1) * dx + (py - y1) * dy) / len_sq;
-    let t = t.clamp(0.0, 1.0);
-    let proj_x = x1 + t * dx;
-    let proj_y = y1 + t * dy;
-    ((px - proj_x).powi(2) + (py - proj_y).powi(2)).sqrt()
-}
-
-/// Approximate distance from point to cubic bezier by sampling.
-fn point_to_cubic_bezier_distance(
-    px: f32,
-    py: f32,
-    x0: f32,
-    y0: f32,
-    cx0: f32,
-    cy0: f32,
-    cx1: f32,
-    cy1: f32,
-    x1: f32,
-    y1: f32,
-    samples: usize,
-) -> f32 {
-    let mut min_dist = f32::MAX;
-    for i in 0..=samples {
-        let t = i as f32 / samples as f32;
-        let u = 1.0 - t;
-        let bx = u * u * u * x0 + 3.0 * u * u * t * cx0 + 3.0 * u * t * t * cx1 + t * t * t * x1;
-        let by = u * u * u * y0 + 3.0 * u * u * t * cy0 + 3.0 * u * t * t * cy1 + t * t * t * y1;
-        let dist = ((px - bx).powi(2) + (py - by).powi(2)).sqrt();
-        if dist < min_dist {
-            min_dist = dist;
-        }
-    }
-    min_dist
-}
-
 /// Find the handle position for a given node and handle type.
 fn find_handle_position(
     node: &FlowNode,
@@ -376,21 +200,4 @@ fn find_handle_position(
             HandleType::Source => HandlePosition::Right,
             HandleType::Target => HandlePosition::Left,
         })
-}
-
-/// Compute handle center directly from a node reference (no HashMap lookup).
-fn handle_center_from_node(
-    node: &FlowNode,
-    handle_pos: HandlePosition,
-    viewport: &Viewport,
-) -> (f32, f32) {
-    let (sx, sy) = viewport.flow_to_screen(node.position);
-    let w = node.measured_width.map(|p| p.as_f32()).unwrap_or(114.0);
-    let h = node.measured_height.map(|p| p.as_f32()).unwrap_or(54.0);
-    match handle_pos {
-        HandlePosition::Top => (sx + w / 2.0, sy),
-        HandlePosition::Bottom => (sx + w / 2.0, sy + h),
-        HandlePosition::Left => (sx, sy + h / 2.0),
-        HandlePosition::Right => (sx + w, sy + h / 2.0),
-    }
 }

@@ -705,6 +705,21 @@ impl Default for Theme {
 }
 
 impl Theme {
+    /// Color for main mixer output wires, following the source-track palette.
+    pub fn mixer_output_color(&self) -> Hsla {
+        readable_indicator(self.track_palette[0], self)
+    }
+
+    /// Color for auxiliary mixer branches, following the bus/effects palette.
+    pub fn mixer_send_color(&self) -> Hsla {
+        readable_indicator(self.track_palette[3], self)
+    }
+
+    /// Color for detector/control wires, separate from audio-output branches.
+    pub fn mixer_sidechain_color(&self) -> Hsla {
+        readable_indicator(self.track_palette[4], self)
+    }
+
     /// The palette a scheme describes.
     ///
     /// The lightness steps below are the whole layout of the interface, written down once. Reading

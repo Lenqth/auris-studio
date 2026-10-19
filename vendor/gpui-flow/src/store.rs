@@ -35,6 +35,8 @@ pub struct FlowState {
     pub pending_edge_menu: Option<(EdgeId, gpui::Point<Pixels>)>,
     /// Theme selection color supplied by the document owner.
     pub edge_selection_color: Option<u32>,
+    /// Text-scale multiplier for minimum separation between parallel lanes.
+    pub edge_lane_scale: f32,
     /// Optional document-authoritative connection preview, keyed by source and target.
     pub allowed_connections: Option<HashSet<(NodeId, NodeId)>>,
     /// Canvas origin in window coordinates, for embedding in a dock panel.
@@ -61,6 +63,28 @@ pub struct FlowState {
 }
 
 impl FlowState {
+    /// Select a specific editable wire, also used by labels so overlapping labels never pick another edge.
+    pub fn select_edge(&mut self, id: &EdgeId, additive: bool) {
+        if !self
+            .edges
+            .iter()
+            .any(|edge| edge.id == *id && edge.selectable && !edge.hidden)
+        {
+            return;
+        }
+        if !additive {
+            for node in &mut self.nodes {
+                node.selected = false;
+            }
+            for edge in &mut self.edges {
+                edge.selected = false;
+            }
+        }
+        if let Some(edge) = self.edges.iter_mut().find(|edge| edge.id == *id) {
+            edge.selected = true;
+        }
+    }
+
     pub fn new(nodes: Vec<FlowNode>, edges: Vec<FlowEdge>) -> Self {
         let mut node_lookup = HashMap::new();
         for (i, node) in nodes.iter().enumerate() {
@@ -72,6 +96,7 @@ impl FlowState {
             pending_connections: Vec::new(),
             pending_edge_menu: None,
             edge_selection_color: None,
+            edge_lane_scale: 1.0,
             allowed_connections: None,
             origin: (0.0, 0.0),
             nodes,

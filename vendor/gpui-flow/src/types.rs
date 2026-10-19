@@ -173,6 +173,18 @@ impl FlowNode {
     }
 }
 
+/// A wire's stroke pattern, independent of its color and selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EdgeStroke {
+    /// A continuous signal path.
+    #[default]
+    Solid,
+    /// Repeated long strokes separated by gaps.
+    Dashed,
+    /// Short marks separated by gaps.
+    Dotted,
+}
+
 /// An edge connecting two nodes.
 #[derive(Debug, Clone)]
 pub struct FlowEdge {
@@ -193,6 +205,11 @@ pub struct FlowEdge {
     pub color: Option<u32>,
     /// Custom stroke width. If None, uses default (2.0).
     pub stroke_width: Option<f32>,
+    /// Stroke pattern, independent of selection and color.
+    pub stroke: EdgeStroke,
+    /// Perpendicular separation of a Bezier lane, in flow coordinates.
+    /// Endpoints remain attached to their original handles.
+    pub lane_offset: f32,
 }
 
 impl FlowEdge {
@@ -216,6 +233,8 @@ impl FlowEdge {
             label: None,
             color: None,
             stroke_width: None,
+            stroke: EdgeStroke::Solid,
+            lane_offset: 0.0,
         }
     }
 

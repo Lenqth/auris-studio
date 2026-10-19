@@ -642,6 +642,13 @@ pub mod architecture {
     //!
     //! The graph owns selection and pointer geometry, while the session owns deletion and undo.
     //! Editable edges have stable identities independent of graph order and insert positions.
+    //! The desktop distinguishes outputs, sends and sidechains with themed colors, solid/dashed/
+    //! dotted strokes, and labels. Duplicate source/target pairs are placed in deterministic
+    //! parallel Bezier lanes ordered by role and stable send ID. Their endpoints stay attached
+    //! to the ports. Painting, label anchors and nearest-wire hit testing share a flattened
+    //! window-space route, including pan, zoom and text-scale lane clearance. Labels select their
+    //! exact edge ID directly. These are frontend geometry and presentation; session identities
+    //! and the audible graph remain authoritative.
     //! Delete, Backspace and the edge context menu use `Session::disconnect_mixer_edges` to
     //! preflight the complete selection, then remove it in one undo transaction. Insert-chain
     //! edges describe order and are not selectable. Every output branch has its own compensation

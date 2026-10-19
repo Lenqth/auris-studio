@@ -694,6 +694,9 @@ impl FlowGraph {
 
 impl Render for FlowGraph {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.state.update(cx, |state, _| {
+            state.edge_lane_scale = (window.rem_size().as_f32() / 16.0).max(1.0);
+        });
         // On second render, edges will have correct node measurements
         // from the first render's measurement canvases.
         if !self.measured {
@@ -759,20 +762,95 @@ impl Render for FlowGraph {
             let bg = self.bg_color;
             let mut edge_label_elements: Vec<AnyElement> = Vec::new();
             for edge in &state.edges {
+                if edge.hidden {
+                    continue;
+                }
                 if let Some(ref label) = edge.label {
                     if let Some((lx, ly)) = edges::compute_edge_label_position(state, edge) {
                         let label_color = edge.color.unwrap_or(0xb1b1b7);
+                        let mut label_border: Hsla = gpui::rgb(label_color).into();
+                        label_border.a = 0.35;
+                        let font_size = window.rem_size() * 0.75;
+                        let line_height = window.rem_size();
+                        let padding_x = window.rem_size() * 0.5;
+                        let padding_y = window.rem_size() * 0.125;
+                        let run = window.text_style().to_run(label.len());
+                        let text_width = window
+                            .text_system()
+                            .shape_line(label.clone(), font_size, &[run], None)
+                            .width;
+                        let label_id = edge.id.clone();
+                        let select_id = edge.id.clone();
+                        let menu_id = edge.id.clone();
+                        let select_state = self.state.clone();
+                        let menu_state = self.state.clone();
+                        let select_focus = self.focus_handle.clone();
+                        let menu_focus = self.focus_handle.clone();
                         edge_label_elements.push(
                             div()
+                                .id(SharedString::from(format!("flow-edge-label-{}", edge.id)))
+                                .debug_selector(move || format!("flow-edge-label-{label_id}"))
                                 .absolute()
-                                .left(px(lx - state.origin.0))
-                                .top(px(ly - state.origin.1))
+                                .left(
+                                    px(lx - state.origin.0)
+                                        - text_width / 2.0
+                                        - padding_x
+                                        - px(1.0),
+                                )
+                                .top(
+                                    px(ly - state.origin.1)
+                                        - line_height / 2.0
+                                        - padding_y
+                                        - px(1.0),
+                                )
                                 .px_2()
                                 .py_0p5()
                                 .bg(gpui::rgb(bg))
                                 .rounded_sm()
-                                .text_xs()
+                                .text_size(font_size)
+                                .line_height(line_height)
+                                .border_1()
+                                .border_color(if edge.selected {
+                                    Hsla::from(gpui::rgb(self.selection_color))
+                                } else {
+                                    label_border
+                                })
                                 .text_color(gpui::rgb(label_color))
+                                .when(edge.selectable, |element| {
+                                    element
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            move |event, window, cx| {
+                                                window.focus(&select_focus);
+                                                select_state.update(cx, |state, _| {
+                                                    state.select_edge(
+                                                        &select_id,
+                                                        event.modifiers.secondary(),
+                                                    )
+                                                });
+                                                cx.notify(entity_id);
+                                                cx.stop_propagation();
+                                            },
+                                        )
+                                        .on_mouse_down(
+                                            MouseButton::Right,
+                                            move |event, window, cx| {
+                                                window.focus(&menu_focus);
+                                                menu_state.update(cx, |state, cx| {
+                                                    if !state.edges.iter().any(|edge| {
+                                                        edge.id == menu_id && edge.selected
+                                                    }) {
+                                                        state.select_edge(&menu_id, false);
+                                                    }
+                                                    state.pending_edge_menu =
+                                                        Some((menu_id.clone(), event.position));
+                                                    cx.notify();
+                                                });
+                                                cx.notify(entity_id);
+                                                cx.stop_propagation();
+                                            },
+                                        )
+                                })
                                 .child(label.to_string())
                                 .into_any_element(),
                         );

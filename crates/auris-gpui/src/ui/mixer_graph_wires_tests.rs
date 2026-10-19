@@ -1,0 +1,316 @@
+use super::*;
+use crate::{
+    dock::{Dock, Panel},
+    harness::{click, open, paint, right_press},
+};
+use gpui::{Modifiers, TestAppContext};
+use gpui_flow::{
+    EdgeType,
+    edges::{compute_edge_label_position, compute_edge_path, hit_test_edges},
+};
+
+fn measured_node(id: &str, x: f32, y: f32, handle: HandleDef) -> FlowNode {
+    let mut node = FlowNode::new(id.to_string(), x, y).handles(vec![handle]);
+    node.measured_width = Some(px(100.0));
+    node.measured_height = Some(px(80.0));
+    node
+}
+
+#[test]
+fn curved_lanes_share_geometry_for_painting_labels_and_nearest_hit_testing() {
+    let nodes = vec![
+        measured_node("a", 0., 0., HandleDef::source(HandlePosition::Right)),
+        measured_node("b", 10_000., 600., HandleDef::target(HandlePosition::Left)),
+    ];
+    let mut edges = Vec::new();
+    for (index, offset) in [-60., 0., 60.].into_iter().enumerate() {
+        let mut edge = FlowEdge::new(format!("wire-{index}"), "a", "b");
+        edge.lane_offset = offset;
+        edges.push(edge);
+    }
+    let mut state = FlowState::new(nodes, edges);
+    state.origin = (37., 211.);
+    state.viewport.x = -80.;
+    state.viewport.y = 25.;
+    state.viewport.zoom = 1.6;
+    state.edge_lane_scale = 1.5;
+    let mut endpoints = None;
+    for edge in &state.edges {
+        let path = compute_edge_path(&state, edge).unwrap();
+        let source = *path.points.first().unwrap();
+        let target = *path.points.last().unwrap();
+        assert_eq!(*endpoints.get_or_insert((source, target)), (source, target));
+        assert_eq!(
+            compute_edge_label_position(&state, edge).unwrap(),
+            path.label
+        );
+        let curve = gpui_flow::edges::bezier::get_bezier_path(
+            source.0,
+            source.1,
+            HandlePosition::Right,
+            target.0,
+            target.1,
+            HandlePosition::Left,
+            0.25,
+        )
+        .with_lane_offset(edge.lane_offset * state.viewport.zoom * state.edge_lane_scale);
+        for t in [0.005, 0.1371, 0.32711, 0.7317, 0.99] {
+            let point = curve.point(t);
+            assert!(path.distance(point) < 0.26);
+            assert_eq!(
+                hit_test_edges(&state, point.0, point.1, 5.).as_ref(),
+                Some(&edge.id),
+                "t={t}"
+            );
+        }
+    }
+}
+
+#[test]
+fn orthogonal_wires_are_hit_on_the_visible_bends_and_ignore_hidden_edges() {
+    let nodes = vec![
+        measured_node("a", 0., 0., HandleDef::source(HandlePosition::Right)),
+        measured_node("b", 400., 240., HandleDef::target(HandlePosition::Top)),
+    ];
+    let mut edge = FlowEdge::new("key", "a", "b").edge_type(EdgeType::SmoothStep {
+        border_radius: 8.,
+        offset: 30.,
+    });
+    edge.stroke = EdgeStroke::Dotted;
+    let mut state = FlowState::new(nodes, vec![edge]);
+    let path = compute_edge_path(&state, &state.edges[0]).unwrap();
+    for pair in path.points.windows(2) {
+        let at = ((pair[0].0 + pair[1].0) / 2., (pair[0].1 + pair[1].1) / 2.);
+        assert_eq!(hit_test_edges(&state, at.0, at.1, 0.1), Some("key".into()));
+    }
+    let label = path.label;
+    assert_eq!(
+        hit_test_edges(&state, label.0, label.1, 0.1),
+        Some("key".into())
+    );
+    state.edges[0].hidden = true;
+    assert_eq!(hit_test_edges(&state, label.0, label.1, 5.), None);
+}
+
+#[test]
+fn lane_order_and_wire_vocabulary_survive_parameter_changes_and_all_schemes() {
+    let mut session =
+        auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
+    let a = session.add_bus_track("A");
+    let b = session.add_bus_track("B");
+    session.add_track_output(a, Output::Bus(b)).unwrap();
+    let one = session.add_send(a, b).unwrap();
+    session.add_send(a, b).unwrap();
+    let graph = session.mixer_graph();
+    let lanes = wire_lanes(&graph);
+    session.set_send_level(a, one, -12.).unwrap();
+    session.set_send_pre_fader(a, one, true).unwrap();
+    assert_eq!(wire_lanes(&session.mixer_graph()), lanes);
+    let mut reordered = graph.clone();
+    reordered.edges.reverse();
+    assert_eq!(wire_lanes(&reordered), lanes);
+    for scheme in crate::theme::SCHEMES {
+        let theme = Theme::from_scheme(scheme);
+        let kinds = [
+            MixerEdgeKind::Output,
+            MixerEdgeKind::Send {
+                track: a,
+                send: one,
+                level_db: 0.,
+                pre_fader: false,
+            },
+            MixerEdgeKind::Sidechain,
+        ];
+        let styles: Vec<_> = kinds
+            .into_iter()
+            .map(|kind| wire_style(kind, &theme))
+            .collect();
+        assert_eq!(
+            styles.iter().map(|(_, stroke)| *stroke).collect::<Vec<_>>(),
+            vec![EdgeStroke::Solid, EdgeStroke::Dashed, EdgeStroke::Dotted]
+        );
+        for (color, _) in styles {
+            assert!(
+                crate::theme::contrast_ratio(color, theme.surface_sunken) >= 4.5,
+                "{}",
+                scheme.id
+            );
+        }
+        let mut custom = theme.clone();
+        custom.track_palette = [theme.surface_sunken; 8];
+        for color in [
+            custom.mixer_output_color(),
+            custom.mixer_send_color(),
+            custom.mixer_sidechain_color(),
+        ] {
+            assert!(crate::theme::contrast_ratio(color, custom.surface_sunken) >= 4.5);
+        }
+    }
+}
+
+#[gpui::test]
+fn overlapping_output_sends_and_sidechain_are_individually_selected_deleted_and_undone(
+    cx: &mut TestAppContext,
+) {
+    let (app, cx) = open(cx);
+    let (a, b, slot, sends) = app.update(cx, |this, _| {
+        this.panels.set_detached(Panel::Mixer, false);
+        this.panels.move_to(Panel::Mixer, Dock::Bottom);
+        this.panels.set_size(Dock::Bottom, px(520.));
+        this.panels.show(Panel::Mixer);
+        let a = this.session.add_bus_track("A");
+        let b = this.session.add_bus_track("B");
+        this.session.add_track_output(a, Output::Bus(b)).unwrap();
+        let one = this.session.add_send(a, b).unwrap();
+        let two = this.session.add_send(a, b).unwrap();
+        this.session.set_send_level(a, one, -6.).unwrap();
+        this.session.set_send_level(a, two, -12.).unwrap();
+        let slot = this
+            .session
+            .add_effect(Some(b), "auris.fx.compressor")
+            .unwrap();
+        this.session
+            .set_effect_sidechain(Some(b), slot, Some(a))
+            .unwrap();
+        (a, b, slot, [one, two])
+    });
+    paint(&app, cx);
+    app.update(cx, |this, cx| {
+        let canvas = this.mixer_canvas.as_ref().unwrap();
+        canvas.state.update(cx, |state, _| {
+            state.viewport.x = 20.;
+            state.viewport.y = 10.;
+            for node in &mut state.nodes {
+                node.position = if node.id == node_id(MixerNode::Strip(Some(a))) {
+                    FlowPoint::new(24., 24.)
+                } else if node.id == node_id(MixerNode::Strip(Some(b))) {
+                    FlowPoint::new(380., 24.)
+                } else if node.id == node_id(MixerNode::Effect(Some(b), slot)) {
+                    FlowPoint::new(680., 24.)
+                } else {
+                    FlowPoint::new(3000., 3000.)
+                };
+            }
+        });
+        canvas.view.update(cx, |_, cx| cx.notify());
+    });
+    paint(&app, cx);
+    app.read_with(cx, |this, cx| {
+        let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+        for send in sends {
+            let edge = state
+                .edges
+                .iter()
+                .find(|edge| edge.id.as_ref() == format!("mix-send-{}", send.0))
+                .unwrap();
+            assert_eq!(edge.stroke, EdgeStroke::Dashed);
+            assert!(
+                edge.label
+                    .as_ref()
+                    .unwrap()
+                    .contains(&format!("#{}", send.0))
+            );
+        }
+        let sidechain = state
+            .edges
+            .iter()
+            .find(|edge| edge.target_handle == Some("sidechain".into()))
+            .unwrap();
+        assert_eq!(sidechain.stroke, EdgeStroke::Dotted);
+        let output = state
+            .edges
+            .iter()
+            .find(|edge| {
+                edge.target == node_id(MixerNode::Strip(Some(b)))
+                    && edge.id.starts_with("mix-output-")
+            })
+            .unwrap();
+        assert_eq!(output.stroke, EdgeStroke::Solid);
+        assert_ne!(output.color, sidechain.color);
+    });
+    let original = app.read_with(cx, |this, _| serde_json::to_value(this.project()).unwrap());
+    let wires: Vec<_> = app.read_with(cx, |this, _| {
+        this.session
+            .mixer_graph()
+            .edges
+            .into_iter()
+            .filter(|edge| {
+                matches!(
+                    edge.kind,
+                    MixerEdgeKind::Send { .. } | MixerEdgeKind::Sidechain
+                ) || (edge.kind == MixerEdgeKind::Output
+                    && edge.target == MixerNode::Strip(Some(b)))
+            })
+            .map(|edge| edge_id(&edge))
+            .collect()
+    });
+    assert_eq!(wires.len(), 4);
+    for (index, id) in wires.iter().enumerate() {
+        let at = app.read_with(cx, |this, cx| {
+            let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+            let edge = state.edges.iter().find(|edge| edge.id == *id).unwrap();
+            let at = compute_edge_label_position(state, edge).unwrap();
+            gpui::point(px(at.0), px(at.1))
+        });
+        assert!(cx.debug_bounds("flow-graph").unwrap().contains(&at));
+        cx.simulate_click(at, Modifiers::none());
+        paint(&app, cx);
+        app.read_with(cx, |this, cx| {
+            let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+            assert_eq!(
+                state
+                    .edges
+                    .iter()
+                    .filter(|edge| edge.selected)
+                    .map(|edge| &edge.id)
+                    .collect::<Vec<_>>(),
+                vec![id]
+            );
+        });
+        // A theme change must retain selection, identities and lane ownership.
+        app.update(cx, |this, cx| {
+            this.theme =
+                Theme::from_scheme(&crate::theme::SCHEMES[index % crate::theme::SCHEMES.len()]);
+            cx.notify();
+        });
+        paint(&app, cx);
+        if index % 2 == 0 {
+            cx.simulate_keystrokes("delete");
+        } else {
+            right_press(cx, at);
+            paint(&app, cx);
+            click("menu-item-0", cx);
+        }
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let remaining: Vec<_> = this
+                .session
+                .mixer_graph()
+                .edges
+                .iter()
+                .map(edge_id)
+                .collect();
+            assert!(!remaining.contains(id));
+            for other in wires.iter().filter(|other| *other != id) {
+                assert!(remaining.contains(other));
+            }
+        });
+        cx.dispatch_action(crate::actions::Undo);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(serde_json::to_value(this.project()).unwrap(), original)
+        });
+    }
+    app.read_with(cx, |this, _| {
+        assert_eq!(
+            this.project()
+                .track(a)
+                .unwrap()
+                .sends
+                .iter()
+                .map(|send| send.id)
+                .collect::<Vec<_>>(),
+            sends
+        )
+    });
+}

@@ -18,8 +18,20 @@ sidechain connections all participate in cycle validation. A connection that
 would lead back to its source is refused before the document or undo history
 changes.
 
-Click an output, send or sidechain wire to select it. Selection uses a thicker
-accent stroke. Press Delete or Backspace, or right-click the wire and choose
+Wire roles use themed colors, labels and distinct line styles:
+
+| Connection | Line | Label |
+| --- | --- | --- |
+| Output | Solid | Out |
+| Send | Dashed | Send ID, level, and pre-fader mark when applicable |
+| Sidechain | Dotted | Sidechain |
+
+The legend below the canvas shows the current colors. Wires sharing the same
+source and destination use separate curved lanes, including multiple sends to
+one bus. Their labels follow their lanes and identify each send independently.
+
+Click a wire or its label to select it. Selection adds a thicker accent outline
+while retaining the role color and line style. Press Delete or Backspace, or right-click the wire or label and choose
 **Delete connections**. Hold Ctrl on Windows or Command on macOS while clicking
 to select several wires; their deletion is one Undo step. Undo and Redo restore
 the actual routing, including removed send automation. A disconnection removes

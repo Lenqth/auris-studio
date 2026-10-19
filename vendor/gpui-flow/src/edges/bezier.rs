@@ -36,6 +36,45 @@ pub struct BezierPath {
     pub label_y: f32,
 }
 
+impl BezierPath {
+    /// Separate a parallel lane while keeping its endpoints attached to the handles.
+    pub fn with_lane_offset(mut self, offset: f32) -> Self {
+        let dx = self.target.0 - self.source.0;
+        let dy = self.target.1 - self.source.1;
+        let length = dx.hypot(dy);
+        let normal = if length > f32::EPSILON {
+            (-dy / length, dx / length)
+        } else {
+            (0.0, 1.0)
+        };
+        for control in [&mut self.source_control, &mut self.target_control] {
+            control.0 += normal.0 * offset;
+            control.1 += normal.1 * offset;
+        }
+        let label = self.point(0.5);
+        self.label_x = label.0;
+        self.label_y = label.1;
+        self
+    }
+
+    /// An exact point on this cubic, with `t` clamped to the interval 0..1.
+    pub fn point(&self, t: f32) -> (f32, f32) {
+        let t = t.clamp(0.0, 1.0);
+        let u = 1.0 - t;
+        let weights = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+        let points = [
+            self.source,
+            self.source_control,
+            self.target_control,
+            self.target,
+        ];
+        points
+            .into_iter()
+            .zip(weights)
+            .fold((0.0, 0.0), |sum, (p, w)| (sum.0 + p.0 * w, sum.1 + p.1 * w))
+    }
+}
+
 /// Compute a bezier edge path between two handle positions.
 ///
 /// Ported from xyflow's `getBezierPath`.

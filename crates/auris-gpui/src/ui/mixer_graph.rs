@@ -7,18 +7,25 @@ use auris_session::mixer_graph::{MixerEdge, MixerEdgeKind, MixerGraph, MixerNode
 use auris_session::prelude::*;
 use gpui::{AnyElement, Axis, Entity, IntoElement, MouseButton, SharedString, div, prelude::*, px};
 use gpui_flow::{
-    Connection, FlowEdge, FlowGraph, FlowNode, FlowPoint, FlowState, HandleDef, HandlePosition,
+    Connection, EdgeStroke, FlowEdge, FlowGraph, FlowNode, FlowPoint, FlowState, HandleDef,
+    HandlePosition,
 };
 
 use crate::app::AurisApp;
-use crate::theme::Metrics;
+use crate::theme::{Metrics, Theme};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::plugin_window::PluginSubject;
 use crate::ui::widgets::{ButtonStyle, button, db_to_meter_position, level_meter};
 
 const NODE_WIDTH: f32 = 176.0;
-const COLUMN: f32 = 240.0;
+const COLUMN: f32 = 360.0;
 const ROW: f32 = 280.0;
+// Curve control points are separated enough to leave a label-height gap at their midpoints.
+const WIRE_LANE_SPACING: f32 = 48.0;
+
+#[cfg(test)]
+#[path = "mixer_graph_wires_tests.rs"]
+mod wire_tests;
 
 /// Presentation state kept across paints and panel moves.
 pub(crate) struct MixerCanvas {
@@ -27,6 +34,81 @@ pub(crate) struct MixerCanvas {
     document: MixerGraph,
     by_id: HashMap<SharedString, MixerNode>,
     send: bool,
+    palette: [u32; 4],
+}
+
+fn wire_style(kind: MixerEdgeKind, theme: &Theme) -> (gpui::Hsla, EdgeStroke) {
+    match kind {
+        MixerEdgeKind::Output => (theme.mixer_output_color(), EdgeStroke::Solid),
+        MixerEdgeKind::Send { .. } => (theme.mixer_send_color(), EdgeStroke::Dashed),
+        MixerEdgeKind::Sidechain => (theme.mixer_sidechain_color(), EdgeStroke::Dotted),
+        MixerEdgeKind::Chain => (theme.text_faint, EdgeStroke::Solid),
+    }
+}
+
+fn wire_palette(theme: &Theme) -> [u32; 4] {
+    [
+        theme.mixer_output_color(),
+        theme.mixer_send_color(),
+        theme.mixer_sidechain_color(),
+        theme.accent,
+    ]
+    .map(|color| u32::from(color.to_rgb()) >> 8)
+}
+
+fn wire_lanes(graph: &MixerGraph) -> HashMap<SharedString, f32> {
+    let mut pairs: HashMap<_, Vec<_>> = HashMap::new();
+    for edge in &graph.edges {
+        if !matches!(edge.kind, MixerEdgeKind::Chain) {
+            pairs
+                .entry((edge.source, edge.target))
+                .or_default()
+                .push(edge);
+        }
+    }
+    pairs
+        .into_values()
+        .flat_map(|mut edges| {
+            edges.sort_by_key(|edge| match edge.kind {
+                MixerEdgeKind::Output => (0, 0),
+                MixerEdgeKind::Send { send, .. } => (1, send.0),
+                MixerEdgeKind::Sidechain => (2, 0),
+                MixerEdgeKind::Chain => (3, 0),
+            });
+            let center = (edges.len() - 1) as f32 / 2.0;
+            edges.into_iter().enumerate().map(move |(index, edge)| {
+                (edge_id(edge), (index as f32 - center) * WIRE_LANE_SPACING)
+            })
+        })
+        .collect()
+}
+
+fn wire_legend(label: &'static str, color: gpui::Hsla, stroke: EdgeStroke) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .text_xs()
+        .child(
+            gpui::canvas(
+                |_, _, _| (),
+                move |bounds, (), window, _| {
+                    let y = f32::from(bounds.center().y);
+                    let path = gpui_flow::edges::EdgePath {
+                        points: vec![
+                            (f32::from(bounds.left()), y),
+                            (f32::from(bounds.right()), y),
+                        ],
+                        label: (0.0, 0.0),
+                    };
+                    gpui_flow::edges::paint_edge_path(&path, stroke, 2.0, color.into(), window);
+                },
+            )
+            .w_6()
+            .h_2(),
+        )
+        .child(label)
+        .into_any_element()
 }
 
 fn node_id(node: MixerNode) -> SharedString {
@@ -161,6 +243,7 @@ impl AurisApp {
                 },
                 by_id: HashMap::new(),
                 send: !self.mixer_connect_send,
+                palette: [0; 4],
             });
         }
         self.sync_mixer_graph(&document, cx);
@@ -260,6 +343,27 @@ impl AurisApp {
                     .py_1()
                     .text_xs()
                     .text_color(theme.text_muted)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_3()
+                            .child(wire_legend(
+                                self.t(Key::OutputShort),
+                                theme.mixer_output_color(),
+                                EdgeStroke::Solid,
+                            ))
+                            .child(wire_legend(
+                                self.t(Key::Sends),
+                                theme.mixer_send_color(),
+                                EdgeStroke::Dashed,
+                            ))
+                            .child(wire_legend(
+                                self.t(Key::MenuSidechain),
+                                theme.mixer_sidechain_color(),
+                                EdgeStroke::Dotted,
+                            )),
+                    )
                     .child(self.t(Key::MixerGraphHelp)),
             )
             .into_any_element()
@@ -346,8 +450,11 @@ impl AurisApp {
     }
 
     fn sync_mixer_graph(&mut self, document: &MixerGraph, cx: &mut gpui::Context<Self>) {
+        let palette = wire_palette(&self.theme);
         let changed = self.mixer_canvas.as_ref().is_some_and(|canvas| {
-            canvas.document != *document || canvas.send != self.mixer_connect_send
+            canvas.document != *document
+                || canvas.send != self.mixer_connect_send
+                || canvas.palette != palette
         });
         let routing_changed = self.mixer_canvas.as_ref().is_some_and(|canvas| {
             canvas.send != self.mixer_connect_send
@@ -403,6 +510,7 @@ impl AurisApp {
             return;
         }
         let layout = positions(document);
+        let lanes = wire_lanes(document);
         let old_owners: HashSet<_> = canvas.document.nodes.iter().copied().collect();
         let mut sidechain_slots = HashSet::new();
         for node in &document.nodes {
@@ -465,9 +573,12 @@ impl AurisApp {
                 .iter()
                 .map(|edge| {
                     let id = edge_id(edge);
+                    let (color, stroke) = wire_style(edge.kind, &theme);
                     let mut flow =
                         FlowEdge::new(id.clone(), node_id(edge.source), node_id(edge.target))
-                            .color(u32::from(theme.text_muted.to_rgb()) >> 8);
+                            .color(u32::from(color.to_rgb()) >> 8);
+                    flow.stroke = stroke;
+                    flow.lane_offset = lanes.get(&id).copied().unwrap_or_default();
                     flow.selected = state
                         .edges
                         .iter()
@@ -479,13 +590,15 @@ impl AurisApp {
                     }
                     match edge.kind {
                         MixerEdgeKind::Send {
+                            send,
                             level_db,
                             pre_fader,
                             ..
                         } => {
                             flow = flow.label(format!(
-                                "{} {level_db:.1} dB{}",
+                                "{} #{} {level_db:.1} dB{}",
                                 self.t(Key::Sends),
+                                send.0,
                                 if pre_fader {
                                     format!(" · {}", self.t(Key::SendPreFaderMark))
                                 } else {
@@ -498,6 +611,7 @@ impl AurisApp {
                                 .label(self.t(Key::MenuSidechain))
                                 .target_handle("sidechain");
                         }
+                        MixerEdgeKind::Output => flow = flow.label(self.t(Key::OutputShort)),
                         _ => {}
                     }
                     flow
@@ -517,6 +631,7 @@ impl AurisApp {
             .map(|node| (node_id(*node), *node))
             .collect();
         canvas.send = self.mixer_connect_send;
+        canvas.palette = palette;
         self.mixer_canvas = Some(canvas);
     }
 
