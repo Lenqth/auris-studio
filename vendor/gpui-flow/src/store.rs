@@ -300,50 +300,81 @@ impl FlowState {
         Some((cx + self.origin.0, cy + self.origin.1))
     }
 
-    /// Fit the viewport to show all nodes with padding.
+    /// Fit visible nodes, wire paths and measured labels with padding in screen pixels.
+    /// Extends the minimum zoom when necessary so a large graph can fit in its entirety.
     pub fn fit_view(&mut self, padding: f32, container_width: f32, container_height: f32) {
-        if self.nodes.is_empty() {
+        if !padding.is_finite()
+            || !container_width.is_finite()
+            || !container_height.is_finite()
+            || container_width <= 0.0
+            || container_height <= 0.0
+        {
             return;
         }
-
-        let mut min_x = f32::MAX;
-        let mut min_y = f32::MAX;
-        let mut max_x = f32::MIN;
-        let mut max_y = f32::MIN;
-
-        for node in &self.nodes {
-            if node.hidden {
-                continue;
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        let mut include = |x: f32, y: f32| {
+            if x.is_finite() && y.is_finite() {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
             }
-            let w = node
-                .measured_width
-                .map(|p| p.as_f32() / self.viewport.zoom)
-                .unwrap_or(150.0);
-            let h = node
-                .measured_height
-                .map(|p| p.as_f32() / self.viewport.zoom)
-                .unwrap_or(40.0);
-            min_x = min_x.min(node.position.x);
-            min_y = min_y.min(node.position.y);
-            max_x = max_x.max(node.position.x + w);
-            max_y = max_y.max(node.position.y + h);
+        };
+        for node in self.nodes.iter().filter(|node| !node.hidden) {
+            let (x, y) = self.viewport.flow_to_screen(node.position);
+            include(x, y);
+            include(
+                x + node
+                    .measured_width
+                    .map_or(150.0 * self.viewport.zoom, |p| p.as_f32()),
+                y + node
+                    .measured_height
+                    .map_or(40.0 * self.viewport.zoom, |p| p.as_f32()),
+            );
         }
-
-        let content_width = max_x - min_x + padding * 2.0;
-        let content_height = max_y - min_y + padding * 2.0;
-
-        if content_width <= 0.0 || content_height <= 0.0 {
+        for edge in self.edges.iter().filter(|edge| !edge.hidden) {
+            if let Some(path) = crate::edges::compute_edge_path(self, edge) {
+                for (x, y) in path.points {
+                    include(x - self.origin.0, y - self.origin.1);
+                }
+            }
+        }
+        for (id, bounds) in &self.edge_label_bounds {
+            if self.edges.iter().any(|edge| edge.id == *id && !edge.hidden) {
+                include(
+                    bounds.left().as_f32() - self.origin.0,
+                    bounds.top().as_f32() - self.origin.1,
+                );
+                include(
+                    bounds.right().as_f32() - self.origin.0,
+                    bounds.bottom().as_f32() - self.origin.1,
+                );
+            }
+        }
+        if !min_x.is_finite() || !min_y.is_finite() {
             return;
         }
-
-        let zoom_x = container_width / content_width;
-        let zoom_y = container_height / content_height;
-        let zoom = zoom_x.min(zoom_y).clamp(self.min_zoom, self.max_zoom);
-
+        let padding = padding
+            .max(0.0)
+            .min((container_width.min(container_height) / 2.0 - 1.0).max(0.0));
+        let width = (max_x - min_x).max(1.0);
+        let height = (max_y - min_y).max(1.0);
+        let factor = ((container_width - padding * 2.0) / width)
+            .min((container_height - padding * 2.0) / height);
+        let zoom = (self.viewport.zoom * factor).min(self.max_zoom);
+        if !zoom.is_finite() || zoom <= 0.0 {
+            return;
+        }
+        let centre = self
+            .viewport
+            .screen_to_flow(min_x + width / 2.0, min_y + height / 2.0);
+        self.min_zoom = self.min_zoom.min(zoom);
         self.zoom_at(zoom, 0.0, 0.0);
-        self.viewport.x = (container_width - content_width * zoom) / 2.0 - (min_x - padding) * zoom;
-        self.viewport.y =
-            (container_height - content_height * zoom) / 2.0 - (min_y - padding) * zoom;
+        self.viewport.x = container_width / 2.0 - centre.x * zoom;
+        self.viewport.y = container_height / 2.0 - centre.y * zoom;
     }
 
     /// Zoom in by a step, centered on the container center.

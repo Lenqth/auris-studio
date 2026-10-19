@@ -654,6 +654,11 @@ pub mod architecture {
     //! spacing to their viewport, with matching control and port dimensions. Cached node bounds
     //! follow the zoom immediately and are refined during prepaint before edges are painted.
     //! Zoom and pan are view state and do not change the document or consume an undo step.
+    //! **Fit graph** frames all visible nodes, flattened wire paths and measured labels with
+    //! screen-space padding. It extends the minimum zoom below 50% when needed, while leaving
+    //! node positions and the session's routing untouched.
+    //! Up to two later layout passes refine the fit after newly visible cards are measured;
+    //! a viewport change cancels queued refinements.
     //! Delete, Backspace and the edge context menu use `Session::disconnect_mixer_edges` to
     //! preflight the complete selection, then remove it in one undo transaction. Insert-chain
     //! edges describe order and are not selectable. Every output branch has its own compensation

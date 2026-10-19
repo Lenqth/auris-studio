@@ -334,10 +334,21 @@ impl AurisApp {
         }
         let theme = self.theme.clone();
         let view = self.mixer_canvas.as_ref().map(|canvas| canvas.view.clone());
-        let zoom = self
+        let (zoom, min_zoom) = self
             .mixer_canvas
             .as_ref()
-            .map_or(1.0, |canvas| canvas.state.read(cx).viewport.zoom);
+            .map_or((1.0, MIN_ZOOM), |canvas| {
+                let state = canvas.state.read(cx);
+                (state.viewport.zoom, state.min_zoom)
+            });
+        let percent = zoom * 100.0;
+        let zoom_label = if percent >= 1.0 {
+            format!("{percent:.0}%")
+        } else if percent >= 0.01 {
+            format!("{percent:.2}%")
+        } else {
+            "<0.01%".to_string()
+        };
         div()
             .flex()
             .flex_col()
@@ -417,7 +428,7 @@ impl AurisApp {
                             "mixer-zoom-out",
                             "−",
                             ButtonStyle::Ghost,
-                            ButtonState::available(false, zoom > MIN_ZOOM),
+                            ButtonState::available(false, zoom > min_zoom),
                             theme.accent_soft,
                             &theme,
                             cx.listener(|this, _, _, cx| this.zoom_mixer(Some(1.0 / 1.2), cx)),
@@ -427,7 +438,7 @@ impl AurisApp {
                     .child(
                         button(
                             "mixer-zoom-reset",
-                            format!("{:.0}%", zoom * 100.0),
+                            zoom_label,
                             ButtonStyle::Ghost,
                             false,
                             theme.accent_soft,
@@ -448,6 +459,15 @@ impl AurisApp {
                         )
                         .tooltip(self.tip(Key::CmdZoomIn, "")),
                     )
+                    .child(button(
+                        "mixer-fit-view",
+                        self.t(Key::MixerFitView),
+                        ButtonStyle::Ghost,
+                        false,
+                        theme.accent_soft,
+                        &theme,
+                        cx.listener(|this, _, window, cx| this.fit_mixer_view(window, cx)),
+                    ))
                     .child(button(
                         "mixer-animate-signals",
                         self.t(Key::MixerAnimateSignals),
@@ -809,6 +829,57 @@ impl AurisApp {
                 }
             });
             canvas.view.update(cx, |_, cx| cx.notify());
+        }
+        cx.notify();
+    }
+
+    /// Frame the entire graph without rearranging nodes or editing the mixer document.
+    fn fit_mixer_view(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) {
+        self.fit_mixer_view_pass(window, cx, 2);
+    }
+
+    /// Refine once newly visible cards have their actual heights, rather than fallback estimates.
+    fn fit_mixer_view_pass(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+        remaining: u8,
+    ) {
+        if let Some(canvas) = &self.mixer_canvas {
+            let padding = f32::from(window.rem_size()) * 1.5;
+            canvas.state.update(cx, |state, _| {
+                if let Some(bounds) = state.canvas_bounds {
+                    state.min_zoom = MIN_ZOOM;
+                    state.fit_view(
+                        padding,
+                        f32::from(bounds.size.width),
+                        f32::from(bounds.size.height),
+                    );
+                }
+            });
+            canvas.view.update(cx, |_, cx| cx.notify());
+            if remaining > 0 {
+                let identity = canvas.state.entity_id();
+                let viewport = canvas.state.read(cx).viewport;
+                let expected = (viewport.x, viewport.y, viewport.zoom);
+                // The first callback precedes the requested frame. The second runs after its
+                // node and label measurements are available. Navigation meanwhile cancels it.
+                cx.on_next_frame(window, move |_, window, cx| {
+                    cx.on_next_frame(window, move |this, window, cx| {
+                        let unchanged = this.mixer_canvas.as_ref().is_some_and(|canvas| {
+                            let viewport = canvas.state.read(cx).viewport;
+                            canvas.state.entity_id() == identity
+                                && (viewport.x, viewport.y, viewport.zoom) == expected
+                        });
+                        if unchanged
+                            && this.mixer_graph_visible
+                            && this.panels.is_open(crate::dock::Panel::Mixer)
+                        {
+                            this.fit_mixer_view_pass(window, cx, remaining - 1);
+                        }
+                    });
+                });
+            }
         }
         cx.notify();
     }

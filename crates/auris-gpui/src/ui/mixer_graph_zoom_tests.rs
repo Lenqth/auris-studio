@@ -4,6 +4,240 @@ use crate::harness::{click, drag, open, paint};
 use gpui::{Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, point};
 
 #[test]
+fn fit_frames_distant_nodes_with_pixel_padding_and_extends_the_zoom_range() {
+    let mut a = FlowNode::new("a", -900., -400.);
+    a.measured_width = Some(px(176.));
+    a.measured_height = Some(px(240.));
+    let mut b = FlowNode::new("b", 4200., 2100.);
+    b.measured_width = Some(px(200.));
+    b.measured_height = Some(px(180.));
+    let mut hidden = FlowNode::new("hidden", 1e6, -1e6);
+    hidden.hidden = true;
+    let mut state = FlowState::new(vec![a, b, hidden], vec![]);
+    state.min_zoom = MIN_ZOOM;
+    state.max_zoom = MAX_ZOOM;
+    state.zoom_at(1.6, 70., 30.);
+    state.viewport.x = -500.;
+    state.viewport.y = 250.;
+    state.origin = (73., 91.);
+    state.fit_view(24., 600., 400.);
+    assert!(state.viewport.zoom < MIN_ZOOM);
+    assert_eq!(state.min_zoom, state.viewport.zoom);
+    for node in state.nodes.iter().filter(|node| !node.hidden) {
+        let (x, y) = state.viewport.flow_to_screen(node.position);
+        assert!(x >= 24. - 1e-3 && y >= 24. - 1e-3);
+        assert!(x + f32::from(node.measured_width.unwrap()) <= 576. + 1e-3);
+        assert!(y + f32::from(node.measured_height.unwrap()) <= 376. + 1e-3);
+    }
+    let fitted = state.viewport;
+    state.fit_view(24., 600., 400.);
+    assert!((state.viewport.zoom - fitted.zoom).abs() < 1e-6);
+    assert!((state.viewport.x - fitted.x).abs() < 1e-3);
+    assert!((state.viewport.y - fitted.y).abs() < 1e-3);
+    state.zoom_at(fitted.zoom * 1.2, 300., 200.);
+    assert!(state.viewport.zoom > fitted.zoom && state.viewport.zoom < MIN_ZOOM);
+}
+
+#[test]
+fn fit_leaves_an_empty_or_unmeasurable_canvas_unchanged() {
+    let mut hidden = FlowNode::new("hidden", -1000., 1000.);
+    hidden.hidden = true;
+    for nodes in [vec![], vec![hidden]] {
+        let mut state = FlowState::new(nodes, vec![]);
+        state.viewport.x = 17.;
+        state.viewport.y = -33.;
+        let before = (
+            state.viewport.x,
+            state.viewport.y,
+            state.viewport.zoom,
+            state.min_zoom,
+        );
+        for (padding, width, height) in [
+            (24., 600., 400.),
+            (24., 0., 400.),
+            (24., f32::NAN, 400.),
+            (f32::NAN, 600., 400.),
+        ] {
+            state.fit_view(padding, width, height);
+            assert_eq!(
+                (
+                    state.viewport.x,
+                    state.viewport.y,
+                    state.viewport.zoom,
+                    state.min_zoom
+                ),
+                before
+            );
+        }
+    }
+}
+
+#[gpui::test]
+fn fit_button_frames_all_nodes_curves_and_labels_without_rearranging_or_editing(
+    cx: &mut TestAppContext,
+) {
+    let (app, cx) = open(cx);
+    app.update(cx, |this, _| {
+        this.panels.set_detached(Panel::Mixer, false);
+        this.panels.move_to(Panel::Mixer, Dock::Bottom);
+        this.panels.set_size(Dock::Bottom, px(620.));
+        this.panels.show(Panel::Mixer);
+        let a = this.session.add_bus_track("Source");
+        let b = this.session.add_bus_track("Bus");
+        this.session.add_track_output(a, Output::Bus(b)).unwrap();
+        for _ in 0..20 {
+            this.session.add_send(a, b).unwrap();
+        }
+        let slot = this
+            .session
+            .add_effect(Some(b), "auris.fx.compressor")
+            .unwrap();
+        this.session
+            .set_effect_sidechain(Some(b), slot, Some(a))
+            .unwrap();
+    });
+    paint(&app, cx);
+    // Measure cards before moving the complete graph beyond the viewport.
+    app.update(cx, |this, cx| {
+        let canvas = this.mixer_canvas.as_ref().unwrap();
+        canvas.state.update(cx, |state, _| {
+            for (index, node) in state.nodes.iter_mut().enumerate() {
+                node.position = FlowPoint::new(30. + index as f32 * 230., 24.);
+            }
+        });
+        canvas.view.update(cx, |_, cx| cx.notify());
+    });
+    paint(&app, cx);
+    app.update(cx, |this, cx| {
+        let canvas = this.mixer_canvas.as_ref().unwrap();
+        canvas.state.update(cx, |state, _| {
+            for (index, node) in state.nodes.iter_mut().enumerate() {
+                node.position = FlowPoint::new(
+                    -2200. + index as f32 * 2400.,
+                    if index == 2 { -800. } else { 1800. },
+                );
+            }
+            // A tall offscreen strip may never have been measured before Fit graph.
+            state.nodes[0].measured_width = None;
+            state.nodes[0].measured_height = None;
+            state.edges[0].selected = true;
+            state.zoom_at(1.7, 100., 200.);
+            state.viewport.x = -8000.;
+            state.viewport.y = 5000.;
+        });
+        canvas.view.update(cx, |_, cx| cx.notify());
+    });
+    paint(&app, cx);
+    let before = app.read_with(cx, |this, cx| {
+        let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+        (
+            serde_json::to_value(this.project()).unwrap(),
+            state
+                .nodes
+                .iter()
+                .map(|node| (node.id.clone(), node.position))
+                .collect::<Vec<_>>(),
+            state
+                .edges
+                .iter()
+                .filter(|edge| edge.selected)
+                .map(|edge| edge.id.clone())
+                .collect::<Vec<_>>(),
+        )
+    });
+    click("mixer-fit-view", cx);
+    paint(&app, cx);
+    let fitted = app.read_with(cx, |this, cx| {
+        let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+        let bounds = state.canvas_bounds.unwrap();
+        assert!(state.viewport.zoom < MIN_ZOOM);
+        for node in &state.nodes {
+            let (x, y) = state.viewport.flow_to_screen(node.position);
+            let left = x + state.origin.0;
+            let top = y + state.origin.1;
+            assert!(
+                left >= f32::from(bounds.left()) + 4. && top >= f32::from(bounds.top()) + 4.,
+                "{}: ({left}, {top})",
+                node.id
+            );
+            assert!(
+                left + f32::from(node.measured_width.unwrap()) <= f32::from(bounds.right()) - 4.,
+                "{}",
+                node.id
+            );
+            assert!(
+                top + f32::from(node.measured_height.unwrap()) <= f32::from(bounds.bottom()) - 4.,
+                "{}",
+                node.id
+            );
+        }
+        for edge in &state.edges {
+            let path = gpui_flow::edges::compute_edge_path(state, edge).unwrap();
+            assert!(
+                path.points
+                    .iter()
+                    .all(|&(x, y)| bounds.contains(&point(px(x), px(y)))),
+                "{}",
+                edge.id
+            );
+        }
+        for (id, label) in &state.edge_label_bounds {
+            assert!(
+                bounds.contains(&label.origin) && bounds.contains(&label.bottom_right()),
+                "{id}"
+            );
+        }
+        assert_eq!(serde_json::to_value(this.project()).unwrap(), before.0);
+        assert_eq!(
+            state
+                .nodes
+                .iter()
+                .map(|node| (node.id.clone(), node.position))
+                .collect::<Vec<_>>(),
+            before.1
+        );
+        assert_eq!(
+            state
+                .edges
+                .iter()
+                .filter(|edge| edge.selected)
+                .map(|edge| edge.id.clone())
+                .collect::<Vec<_>>(),
+            before.2
+        );
+        state.viewport.zoom
+    });
+    click("mixer-zoom-in", cx);
+    paint(&app, cx);
+    assert!(
+        app.read_with(cx, |this, cx| this
+            .mixer_canvas
+            .as_ref()
+            .unwrap()
+            .state
+            .read(cx)
+            .viewport
+            .zoom)
+            > fitted
+    );
+    click("mixer-zoom-out", cx);
+    paint(&app, cx);
+    assert!(
+        (app.read_with(cx, |this, cx| this
+            .mixer_canvas
+            .as_ref()
+            .unwrap()
+            .state
+            .read(cx)
+            .viewport
+            .zoom)
+            - fitted)
+            .abs()
+            < 1e-6
+    );
+}
+
+#[test]
 fn zoom_keeps_the_pointer_anchor_and_cached_node_bounds_consistent_at_both_limits() {
     let mut node = FlowNode::new("a", 24., 30.);
     node.measured_width = Some(px(176.));
