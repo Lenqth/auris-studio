@@ -70,17 +70,17 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/auris-intel-ort-lib
-          key: onnxruntime-1.28.0-macos-x86_64-coreml-13.3-static-v2
+          key: onnxruntime-1.28.0-macos-x86_64-coreml-13.3-static-v3
 
       - name: Build ONNX Runtime for Intel Macs
         run: bash .release-tools/tools/build-macos-intel-ort.sh
 
       - name: Save the Intel ONNX Runtime library
-        if: steps.intel-ort.outputs.cache-hit != 'true' && env.ORT_INTEL_LIB_DIR != ''
+        if: always() && steps.intel-ort.outputs.cache-hit != 'true' && env.ORT_INTEL_LIB_DIR != ''
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/auris-intel-ort-lib
-          key: onnxruntime-1.28.0-macos-x86_64-coreml-13.3-static-v2
+          key: onnxruntime-1.28.0-macos-x86_64-coreml-13.3-static-v3
 
       - name: Build both architectures
         run: |

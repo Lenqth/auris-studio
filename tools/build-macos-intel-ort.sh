@@ -10,13 +10,9 @@ if [[ "$ort_version" != "2.0.0-rc.13" ]]; then
 fi
 
 lib_dir="${RUNNER_TEMP:?}/auris-intel-ort-lib"
-if [[ -f "$lib_dir/libonnxruntime.a" ]]; then
-  lipo "$lib_dir/libonnxruntime.a" -verify_arch x86_64
-  echo "ORT_INTEL_LIB_DIR=$lib_dir" >> "${GITHUB_ENV:?}"
-  exit 0
-fi
 
 work=$(mktemp -d "$RUNNER_TEMP/auris-intel-ort.XXXXXX")
+if [[ ! -f "$lib_dir/libonnxruntime.a" ]]; then
 source_dir="$work/source"
 build_dir="$work/build"
 git clone --depth 1 --branch v1.28.0 https://github.com/microsoft/onnxruntime.git "$source_dir"
@@ -33,10 +29,16 @@ test "$(git -C "$source_dir" rev-parse HEAD)" = da9b5e364c465de65c49d91e696cd648
 
 # ort-sys accepts a single libonnxruntime.a, including its third-party objects.
 # Keep the output outside the build tree so it cannot include itself.
-mkdir -p "$lib_dir"
+mkdir -p "$lib_dir/include"
 find "$build_dir/Release" -type f -name '*.a' | sort > "$work/archives.txt"
 test -s "$work/archives.txt"
 libtool -static -o "$lib_dir/libonnxruntime.a" -filelist "$work/archives.txt"
+cp "$source_dir"/include/onnxruntime/core/session/*.h "$lib_dir/include/"
+fi
+
+# Cache completed build output even if validation fails. Restored libraries must
+# pass the same validation before the application can use them.
+echo "ORT_INTEL_LIB_DIR=$lib_dir" >> "${GITHUB_ENV:?}"
 lipo "$lib_dir/libonnxruntime.a" -verify_arch x86_64
 
 # Catch missing dependencies before rebuilding both Rust application architectures.
@@ -47,10 +49,8 @@ int main() {
 }
 CPP
 clang_runtime=$(xcrun --sdk macosx clang -print-libgcc-file-name)
-c++ -arch x86_64 -mmacosx-version-min=13.3 \
-  -I "$source_dir/include/onnxruntime/core/session" "$work/check.cc" \
+c++ -std=c++20 -arch x86_64 -mmacosx-version-min=13.3 \
+  -I "$lib_dir/include" "$work/check.cc" \
   "$lib_dir/libonnxruntime.a" "$clang_runtime" -framework Foundation -framework CoreML \
   -o "$work/check"
 arch -x86_64 "$work/check"
-
-echo "ORT_INTEL_LIB_DIR=$lib_dir" >> "${GITHUB_ENV:?}"
