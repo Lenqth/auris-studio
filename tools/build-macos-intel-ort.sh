@@ -22,7 +22,9 @@ build_dir="$work/build"
 git clone --depth 1 --branch v1.28.0 https://github.com/microsoft/onnxruntime.git "$source_dir"
 test "$(git -C "$source_dir" rev-parse HEAD)" = da9b5e364c465de65c49d91e696cd6485270757f
 
-"$source_dir/build.sh" --build_dir "$build_dir" --config Release \
+# The final shared target makes CMake build all transitive dependencies, including
+# EXCLUDE_FROM_ALL targets such as RE2, before their archives are collected below.
+"$source_dir/build.sh" --build_dir "$build_dir" --config Release --build_shared_lib \
   --update --build --skip_tests --parallel 3 --use_coreml \
   --osx_arch x86_64 --compile_no_warning_as_error \
   --cmake_extra_defines CMAKE_OSX_DEPLOYMENT_TARGET=13.3 \
@@ -36,4 +38,19 @@ find "$build_dir/Release" -type f -name '*.a' | sort > "$work/archives.txt"
 test -s "$work/archives.txt"
 libtool -static -o "$lib_dir/libonnxruntime.a" -filelist "$work/archives.txt"
 lipo "$lib_dir/libonnxruntime.a" -verify_arch x86_64
+
+# Catch missing dependencies before rebuilding both Rust application architectures.
+cat > "$work/check.cc" <<'CPP'
+#include <onnxruntime_c_api.h>
+int main() {
+  return OrtGetApiBase()->GetApi(ORT_API_VERSION) == nullptr;
+}
+CPP
+clang_runtime=$(xcrun --sdk macosx clang -print-libgcc-file-name)
+c++ -arch x86_64 -mmacosx-version-min=13.3 \
+  -I "$source_dir/include/onnxruntime/core/session" "$work/check.cc" \
+  "$lib_dir/libonnxruntime.a" "$clang_runtime" -framework Foundation -framework CoreML \
+  -o "$work/check"
+arch -x86_64 "$work/check"
+
 echo "ORT_INTEL_LIB_DIR=$lib_dir" >> "${GITHUB_ENV:?}"
