@@ -67,8 +67,13 @@ pub mod tin_whistle;
 pub mod vocal;
 pub mod voice;
 
+mod presence;
+
 #[cfg(test)]
 mod test_support;
+
+#[cfg(test)]
+mod voicing_tests;
 
 pub use chiptune::Chiptune;
 pub use choir::Choir;

@@ -90,7 +90,8 @@ impl Pad {
                 decay: 0.32,
                 // Keep the resonating head under the diffuse wires after the initial strike.
                 body: 0.28,
-                noise: 1.0,
+                // Retain the lower wire body after the upper-midrange contact correction.
+                noise: 1.145,
                 highpass: 650.0,
                 lowpass: 6_000.0,
             },
@@ -150,6 +151,7 @@ struct Hit {
     shell: Biquad,
     highpass: Biquad,
     lowpass: Biquad,
+    wire_color: Biquad,
     noise_state: u32,
     wire_energy: f32,
     wire_loss: f32,
@@ -193,6 +195,17 @@ impl Hit {
                 profile.lowpass.min(sample_rate * 0.45),
                 std::f32::consts::FRAC_1_SQRT_2,
             )),
+            // Shape only the snappy wires: keep the head and high-frequency sizzle intact.
+            wire_color: Biquad::new(if pad == Pad::Snare {
+                BiquadCoefficients::peaking(
+                    f64::from(sample_rate),
+                    3_800.0_f32.min(sample_rate * 0.4),
+                    1.3,
+                    -4.0,
+                )
+            } else {
+                BiquadCoefficients::identity()
+            }),
             noise_state: 1,
             wire_energy: 1.0,
             // Snappy wires and colliding hat plates retain diffuse energy after the strike.
@@ -232,6 +245,11 @@ impl Hit {
         let noise = self
             .lowpass
             .process_sample(self.highpass.process_sample(noise * self.wire_energy));
+        let noise = if self.pad == Pad::Snare {
+            self.wire_color.process_sample(noise)
+        } else {
+            noise
+        };
         (body * self.profile.body + noise * self.profile.noise)
             * self.amplitude.process()
             * self.velocity
@@ -362,6 +380,9 @@ impl DrumKit {
             .current
             .resonators
             .strike(hardness, position, damping, decay);
+        if pad == Pad::Ride {
+            voice.current.resonators.soften_ride_strike();
+        }
         voice.current.amplitude.trigger();
     }
 
@@ -624,6 +645,35 @@ mod tests {
 
     fn sound(pitch: u8) -> Vec<f32> {
         rig(512).render(48_000, &[hit(0, pitch)])
+    }
+
+    #[test]
+    fn snare_keeps_wire_body_and_sizzle_while_reducing_upper_midrange() {
+        let snare = sound(38);
+        let attack = &snare[..2_400];
+        let body = band_amplitude(attack, 48_000.0, 1_000.0);
+        let sharp = band_amplitude(attack, 48_000.0, 3_800.0);
+        let sizzle = band_amplitude(attack, 48_000.0, 8_000.0);
+        // The original attack measured 0.00792 / 0.00518 / 0.00248 respectively.
+        // Keep the wire body and sizzle within 1 dB while reducing the sharp band.
+        assert!((0.0071..0.0089).contains(&body), "wire body: {body}");
+        assert!((0.0022..0.0028).contains(&sizzle), "wire sizzle: {sizzle}");
+        assert!(sharp / body < 0.5, "sharp/body: {}", sharp / body);
+    }
+
+    #[test]
+    fn ride_keeps_its_ping_without_dominant_low_and_high_plate_modes() {
+        for rate in [44_100.0, 48_000.0, 96_000.0] {
+            let mut rig = Rig::new(Box::new(DrumKit::new()), rate, 256, 2);
+            let audio = rig.render(rate as usize, &[hit(0, 51)]);
+            let body = &audio[(rate * 0.05) as usize..(rate * 0.25) as usize];
+            let ping = band_amplitude(body, rate, 2_650.0);
+            let upper = band_amplitude(body, rate, 12_359.6);
+            // Baseline amplitudes at 48 kHz were 0.00398 and 0.01659.
+            assert!((0.0018..0.0030).contains(&ping), "{rate}: ping {ping}");
+            assert!((0.010..0.0145).contains(&upper), "{rate}: upper {upper}");
+            assert!(rms(body) > 0.04, "{rate}: lost the ride body");
+        }
     }
 
     #[test]

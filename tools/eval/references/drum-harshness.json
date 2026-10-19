@@ -1,0 +1,366 @@
+{
+  "schema_version": 1,
+  "rate_hz": [
+    44100,
+    48000,
+    96000
+  ],
+  "velocities": [
+    0.35,
+    0.65,
+    1.0
+  ],
+  "duration_seconds": 3,
+  "params": {},
+  "policy": "absolute unnormalized power; 0-50 ms attack; 50-250 ms body; rectangular periodogram",
+  "renderer_sha256": {
+    "before": "5910e3023b1b1b72c850a3cf496163222b7f798654bde628053ff987190de8e4",
+    "after": "c15d6700f757287bb1ffe9b9dd772d8f8dea5c873b3e8b33e8ffb5a4cb79ef5a"
+  },
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "baseline_commit": "1654a5f",
+  "factory_voicing": {
+    "snare": {
+      "wire_peak_hz": 3800,
+      "wire_peak_q": 1.3,
+      "wire_peak_db": -4,
+      "wire_gain": 1.145
+    },
+    "ride": {
+      "mode_0_gain": 0.6,
+      "mode_8_gain": 0.8
+    }
+  },
+  "unrelated_pads": {
+    "compared_conditions": 63,
+    "max_sample_difference": 0.0
+  },
+  "rows": [
+    {
+      "pad": "snare",
+      "rate": 44100,
+      "pitch": 38,
+      "velocity": 1.0,
+      "before": {
+        "peak": 0.40215685963630676,
+        "rms": 0.010103293153346576,
+        "t90_seconds": 0.03226757369614512,
+        "attack_power": 0.005951951623062427,
+        "attack_bands": {
+          "wire_body": 0.0008361254748557774,
+          "sharp": 0.002883652102440623,
+          "sizzle": 0.0003868412640135032
+        },
+        "body_lines": {
+          "2650": 1.1096357180099424e-07,
+          "12359.6": 1.8160515820511374e-09
+        }
+      },
+      "after": {
+        "peak": 0.4191022515296936,
+        "rms": 0.009673573985924286,
+        "t90_seconds": 0.032403628117913835,
+        "attack_power": 0.005456808811753944,
+        "attack_bands": {
+          "wire_body": 0.0010531093189061341,
+          "sharp": 0.0020939383863530095,
+          "sizzle": 0.00044336741940467767
+        },
+        "body_lines": {
+          "2650": 8.906397668677727e-08,
+          "12359.6": 2.1869086032740162e-09
+        }
+      },
+      "rms_delta_db": -0.37751993796050604,
+      "attack_band_delta_db": {
+        "wire_body": 1.002020002255834,
+        "sharp": -1.3897896533031822,
+        "sizzle": 0.5923098238723021
+      },
+      "body_line_delta_db": {
+        "2650": -0.9547834539381754,
+        "12359.6": 0.8070245329269901
+      }
+    },
+    {
+      "pad": "ride",
+      "rate": 44100,
+      "pitch": 51,
+      "velocity": 1.0,
+      "before": {
+        "peak": 0.4132784307003021,
+        "rms": 0.023252113264886066,
+        "t90_seconds": 0.17997732426303856,
+        "attack_power": 0.01547835610431513,
+        "attack_bands": {
+          "wire_body": 1.6065952212089476e-07,
+          "sharp": 0.0005079831089030051,
+          "sizzle": 0.0011753103366358123
+        },
+        "body_lines": {
+          "2650": 0.00013070251779523598,
+          "12359.6": 0.0021262587768599303
+        }
+      },
+      "after": {
+        "peak": 0.3726929724216461,
+        "rms": 0.02048305521280781,
+        "t90_seconds": 0.17904761904761904,
+        "attack_power": 0.012049761935440504,
+        "attack_bands": {
+          "wire_body": 1.075897808220495e-07,
+          "sharp": 0.00021522314434817372,
+          "sizzle": 0.0011757981179668564
+        },
+        "body_lines": {
+          "2650": 4.723886010765123e-05,
+          "12359.6": 0.001351101152791038
+        }
+      },
+      "rms_delta_db": -1.1013538830256957,
+      "attack_band_delta_db": {
+        "wire_body": -1.7413544804138292,
+        "sharp": -3.729602996460945,
+        "sizzle": 0.001802049948589999
+      },
+      "body_line_delta_db": {
+        "2650": -4.419845443465161,
+        "12359.6": -1.969282547908778
+      }
+    },
+    {
+      "pad": "snare",
+      "rate": 48000,
+      "pitch": 38,
+      "velocity": 1.0,
+      "before": {
+        "peak": 0.4122844934463501,
+        "rms": 0.0098067455676959,
+        "t90_seconds": 0.032125,
+        "attack_power": 0.005612270741083898,
+        "attack_bands": {
+          "wire_body": 0.0007623458634370429,
+          "sharp": 0.0025445936808537067,
+          "sizzle": 0.0003897319706509465
+        },
+        "body_lines": {
+          "2650": 6.774310296487827e-08,
+          "12359.6": 6.497342981359854e-09
+        }
+      },
+      "after": {
+        "peak": 0.3736114501953125,
+        "rms": 0.009376142729622132,
+        "t90_seconds": 0.032625,
+        "attack_power": 0.005128580238647819,
+        "attack_bands": {
+          "wire_body": 0.0009469387033215378,
+          "sharp": 0.001794820793038134,
+          "sizzle": 0.00044245959069662895
+        },
+        "body_lines": {
+          "2650": 5.720234337268344e-08,
+          "12359.6": 7.944086456183748e-09
+        }
+      },
+      "rms_delta_db": -0.39001396016669193,
+      "attack_band_delta_db": {
+        "wire_body": 0.9416981930204165,
+        "sharp": -1.5159735213319279,
+        "sizzle": 0.5510757977621329
+      },
+      "body_line_delta_db": {
+        "2650": -0.7345126494365264,
+        "12359.6": 0.8730816909555911
+      },
+      "snare_fitness": [
+        0.8862014505699962,
+        0.8466613491727932
+      ],
+      "snare_wire_ratio": [
+        2.051833064657399,
+        2.050303148954908
+      ]
+    },
+    {
+      "pad": "ride",
+      "rate": 48000,
+      "pitch": 51,
+      "velocity": 1.0,
+      "before": {
+        "peak": 0.4030032157897949,
+        "rms": 0.022994741762168515,
+        "t90_seconds": 0.1808125,
+        "attack_power": 0.014952452930512857,
+        "attack_bands": {
+          "wire_body": 2.605018042814123e-07,
+          "sharp": 0.0005205566436266915,
+          "sizzle": 0.001057185627842805
+        },
+        "body_lines": {
+          "2650": 0.00012851857439803,
+          "12359.6": 0.0022506481587123393
+        }
+      },
+      "after": {
+        "peak": 0.3639727234840393,
+        "rms": 0.020158315158616016,
+        "t90_seconds": 0.18033333333333335,
+        "attack_power": 0.011508699450182246,
+        "attack_bands": {
+          "wire_body": 1.6293981854641868e-07,
+          "sharp": 0.00022261807661205186,
+          "sizzle": 0.0010568658609439747
+        },
+        "body_lines": {
+          "2650": 4.6166589709539994e-05,
+          "12359.6": 0.001452982917737207
+        }
+      },
+      "rms_delta_db": -1.1434861185098582,
+      "attack_band_delta_db": {
+        "wire_body": -2.037835073116589,
+        "sharp": -3.6890756736106365,
+        "sizzle": -0.001313809067120848
+      },
+      "body_line_delta_db": {
+        "2650": -4.446381047251739,
+        "12359.6": -1.9004709907582606
+      }
+    },
+    {
+      "pad": "snare",
+      "rate": 96000,
+      "pitch": 38,
+      "velocity": 1.0,
+      "before": {
+        "peak": 0.3238352835178375,
+        "rms": 0.007399164899229293,
+        "t90_seconds": 0.028927083333333332,
+        "attack_power": 0.003214747723238425,
+        "attack_bands": {
+          "wire_body": 0.00039387915454451073,
+          "sharp": 0.0010393171570345773,
+          "sizzle": 0.00022938203228049962
+        },
+        "body_lines": {
+          "2650": 1.0753845070683754e-07,
+          "12359.6": 8.161847721599765e-10
+        }
+      },
+      "after": {
+        "peak": 0.33849653601646423,
+        "rms": 0.007235098849378292,
+        "t90_seconds": 0.028354166666666666,
+        "attack_power": 0.0030764274469553357,
+        "attack_bands": {
+          "wire_body": 0.0004869987774043719,
+          "sharp": 0.0007448523615174632,
+          "sizzle": 0.00025716448496852654
+        },
+        "body_lines": {
+          "2650": 8.765226870084352e-08,
+          "12359.6": 1.005300177782553e-09
+        }
+      },
+      "rms_delta_db": -0.19476474333081156,
+      "attack_band_delta_db": {
+        "wire_body": 0.9216487389083112,
+        "sharp": -1.4467789765974846,
+        "sizzle": 0.4965159509994635
+      },
+      "body_line_delta_db": {
+        "2650": -0.8880061395391331,
+        "12359.6": 0.9050727162653978
+      }
+    },
+    {
+      "pad": "ride",
+      "rate": 96000,
+      "pitch": 51,
+      "velocity": 1.0,
+      "before": {
+        "peak": 0.31303519010543823,
+        "rms": 0.02021572116728576,
+        "t90_seconds": 0.18021875,
+        "attack_power": 0.011386897094744578,
+        "attack_bands": {
+          "wire_body": 1.9884802537527172e-07,
+          "sharp": 0.00046971463545890407,
+          "sizzle": 0.0005224179040092622
+        },
+        "body_lines": {
+          "2650": 0.00012455059082533494,
+          "12359.6": 0.0019764196342025087
+        }
+      },
+      "after": {
+        "peak": 0.2764456868171692,
+        "rms": 0.01726254688047277,
+        "t90_seconds": 0.17946875,
+        "attack_power": 0.008309140350861992,
+        "attack_bands": {
+          "wire_body": 1.0253788044627461e-07,
+          "sharp": 0.00018780820656152524,
+          "sizzle": 0.0005222183969385159
+        },
+        "body_lines": {
+          "2650": 4.455290768612159e-05,
+          "12359.6": 0.001261007055232996
+        }
+      },
+      "rms_delta_db": -1.3716873554344378,
+      "attack_band_delta_db": {
+        "wire_body": -2.8763694673505036,
+        "sharp": -3.9811952673094213,
+        "sizzle": -0.0016588514280160274
+      },
+      "body_line_delta_db": {
+        "2650": -4.464697390734621,
+        "12359.6": -1.9516164319648845
+      }
+    }
+  ],
+  "symbolic_unchanged": true,
+  "learned_snare_diagnostic": {
+    "input": "four isolated velocity-1 snare hits in eight seconds, repeated/zero-padded by music.py",
+    "prompt_profile": "rock",
+    "segments": 1,
+    "before": {
+      "tunejury_reward": -1.447465181350708,
+      "positive_cosine": -0.1368229240179062,
+      "contrast_cosine": -0.03237801045179367,
+      "contrast_margin": -0.10444491356611252,
+      "positive_cosine_stddev": 0.0,
+      "contrast_margin_stddev": 0.0
+    },
+    "after": {
+      "tunejury_reward": -1.5049996376037598,
+      "positive_cosine": -0.13593444228172302,
+      "contrast_cosine": -0.034590937197208405,
+      "contrast_margin": -0.10134350508451462,
+      "positive_cosine_stddev": 0.0,
+      "contrast_margin_stddev": 0.0
+    },
+    "comparison": {
+      "status": "ok",
+      "delta": {
+        "tunejury_reward": -0.05753445625305176,
+        "positive_cosine": 0.0008884817361831665,
+        "contrast_cosine": -0.002212926745414734,
+        "contrast_margin": 0.0031014084815979004
+      },
+      "same_excerpt_positions": true
+    },
+    "wav_sha256": {
+      "before": "db25adbe2905b600944caaefbb760cbcd7138bd4dc0a5fe9b819e45a68475987",
+      "after": "94b8e0ddf328fe943ac81ee34662718c24d94c1333cc86dcc51e8038f44c4dce"
+    },
+    "report_sha256": {
+      "before": "28e994be05416cfb9f6a619edc91011e9374607a76affdd2a6ddc758da9ccd97",
+      "after": "1a814eb5acaa14dd68084d0a3855fabde00f399e4f45dcdbbf5ccf1cb0e04954"
+    },
+    "interpretation": "Mixed isolated-hit diagnostics, not evidence of improved song preference or perceived timbre."
+  }
+}

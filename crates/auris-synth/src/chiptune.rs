@@ -58,6 +58,7 @@ pub const DEFAULT_MOD_DEPTH: f32 = 0.5;
 struct ChiptuneVoice {
     oscillators: [Oscillator; MAX_UNISON],
     envelope: Adsr,
+    presence: crate::presence::Presence,
     /// The vibrato, restarted at every note on so a chord wobbles together.
     vibrato: Lfo,
     /// MIDI note the voice was started with, before octave, detune and bend.
@@ -83,6 +84,7 @@ impl ChiptuneVoice {
         Self {
             oscillators,
             envelope,
+            presence: crate::presence::Presence::new(sample_rate, -3.0),
             vibrato,
             pitch: 69.0,
             frequency: 440.0,
@@ -268,6 +270,7 @@ impl Chiptune {
         voice.target = target;
         voice.frequency = start;
         if !stolen {
+            voice.presence.reset();
             // Restarting the phase gives every note the same attack transient, and it is only
             // safe on a silent voice: doing it to one that is still sounding would step the
             // waveform and click.
@@ -419,6 +422,11 @@ impl SegmentRenderer for Chiptune {
         let voice_gain = self.unison_gain;
         let pitch_offset = self.pitch_offset;
         let vibrato_depth = self.vibrato_depth;
+        let presence = if matches!(waveform, Waveform::Square | Waveform::Saw) {
+            1.0
+        } else {
+            0.0
+        };
 
         for (index, voice) in self.voices.iter_mut().enumerate() {
             if !voice.envelope.is_active() {
@@ -450,6 +458,7 @@ impl SegmentRenderer for Chiptune {
                     oscillator.set_frequency(frequency * ratio);
                     mix += oscillator.next(waveform);
                 }
+                let mix = voice.presence.process(mix, frequency, presence);
                 *sample += mix * gain * envelope;
             }
 
@@ -506,6 +515,7 @@ impl Instrument for Chiptune {
     fn reset(&mut self) {
         for voice in &mut self.voices {
             voice.envelope.silence();
+            voice.presence.reset();
             for oscillator in &mut voice.oscillators {
                 oscillator.reset();
             }

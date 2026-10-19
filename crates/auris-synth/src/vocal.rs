@@ -68,6 +68,8 @@ struct VocalVoice {
     /// Restarted at every note on, so repeated notes wobble the same way.
     vibrato: Lfo,
     formants: [Biquad; FORMANTS.len()],
+    third_mix: f32,
+    third_step: f32,
     pitch: f32,
     velocity: f32,
 }
@@ -91,6 +93,8 @@ impl VocalVoice {
             envelope,
             vibrato,
             formants: [Biquad::new(BiquadCoefficients::identity()); FORMANTS.len()],
+            third_mix: 0.0,
+            third_step: 1.0 - (-1.0 / (sample_rate * 0.003)).exp(),
             pitch: 69.0,
             velocity: 0.0,
         }
@@ -172,6 +176,7 @@ impl Vocal {
         voice.pitch = f32::from(pitch);
         voice.velocity = velocity;
         if !stolen {
+            voice.third_mix = 0.0;
             // A silent voice can start from phase zero; a stolen one keeps its phase and its
             // filter state, because resetting either mid-flight clicks.
             voice.source.reset();
@@ -309,7 +314,18 @@ impl SegmentRenderer for Vocal {
                 let excitation = voice.source.next(Waveform::Saw)
                     + voice.breath.next(Waveform::Noise) * breath_gain;
                 let mut shaped = 0.0;
-                for (filter, (_, weight)) in voice.formants.iter_mut().zip(FORMANTS) {
+                let correction = crate::presence::correction_amount(frequency * swing);
+                voice.third_mix += (correction - voice.third_mix) * voice.third_step;
+                for (index, (filter, (_, weight))) in
+                    voice.formants.iter_mut().zip(FORMANTS).enumerate()
+                {
+                    // Preserve vowel placement and the lower formants; only the sharp
+                    // third peak loses up to 20%, with high fundamentals protected.
+                    let weight = if index == 2 {
+                        weight * (1.0 - 0.2 * voice.third_mix)
+                    } else {
+                        weight
+                    };
                     shaped += filter.process_sample(excitation) * weight;
                 }
                 *sample += shaped * voice.envelope.process() * gain;
@@ -365,6 +381,7 @@ impl Instrument for Vocal {
     fn reset(&mut self) {
         for voice in &mut self.voices {
             voice.envelope.silence();
+            voice.third_mix = 0.0;
             voice.source.reset();
             for filter in &mut voice.formants {
                 filter.reset();
