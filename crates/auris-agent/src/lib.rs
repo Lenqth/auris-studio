@@ -298,7 +298,7 @@ Use multiple tracks for distinct musical parts and set_level to balance them.
 Read read_mixer_graph before routing or effect edits. Track nodes combine the source and fader controls;
 inserts still run before the fader. Copy stable track/effect node IDs instead of effect positions.
 set_mixer_track changes fader/pan/mute/solo by node ID; track:master accepts fader/pan.
-connect_mixer changes outputs or adds bus sends/sidechains; every connection must remain a DAG.
+connect_mixer adds output branches without replacing existing destinations, or adds bus sends/sidechains; every connection must remain a DAG. disconnect_mixer removes only the named edge; no outputs means disconnected.
 Parallel effects use add_track kind bus and sends. Use add_mixer_effect, move_mixer_effect,
 enable_mixer_effect and mixer_effect_parameters/set_mixer_effect_parameter for inserts;
 set_mixer_send changes existing send levels and tap points. Re-read the graph after edits.

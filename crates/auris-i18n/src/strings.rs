@@ -188,7 +188,7 @@ strings! {
     MixerGraph { en: "Signal flow", ja: "信号フロー" }
     MixerConsole { en: "Console", ja: "コンソール" }
     MixerLayout { en: "Arrange nodes", ja: "ノードを整列" }
-    MixerGraphHelp { en: "Drag from a track or its last effect’s output port to a bus or sidechain. Fader controls belong to the track and process after inserts. Drag the background to pan.", ja: "トラックまたは末尾のエフェクトの出力端子から、バスやサイドチェインへドラッグ。トラック内のフェーダーはエフェクト後に作用します。背景をドラッグすると移動できます。" }
+    MixerGraphHelp { en: "Drag an output port to add a bus or sidechain branch. Click a wire, then Delete or right-click to remove it. Faders act after inserts. Drag the background to pan.", ja: "出力端子からドラッグしてバスやサイドチェインへ接続。配線をクリックし、Deleteまたは右クリックで削除できます。フェーダーはエフェクト後に作用します。背景をドラッグして移動。" }
     MixerConnectionRejected { en: "Cannot connect these nodes. Choose a bus input or sidechain that does not create a cycle.", ja: "このノードには接続できません。循環しないバス入力かサイドチェインを選んでください。" }
     Inspector { en: "Inspector", ja: "インスペクタ" }
     InspectorClip { en: "Clip", ja: "クリップ" }
@@ -762,6 +762,8 @@ strings! {
     MenuRouteTo { en: "Output", ja: "出力先" }
     MenuAddSend { en: "Add Send", ja: "センドを追加" }
     MenuRemoveSend { en: "Remove Send", ja: "センドを削除" }
+    MixerNoOutput { en: "No output", ja: "未接続" }
+    MixerDeleteConnections { en: "Delete connections", ja: "配線を削除" }
     MenuSendPreFader { en: "Take Before the Fader", ja: "フェーダー前から取る" }
     MenuDuplicate { en: "Duplicate", ja: "複製" }
     MenuCut { en: "Cut", ja: "切り取り" }

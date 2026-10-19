@@ -205,7 +205,7 @@ fn send_controls_undo_as_one_and_duplicate_connects_are_unchanged() {
 }
 
 #[test]
-fn disconnect_checks_the_existing_edge_and_output_returns_to_master() {
+fn disconnect_removes_only_the_named_output_and_allows_no_outputs() {
     let mut session = session();
     let a = session.add_bus_track("A");
     let b = session.add_bus_track("B");
@@ -216,18 +216,36 @@ fn disconnect_checks_the_existing_edge_and_output_returns_to_master() {
         json!({"action":"connect","source":source,"target":target,"kind":"output"}),
     )
     .unwrap();
+    let c = session.add_bus_track("C");
     assert!(
         apply(
             &mut session,
-            json!({"action":"disconnect","source":source,"target":"track:master","kind":"output"})
+            json!({"action":"disconnect","source":source,"target":MixerNode::Strip(Some(c)).key(),"kind":"output"})
         )
         .is_err()
     );
-    assert_eq!(session.project().track(a).unwrap().output, Output::Bus(b));
+    assert_eq!(
+        session.project().track(a).unwrap().outputs,
+        vec![Output::Master, Output::Bus(b)]
+    );
     apply(
         &mut session,
         json!({"action":"disconnect","source":source,"target":target,"kind":"output"}),
     )
     .unwrap();
-    assert_eq!(session.project().track(a).unwrap().output, Output::Master);
+    assert_eq!(
+        session.project().track(a).unwrap().outputs,
+        vec![Output::Master]
+    );
+    apply(
+        &mut session,
+        json!({"action":"disconnect","source":source,"target":"track:master","kind":"output"}),
+    )
+    .unwrap();
+    assert!(session.project().track(a).unwrap().outputs.is_empty());
+    session.undo();
+    assert_eq!(
+        session.project().track(a).unwrap().outputs,
+        vec![Output::Master]
+    );
 }

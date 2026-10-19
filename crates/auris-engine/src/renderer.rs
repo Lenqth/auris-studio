@@ -256,10 +256,18 @@ fn render_segment(
         // The output edge's own delay, after both taps so that each copy carries its own: zero in
         // any graph where nothing looks ahead, which is why this is normally a return on the
         // first line.
-        track.output_delay.process(&mut track.scratch);
-        match track.output.and_then(|slot| bus_inputs.get_mut(slot)) {
-            Some(input) => input.mix_from(&track.scratch, 1.0),
-            None => master_scratch.mix_from(&track.scratch, 1.0),
+        for output in &mut track.outputs {
+            let signal = if output.delay.frames() == 0 {
+                &track.scratch
+            } else {
+                output.scratch.copy_from(&track.scratch);
+                output.delay.process(&mut output.scratch);
+                &output.scratch
+            };
+            match output.target.and_then(|slot| bus_inputs.get_mut(slot)) {
+                Some(input) => input.mix_from(signal, 1.0),
+                None => master_scratch.mix_from(signal, 1.0),
+            }
         }
     }
 
@@ -2140,8 +2148,8 @@ mod tests {
             ));
         }
         let bus = project.add_bus_track("Drums");
-        project.tracks[0].output = Output::Bus(bus);
-        project.tracks[1].output = Output::Bus(bus);
+        project.tracks[0].outputs = vec![Output::Bus(bus)];
+        project.tracks[1].outputs = vec![Output::Bus(bus)];
         project
     }
 
@@ -2225,6 +2233,32 @@ mod tests {
     }
 
     #[test]
+    fn multiple_outputs_sum_independently_and_compensate_each_branch() {
+        for block in [31, 512] {
+            let mut project = one_note_project(Ticks::ZERO, Ticks::from_beats(4.0));
+            let a = project.add_bus_track("A");
+            let b = project.add_bus_track("B");
+            project.track_mut(a).unwrap().mixer.gain_db = -6.020_6;
+            project.track_mut(b).unwrap().mixer.gain_db = -12.041_2;
+            project.add_effect(Some(b), testkit::LOOKAHEAD_ID);
+            project.tracks[0].outputs = vec![Output::Master, Output::Bus(a), Output::Bus(b)];
+            let mut graph = build(&project, block);
+            let out = render_range(&mut graph, &mut Transport::playing_from(0), 2048, block);
+            assert_eq!(out.slice(0, testkit::LOOKAHEAD_FRAMES).peak(), 0.0);
+            for frame in [testkit::LOOKAHEAD_FRAMES, 1000, 2047] {
+                assert!(
+                    (out.channel(0)[frame] - 1.75 * TONE_AMPLITUDE).abs() < 1e-5,
+                    "block {block}, frame {frame}"
+                );
+            }
+            project.tracks[0].outputs.clear();
+            let mut graph = build(&project, block);
+            let silent = render_range(&mut graph, &mut Transport::playing_from(0), 2048, block);
+            assert_eq!(silent.peak(), 0.0);
+        }
+    }
+
+    #[test]
     fn a_pre_fader_send_ignores_the_fader_and_a_post_fader_one_follows_it() {
         let heard = |pre_fader: bool| {
             let mut project = sent_project(0.0, pre_fader);
@@ -2280,7 +2314,7 @@ mod tests {
             ));
         }
         let bus = project.add_bus_track("Late");
-        project.tracks[0].output = Output::Bus(bus);
+        project.tracks[0].outputs = vec![Output::Bus(bus)];
         project.add_effect(Some(bus), testkit::LOOKAHEAD_ID);
 
         let mut graph = build(&project, 512);

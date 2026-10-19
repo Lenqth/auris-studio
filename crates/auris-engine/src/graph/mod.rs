@@ -511,16 +511,15 @@ impl RenderGraph {
             // A route to a bus that is not there was already repaired when the document was
             // loaded; dropping it to the master here is the second lock on that door, and it is
             // what keeps the render loop free of a check on every block.
-            let output = match track.output.bus() {
-                Some(id) => match bus_slot(id) {
-                    Some(slot) => Some(slot),
-                    None => {
-                        log::warn!("track `{}` names a bus that is not there", track.name);
-                        None
-                    }
-                },
-                None => None,
-            };
+            let outputs = track
+                .outputs
+                .iter()
+                .map(|output| track::RenderOutput {
+                    target: output.bus().and_then(bus_slot),
+                    delay: LatencyDelay::new(0, RENDER_CHANNELS),
+                    scratch: AudioBuffer::new(RENDER_CHANNELS, 0, sample_rate),
+                })
+                .collect();
             let sends = track
                 .sends
                 .iter()
@@ -541,11 +540,11 @@ impl RenderGraph {
                 name: track.name.clone(),
                 source,
                 strip,
-                output,
+                outputs,
                 sends,
                 // Sized below, once every chain's latency is known.
                 delay: LatencyDelay::new(0, RENDER_CHANNELS),
-                output_delay: LatencyDelay::new(0, RENDER_CHANNELS),
+
                 scratch,
                 block_events: Vec::with_capacity(block_events),
                 audition: Vec::with_capacity(AUDITION_HEADROOM),
@@ -620,7 +619,14 @@ impl RenderGraph {
         for (index, track) in tracks.iter_mut().enumerate() {
             track.delay = LatencyDelay::new(plan.node[index], RENDER_CHANNELS);
             let mut edges = plan.edges[index].iter().copied();
-            track.output_delay = LatencyDelay::new(edges.next().unwrap_or(0), RENDER_CHANNELS);
+            for output in &mut track.outputs {
+                let frames = edges.next().unwrap_or(0);
+                output.delay = LatencyDelay::new(frames, RENDER_CHANNELS);
+                if frames > 0 {
+                    output.scratch = AudioBuffer::new(RENDER_CHANNELS, max_block, sample_rate);
+                    output.scratch.reserve_frames(max_block);
+                }
+            }
             for send in &mut track.sends {
                 let frames = edges.next().unwrap_or(0);
                 send.delay = LatencyDelay::new(frames, RENDER_CHANNELS);
@@ -1096,7 +1102,9 @@ impl RenderGraph {
             track.silence_voices();
             track.strip.reset();
             track.delay.reset();
-            track.output_delay.reset();
+            for output in &mut track.outputs {
+                output.delay.reset();
+            }
             for send in &mut track.sends {
                 send.delay.reset();
             }

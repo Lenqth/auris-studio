@@ -6,7 +6,7 @@ use auris_session::mixer_graph::commands::GraphAction;
 /// The tool's wire name.
 pub const NAME: &str = "mixer_graph";
 /// The model-facing description shared with the MCP registration.
-pub const DESCRIPTION: &str = "Reads or edits the mixer DAG using stable track/effect node IDs. Start with operation {\"action\":\"read\"}; follow next_offset for more nodes and outgoing edges. Track nodes contain fader controls; inserts still process before the fader. Connect output/send to bus track nodes (output also accepts track:master), or sidechain to an effect. All cycles are rejected before mutation. Parallel effects use bus branches. Set track fader/pan/mute/solo, add/remove/move/enable effects, read/set effect parameters, and set existing send levels/taps with operation objects. Reordering preserves node IDs. Disconnecting an output restores master. Changed operations are checkpointed and saved; reads and unchanged retries do not save.";
+pub const DESCRIPTION: &str = "Reads or edits the mixer DAG using stable track/effect node IDs. Start with operation {\"action\":\"read\"}; follow next_offset for more nodes and outgoing edges. Track nodes contain fader controls; inserts still process before the fader. Connect output/send to bus track nodes (output also accepts track:master), or sidechain to an effect. All cycles are rejected before mutation. Parallel effects use bus branches. Set track fader/pan/mute/solo, add/remove/move/enable effects, read/set effect parameters, and set existing send levels/taps with operation objects. Reordering preserves node IDs. Output connections add unity post-fader branches, preserving other destinations. Disconnect removes only that edge; removing all outputs leaves the track disconnected. Changed operations are checkpointed and saved; reads and unchanged retries do not save.";
 
 /// A saved project and one shared graph operation.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -82,6 +82,28 @@ mod tests {
         assert_eq!(
             opened(&project).unwrap().checkpoints().unwrap().len(),
             checkpoints
+        );
+        request(json!({"action":"connect","source":format!("track:{}",a.0),"target":format!("track:{}",b.0),"kind":"output"})).unwrap();
+        assert_eq!(
+            opened(&project)
+                .unwrap()
+                .project()
+                .track(a)
+                .unwrap()
+                .outputs,
+            vec![Output::Master, Output::Bus(b)]
+        );
+        for target in ["track:master".to_string(), format!("track:{}", b.0)] {
+            request(json!({"action":"disconnect","source":format!("track:{}",a.0),"target":target,"kind":"output"})).unwrap();
+        }
+        assert!(
+            opened(&project)
+                .unwrap()
+                .project()
+                .track(a)
+                .unwrap()
+                .outputs
+                .is_empty()
         );
     }
 }

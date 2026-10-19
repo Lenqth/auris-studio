@@ -632,9 +632,21 @@ pub mod architecture {
     //!
     //! A track's audio does not necessarily go to the master. Its
     //! [`Output`](auris_core::Output) is either the master or a **bus**, and it may also carry any
-    //! number of [`AuxSend`](auris_core::AuxSend)s — taps that feed a bus *as well as*, rather
-    //! than instead of, its own output. One reverb shared by six tracks at six different levels is
-    //! six sends; a single fader over a whole drum kit is six outputs.
+    //! number of outputs and [`AuxSend`](auris_core::AuxSend)s. Every output receives a unity
+    //! post-fader copy, while sends have independent levels and pre/post-fader taps. No outputs
+    //! means disconnected; sends and sidechain keys can still carry its signal. Graph connections
+    //! add destinations without replacing others, and disconnection removes exactly one edge.
+    //! The console's output menu toggles the same destinations. Legacy single-output commands
+    //! replace the destination list explicitly. Older documents' `output` fields load as one
+    //! destination, and the current format stores an `outputs` list, including an empty list.
+    //!
+    //! The graph owns selection and pointer geometry, while the session owns deletion and undo.
+    //! Editable edges have stable identities independent of graph order and insert positions.
+    //! Delete, Backspace and the edge context menu use `Session::disconnect_mixer_edges` to
+    //! preflight the complete selection, then remove it in one undo transaction. Insert-chain
+    //! edges describe order and are not selectable. Every output branch has its own compensation
+    //! delay and prepared scratch buffer, so copying to buses of different latencies does not
+    //! alter the shared source buffer or allocate on the audio callback.
     //!
     //! A bus is a [`TrackKind`](auris_core::TrackKind), not a thing of its own. That is what gives
     //! it a fader, a pan, a mute, an effect chain, a colour and an automation lane without any of

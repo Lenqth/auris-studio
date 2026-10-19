@@ -130,19 +130,27 @@ impl AurisApp {
         let level_db = gain_to_db(self.track_level(index));
         let clipped = self.session.meters().track_clipped(index);
         let selected = self.selected_track == Some(track_id);
-        let output = track.output;
+        let outputs = track.outputs.clone();
         let sends: Vec<(SendId, TrackId, f32, bool)> = track
             .sends
             .iter()
             .map(|send| (send.id, send.target, send.level_db, send.pre_fader))
             .collect();
-        let destination = match output {
-            Output::Master => self.t(Key::Master).to_string(),
-            Output::Bus(bus) => self
-                .project()
-                .track(bus)
-                .map(|bus| bus.name.clone())
-                .unwrap_or_else(|| self.t(Key::Master).to_string()),
+        let destinations: Vec<_> = outputs
+            .iter()
+            .map(|output| match *output {
+                Output::Master => self.t(Key::Master).to_string(),
+                Output::Bus(bus) => self
+                    .project()
+                    .track(bus)
+                    .map(|bus| bus.name.clone())
+                    .unwrap_or_else(|| self.t(Key::Master).to_string()),
+            })
+            .collect();
+        let destination = if destinations.is_empty() {
+            self.t(Key::MixerNoOutput).to_string()
+        } else {
+            destinations.join(", ")
         };
 
         let effect_rows: Vec<AnyElement> = insert_rows(&effects)

@@ -6,8 +6,10 @@ processing order. Fader controls still act after all inserts. Bus and master nod
 Arrows show the direction audio travels. Bypassed effects remain in the chain.
 
 Drag a track's right port, or its last effect's right port, to a bus's left input port. **Output** changes the
-strip's main destination; **Sends** adds a parallel branch and keeps its existing
-output. The master input can receive a main output. Add a bus from the toolbar
+strip's destinations by adding a unity post-fader branch; it keeps every existing
+output. **Sends** adds a branch with its own level and pre/post-fader tap. The master
+and several buses can receive the same strip at once. The console's **Output** menu
+checks each connected destination; choosing one toggles that branch. Add a bus from the toolbar
 to create a shared return or another processing branch.
 
 An effect that accepts a sidechain has a port on its top edge. Drag another
@@ -15,6 +17,15 @@ strip's output port there to key the effect from that strip. Output, send and
 sidechain connections all participate in cycle validation. A connection that
 would lead back to its source is refused before the document or undo history
 changes.
+
+Click an output, send or sidechain wire to select it. Selection uses a thicker
+accent stroke. Press Delete or Backspace, or right-click the wire and choose
+**Delete connections**. Hold Ctrl on Windows or Command on macOS while clicking
+to select several wires; their deletion is one Undo step. Undo and Redo restore
+the actual routing, including removed send automation. A disconnection removes
+only the selected branch. Deleting every output leaves the strip disconnected;
+it does not create a new master route. Thin insert-chain arrows follow effect
+order; use the effect menu to change that order.
 
 Use **Add effect** on a track node. Open an effect by its name, toggle
 **Enabled** to bypass it, or use its **Effect** menu to reorder, remove or choose
@@ -60,8 +71,9 @@ The rig agent uses flat tools against the open document:
 | Read / set effect parameters | `mixer_effect_parameters` / `set_mixer_effect_parameter` | `parameters` / `set_parameter` |
 
 Both transports use the same session operations and cycle checks. Invalid and
-stale edges are refused before editing. Disconnecting a main output restores its
-master route. Removing a send or effect also removes its automation. MCP saves
+stale edges are refused before editing. Connecting an output adds a destination
+without replacing the others. Disconnecting removes only the named branch;
+an empty output list stays disconnected. Removing a send or effect also removes its automation. MCP saves
 actual changes with a checkpoint; reads and unchanged connection retries do not
 write. Live edits remain unsaved and undoable. Read-only and Plan modes permit
 graph inspection but deny edits; ordinary Edit mode asks before disconnecting or

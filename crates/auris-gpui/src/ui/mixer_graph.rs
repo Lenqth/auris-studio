@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use auris_i18n::Key;
-use auris_session::mixer_graph::{MixerEdgeKind, MixerGraph, MixerNode};
+use auris_session::mixer_graph::{MixerEdge, MixerEdgeKind, MixerGraph, MixerNode};
 use auris_session::prelude::*;
 use gpui::{AnyElement, Axis, Entity, IntoElement, MouseButton, SharedString, div, prelude::*, px};
 use gpui_flow::{
@@ -12,6 +12,7 @@ use gpui_flow::{
 
 use crate::app::AurisApp;
 use crate::theme::Metrics;
+use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::plugin_window::PluginSubject;
 use crate::ui::widgets::{ButtonStyle, button, db_to_meter_position, level_meter};
 
@@ -33,6 +34,20 @@ fn node_id(node: MixerNode) -> SharedString {
         MixerNode::Strip(owner) => format!("mix-track-{}", owner.map_or(0, |id| id.0)),
 
         MixerNode::Effect(_, slot) => format!("mix-effect-{}", slot.0),
+    }
+    .into()
+}
+
+fn edge_id(edge: &MixerEdge) -> SharedString {
+    let owner = match edge.source {
+        MixerNode::Strip(owner) | MixerNode::Effect(owner, _) => owner,
+    };
+    let source = MixerNode::Strip(owner).key();
+    match edge.kind {
+        MixerEdgeKind::Send { send, .. } => format!("mix-send-{}", send.0),
+        MixerEdgeKind::Output => format!("mix-output-{source}-{}", edge.target.key()),
+        MixerEdgeKind::Sidechain => format!("mix-key-{source}-{}", edge.target.key()),
+        MixerEdgeKind::Chain => format!("mix-chain-{}-{}", edge.source.key(), edge.target.key()),
     }
     .into()
 }
@@ -251,9 +266,34 @@ impl AurisApp {
     }
 
     fn apply_mixer_connections(&mut self, state: &Entity<FlowState>, cx: &mut gpui::Context<Self>) {
-        let pending = state.update(cx, |state, _| {
-            std::mem::take(&mut state.pending_connections)
+        let (pending, menu) = state.update(cx, |state, _| {
+            (
+                std::mem::take(&mut state.pending_connections),
+                state.pending_edge_menu.take(),
+            )
         });
+        if let Some((_, at)) = menu {
+            let selected: HashSet<_> = state
+                .read(cx)
+                .edges
+                .iter()
+                .filter(|edge| edge.selected && edge.deletable)
+                .map(|edge| edge.id.clone())
+                .collect();
+            let edges: Vec<_> = self
+                .session
+                .mixer_graph()
+                .edges
+                .into_iter()
+                .filter(|edge| selected.contains(&edge_id(edge)))
+                .collect();
+            if !edges.is_empty() {
+                self.open_menu(ContextMenu::new(at, self.t(Key::MixerGraph)).item(
+                    self.t(Key::MixerDeleteConnections),
+                    MenuCommand::DeleteMixerConnections(edges),
+                ));
+            }
+        }
         for connection in pending {
             let document = self.session.mixer_graph();
             let result = gesture(&document, &connection).map(|(from, to)| {
@@ -266,6 +306,43 @@ impl AurisApp {
                 _ => self.set_failed_status(self.t(Key::MixerConnectionRejected).to_string()),
             }
         }
+    }
+
+    pub(crate) fn delete_mixer_connections(&mut self, edges: &[MixerEdge]) {
+        if let Err(error) = self.session.disconnect_mixer_edges(edges) {
+            self.set_failed_status(self.failure(Key::MixerGraph, &error));
+        }
+    }
+
+    pub(crate) fn delete_focused_mixer_connections(
+        &mut self,
+        window: &gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(canvas) = self
+            .mixer_canvas
+            .as_ref()
+            .filter(|canvas| canvas.view.read(cx).is_focused(window))
+        else {
+            return false;
+        };
+        let selected: HashSet<_> = canvas
+            .state
+            .read(cx)
+            .edges
+            .iter()
+            .filter(|edge| edge.selected && edge.deletable)
+            .map(|edge| edge.id.clone())
+            .collect();
+        let edges: Vec<_> = self
+            .session
+            .mixer_graph()
+            .edges
+            .into_iter()
+            .filter(|edge| selected.contains(&edge_id(edge)))
+            .collect();
+        self.delete_mixer_connections(&edges);
+        true
     }
 
     fn sync_mixer_graph(&mut self, document: &MixerGraph, cx: &mut gpui::Context<Self>) {
@@ -386,15 +463,20 @@ impl AurisApp {
             let edges = document
                 .edges
                 .iter()
-                .enumerate()
-                .map(|(i, edge)| {
-                    let mut flow = FlowEdge::new(
-                        format!("mix-edge-{i}"),
-                        node_id(edge.source),
-                        node_id(edge.target),
-                    )
-                    .color(u32::from(theme.text_muted.to_rgb()) >> 8);
-                    flow.deletable = false;
+                .map(|edge| {
+                    let id = edge_id(edge);
+                    let mut flow =
+                        FlowEdge::new(id.clone(), node_id(edge.source), node_id(edge.target))
+                            .color(u32::from(theme.text_muted.to_rgb()) >> 8);
+                    flow.selected = state
+                        .edges
+                        .iter()
+                        .any(|existing| existing.id == id && existing.selected);
+                    flow.deletable = !matches!(edge.kind, MixerEdgeKind::Chain);
+                    flow.selectable = flow.deletable;
+                    if !flow.deletable {
+                        flow.stroke_width = Some(1.0);
+                    }
                     match edge.kind {
                         MixerEdgeKind::Send {
                             level_db,
@@ -423,6 +505,7 @@ impl AurisApp {
                 .collect();
             state.set_nodes(nodes);
             state.set_edges(edges);
+            state.edge_selection_color = Some(u32::from(theme.accent.to_rgb()) >> 8);
             if routing_changed {
                 state.allowed_connections = Some(allowed);
             }
@@ -758,12 +841,18 @@ mod tests {
         connect(cx, MixerNode::Strip(Some(a)), MixerNode::Strip(Some(b)));
         paint(&app, cx);
         app.read_with(cx, |this, _| {
-            assert_eq!(this.project().track(a).unwrap().output, Output::Bus(b))
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master, Output::Bus(b)]
+            )
         });
         cx.dispatch_action(crate::actions::Undo);
         paint(&app, cx);
         app.read_with(cx, |this, _| {
-            assert_eq!(this.project().track(a).unwrap().output, Output::Master);
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master]
+            );
             assert_eq!(
                 this.mixer_canvas.as_ref().unwrap().document,
                 this.session.mixer_graph()
@@ -808,6 +897,96 @@ mod tests {
     }
 
     #[gpui::test]
+    fn selecting_a_wire_deletes_only_that_output_and_supports_undo_and_context_menu(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = open(cx);
+        let (a, b) = app.update(cx, |this, _| {
+            show(this);
+            let a = this.session.add_bus_track("A");
+            let b = this.session.add_bus_track("B");
+            this.session.add_track_output(a, Output::Bus(b)).unwrap();
+            (a, b)
+        });
+        paint(&app, cx);
+        expose_pair(
+            &app,
+            cx,
+            MixerNode::Strip(Some(a)),
+            MixerNode::Strip(Some(b)),
+        );
+        let source = cx
+            .debug_bounds(selector(format!(
+                "flow-handle-{}-0",
+                node_id(MixerNode::Strip(Some(a)))
+            )))
+            .unwrap()
+            .center();
+        let target = cx
+            .debug_bounds(selector(format!(
+                "flow-handle-{}-1",
+                node_id(MixerNode::Strip(Some(b)))
+            )))
+            .unwrap()
+            .center();
+        let wire = gpui::point((source.x + target.x) / 2., (source.y + target.y) / 2.);
+        cx.simulate_click(wire, gpui::Modifiers::none());
+        paint(&app, cx);
+        app.read_with(cx, |this, cx| {
+            let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
+            assert_eq!(state.edges.iter().filter(|edge| edge.selected).count(), 1);
+        });
+        cx.simulate_keystrokes("delete");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master]
+            )
+        });
+        cx.dispatch_action(crate::actions::Undo);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master, Output::Bus(b)]
+            )
+        });
+        cx.dispatch_action(crate::actions::Redo);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master]
+            )
+        });
+        cx.dispatch_action(crate::actions::Undo);
+        paint(&app, cx);
+        crate::harness::right_press(cx, wire);
+        paint(&app, cx);
+        assert!(cx.debug_bounds("context-menu-panel").is_some());
+        click("menu-item-0", cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master]
+            )
+        });
+        cx.dispatch_action(crate::actions::Undo);
+        paint(&app, cx);
+        cx.simulate_click(wire, gpui::Modifiers::none());
+        cx.simulate_keystrokes("backspace");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master]
+            )
+        });
+    }
+
+    #[gpui::test]
     fn pointer_feedback_is_rejected_without_a_speculative_edge(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         let (a, b) = app.update(cx, |this, _| {
@@ -831,6 +1010,93 @@ mod tests {
             assert_eq!(this.session.mixer_graph(), before);
             let canvas = this.mixer_canvas.as_ref().unwrap();
             assert_eq!(canvas.state.read(cx).edges.len(), before.edges.len());
+        });
+    }
+
+    #[gpui::test]
+    fn modifier_selection_deletes_two_outputs_in_one_undo_step(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let (a, b, c) = app.update(cx, |this, _| {
+            show(this);
+            let a = this.session.add_bus_track("A");
+            let b = this.session.add_bus_track("B");
+            let c = this.session.add_bus_track("C");
+            this.session.add_track_output(a, Output::Bus(b)).unwrap();
+            this.session.add_track_output(a, Output::Bus(c)).unwrap();
+            (a, b, c)
+        });
+        paint(&app, cx);
+        expose_pair(
+            &app,
+            cx,
+            MixerNode::Strip(Some(a)),
+            MixerNode::Strip(Some(b)),
+        );
+        app.update(cx, |this, cx| {
+            let canvas = this.mixer_canvas.as_ref().unwrap();
+            canvas.state.update(cx, |state, _| {
+                state
+                    .get_node_mut(&node_id(MixerNode::Strip(Some(c))))
+                    .unwrap()
+                    .position = FlowPoint::new(380., 240.);
+            });
+            canvas.view.update(cx, |_, cx| cx.notify());
+        });
+        paint(&app, cx);
+        let from = cx
+            .debug_bounds(selector(format!(
+                "flow-handle-{}-0",
+                node_id(MixerNode::Strip(Some(a)))
+            )))
+            .unwrap()
+            .center();
+        for (index, target) in [b, c].into_iter().enumerate() {
+            let to = cx
+                .debug_bounds(selector(format!(
+                    "flow-handle-{}-1",
+                    node_id(MixerNode::Strip(Some(target)))
+                )))
+                .unwrap()
+                .center();
+            cx.simulate_click(
+                gpui::point((from.x + to.x) / 2., (from.y + to.y) / 2.),
+                if index == 0 {
+                    gpui::Modifiers::none()
+                } else {
+                    gpui::Modifiers::secondary_key()
+                },
+            );
+            paint(&app, cx);
+        }
+        app.read_with(cx, |this, cx| {
+            assert_eq!(
+                this.mixer_canvas
+                    .as_ref()
+                    .unwrap()
+                    .state
+                    .read(cx)
+                    .edges
+                    .iter()
+                    .filter(|edge| edge.selected)
+                    .count(),
+                2
+            )
+        });
+        cx.simulate_keystrokes("delete");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master]
+            )
+        });
+        cx.dispatch_action(crate::actions::Undo);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.project().track(a).unwrap().outputs,
+                vec![Output::Master, Output::Bus(b), Output::Bus(c)]
+            )
         });
     }
 
@@ -861,7 +1127,7 @@ mod tests {
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             let track = this.project().track(a).unwrap();
-            assert_eq!(track.output, Output::Master);
+            assert_eq!(track.outputs, vec![Output::Master]);
             assert_eq!(track.sends[0].target, b);
         });
         expose_pair(

@@ -23,7 +23,8 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
     let win_h = win_size.height.as_f32();
     let margin = 100.0;
     let edge_color: Background = gpui::rgb(0xb1b1b7).into();
-    let selected_color: Background = gpui::rgb(0x555555).into();
+    let selected_color: Background =
+        gpui::rgb(state.edge_selection_color.unwrap_or(0x555555)).into();
 
     for edge in &state.edges {
         if edge.hidden {
@@ -68,7 +69,7 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
         } else {
             edge_color.clone()
         };
-        let stroke = edge.stroke_width.unwrap_or(2.0);
+        let stroke = edge.stroke_width.unwrap_or(2.0) + if edge.selected { 1.5 } else { 0.0 };
 
         match edge.edge_type {
             EdgeType::Bezier { curvature } => {
@@ -244,7 +245,7 @@ pub fn compute_edge_label_position(state: &FlowState, edge: &FlowEdge) -> Option
 /// Hit test all edges — return the ID of the first edge within `threshold` pixels of (mx, my).
 pub fn hit_test_edges(state: &FlowState, mx: f32, my: f32, threshold: f32) -> Option<EdgeId> {
     for edge in &state.edges {
-        if edge.hidden {
+        if edge.hidden || !edge.selectable {
             continue;
         }
 

@@ -2853,10 +2853,12 @@ impl AurisApp {
     fn on_delete_selection(
         &mut self,
         _: &actions::DeleteSelection,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.delete_selection();
+        if !self.delete_focused_mixer_connections(window, cx) {
+            self.delete_selection();
+        }
         cx.notify();
     }
 

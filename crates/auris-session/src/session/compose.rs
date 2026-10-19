@@ -411,10 +411,12 @@ impl Session {
                 entry.mixer.pan = track.pan;
                 // A draft names a bus by its position in the composition, because the composer has
                 // no ids to name it by; this is where the two meet.
-                entry.output = track
-                    .output
-                    .and_then(|index| buses.get(index))
-                    .map_or(Output::Master, |bus| Output::Bus(*bus));
+                entry.outputs = vec![
+                    track
+                        .output
+                        .and_then(|index| buses.get(index))
+                        .map_or(Output::Master, |bus| Output::Bus(*bus)),
+                ];
             }
             for send in &track.sends {
                 let Some(bus) = buses.get(send.bus).copied() else {
@@ -792,7 +794,7 @@ mod tests {
         let (track, inner) = tracks[0];
         assert!(track.kind.is_drum());
         assert_eq!(inner.instrument_id, auris_synth::DrumKit::ID);
-        assert_eq!(track.output, Output::Master);
+        assert_eq!(track.outputs, vec![Output::Master]);
         assert!(
             !session
                 .project()
@@ -1578,7 +1580,7 @@ mod tests {
 
         // The kit under one fader, and the room fed rather than routed through.
         let track = |name: &str| project.tracks.iter().find(|t| t.name == name).unwrap();
-        assert_eq!(track("Drums").output, Output::Master);
+        assert_eq!(track("Drums").outputs, vec![Output::Master]);
         assert!(track("Drums").kind.is_instrument());
         assert!(track("Drums").sends.is_empty());
         assert!(
@@ -1587,7 +1589,7 @@ mod tests {
                 .iter()
                 .any(|entry| entry.kind.is_bus() && entry.name == "Drums")
         );
-        assert_eq!(track("lead").output, Output::Master);
+        assert_eq!(track("lead").outputs, vec![Output::Master]);
         assert_eq!(track("lead").sends[0].target, room);
         assert!(track("bass").sends.is_empty());
 

@@ -29,7 +29,7 @@ pub const GRAPH_TOOLS: &[(&str, &str)] = &[
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionKind {
-    /// Replace the source strip's main output.
+    /// Add a unity post-fader output without replacing existing destinations.
     Output,
     /// Add an independent post-fader copy feeding a bus.
     Send,
@@ -73,7 +73,7 @@ pub enum GraphAction {
         /// output, send, or sidechain; must match the target port.
         kind: ConnectionKind,
     },
-    /// Disconnect an existing graph edge. Main outputs return to master; sends and sidechains are removed. Internal chain edges cannot be disconnected. Supply send_id when several sends share the same source/target. A stale or mismatched edge is refused.
+    /// Disconnect an existing graph edge. Only the named output, send or sidechain is removed; an empty output list remains disconnected. Internal chain edges cannot be disconnected. Supply send_id when several sends share the same source/target. A stale or mismatched edge is refused.
     Disconnect {
         /// Exact source track node ID, including for a pre-fader send.
         source: String,
@@ -325,11 +325,10 @@ impl Session {
                 let (from, to) = self.graph_connection(source, target, *kind)?;
                 let exists = match kind {
                     ConnectionKind::Output => self.project().track(from).is_some_and(|track| {
-                        track.output.bus()
-                            == match to {
-                                MixerNode::Strip(owner) => owner,
-                                _ => None,
-                            }
+                        track.outputs.contains(&match to {
+                            MixerNode::Strip(owner) => owner.map_or(Output::Master, Output::Bus),
+                            _ => Output::Master,
+                        })
                     }),
                     ConnectionKind::Send => self.project().track(from).is_some_and(|track| {
                         track
@@ -369,17 +368,18 @@ impl Session {
                             MixerNode::Strip(owner) => owner,
                             _ => return Err("Expected an input".into()),
                         };
-                        if self
-                            .project()
-                            .track(from)
-                            .is_none_or(|track| track.output.bus() != target)
-                        {
+                        if self.project().track(from).is_none_or(|track| {
+                            !track
+                                .outputs
+                                .contains(&target.map_or(Output::Master, Output::Bus))
+                        }) {
                             return Err(
                                 "This output edge no longer exists; read_mixer_graph again".into(),
                             );
                         }
-                        changed = target.is_some();
-                        self.set_track_output(from, Output::Master).map_err(error)?;
+                        changed = true;
+                        self.remove_track_output(from, target.map_or(Output::Master, Output::Bus))
+                            .map_err(error)?;
                     }
                     ConnectionKind::Send => {
                         let sends: Vec<_> = self

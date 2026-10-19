@@ -129,8 +129,18 @@ impl Session {
     /// and then fails has cost the user a rung that reverses nothing and a redo branch that is
     /// simply gone.
     pub fn set_track_output(&mut self, id: TrackId, output: Output) -> Result<(), SessionError> {
+        self.set_track_outputs(id, &[output])
+    }
+
+    /// Replace all post-fader destinations atomically; an empty slice disconnects the track.
+    /// Duplicate destinations are collapsed, and all buses and cycles are validated before undo.
+    pub fn set_track_outputs(
+        &mut self,
+        id: TrackId,
+        outputs: &[Output],
+    ) -> Result<(), SessionError> {
         self.require_track(id)?;
-        if let Some(bus) = output.bus() {
+        for bus in outputs.iter().filter_map(|output| output.bus()) {
             self.require_bus(bus)?;
             if self.project.routing_would_cycle(id, bus) {
                 return Err(SessionError::RoutingLoop {
@@ -139,15 +149,47 @@ impl Session {
                 });
             }
         }
-        if self.project.track(id).is_some_and(|t| t.output == output) {
+        let mut unique = Vec::new();
+        for output in outputs {
+            if !unique.contains(output) {
+                unique.push(*output);
+            }
+        }
+        if self.project.track(id).is_some_and(|t| t.outputs == unique) {
             return Ok(());
         }
         self.record(Edit::SetTrackOutput);
         if let Some(track) = self.project.track_mut(id) {
-            track.output = output;
+            track.outputs = unique;
         }
         self.invalidate_graph();
         Ok(())
+    }
+
+    /// Add a unity post-fader destination while preserving every existing output.
+    pub fn add_track_output(&mut self, id: TrackId, output: Output) -> Result<(), SessionError> {
+        let mut outputs = self
+            .project
+            .track(id)
+            .ok_or(SessionError::UnknownTrack(id.0))?
+            .outputs
+            .clone();
+        outputs.push(output);
+        self.set_track_outputs(id, &outputs)
+    }
+
+    /// Remove exactly one destination, leaving the track disconnected when none remain.
+    pub fn remove_track_output(&mut self, id: TrackId, output: Output) -> Result<(), SessionError> {
+        let outputs: Vec<_> = self
+            .project
+            .track(id)
+            .ok_or(SessionError::UnknownTrack(id.0))?
+            .outputs
+            .iter()
+            .copied()
+            .filter(|existing| *existing != output)
+            .collect();
+        self.set_track_outputs(id, &outputs)
     }
 
     /// Adds a post-fader send at unity from `id` to `bus`, returning its new id.
@@ -703,8 +745,8 @@ mod tests {
         session.move_track(bus, 0).expect("the bus goes first");
         assert_eq!(session.project.tracks[0].id, bus);
         assert_eq!(
-            session.project.track(kick).unwrap().output,
-            Output::Bus(bus)
+            session.project.track(kick).unwrap().outputs,
+            vec![Output::Bus(bus)]
         );
         assert_eq!(session.project.track(bus).unwrap().mixer.gain_db, -6.0);
         // A bus above its feeders is still rendered after them.
@@ -723,13 +765,16 @@ mod tests {
             .set_track_output(track, Output::Bus(bus))
             .expect("a bus is a legal destination");
         assert_eq!(
-            session.project.track(track).unwrap().output,
-            Output::Bus(bus)
+            session.project.track(track).unwrap().outputs,
+            vec![Output::Bus(bus)]
         );
 
         // And it is one undo step, which puts the track back on the master.
         session.undo().expect("a step");
-        assert_eq!(session.project.track(track).unwrap().output, Output::Master);
+        assert_eq!(
+            session.project.track(track).unwrap().outputs,
+            vec![Output::Master]
+        );
     }
 
     #[test]
@@ -760,12 +805,15 @@ mod tests {
 
         assert!(session.redo().is_some(), "the redo branch was thrown away");
         assert_eq!(
-            session.project.track(track).unwrap().output,
-            Output::Bus(bus)
+            session.project.track(track).unwrap().outputs,
+            vec![Output::Bus(bus)]
         );
         // And nothing was pushed: one undo is back at the master, with no phantom rung between.
         session.undo().expect("a step");
-        assert_eq!(session.project.track(track).unwrap().output, Output::Master);
+        assert_eq!(
+            session.project.track(track).unwrap().outputs,
+            vec![Output::Master]
+        );
     }
 
     #[test]
@@ -886,7 +934,7 @@ mod tests {
 
         session.remove_track(bus).expect("the bus goes");
         let track = session.project.track(track).unwrap();
-        assert_eq!(track.output, Output::Master);
+        assert_eq!(track.outputs, vec![Output::Master]);
         assert!(track.sends.is_empty());
     }
 

@@ -31,6 +31,10 @@ pub struct FlowState {
     pub externally_managed: bool,
     /// Completed gestures waiting for the document owner; never speculative visual edges.
     pub pending_connections: Vec<Connection>,
+    /// An edge context-menu request, in window coordinates.
+    pub pending_edge_menu: Option<(EdgeId, gpui::Point<Pixels>)>,
+    /// Theme selection color supplied by the document owner.
+    pub edge_selection_color: Option<u32>,
     /// Optional document-authoritative connection preview, keyed by source and target.
     pub allowed_connections: Option<HashSet<(NodeId, NodeId)>>,
     /// Canvas origin in window coordinates, for embedding in a dock panel.
@@ -66,6 +70,8 @@ impl FlowState {
         Self {
             externally_managed: false,
             pending_connections: Vec::new(),
+            pending_edge_menu: None,
+            edge_selection_color: None,
             allowed_connections: None,
             origin: (0.0, 0.0),
             nodes,

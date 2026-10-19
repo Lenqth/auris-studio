@@ -412,12 +412,69 @@ pub struct Track {
     pub kind: TrackKind,
     /// Volume, pan and effects.
     pub mixer: MixerStrip,
-    /// Where this track's output goes.
-    #[serde(default)]
-    pub output: Output,
+    /// Post-fader destinations, each receiving a unity copy. Empty disconnects the track.
+    #[serde(
+        alias = "output",
+        deserialize_with = "deserialize_outputs",
+        default = "default_outputs"
+    )]
+    pub outputs: Vec<Output>,
     /// Copies of this track's signal, fed to buses alongside its own output.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sends: Vec<AuxSend>,
+}
+
+fn default_outputs() -> Vec<Output> {
+    vec![Output::Master]
+}
+
+#[cfg(test)]
+mod output_format_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_single_outputs_and_unconnected_multi_outputs_round_trip() {
+        let mut project = Project::new("Routes", 48_000.0);
+        let id = project.add_bus_track("Bus");
+        let track = project.track(id).unwrap();
+        let mut old = serde_json::to_value(track).unwrap();
+        old.as_object_mut().unwrap().remove("outputs");
+        old["output"] = serde_json::json!(Output::Master);
+        assert_eq!(
+            serde_json::from_value::<Track>(old.clone())
+                .unwrap()
+                .outputs,
+            vec![Output::Master]
+        );
+        old.as_object_mut().unwrap().remove("output");
+        assert_eq!(
+            serde_json::from_value::<Track>(old).unwrap().outputs,
+            vec![Output::Master]
+        );
+        for outputs in [vec![], vec![Output::Master, Output::Bus(TrackId(123))]] {
+            project.track_mut(id).unwrap().outputs = outputs.clone();
+            let saved = serde_json::to_value(project.track(id).unwrap()).unwrap();
+            assert_eq!(
+                serde_json::from_value::<Track>(saved).unwrap().outputs,
+                outputs
+            );
+        }
+    }
+}
+
+fn deserialize_outputs<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Output>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StoredOutputs {
+        One(Output),
+        Many(Vec<Output>),
+    }
+    Ok(match StoredOutputs::deserialize(deserializer)? {
+        StoredOutputs::One(output) => vec![output],
+        StoredOutputs::Many(outputs) => outputs,
+    })
 }
 
 fn default_track_height() -> f32 {
@@ -464,9 +521,10 @@ impl Track {
     /// routing — the order to render in, whether an edit would make a loop, how far behind a chain
     /// runs — is a walk over exactly these.
     pub fn feeds(&self) -> impl Iterator<Item = TrackId> + '_ {
-        self.output
-            .bus()
-            .into_iter()
+        self.outputs
+            .iter()
+            .copied()
+            .filter_map(Output::bus)
             .chain(self.sends.iter().map(|send| send.target))
     }
 }
@@ -483,7 +541,7 @@ impl Project {
             height: default_track_height(),
             kind,
             mixer: MixerStrip::default(),
-            output: Output::Master,
+            outputs: default_outputs(),
             sends: Vec::new(),
         });
         id
@@ -645,8 +703,10 @@ impl Project {
             // where it would have been had the bus never existed.
             let mut removed_sends = Vec::new();
             for track in &mut self.tracks {
-                if track.output == Output::Bus(id) {
-                    track.output = Output::Master;
+                let had_route = track.outputs.contains(&Output::Bus(id));
+                track.outputs.retain(|output| *output != Output::Bus(id));
+                if had_route && track.outputs.is_empty() {
+                    track.outputs.push(Output::Master);
                 }
                 removed_sends.extend(
                     track
@@ -858,7 +918,7 @@ mod tests {
         let copy = project.duplicate_track(kick).unwrap();
         assert_ne!(project.track(copy).unwrap().sends[0].id, send);
         // The routing itself is copied as it was: the copy feeds the same bus.
-        assert_eq!(project.track(copy).unwrap().output, Output::Bus(bus));
+        assert_eq!(project.track(copy).unwrap().outputs, vec![Output::Bus(bus)]);
         assert_eq!(project.track(copy).unwrap().sends[0].target, bus);
     }
 

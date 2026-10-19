@@ -469,13 +469,6 @@ impl AurisApp {
         self.reveal_track(id);
     }
 
-    /// Points a track's output at a bus, or back at the master.
-    pub(crate) fn set_track_output(&mut self, track: TrackId, output: Output) {
-        if let Err(error) = self.session.set_track_output(track, output) {
-            self.set_failed_status(self.failure(Key::CmdSetTrackOutput, &error));
-        }
-    }
-
     /// Adds a send from a track to a bus.
     pub(crate) fn add_send(&mut self, track: TrackId, bus: TrackId) {
         if let Err(error) = self.session.add_send(track, bus) {

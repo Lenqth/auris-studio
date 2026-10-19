@@ -41,6 +41,11 @@ pub struct FlowGraph {
 }
 
 impl FlowGraph {
+    /// Whether keyboard commands currently target the canvas itself rather than a child control.
+    pub fn is_focused(&self, window: &Window) -> bool {
+        self.focus_handle.is_focused(window)
+    }
+
     pub fn new(state: Entity<FlowState>, cx: &mut Context<Self>) -> Self {
         Self {
             state,
@@ -812,6 +817,9 @@ impl Render for FlowGraph {
         let state_for_mouse_up = self.state.clone();
         let state_for_key = self.state.clone();
         let state_for_cancel = self.state.clone();
+        let state_for_context = self.state.clone();
+        let canvas_focus = self.focus_handle.clone();
+        let context_focus = self.focus_handle.clone();
 
         div()
             .id("flow-graph")
@@ -867,7 +875,8 @@ impl Render for FlowGraph {
             // Mouse down on empty space → start panning, deselect, or edge selection
             .on_mouse_down(MouseButton::Left, {
                 let entity_id = entity_id;
-                move |event, _window, cx| {
+                move |event, window, cx| {
+                    window.focus(&canvas_focus);
                     let mouse_pos = event.position;
                     state_for_mouse_down.update(cx, |state, _cx| {
                         // If a node drag or connection was already started, skip
@@ -926,6 +935,35 @@ impl Render for FlowGraph {
                             start_viewport: (state.viewport.x, state.viewport.y),
                         });
                     });
+                    cx.notify(entity_id);
+                }
+            })
+            .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                let edge = edges::hit_test_edges(
+                    state_for_context.read(cx),
+                    event.position.x.as_f32(),
+                    event.position.y.as_f32(),
+                    6.0,
+                );
+                if let Some(id) = edge {
+                    window.focus(&context_focus);
+                    state_for_context.update(cx, |state, cx| {
+                        if !state
+                            .edges
+                            .iter()
+                            .any(|edge| edge.id == id && edge.selected)
+                        {
+                            for node in &mut state.nodes {
+                                node.selected = false;
+                            }
+                            for edge in &mut state.edges {
+                                edge.selected = edge.id == id;
+                            }
+                        }
+                        state.pending_edge_menu = Some((id, event.position));
+                        cx.notify();
+                    });
+                    cx.stop_propagation();
                     cx.notify(entity_id);
                 }
             })

@@ -88,6 +88,16 @@ pub(crate) struct RenderSend {
     pub(crate) scratch: AudioBuffer,
 }
 
+/// One unity output branch with independent latency compensation.
+pub(crate) struct RenderOutput {
+    /// Bus input slot, or the master when absent.
+    pub(crate) target: Option<usize>,
+    /// Independent post-fader delay for this path through the graph.
+    pub(crate) delay: LatencyDelay,
+    /// Prepared copy buffer, empty when the path needs no compensation.
+    pub(crate) scratch: AudioBuffer,
+}
+
 /// One track, ready to render.
 pub struct RenderTrack {
     /// Project id of the track this came from.
@@ -96,21 +106,13 @@ pub struct RenderTrack {
     pub name: String,
     pub(crate) source: RenderSource,
     pub(crate) strip: RenderStrip,
-    /// Which bus input this track's output is mixed into; `None` for the master.
-    pub(crate) output: Option<usize>,
+    /// Every post-fader unity output branch.
+    pub(crate) outputs: Vec<RenderOutput>,
     /// Copies of this track's signal, on their way to buses.
     pub(crate) sends: Vec<RenderSend>,
     /// Holds this track back to the longest path through the graph, so the sources line up.
     pub(crate) delay: LatencyDelay,
-    /// Holds this track's *output* back so it reaches its destination in step with everything
-    /// else arriving there.
-    ///
-    /// Distinct from [`Self::delay`], and applied after the fader rather than before it, because
-    /// every one of a track's outgoing edges needs a delay of its own: a track feeding the master
-    /// dry while sending to a bus that looks ahead has two paths of different lengths, and only a
-    /// delay per edge can make both arrive together. Zero unless a send makes it otherwise, which
-    /// is why the fader still acts immediately in every ordinary graph.
-    pub(crate) output_delay: LatencyDelay,
+    /// Prepared working buffer shared by the strip and its outgoing copies.
     pub(crate) scratch: AudioBuffer,
     /// Events handed to the instrument for the current block, block-relative and sorted.
     pub(crate) block_events: Vec<NoteEvent>,
