@@ -27,6 +27,62 @@ and settled tin-whistle scale excerpts, with distinct-pitch validation and froze
 The [choir calibration](choir-copy-synthesis.md) fits the native vocal-tract ensemble to
 real sustained vowels, with 24 training notes and 80 notes from separate held-out singers.
 
+## Native instrument upper-midrange voicing
+
+The 2026-10-19 upper-midrange study follows the
+[snare and ride correction](physical-pack.md#targeted-snare-and-ride-voicing).
+It screens all sixteen native instrument families, additional pulse/saw/FM lead patches,
+unmodulated controls and the production pop/rock guitar-amp chains. The worker uses the
+actual instrument implementation at 44.1/48/96 kHz and velocities 0.35/0.65/1: 2,295 paired
+conditions, with 1.2 seconds held in each 1.8-second capture.
+
+Piano, acoustic guitar, electric guitar, bowed strings, clarinet and pulse/saw leads receive
+a Q=0.9 section at 3.2 kHz. Maximum cuts are respectively 3.5/2/3/3/2/3 dB. This runs per
+voice before its amplitude envelope; the acoustic models' feedback and modal frequencies
+are unchanged. The wet amount falls linearly from full at a 1 kHz fundamental to zero at
+2 kHz, with 3 ms smoothing for bends, glides and timbre changes. FM applies up to 3 dB while
+its modulation envelope is active; an unmodulated sine is unchanged. The preview voice
+reduces its 2.6 kHz formant by up to 20% with the same fundamental protection, retaining
+the two lower formants. This does not change the physical choir's vocal tract.
+
+The following medians describe the paired probe windows whose fundamental is below 1.4 kHz
+and whose original 2–5 kHz power exceeds 1% of audible power. Attack is 0–150 ms; sustain is
+150–1200 ms. The values are absolute band-power deltas, without gain normalization.
+
+| Sound | Attack 2–5 kHz | Sustain 2–5 kHz |
+| --- | ---: | ---: |
+| Piano | -2.15 dB | -2.20 dB |
+| Acoustic guitar | -1.21 dB | -1.19 dB |
+| Electric guitar DI | -1.84 dB | -1.81 dB |
+| Bowed strings | -2.43 dB | -2.47 dB |
+| Clarinet | -1.65 dB | -1.65 dB |
+| Pulse lead, width 0.125 | -2.21 dB | -2.21 dB |
+| Saw lead | -2.25 dB | -2.25 dB |
+| Factory FM | -2.11 dB | — |
+| Preview voice | -1.36 dB | -1.37 dB |
+| Pop amplified guitar | -1.80 dB | -1.81 dB |
+| Rock amplified guitar | -1.19 dB | -1.55 dB |
+
+The report also retains deltas after audible-power matching, to distinguish spectral
+changes from overall attenuation. Hann-periodogram normalization excludes frequencies
+below 30 Hz, so a narrow pulse's DC offset cannot hide its upper harmonics. All tested
+notes at MIDI 96 and above match the baseline sample for sample, including the amp chains.
+The bass, bell, mallet, dulcimer, whistle, choir, complete drum kit and legacy noise drum
+also remain identical, as do sine/triangle and zero-index FM controls.
+
+`tools/eval/references/instrument-harshness.json` retains the cohort, hashes and results.
+The symbolic ruler is unchanged. A frozen solo pulse-lead melody through `music.py` has
+TuneJury delta -0.0278 and MuQ-MuLan positive-cosine delta -0.000028 under matching
+conditions. These coarse diagnostics do not establish improved musical preference or
+perceived timbre. Listening files compare common gain and a separately labeled AC-RMS-matched
+candidate, without limiting. Keep the original worker before rebuilding the changed DSP:
+
+```sh
+uv run tools/eval/instrument_harshness.py <before-worker> <after-worker> target/instrument-harshness/fix
+uv run --with pytest --with numpy --with scipy --with soundfile pytest tools/eval/test_instrument_harshness.py
+uv run --with ruff ruff check tools/eval/instrument_harshness.py tools/eval/test_instrument_harshness.py
+```
+
 ## The symbolic ruler
 
 ```

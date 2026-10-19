@@ -54,6 +54,7 @@ struct Fm2Voice {
     carrier: Oscillator,
     modulator: Oscillator,
     envelope: Adsr,
+    presence: crate::presence::Presence,
     /// The vibrato, restarted at every note on so a chord wobbles together.
     vibrato: Lfo,
     /// Drives the modulation depth. Its sustain is zero, which is what gives 2-op FM its
@@ -79,6 +80,7 @@ impl Fm2Voice {
             carrier,
             modulator,
             envelope,
+            presence: crate::presence::Presence::new(sample_rate, -3.0),
             vibrato,
             mod_envelope,
             pitch: 69.0,
@@ -177,6 +179,7 @@ impl Fm2 {
         voice.pitch = f32::from(pitch);
         voice.velocity = velocity;
         if !stolen {
+            voice.presence.reset();
             // FM timbre depends on the phase relationship between the two operators, so a
             // reproducible note needs both to start together — safe only on a silent voice.
             voice.carrier.reset();
@@ -340,6 +343,13 @@ impl SegmentRenderer for Fm2 {
                 let depth = voice.mod_envelope.process() * index_cycles;
                 let offset = voice.modulator.next(Waveform::Sine) * depth;
                 let carrier = voice.carrier.next_modulated(Waveform::Sine, offset);
+                // Only the bright modulated attack needs voicing; the settled sine
+                // and an explicit zero-index patch retain their original spectrum.
+                let carrier = voice.presence.process(
+                    carrier,
+                    frequency * swing,
+                    (depth * std::f32::consts::TAU).min(1.0),
+                );
                 *sample += carrier * voice.envelope.process() * gain;
             }
 
@@ -384,6 +394,7 @@ impl Instrument for Fm2 {
     fn reset(&mut self) {
         for voice in &mut self.voices {
             voice.envelope.silence();
+            voice.presence.reset();
             voice.mod_envelope.silence();
             voice.carrier.reset();
             voice.modulator.reset();

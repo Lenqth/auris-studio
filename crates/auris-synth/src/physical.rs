@@ -173,6 +173,7 @@ struct Voice {
     modal: Modal,
     string: StringModel,
     envelope: Adsr,
+    presence: crate::presence::Presence,
     held: bool,
     deferred: bool,
     age: usize,
@@ -198,6 +199,15 @@ impl Voice {
             modal,
             string,
             envelope,
+            presence: crate::presence::Presence::new(
+                rate,
+                match model {
+                    Model::Piano => -3.5,
+                    Model::Guitar => -2.0,
+                    Model::ElectricGuitar | Model::Violin => -3.0,
+                    _ => 0.0,
+                },
+            ),
             held: false,
             deferred: false,
             age: 0,
@@ -581,6 +591,7 @@ impl Physical {
         voice.tail = if assignment.stolen { voice.last } else { 0.0 };
         voice.fade = if assignment.stolen { 1.0 } else { 0.0 };
         voice.envelope.silence();
+        voice.presence.reset();
         voice.envelope.set_adsr(
             if self.model == Model::Violin {
                 0.025
@@ -770,6 +781,7 @@ impl SegmentRenderer for Physical {
             if !voice.envelope.is_active() {
                 continue;
             }
+            let frequency = pitch_to_hz(f32::from(voice.pitch) + self.bend);
             for sample in samples.iter_mut() {
                 let raw = if self.model.is_string() {
                     let bow = if voice.held { self.expression } else { 0.0 };
@@ -777,6 +789,7 @@ impl SegmentRenderer for Physical {
                 } else {
                     voice.modal.next()
                 };
+                let raw = voice.presence.process(raw, frequency, 1.0);
                 let envelope = voice.envelope.process();
                 let current = raw * envelope;
                 voice.last = current * (1.0 - voice.fade) + voice.tail * voice.fade;
@@ -844,6 +857,7 @@ impl Instrument for Physical {
     fn reset(&mut self) {
         for voice in &mut self.voices {
             voice.envelope.silence();
+            voice.presence.reset();
             voice.last = 0.0;
             voice.fade = 0.0;
         }

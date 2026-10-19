@@ -34,6 +34,8 @@ struct Voice {
     pitch: f32,
     velocity: f32,
     envelope: Adsr,
+    presence: crate::presence::Presence,
+    frequency: f32,
     noise: u32,
     last: f32,
     flow_mean: f32,
@@ -51,6 +53,8 @@ impl Voice {
             pitch: 60.0,
             velocity: 0.0,
             envelope,
+            presence: crate::presence::Presence::new(rate, -2.0),
+            frequency: 440.0,
             noise: 0x1234_5678,
             last: 0.0,
             flow_mean: 0.0,
@@ -58,11 +62,13 @@ impl Voice {
     }
 
     fn prepare(&mut self, rate: f32, max_delay: usize) {
+        self.presence = crate::presence::Presence::new(rate, -2.0);
         self.delay.resize(max_delay.max(2), 0.0);
         self.envelope.set_sample_rate(rate);
     }
 
     fn reset(&mut self) {
+        self.presence.reset();
         self.delay.fill(0.0);
         self.write = 0;
         self.delay_len = 1;
@@ -157,6 +163,7 @@ impl Clarinet {
         voice.write = 0;
         if !assignment.stolen {
             voice.delay.fill(0.0);
+            voice.presence.reset();
         }
         voice.envelope.trigger();
     }
@@ -238,7 +245,8 @@ impl SegmentRenderer for Clarinet {
             if !voice.envelope.is_active() {
                 continue;
             }
-            let delay = (self.rate / (2.0 * pitch_to_hz(voice.pitch + self.bend)))
+            voice.frequency = pitch_to_hz(voice.pitch + self.bend);
+            let delay = (self.rate / (2.0 * voice.frequency))
                 .clamp(2.0, voice.delay.len().saturating_sub(2) as f32);
             voice.delay_len = delay.floor() as usize;
             voice.delay_fraction = delay - voice.delay_len as f32;
@@ -275,7 +283,11 @@ impl SegmentRenderer for Clarinet {
                 voice.last = bore;
                 // A small mouthpiece observation keeps the attack present while the first
                 // round-trip travels down the preallocated bore line.
-                *sample += (bore * 0.7 + input * 0.18) * env * voice.velocity;
+                let radiated =
+                    voice
+                        .presence
+                        .process(bore * 0.7 + input * 0.18, voice.frequency, 1.0);
+                *sample += radiated * env * voice.velocity;
             }
             *sample *= output * self.expression_current;
         }

@@ -1,0 +1,1236 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "bdd4192",
+  "rate_hz": [
+    44100,
+    48000,
+    96000
+  ],
+  "velocities": [
+    0.35,
+    0.65,
+    1.0
+  ],
+  "seconds": 1.8,
+  "hold_seconds": 1.2,
+  "policy": "Hann periodogram; 0-150 ms attack and 150-1200 ms sustain; AC normalization excludes below 30 Hz",
+  "renderer_sha256": {
+    "before": "914a7761994b3b021422a7fb593c2660d61c0b09af91dbe4040b4ddc2b526b84",
+    "after": "a5e0b6564b94dc63e381531eec032c0d5fe2495ac3ee3243e7067917840896b8"
+  },
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "profiles": [
+    {
+      "name": "piano",
+      "model": "piano",
+      "params": {},
+      "pitches": [
+        36,
+        42,
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84,
+        85,
+        87,
+        90,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "guitar",
+      "model": "guitar",
+      "params": {},
+      "pitches": [
+        40,
+        46,
+        52,
+        58,
+        64,
+        70,
+        72,
+        76,
+        77,
+        82,
+        84,
+        85,
+        87,
+        88,
+        94,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "electric_guitar",
+      "model": "electric_guitar",
+      "params": {},
+      "pitches": [
+        40,
+        46,
+        52,
+        58,
+        64,
+        70,
+        72,
+        76,
+        77,
+        82,
+        84,
+        85,
+        87,
+        88,
+        94,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "bass",
+      "model": "bass",
+      "params": {},
+      "pitches": [
+        28,
+        34,
+        40,
+        46,
+        52,
+        58,
+        64
+      ]
+    },
+    {
+      "name": "bell",
+      "model": "bell",
+      "params": {},
+      "pitches": [
+        60,
+        66,
+        72,
+        77,
+        78,
+        84,
+        85,
+        87,
+        90,
+        96
+      ]
+    },
+    {
+      "name": "mallet",
+      "model": "mallet",
+      "params": {},
+      "pitches": [
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84,
+        85,
+        87,
+        90,
+        96
+      ]
+    },
+    {
+      "name": "violin",
+      "model": "violin",
+      "params": {},
+      "pitches": [
+        55,
+        61,
+        67,
+        72,
+        73,
+        77,
+        79,
+        84,
+        85,
+        87,
+        91,
+        96,
+        97,
+        100
+      ]
+    },
+    {
+      "name": "clarinet",
+      "model": "clarinet",
+      "params": {},
+      "pitches": [
+        50,
+        56,
+        62,
+        68,
+        72,
+        74,
+        77,
+        80,
+        84,
+        85,
+        86,
+        87,
+        92,
+        96,
+        98,
+        100
+      ]
+    },
+    {
+      "name": "tin_whistle",
+      "model": "tin_whistle",
+      "params": {},
+      "pitches": [
+        74,
+        77,
+        80,
+        84,
+        85,
+        86,
+        87,
+        92,
+        96,
+        98
+      ]
+    },
+    {
+      "name": "hammered_dulcimer",
+      "model": "hammered_dulcimer",
+      "params": {},
+      "pitches": [
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84
+      ]
+    },
+    {
+      "name": "choir",
+      "model": "choir",
+      "params": {},
+      "pitches": [
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84
+      ]
+    },
+    {
+      "name": "vocal",
+      "model": "vocal",
+      "params": {},
+      "pitches": [
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84,
+        85,
+        87,
+        90,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "chiptune",
+      "model": "chiptune",
+      "params": {},
+      "pitches": [
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84,
+        85,
+        87,
+        90,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "fm2",
+      "model": "fm2",
+      "params": {},
+      "pitches": [
+        48,
+        54,
+        60,
+        66,
+        72,
+        77,
+        78,
+        84,
+        85,
+        87,
+        90,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "pulse_lead",
+      "model": "chiptune",
+      "params": {
+        "pulse_width": 0.125
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "saw_lead",
+      "model": "chiptune",
+      "params": {
+        "waveform": 2
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "fm_lead",
+      "model": "fm2",
+      "params": {
+        "ratio": 1,
+        "mod_decay": 0.3
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "sine",
+      "model": "chiptune",
+      "params": {
+        "waveform": 0
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "triangle",
+      "model": "chiptune",
+      "params": {
+        "waveform": 3
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "fm_sine",
+      "model": "fm2",
+      "params": {
+        "index": 0
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ]
+    },
+    {
+      "name": "drums",
+      "model": "drums",
+      "params": {},
+      "pitches": [
+        36,
+        38,
+        42,
+        46,
+        49,
+        51,
+        47
+      ]
+    },
+    {
+      "name": "noisedrum",
+      "model": "noisedrum",
+      "params": {},
+      "pitches": [
+        48,
+        60,
+        72
+      ]
+    },
+    {
+      "name": "amp_pop",
+      "model": "electric_guitar",
+      "params": {
+        "pickup_position": 0.12
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ],
+      "effects": [
+        {
+          "id": "amp",
+          "params": {
+            "drive_db": 12,
+            "bass_db": -2,
+            "treble_db": 1.5,
+            "cabinet": 1,
+            "output_db": -6
+          }
+        }
+      ]
+    },
+    {
+      "name": "amp_rock",
+      "model": "electric_guitar",
+      "params": {
+        "pickup_position": 0.064146
+      },
+      "pitches": [
+        48,
+        60,
+        72,
+        77,
+        84,
+        85,
+        87,
+        96,
+        100
+      ],
+      "effects": [
+        {
+          "id": "amp",
+          "params": {
+            "drive_db": 34,
+            "bass_db": -3,
+            "mid_db": 1.5,
+            "treble_db": 2,
+            "cabinet": 2,
+            "output_db": -12
+          }
+        }
+      ]
+    }
+  ],
+  "unchanged_profiles": [
+    "bass",
+    "bell",
+    "choir",
+    "drums",
+    "fm_sine",
+    "hammered_dulcimer",
+    "mallet",
+    "noisedrum",
+    "sine",
+    "tin_whistle",
+    "triangle"
+  ],
+  "summary": {
+    "amp_pop": {
+      "conditions": 81,
+      "max_sample_difference": 0.07098168134689331,
+      "attack": {
+        "conditions": 54,
+        "sharp_db": {
+          "median": -1.8000240580007572,
+          "min": -2.4848408719637622,
+          "max": -1.3778864887443225
+        },
+        "matched_sharp_db": {
+          "median": -1.0337299456144342,
+          "min": -2.1961236022804203,
+          "max": -0.7813985783674042
+        },
+        "level_db": {
+          "median": -0.7807539232703783,
+          "min": -0.9495218545733066,
+          "max": -0.2116279532584053
+        }
+      },
+      "sustain": {
+        "conditions": 45,
+        "sharp_db": {
+          "median": -1.8057153021361683,
+          "min": -1.844896743499806,
+          "max": -1.7268063149196404
+        },
+        "matched_sharp_db": {
+          "median": -1.1946224234096776,
+          "min": -1.3378020028357558,
+          "max": -1.0199814416566926
+        },
+        "level_db": {
+          "median": -0.6264028505856114,
+          "min": -0.7083616649405694,
+          "max": -0.5032295502775377
+        }
+      }
+    },
+    "amp_rock": {
+      "conditions": 81,
+      "max_sample_difference": 0.17558456771075726,
+      "attack": {
+        "conditions": 63,
+        "sharp_db": {
+          "median": -1.189448839360597,
+          "min": -2.3002636946580073,
+          "max": -0.027553699601871564
+        },
+        "matched_sharp_db": {
+          "median": -0.8527227971154515,
+          "min": -1.9671435080229527,
+          "max": -0.0333498069473802
+        },
+        "level_db": {
+          "median": -0.41704047248842036,
+          "min": -0.5942469070309604,
+          "max": 0.03485014487682435
+        }
+      },
+      "sustain": {
+        "conditions": 57,
+        "sharp_db": {
+          "median": -1.5546420905328362,
+          "min": -1.8659399170422442,
+          "max": -0.08440535875056289
+        },
+        "matched_sharp_db": {
+          "median": -0.9120843345493,
+          "min": -1.6312224992434636,
+          "max": -0.09971302485493043
+        },
+        "level_db": {
+          "median": -0.5401075711500599,
+          "min": -0.9094582826318419,
+          "max": 0.015307666104367542
+        }
+      }
+    },
+    "bass": {
+      "conditions": 63,
+      "max_sample_difference": 0.0
+    },
+    "bell": {
+      "conditions": 90,
+      "max_sample_difference": 0.0
+    },
+    "chiptune": {
+      "conditions": 117,
+      "max_sample_difference": 0.1590079367160797,
+      "attack": {
+        "conditions": 90,
+        "sharp_db": {
+          "median": -2.4958502522536783,
+          "min": -2.8314433534557604,
+          "max": -2.0098729798442143
+        },
+        "matched_sharp_db": {
+          "median": -2.220595751971728,
+          "min": -2.440134747427153,
+          "max": -1.4202706773991622
+        },
+        "level_db": {
+          "median": -0.35640156252726274,
+          "min": -0.6155896378442043,
+          "max": -0.07128935766047614
+        }
+      },
+      "sustain": {
+        "conditions": 90,
+        "sharp_db": {
+          "median": -2.4959263204183504,
+          "min": -2.8315335867536797,
+          "max": -2.009932999712974
+        },
+        "matched_sharp_db": {
+          "median": -2.2202011064629295,
+          "min": -2.4402093662652944,
+          "max": -1.4203158178520563
+        },
+        "level_db": {
+          "median": -0.3564096650166307,
+          "min": -0.6156044976562575,
+          "max": -0.07129087923081594
+        }
+      }
+    },
+    "choir": {
+      "conditions": 72,
+      "max_sample_difference": 0.0,
+      "attack": {
+        "conditions": 18,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "sustain": {
+        "conditions": 21,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    "clarinet": {
+      "conditions": 144,
+      "max_sample_difference": 0.09967127442359924,
+      "attack": {
+        "conditions": 108,
+        "sharp_db": {
+          "median": -1.645636864758612,
+          "min": -1.8938163051445411,
+          "max": -1.3559404576081346
+        },
+        "matched_sharp_db": {
+          "median": -1.3711795423713675,
+          "min": -1.6284103387167328,
+          "max": -0.9603450951404778
+        },
+        "level_db": {
+          "median": -0.25150299366701356,
+          "min": -0.4194372265060111,
+          "max": -0.04407014749791476
+        }
+      },
+      "sustain": {
+        "conditions": 108,
+        "sharp_db": {
+          "median": -1.6482040801389797,
+          "min": -1.8938852390508587,
+          "max": -1.3556957416321347
+        },
+        "matched_sharp_db": {
+          "median": -1.3686499414130555,
+          "min": -1.628119051732304,
+          "max": -0.9603600214624821
+        },
+        "level_db": {
+          "median": -0.25165937560715,
+          "min": -0.4194118453381007,
+          "max": -0.05244937879651784
+        }
+      }
+    },
+    "drums": {
+      "conditions": 63,
+      "max_sample_difference": 0.0,
+      "attack": {
+        "conditions": 45,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "sustain": {
+        "conditions": 36,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    "electric_guitar": {
+      "conditions": 153,
+      "max_sample_difference": 0.03825899958610535,
+      "attack": {
+        "conditions": 73,
+        "sharp_db": {
+          "median": -1.8380965911386662,
+          "min": -2.799397891556622,
+          "max": -1.728458600270447
+        },
+        "matched_sharp_db": {
+          "median": -1.0641867372181653,
+          "min": -2.0352013602109325,
+          "max": -0.3712471570189293
+        },
+        "level_db": {
+          "median": -0.7947267860156941,
+          "min": -1.4499326298875328,
+          "max": -0.3964801822063202
+        }
+      },
+      "sustain": {
+        "conditions": 54,
+        "sharp_db": {
+          "median": -1.8053755069462345,
+          "min": -1.8545367821495937,
+          "max": -1.7288110192691197
+        },
+        "matched_sharp_db": {
+          "median": -0.8045575941293248,
+          "min": -1.6319912568862889,
+          "max": -0.680256692399869
+        },
+        "level_db": {
+          "median": -0.9665050808173877,
+          "min": -1.136296314458559,
+          "max": -0.21286618678433378
+        }
+      }
+    },
+    "fm2": {
+      "conditions": 117,
+      "max_sample_difference": 0.10639289021492004,
+      "attack": {
+        "conditions": 54,
+        "sharp_db": {
+          "median": -2.1119684123885283,
+          "min": -2.611616538612647,
+          "max": -1.6741109544872748
+        },
+        "matched_sharp_db": {
+          "median": -1.7594432587117013,
+          "min": -2.442491707993125,
+          "max": -1.256604650538229
+        },
+        "level_db": {
+          "median": -0.34288286075811614,
+          "min": -0.42503043087916687,
+          "max": -0.16605170529047591
+        }
+      }
+    },
+    "fm_lead": {
+      "conditions": 81,
+      "max_sample_difference": 0.09395299851894379,
+      "attack": {
+        "conditions": 36,
+        "sharp_db": {
+          "median": -1.624482998459594,
+          "min": -1.952612755826633,
+          "max": -1.5844985155653013
+        },
+        "matched_sharp_db": {
+          "median": -1.2054167112097072,
+          "min": -1.7466670630329864,
+          "max": -1.1506647251166273
+        },
+        "level_db": {
+          "median": -0.41906628573493276,
+          "min": -0.4405767880106292,
+          "max": -0.2012289037962695
+        }
+      }
+    },
+    "fm_sine": {
+      "conditions": 81,
+      "max_sample_difference": 0.0
+    },
+    "guitar": {
+      "conditions": 153,
+      "max_sample_difference": 0.0039589181542396545,
+      "attack": {
+        "conditions": 45,
+        "sharp_db": {
+          "median": -1.2112233993987593,
+          "min": -1.8252412145530392,
+          "max": -1.1709946849615644
+        },
+        "matched_sharp_db": {
+          "median": -0.722936198104256,
+          "min": -1.2689430672764082,
+          "max": -0.6799195244376314
+        },
+        "level_db": {
+          "median": -0.4921598448633447,
+          "min": -0.5800357739403919,
+          "max": -0.4723266466841258
+        }
+      },
+      "sustain": {
+        "conditions": 36,
+        "sharp_db": {
+          "median": -1.18839610021868,
+          "min": -1.2237481765355427,
+          "max": -1.1551558564483837
+        },
+        "matched_sharp_db": {
+          "median": -0.843883398002836,
+          "min": -0.8689954417213883,
+          "max": -0.8091271093694242
+        },
+        "level_db": {
+          "median": -0.34986216911715223,
+          "min": -0.3674900707502583,
+          "max": -0.33247532296847065
+        }
+      }
+    },
+    "hammered_dulcimer": {
+      "conditions": 72,
+      "max_sample_difference": 0.0
+    },
+    "mallet": {
+      "conditions": 108,
+      "max_sample_difference": 0.0,
+      "attack": {
+        "conditions": 2,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    "noisedrum": {
+      "conditions": 27,
+      "max_sample_difference": 0.0,
+      "attack": {
+        "conditions": 18,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "sustain": {
+        "conditions": 18,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    "piano": {
+      "conditions": 135,
+      "max_sample_difference": 0.06976516544818878,
+      "attack": {
+        "conditions": 53,
+        "sharp_db": {
+          "median": -2.151982646208686,
+          "min": -2.811672907284595,
+          "max": -2.0763083581359423
+        },
+        "matched_sharp_db": {
+          "median": -1.1156410719513281,
+          "min": -2.3304623168570204,
+          "max": -0.7388331084248256
+        },
+        "level_db": {
+          "median": -1.0277301359761253,
+          "min": -1.38652602739083,
+          "max": -0.1987623509424674
+        }
+      },
+      "sustain": {
+        "conditions": 57,
+        "sharp_db": {
+          "median": -2.198558150921291,
+          "min": -2.9185284127618965,
+          "max": -2.1112746353941145
+        },
+        "matched_sharp_db": {
+          "median": -1.0634679627028891,
+          "min": -2.3410666545665904,
+          "max": -0.3836277153120937
+        },
+        "level_db": {
+          "median": -1.211091930321943,
+          "min": -1.8228148655141334,
+          "max": -0.19419927760574984
+        }
+      }
+    },
+    "pulse_lead": {
+      "conditions": 81,
+      "max_sample_difference": 0.16730931401252747,
+      "attack": {
+        "conditions": 63,
+        "sharp_db": {
+          "median": -2.205991908935279,
+          "min": -2.694838368050375,
+          "max": -1.7517550130975472
+        },
+        "matched_sharp_db": {
+          "median": -1.2044229783697369,
+          "min": -2.3651377581306114,
+          "max": -0.5932295980286306
+        },
+        "level_db": {
+          "median": -1.1005729767849715,
+          "min": -1.3943632400654014,
+          "max": -0.16591264686945545
+        }
+      },
+      "sustain": {
+        "conditions": 63,
+        "sharp_db": {
+          "median": -2.2060564285790405,
+          "min": -2.6949194743390885,
+          "max": -1.7517977809326708
+        },
+        "matched_sharp_db": {
+          "median": -1.2044600131900627,
+          "min": -2.3652115554011006,
+          "max": -0.5932382042917901
+        },
+        "level_db": {
+          "median": -1.1006032387848432,
+          "min": -1.3944044027994482,
+          "max": -0.16591761497217544
+        }
+      }
+    },
+    "saw_lead": {
+      "conditions": 81,
+      "max_sample_difference": 0.15587690472602844,
+      "attack": {
+        "conditions": 63,
+        "sharp_db": {
+          "median": -2.2542424165185313,
+          "min": -2.4614023068351503,
+          "max": -1.7761082868892997
+        },
+        "matched_sharp_db": {
+          "median": -1.6817376408954727,
+          "min": -2.351306575136643,
+          "max": -0.9971943225229785
+        },
+        "level_db": {
+          "median": -0.5725047806210644,
+          "min": -0.8269070292893113,
+          "max": -0.10576631216724737
+        }
+      },
+      "sustain": {
+        "conditions": 63,
+        "sharp_db": {
+          "median": -2.25430862519842,
+          "min": -2.461480273998156,
+          "max": -1.7761545434284187
+        },
+        "matched_sharp_db": {
+          "median": -1.6817904067115212,
+          "min": -2.3513819279986206,
+          "max": -0.9972208435662723
+        },
+        "level_db": {
+          "median": -0.572518219011123,
+          "min": -0.8269271142492867,
+          "max": -0.10576938268301547
+        }
+      }
+    },
+    "sine": {
+      "conditions": 81,
+      "max_sample_difference": 0.0
+    },
+    "tin_whistle": {
+      "conditions": 90,
+      "max_sample_difference": 0.0
+    },
+    "triangle": {
+      "conditions": 81,
+      "max_sample_difference": 0.0,
+      "attack": {
+        "conditions": 36,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "sustain": {
+        "conditions": 36,
+        "sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "matched_sharp_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "level_db": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    "violin": {
+      "conditions": 126,
+      "max_sample_difference": 0.0194481760263443,
+      "attack": {
+        "conditions": 90,
+        "sharp_db": {
+          "median": -2.427108403257772,
+          "min": -2.7626439270489422,
+          "max": -1.8045189700666473
+        },
+        "matched_sharp_db": {
+          "median": -1.560415867826453,
+          "min": -1.9742922005297376,
+          "max": -0.6926378222422376
+        },
+        "level_db": {
+          "median": -0.8390236571358944,
+          "min": -1.4309097979168284,
+          "max": -0.45845575820450074
+        }
+      },
+      "sustain": {
+        "conditions": 90,
+        "sharp_db": {
+          "median": -2.46640787092328,
+          "min": -2.6379389979205268,
+          "max": -1.8265553586809928
+        },
+        "matched_sharp_db": {
+          "median": -1.8045372780415874,
+          "min": -2.3674998966532854,
+          "max": -0.6820115070309707
+        },
+        "level_db": {
+          "median": -0.5983728404465241,
+          "min": -1.318614388354396,
+          "max": -0.24850251439973825
+        }
+      }
+    },
+    "vocal": {
+      "conditions": 117,
+      "max_sample_difference": 0.006551502272486687,
+      "attack": {
+        "conditions": 72,
+        "sharp_db": {
+          "median": -1.364086219747307,
+          "min": -1.4574588271080717,
+          "max": -0.3820084817156863
+        },
+        "matched_sharp_db": {
+          "median": -1.3200622011359255,
+          "min": -1.4457321093373336,
+          "max": -0.2189791286838529
+        },
+        "level_db": {
+          "median": -0.029657972602527165,
+          "min": -0.1727755172172616,
+          "max": -0.010604165082578759
+        }
+      },
+      "sustain": {
+        "conditions": 72,
+        "sharp_db": {
+          "median": -1.3651790714629177,
+          "min": -1.4545889442719004,
+          "max": -0.3856875611295435
+        },
+        "matched_sharp_db": {
+          "median": -1.3200007980952129,
+          "min": -1.4443524122354348,
+          "max": -0.2195435091598794
+        },
+        "level_db": {
+          "median": -0.029491847137400783,
+          "min": -0.17508495083493192,
+          "max": -0.009839345171867804
+        }
+      }
+    }
+  },
+  "symbolic_unchanged": true,
+  "learned_lead_diagnostic": {
+    "input": "10.4-second solo pulse-lead phrase, width 0.125, velocity 0.8, frozen written notes",
+    "prompt_profile": "chiptune",
+    "segments": 1,
+    "before": {
+      "tunejury_reward": -0.7517607808113098,
+      "positive_cosine": 0.29079970717430115,
+      "contrast_cosine": 0.012478247284889221,
+      "contrast_margin": 0.2783214598894119,
+      "positive_cosine_stddev": 0.0,
+      "contrast_margin_stddev": 0.0
+    },
+    "after": {
+      "tunejury_reward": -0.7795762419700623,
+      "positive_cosine": 0.2907719612121582,
+      "contrast_cosine": 0.014614321291446686,
+      "contrast_margin": 0.2761576399207115,
+      "positive_cosine_stddev": 0.0,
+      "contrast_margin_stddev": 0.0
+    },
+    "comparison": {
+      "status": "ok",
+      "delta": {
+        "tunejury_reward": -0.02781546115875244,
+        "positive_cosine": -2.7745962142944336e-05,
+        "contrast_cosine": 0.0021360740065574646,
+        "contrast_margin": -0.002163819968700409
+      },
+      "same_excerpt_positions": true
+    },
+    "wav_sha256": {
+      "before": "cede4f3fa062b4759d64f2a7bb6f23c842751f266ad3a51159822be05e1f09ee",
+      "after": "bfad0bb37441b0f82176c0739f45a7efb8413bae9af4a83d91b64c38ce58107c"
+    },
+    "report_sha256": {
+      "before": "57bbe2cd8c3036060df88db77d63dc519298f30f7ed73d0397e99b311d6c2b59",
+      "after": "a7a2f6ef2fe2a02fbceb89d6bf2799e2598fd6d7eee4f044c10afe0b78e7769c"
+    },
+    "interpretation": "A coarse solo-lead diagnostic, not evidence of improved musical preference or perceived timbre."
+  }
+}
