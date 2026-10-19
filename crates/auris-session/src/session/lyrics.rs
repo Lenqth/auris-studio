@@ -1,18 +1,7 @@
-//! Composing from lyrics: the words first, then the tune, then the band.
+//! Vocal writing, lyric validation and measurement for song sections.
 //!
-//! The Orpheus pipeline seen from this layer. [`Session::compose_from_lyrics`] reads a lyric,
-//! asks `auris-vocal` for its moras and — where the Japanese dictionary is loaded — the pitch
-//! accent of each phrase, asks `auris-compose`'s vocal writer for a melody that honours that
-//! accent over the document's harmony, and lands the result as an ordinary singer clip: every
-//! note carrying its mora and phonemes, ready for a voice model, editable like anything typed
-//! by hand. Where the document has no chords yet, a stock progression is stamped first so the
-//! search has ground to stand on — visibly, in the harmony lane, where it can be disagreed
-//! with and the parts regenerated around the correction, exactly the [`Session::accompany`]
-//! bargain.
-//!
-//! Without a dictionary the moras still split and the melody still writes, but every contour
-//! is free: the Orpheus constraint — sing the words the way they are spoken — only has teeth
-//! where something actually analysed the accent. The report says which of the two happened.
+//! Japanese lyrics are read into moras and pitch-accent contours. The song composer fits
+//! them to each section's bars and harmony, producing editable singer clips.
 
 use auris_compose::vocal::{
     VocalPhraseProsody, VocalRange, VocalRhythm, ornament_vocal, vocal_rhythm,
@@ -24,14 +13,8 @@ use auris_core::{ClipId, ClipPreset, Note, TrackId};
 use auris_vocal::{SungMora, kana_accent_phrase};
 
 use crate::error::SessionError;
-use crate::history::Edit;
 
 use super::Session;
-
-/// The progression stamped under a lyric when the document has none: 王道進行, the royal
-/// road — IV V iii vi, the most-worn ground in J-pop, which is exactly what a default
-/// should be.
-pub const DEFAULT_LYRIC_PROGRESSION: &str = "royal-road";
 
 /// One musical phrase of a lyric: its moras, and what each asks of the melody.
 struct LyricPhrase {
@@ -348,32 +331,6 @@ fn arrange_vocal_backing(
     }
 }
 
-/// What composing from lyrics produced.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LyricSongReport {
-    /// The singer track the melody landed on.
-    pub track: TrackId,
-    /// The clip holding the sung notes.
-    pub clip: ClipId,
-    /// How many notes — one per mora — were written.
-    pub notes: usize,
-    /// How many phrases the lyric was cut into.
-    pub phrases: usize,
-    /// `true` when the pitch accent actually constrained the melody — the dictionary was
-    /// loaded and analysed at least one phrase. `false` means the tune is free-composed
-    /// over the words, which is worth telling the person who expected Orpheus.
-    pub accented: bool,
-    /// How many bars the song covers.
-    pub bars: usize,
-    /// How many chords were stamped — zero when the document already had its own.
-    pub chords: usize,
-    /// The backing tracks written, in order.
-    pub parts: Vec<TrackId>,
-    /// `true` when the parts play the built-in oscillators because no General MIDI font is
-    /// installed.
-    pub substituted: bool,
-}
-
 impl Session {
     /// Checks vocal density and shared phrases before composing can replace the document.
     /// Different verses must fit the same note slots, including phrase boundaries.
@@ -433,132 +390,6 @@ impl Session {
         Ok(())
     }
 
-    /// Writes a song from a lyric: a melody that follows the words, sung notes that carry
-    /// them, and a band behind it. One undo step for the lot.
-    ///
-    /// Phrases are cut at line breaks and sentence punctuation — those are *musical*
-    /// boundaries, where a singer breathes. With the Japanese dictionary loaded every phrase
-    /// is read for its pitch accent and the melody is searched under Orpheus's constraint;
-    /// without one, kana lyrics still sing (with a free contour) and kanji still refuses
-    /// with the error that names the dictionary setting. `seed` names the take, the way it
-    /// does everywhere else; the same lyric, harmony and seed write the same song.
-    pub fn compose_from_lyrics(
-        &mut self,
-        lyrics: &str,
-        parts: &[ClipPreset],
-        seed: u64,
-    ) -> Result<LyricSongReport, SessionError> {
-        // Everything that can refuse does so here, before anything is recorded.
-        let phrases = read_lyrics(lyrics, self.japanese.as_ref())?;
-        if phrases.is_empty() {
-            return Err(SessionError::NoLyrics);
-        }
-        let accented = phrases
-            .iter()
-            .any(|phrase| phrase.contours.iter().any(|c| *c != Contour::Free));
-        let counts: Vec<usize> = phrases.iter().map(|phrase| phrase.moras.len()).collect();
-        let meter = self.signature_at(Ticks::ZERO);
-        let estimated = lyric_rhythm(&phrases, meter);
-        let bar = meter.ticks_per_bar().raw().max(1);
-        let bars = (estimated.length.raw() / bar) as usize;
-        let rhythm = fitted_lyric_rhythm(&phrases, meter, bars, None, seed).ok_or_else(|| {
-            SessionError::SongLyrics("lyrics do not fit the estimated span".into())
-        })?;
-
-        self.begin_transaction(Edit::ComposeLyrics);
-
-        // Ground to stand on: chords the search can read. Only where the document has none —
-        // a harmony somebody wrote is theirs, however little of the span it covers.
-        let mut chords = 0;
-        if self.project.harmony.chords.is_empty() {
-            match self.stamp_named_progression(DEFAULT_LYRIC_PROGRESSION, Ticks::ZERO, bars) {
-                Ok(stamped) => chords = stamped,
-                Err(error) => {
-                    self.end_transaction();
-                    return Err(error);
-                }
-            }
-        }
-
-        let notes = write_lyric_vocal(&self.project, Ticks::ZERO, &rhythm, &phrases, seed);
-
-        // Each note finds its mora by onset rather than by position in a flat list, so a
-        // phrase the writer could not fill (a degenerate range) cannot shift every word
-        // after it onto the wrong note.
-        let mut moras: std::collections::HashMap<Ticks, &SungMora> = Default::default();
-        for (slots, phrase) in rhythm.phrases.iter().zip(&phrases) {
-            for ((onset, _), mora) in slots.iter().zip(&phrase.moras) {
-                moras.insert(*onset, mora);
-            }
-        }
-
-        let track = self.add_singer_track("Vocal");
-        let clip = match self.add_midi_clip(track, "Vocal", Ticks::ZERO, rhythm.length) {
-            Ok(clip) => clip,
-            Err(error) => {
-                self.end_transaction();
-                return Err(error);
-            }
-        };
-        let mut written = 0;
-        for note in notes {
-            let Some(mora) = moras.get(&note.start) else {
-                continue;
-            };
-            let sung = Note {
-                lyric: mora.text.clone(),
-                phonemes: mora.phonemes.clone(),
-                ..note
-            };
-            if self.add_note(clip, sung).is_ok() {
-                written += 1;
-            }
-        }
-
-        // The band, the accompany way: stock parts using native musical sound hints, each a
-        // recipe that can be argued with and regenerated, seeded off the melody's own seed
-        // so one number names the whole song.
-        let mut report = LyricSongReport {
-            track,
-            clip,
-            notes: written,
-            phrases: counts.len(),
-            accented,
-            bars,
-            chords,
-            parts: Vec::with_capacity(parts.len()),
-            substituted: false,
-        };
-        for (index, preset) in parts.iter().enumerate() {
-            let added = if preset.is_drums() {
-                self.add_default_drum_track(part_name(*preset))
-            } else {
-                self.add_default_instrument_track(part_name(*preset))
-            };
-            let Ok(band) = added else {
-                continue;
-            };
-            let sound = auris_compose::analysis::sound_for(*preset);
-            if self
-                .use_backing_sound(band, i32::from(sound.bank), i32::from(sound.patch))
-                .is_err()
-            {
-                report.substituted = true;
-            }
-            let recipe =
-                super::accompany::backing_part_recipe(*preset, seed.wrapping_add(1 + index as u64));
-            match self.generate_clip(band, Ticks::ZERO, rhythm.length, recipe) {
-                Ok(_) => report.parts.push(band),
-                Err(error) => log::warn!("no {} was written: {error}", preset.name()),
-            }
-        }
-
-        self.end_transaction();
-        Ok(report)
-    }
-}
-
-impl Session {
     /// Writes the singer track a composed piece's lyrics ask for, into a project still
     /// being built.
     ///
@@ -686,9 +517,9 @@ impl Session {
 
 /// Mora counts and an unconstrained rhythm estimate for a lyric, line by line.
 ///
-/// `bars` describes the standalone lyric command. For preset sections, `fits_in_bars`
+/// `bars` estimates the space a lyric needs without a fixed section length. `fits_in_bars`
 /// checks the fixed-length rhythm allocator that song composition uses. Seed and style
-/// change the placement of notes, but never this capacity or the standalone bar count.
+/// change the placement of notes, but never this capacity or the estimated bar count.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LyricsMeasure {
     /// Mora counts of readable musical phrases, including punctuation boundaries.
@@ -700,7 +531,7 @@ pub struct LyricsMeasure {
     pub lines: Vec<Option<usize>>,
     /// Notes the whole lyric would sing, counting only the readable lines.
     pub notes: usize,
-    /// Bars the standalone lyric rhythm would cover, with phrase-final closures kept short.
+    /// Estimated bars without a fixed section length, with phrase-final closures kept short.
     pub bars: usize,
 }
 
@@ -713,7 +544,7 @@ impl LyricsMeasure {
     }
 
     /// Counts complete notes in a prefix of the unconstrained rhythm estimate.
-    /// This is an estimate of the standalone layout, not permission to drop a lyric's tail;
+    /// This estimates the unconstrained layout, not permission to drop a lyric's tail;
     /// use `fits_in_bars` to decide whether a fixed section can sing all of its words.
     /// An unreadable lyric has no reliable capacity estimate and returns no count.
     pub fn notes_within_bars(&self, meter: TimeSignature, bars: usize) -> Option<usize> {
@@ -839,16 +670,6 @@ fn read_lyrics(
     Ok(phrases)
 }
 
-/// What a written part's track is called — the accompany convention.
-fn part_name(preset: ClipPreset) -> String {
-    let name = preset.name();
-    let mut first = name.chars();
-    match first.next() {
-        Some(letter) => letter.to_uppercase().collect::<String>() + first.as_str(),
-        None => name.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -900,27 +721,6 @@ mod tests {
         assert_eq!(stretched[0].moras.len(), 4);
         assert_eq!(stretched[0].moras[1].phonemes, ["o"]);
         assert_eq!(stretched[0].moras[3].phonemes, ["o"]);
-    }
-
-    #[test]
-    fn standalone_writing_uses_the_seeded_prosodic_rhythm_inside_its_estimated_span() {
-        let words = "あさの ひかりが\nまどを たたくよ";
-        let meter = TimeSignature::default();
-        let phrases = read_lyrics(words, None).unwrap();
-        let mut session = session();
-        let measured = session.measure_lyrics(words, meter);
-        let expected = fitted_lyric_rhythm(&phrases, meter, measured.bars, None, 37).unwrap();
-        let report = session.compose_from_lyrics(words, &[], 37).unwrap();
-        let notes = &session.midi_clip(report.clip).unwrap().notes;
-        assert_eq!(notes.len(), measured.notes);
-        assert_eq!(report.bars, measured.bars);
-        assert_eq!(
-            notes
-                .iter()
-                .map(|note| (note.start, note.length))
-                .collect::<Vec<_>>(),
-            expected.phrases.into_iter().flatten().collect::<Vec<_>>()
-        );
     }
 
     #[test]
@@ -1258,8 +1058,19 @@ mod tests {
     fn closures_keep_words_and_timing_without_sung_ornaments() {
         for words in ["ずっと", "あっ", "ッあ", "あっっと", "っっ"] {
             let mut session = session();
-            let report = session.compose_from_lyrics(words, &[], 7).unwrap();
-            let clip = session.midi_clip(report.clip).unwrap();
+            let mut spec = auris_compose::SongSpec::parse(
+                "form = \"verse\"\nseed = 7\n[section.verse]\nbars = 2\n",
+            )
+            .unwrap();
+            spec.sections.get_mut("verse").unwrap().lyrics = words.into();
+            session.compose(&auris_compose::compose(&spec)).unwrap();
+            let clip = &session
+                .project()
+                .tracks
+                .iter()
+                .find_map(|track| track.kind.as_singer())
+                .unwrap()
+                .clips[0];
             let moras = auris_vocal::split_kana_lyric(words).unwrap();
             assert_eq!(clip.notes.len(), moras.len());
             for (note, (text, phonemes)) in clip.notes.iter().zip(moras) {
@@ -1312,9 +1123,6 @@ mod tests {
             (1, Some(6)),
             "the displayed fit must agree with the actual closure duration"
         );
-        let from_lyrics = session.compose_from_lyrics(lyrics, &[], 7).unwrap();
-        assert_eq!(from_lyrics.bars, 1);
-        assert_eq!(from_lyrics.notes, 6);
     }
 
     #[test]
@@ -1628,76 +1436,6 @@ mod tests {
     }
 
     #[test]
-    fn a_kana_lyric_becomes_a_sung_clip_over_stamped_chords() {
-        let mut session = session();
-        let report = session
-            .compose_from_lyrics("さくら さいた\nはるが きた", &[], 7)
-            .unwrap();
-
-        assert_eq!(report.phrases, 2);
-        assert_eq!(report.notes, 11, "six moras and five, one note each");
-        assert!(!report.accented, "no dictionary, no accent");
-        assert!(report.chords > 0, "the royal road was laid down");
-        assert!(report.parts.is_empty());
-
-        let clip = session.midi_clip(report.clip).unwrap();
-        assert_eq!(clip.notes.len(), 11);
-        assert_eq!(clip.notes[0].lyric, "さ");
-        assert_eq!(clip.notes[0].phonemes, ["s", "a"]);
-        assert!(
-            clip.notes.iter().all(|note| !note.phonemes.is_empty()),
-            "every note carries its word"
-        );
-        // The harmony is in the document, visible and arguable.
-        assert!(session.project().harmony.numeral_at(Ticks::ZERO).is_some());
-    }
-
-    #[test]
-    fn the_band_comes_along_and_one_undo_takes_the_song_back() {
-        let mut session = session();
-        let tracks = session.project().tracks.len();
-        let report = session
-            .compose_from_lyrics("こんにちは", &[ClipPreset::Bass, ClipPreset::Drums], 1)
-            .unwrap();
-        assert_eq!(report.parts.len(), 2);
-        assert_eq!(session.project().tracks.len(), tracks + 3);
-
-        assert_eq!(session.undo(), Some(Edit::ComposeLyrics));
-        assert_eq!(session.project().tracks.len(), tracks);
-        assert!(
-            session.project().harmony.numeral_at(Ticks::ZERO).is_none(),
-            "the stamped chords came back off with the song"
-        );
-    }
-
-    #[test]
-    fn the_seed_names_the_song_and_refusals_cost_nothing() {
-        let sung = |seed: u64| {
-            let mut session = session();
-            let report = session
-                .compose_from_lyrics("ゆきが ふる", &[], seed)
-                .unwrap();
-            session.midi_clip(report.clip).unwrap().notes.clone()
-        };
-        assert_eq!(sung(3), sung(3), "one seed, one song");
-
-        let mut session = session();
-        assert!(matches!(
-            session.compose_from_lyrics("  \n 、。", &[], 0),
-            Err(SessionError::NoLyrics)
-        ));
-        assert!(
-            matches!(
-                session.compose_from_lyrics("漢字の歌詞", &[], 0),
-                Err(SessionError::Vocal(_))
-            ),
-            "kanji without a dictionary names the cure"
-        );
-        assert!(!session.can_undo(), "a refusal costs no step");
-        assert_eq!(session.project().tracks.len(), 0);
-    }
-
-    #[test]
     fn a_composed_piece_sings_the_sections_that_carry_words() {
         let spec = auris_compose::SongSpec::parse(
             "form = \"verse chorus verse\"\nending = \"none\"\n[section.verse]\nbars = 4\nlyrics = \"さくら さいた\"\n[section.chorus]\nbars = 4\n",
@@ -1817,19 +1555,5 @@ mod tests {
         assert_eq!(measure.notes_within_bars(meter, 1), Some(5));
         assert_eq!(measure.notes_within_bars(meter, 2), Some(6));
         assert_eq!(measure.notes_within_bars(meter, 3), Some(11));
-    }
-
-    #[test]
-    fn a_harmony_already_written_is_left_alone() {
-        let mut session = session();
-        session
-            .stamp_named_progression("canon", Ticks::ZERO, 4)
-            .unwrap();
-        session.forget_history();
-        let before = session.project().harmony.chords.points().to_vec();
-
-        let report = session.compose_from_lyrics("そらを とぶ", &[], 2).unwrap();
-        assert_eq!(report.chords, 0, "nothing was stamped");
-        assert_eq!(session.project().harmony.chords.points(), &before[..]);
     }
 }

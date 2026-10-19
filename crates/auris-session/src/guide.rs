@@ -423,7 +423,7 @@ pub mod architecture {
     //! reproduce a GM patch: slap bass, muted guitar and string pads become editable starting
     //! parameters. The composer's existing strum, mute, expression and pitch-performance stages
     //! still perform the notes. Explicit SoundFont and hosted sources take precedence and are
-    //! validated before editing. Accompaniment and lyric-song backing use the same mapping.
+    //! validated before editing. Accompaniment uses the same mapping.
     //! Unknown families retain the ordinary reported fallback. Selection never rewrites notes.
     //! Shipped song presets name native physical instruments directly for their melodic parts;
     //! chiptune and game-loop retain their melodic oscillator voices. Drum parts use the native

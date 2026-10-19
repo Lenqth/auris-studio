@@ -377,7 +377,6 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_compose_song))
                     .on_action(Self::window_listener(cx, Self::on_compose_from_spec))
                     .on_action(Self::window_listener(cx, Self::on_accompany_melody))
-                    .on_action(Self::window_listener(cx, Self::on_compose_from_lyrics))
                     .on_action(Self::window_listener(cx, Self::on_balance_levels))
                     .on_action(Self::window_listener(cx, Self::on_save_project))
                     .on_action(Self::window_listener(cx, Self::on_save_project_as))
@@ -2493,22 +2492,6 @@ impl AurisApp {
             Some(clip) => self.run_menu_command(MenuCommand::AccompanyClip(clip), cx),
             None => self.set_status(self.t(Key::NoClipToAccompany)),
         }
-        cx.notify();
-    }
-
-    /// Opens the lyric field a whole song is composed from.
-    fn on_compose_from_lyrics(
-        &mut self,
-        _: &actions::ComposeFromLyrics,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let title = self.t(Key::PromptComposeLyrics);
-        self.open_prompt(crate::ui::prompt::Prompt::new(
-            title,
-            crate::ui::prompt::PromptTarget::ComposeLyrics,
-            String::new(),
-        ));
         cx.notify();
     }
 

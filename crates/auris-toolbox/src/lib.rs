@@ -136,7 +136,7 @@ eight bars. preview uses start_bar plus bars, both top-level fields. Automation 
 absolute quarter-note position from zero: beat 16 is the start of bar 5 in 4/4.
 
 write_lyrics places words on singer notes; sing renders a real voice take. A guide voice is
-temporary and stale takes need sing again. compose_lyrics creates music from Japanese lyrics.
+temporary and stale takes need sing again. Song specifications accept lyrics per section.
 listen renders a short excerpt and sends actual audio to a separate audio-capable critic.
 Make a targeted edit only when supported by the review; otherwise keep the mix unchanged.
 After an edit, read back the saved state and listen to the same range. Keep the returned
@@ -393,7 +393,6 @@ pub const WRITES_PROJECTS: &[&str] = &[
     edit_harmony::NAME,
     edit_recipe::NAME,
     compose::NAME,
-    compose_lyrics::NAME,
     regenerate_clips::NAME,
     set_level::NAME,
     normalize_mix::NAME,
@@ -2764,96 +2763,6 @@ pub mod write_lyrics {
     }
 }
 
-/// Composing a song from its words.
-pub mod compose_lyrics {
-    use super::*;
-
-    /// The tool's wire name.
-    pub const NAME: &str = "compose_lyrics";
-    /// The tool's model-facing description.
-    pub const DESCRIPTION: &str = "Writes a song from Japanese lyrics and saves it as a new \
-        project: a melody searched under the words the Orpheus way, sung notes carrying each \
-        syllable, chords in the harmony lane, and a backing band unless `melody_only`. Where \
-        a Japanese dictionary is configured the melody follows the lyric's pitch accent; kana \
-        lyrics work without one, free of the accent. Phrases break at line breaks and \
-        punctuation. The same lyrics and `seed` write the same song; `sing` then gives the \
-        vocal its voice.";
-
-    /// Arguments to `compose_lyrics`.
-    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-    pub struct Args {
-        /// The lyrics to compose from. Line breaks and 、。！？ cut the musical phrases.
-        pub lyrics: String,
-        /// Where to save the project, as an absolute `.auris` path. The project becomes a
-        /// folder: choosing `MySong.auris` writes `MySong/MySong.auris`.
-        pub output: String,
-        /// The take's seed; 0 when left out. Another seed is another melody.
-        pub seed: Option<u64>,
-        /// Write only the sung melody and its chords, leaving the band off.
-        #[serde(default)]
-        pub melody_only: bool,
-        /// Replace the project already at `output`, instead of refusing to.
-        #[serde(default)]
-        pub force: bool,
-    }
-
-    /// Writes the song, and saves it where asked.
-    pub fn run(args: &Args) -> Result<String, String> {
-        let mut session = headless()?;
-        let seed = args.seed.unwrap_or(0);
-        let parts: &[ClipPreset] = match args.melody_only {
-            true => &[],
-            false => &auris_session::DEFAULT_PARTS,
-        };
-        let report = session
-            .compose_from_lyrics(&args.lyrics, parts, seed)
-            .map_err(|error| error.to_string())?;
-
-        // `save_as`, never `save` — the compose tool's reasoning, verbatim.
-        let chosen = Path::new(&args.output);
-        cancellation::begin_commit()?;
-        let saved = match args.force {
-            true => session.save_as_replacing(chosen),
-            false => session.save_as(chosen),
-        };
-        let written = match saved {
-            Ok(save) => save.document,
-            Err(SessionError::WouldReplace(path)) => {
-                return Err(format!(
-                    "the folder at {} already holds a project; pass force: true to replace it",
-                    path.display()
-                ));
-            }
-            Err(error) => return Err(error.to_string()),
-        };
-        let written = std::path::absolute(&written).unwrap_or(written);
-
-        let mut text = format!(
-            "Wrote {} — {} phrases, {} sung notes over {} bars, {} backing parts, seed {seed}.",
-            written.display(),
-            report.phrases,
-            report.notes,
-            report.bars,
-            report.parts.len(),
-        );
-        if !report.accented {
-            text.push_str(
-                "\nNote: no Japanese dictionary is configured, so the melody is free of the \
-                 lyric's pitch accent; naming one in the settings makes the tune follow the \
-                 words.",
-            );
-        }
-        if report.substituted {
-            text.push_str(
-                "\nNote: the General MIDI font is not installed, so the band plays through \
-                 stand-in oscillators.",
-            );
-        }
-        text.push_str("\nThe vocal track has no voice yet — `sing` with `voice` gives it one.");
-        Ok(text)
-    }
-}
-
 /// A singer track, rendered through its voice model.
 pub mod sing {
     use super::*;
@@ -4305,48 +4214,6 @@ mod tests {
         .unwrap();
         assert!(rendered.contains("16-bit"), "{rendered}");
         assert!(wav.exists());
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    /// The words-first door: kana lyrics in, a saved song out, and the answer says both what
-    /// was written and what was *not* analysed — no dictionary means no accent, and the tool
-    /// says so instead of quietly free-composing under a false flag.
-    #[test]
-    fn lyrics_become_a_saved_song_that_names_its_next_step() {
-        let root =
-            std::env::temp_dir().join(format!("auris-toolbox-lyrics-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        let args = compose_lyrics::Args {
-            lyrics: "さくら さいた\nはるが きた".into(),
-            output: root.join("Sakura.auris").display().to_string(),
-            seed: Some(1),
-            melody_only: false,
-            force: false,
-        };
-
-        let answer = compose_lyrics::run(&args).expect("kana needs no dictionary");
-        assert!(answer.contains("2 phrases"), "{answer}");
-        assert!(answer.contains("11 sung notes"), "{answer}");
-        assert!(answer.contains("3 backing parts"), "{answer}");
-        // The tool sessions load the shipped dictionary, so what the answer says about the
-        // accent depends on whether this machine has fetched it — a fetched checkout hears
-        // the accent, a bare CI runner is told plainly that nothing did.
-        assert_eq!(
-            answer.contains("pitch accent"),
-            auris_session::library::installed_dictionary().is_none(),
-            "honest about the accent either way: {answer}"
-        );
-        assert!(
-            answer.contains("`sing`"),
-            "the next step is named: {answer}"
-        );
-        assert!(root.join("Sakura").join("Sakura.auris").exists());
-
-        // Writing again without force refuses and names the flag.
-        let refused = compose_lyrics::run(&args).unwrap_err();
-        assert!(refused.contains("force"), "{refused}");
 
         std::fs::remove_dir_all(&root).unwrap();
     }

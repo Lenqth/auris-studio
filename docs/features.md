@@ -394,29 +394,13 @@ changed). Pitch is the note plus its bend curve plus its ornaments; energy is th
 and the expression pedal (controller 11), which the preview instrument also obeys — what you
 hear and what the model is told stay one story.
 
-### Composing from lyrics
+### Lyrics in a composed song
 
-The words-first direction, modelled on
-[Orpheus](https://www.orpheus-music.org/): the `compose_lyrics` tool (over MCP and in the
-agent panel) takes Japanese lyrics and writes a song under them. Phrases are cut where a
-singer breathes — line breaks and punctuation — each mora becomes one note, and the melody is
-*searched* rather than sampled: a dynamic-programming pass over the candidate pitches,
-scored so that the tune stays in the voice's range, leaps sensibly, lands its cadences on the
-chord, and — the Orpheus constraint — **does not contradict the lyric's spoken pitch
-accent**: the line rises where the word rises and falls exactly where its accent falls, so
-the sung words stay intelligible. Chords go into the harmony lane first (王道進行 unless the
-document already has its own), the standard band comes along behind, and every note lands
-carrying its mora and phonemes, ready for **Sing** once the track has a voice.
+**Compose → Compose a Song…** accepts lyrics for each section. In the detailed song sheet,
+each section has a multi-line lyrics box alongside the form. Each mora becomes one note,
+and the melody follows the section's harmony and the lyric's spoken pitch accent when the Japanese
+dictionary is available.
 
-In the window it is **File → Compose from Lyrics…** (also in the command palette): type or
-paste the words into a multi-line field — Return breaks a phrase, and 、and ！？ cut them
-too — then press Ctrl+Return (⌘Return on a Mac) and the piano roll opens on what was
-written. Every run draws a fresh seed, so the command pressed twice is two takes, and the
-status bar names the seed so a take can be asked for again at any of the model doors.
-
-It is also part of **composing a whole song**: the song sheet's third column *is* the
-lyrics — one multi-line box per section, in the order the form plays them, standing beside
-the form itself (the parts moved to a scrolling strip along the bottom to make the room).
 An `.asong` specification says the same thing as `lyrics = "..."` on a `[section]`. Click a
 box and it is a real editor in place: Return breaks a phrase, Tab walks to the next
 section, a click lands the caret on the character under it, and every keystroke is already
@@ -438,8 +422,8 @@ removable one by one — so the rules are a starting point, never a verdict.
 
 The accent comes from the same Japanese dictionary the lyrics use — shipped with a release,
 so it is simply there. Without one (a checkout that has not fetched it), kana lyrics still
-compose — the melody is free of the accent, and the tool says so — so the dictionary is what
-turns "a tune with words attached" into "a tune the words shaped". The same lyrics and seed
+compose with a melody free of the accent. The dictionary is what turns "a tune with words
+attached" into "a tune the words shaped". The same lyrics and seed
 always write the same song, and everything written is ordinary editable material: notes,
 chords, recipes, one undo step.
 

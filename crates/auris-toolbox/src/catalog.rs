@@ -249,7 +249,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         definition::<accompany::Args>(accompany::NAME, accompany::DESCRIPTION),
         definition::<write_lyrics::Args>(write_lyrics::NAME, write_lyrics::DESCRIPTION),
         definition::<sing::Args>(sing::NAME, sing::DESCRIPTION),
-        definition::<compose_lyrics::Args>(compose_lyrics::NAME, compose_lyrics::DESCRIPTION),
         definition::<tool_help::Args>(tool_help::NAME, tool_help::DESCRIPTION),
         definition::<routing::Args>(routing::NAME, routing::DESCRIPTION),
         definition::<set_track_state::Args>(set_track_state::NAME, set_track_state::DESCRIPTION),

@@ -73,11 +73,6 @@ pub enum PromptTarget {
         /// The clip whose selection takes the phrase.
         clip: ClipId,
     },
-    /// Lyrics a whole song is composed from — a melody under the words, chords, a band.
-    ///
-    /// No payload: the command writes new material rather than editing anything on screen,
-    /// so there is nothing for it to point at yet.
-    ComposeLyrics,
     /// The seed a generated clip is written from.
     ///
     /// Typed for a different reason than the other three: "another take" is the *next* seed, so
@@ -179,9 +174,6 @@ fn empty_prompt_is_meaningful(target: PromptTarget) -> bool {
         PromptTarget::Lyric { .. }
             | PromptTarget::Phonemes { .. }
             | PromptTarget::Lyrics { .. }
-            // Not a clear, but the session's own refusal names the problem better than a
-            // generic "cannot be empty" would.
-            | PromptTarget::ComposeLyrics
             // Let the numeric field report its own valid range for an empty answer.
             | PromptTarget::DrumAssignment { .. }
             // Empty restores the lane's derived role or MIDI name.
@@ -264,7 +256,6 @@ impl PromptTarget {
             | PromptTarget::Lyric { .. }
             | PromptTarget::Phonemes { .. }
             | PromptTarget::Lyrics { .. }
-            | PromptTarget::ComposeLyrics
             // No shared notation: every parameter is written in its own units, and the range
             // and the unit are in the prompt's title instead, where they can name this one.
             | PromptTarget::Param(_) => return None,
@@ -278,21 +269,7 @@ impl PromptTarget {
     /// said that the case of a numeral is what makes it major or minor, so the only way to find
     /// out was to type something, have it refused, and read the refusal.
     pub fn hint(self) -> Option<Key> {
-        // Not notations — these fields take prose — but the one rule worth stating under
-        // them is where the phrases break.
-        if matches!(self, PromptTarget::ComposeLyrics) {
-            return Some(Key::HintComposeLyrics);
-        }
         self.notation().map(Notation::hint)
-    }
-
-    /// Whether the field holds lines rather than a line.
-    ///
-    /// On a multi-line field Return breaks a line instead of committing — the words being
-    /// asked for are phrases, and a phrase break is the likeliest thing to want next — and
-    /// secondary-Return is what commits.
-    pub fn multiline(self) -> bool {
-        matches!(self, PromptTarget::ComposeLyrics)
     }
 }
 
@@ -1008,45 +985,6 @@ impl AurisApp {
                     }
                 }
             }
-            PromptTarget::ComposeLyrics => {
-                // A fresh seed per run, from the clock: pressing the command twice on the
-                // same words should be two takes, and the status names the number so the
-                // take can be asked for again at any of the model doors.
-                let seed = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|now| u64::from(now.subsec_nanos()) ^ now.as_secs())
-                    .unwrap_or(0);
-                match self
-                    .session
-                    .compose_from_lyrics(&text, &auris_session::DEFAULT_PARTS, seed)
-                {
-                    Ok(report) => {
-                        self.close_accepted_prompt();
-                        // Land the person in front of what was written.
-                        self.open_clip_in_editor(report.clip);
-                        let written = match report.accented {
-                            true => messages::lyric_song_written(
-                                self.language(),
-                                report.notes,
-                                report.phrases,
-                                seed,
-                            ),
-                            false => messages::lyric_song_unaccented(
-                                self.language(),
-                                report.notes,
-                                report.phrases,
-                                seed,
-                            ),
-                        };
-                        self.set_status(written);
-                        return;
-                    }
-                    Err(error) => {
-                        self.reject_prompt(self.failure(Key::PromptComposeLyrics, &error));
-                        return;
-                    }
-                }
-            }
             // These parse rather than rename, and a rejection has to say what was rejected:
             // `Bbb minor` and `H7` look plausible enough that "invalid input" would not help.
             PromptTarget::Key(at) => match MusicalKey::parse(&text) {
@@ -1706,8 +1644,6 @@ impl AurisApp {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
-        // Whether Return breaks a line or commits, decided before the field is borrowed.
-        let multiline = prompt.target().is_some_and(PromptTarget::multiline);
         // A question has no field to type into, so only its explicit answer keys apply. A Mac's
         // key labelled Delete reports `backspace`; accepting that spelling only on macOS avoids
         // making an ordinary PC Backspace permanently discard recovery data.
@@ -1730,21 +1666,14 @@ impl AurisApp {
             "escape" if !composing => {
                 self.cancel_prompt();
             }
-            // On a multi-line field a bare Return is a phrase break; secondary-Return is the
-            // commit, and the hint under the field says so.
-            "enter" if !composing && multiline && !command => field.insert("\n"),
             "enter" if !composing => {
                 self.commit_prompt(window, cx);
             }
-            // Up and Down walk the lines where there are lines to walk. On the one-line
-            // fields the only sensible reading of them is the ends of that line.
-            "up" if multiline => field.move_up(shift),
-            "down" if multiline => field.move_down(shift),
             "up" => field.move_home(shift),
             "down" => field.move_end(shift),
             // Editing and clipboard shortcuts are shared with every other text field.
             key => {
-                return field.apply_key_with_clipboard(key, shift, command, multiline, cx)
+                return field.apply_key_with_clipboard(key, shift, command, false, cx)
                     != crate::ui::text_field::KeyEffect::Ignored;
             }
         }
@@ -1775,18 +1704,16 @@ impl AurisApp {
         let focus = self.focus.clone();
         let view = cx.entity();
 
-        let multiline = prompt.target().is_some_and(PromptTarget::multiline);
-        let medium = multiline
-            || matches!(
-                &prompt.body,
-                PromptBody::Ask(
-                    Question::Recovery(_)
-                        | Question::OverwriteSound { .. }
-                        | Question::DeleteSound(_)
-                        | Question::RemovePluginPath(_)
-                        | Question::NewAgentConversation
-                )
-            );
+        let medium = matches!(
+            &prompt.body,
+            PromptBody::Ask(
+                Question::Recovery(_)
+                    | Question::OverwriteSound { .. }
+                    | Question::DeleteSound(_)
+                    | Question::RemovePluginPath(_)
+                    | Question::NewAgentConversation
+            )
+        );
         let (body, buttons) = match &prompt.body {
             PromptBody::Text { target, field } => (
                 div()
@@ -1795,21 +1722,14 @@ impl AurisApp {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(match multiline {
-                        true => self
-                            .render_prompt_area(field, focus, view, &theme, cx)
-                            .into_any_element(),
-                        false => self
-                            .render_prompt_field(
-                                field.content().to_string().into(),
-                                field.selection(),
-                                field.marked(),
-                                focus,
-                                view,
-                                &theme,
-                            )
-                            .into_any_element(),
-                    })
+                    .child(self.render_prompt_field(
+                        field.content().to_string().into(),
+                        field.selection(),
+                        field.marked(),
+                        focus,
+                        view,
+                        &theme,
+                    ))
                     .children(prompt.error.as_ref().map(|error| {
                         div()
                             .id("prompt-error")
@@ -1832,13 +1752,10 @@ impl AurisApp {
                     .into_any_element(),
                 self.render_prompt_buttons(
                     None,
-                    // The default button answers what the sheet asked. Most of these fields
-                    // rename something; the lyric field composes, and a button that said
-                    // Rename over it would be answering a different question.
+                    // The default button names the edit the sheet will commit.
                     match target {
                         PromptTarget::SaveSound(_) => self.t(Key::CmdSave).into(),
                         PromptTarget::DuplicateSound => self.t(Key::DuplicateSoundConfirm).into(),
-                        PromptTarget::ComposeLyrics => self.t(Key::PromptComposeLyrics).into(),
                         PromptTarget::DrumAssignment { .. }
                         | PromptTarget::NewDrumLane(_)
                         | PromptTarget::DrumLaneNote { .. } => {
@@ -1941,8 +1858,7 @@ impl AurisApp {
                         .flex()
                         .flex_col()
                         .gap_2()
-                        // Wider for a field that holds verses: a phrase per line wants the
-                        // room a name never needed.
+                        // Give detailed confirmation messages more room than a name field.
                         .w(px(if medium { 480.0 } else { 360.0 }))
                         .max_w_full()
                         .max_h_full()
@@ -1963,7 +1879,7 @@ impl AurisApp {
                                 .text_color(theme.text)
                                 .child(title),
                         )
-                        // A long verse or diagnostic scrolls inside the sheet; the answers
+                        // A long diagnostic scrolls inside the sheet; the answers
                         // stay reachable even when the window is shorter than the text.
                         .child(
                             div()
@@ -2005,69 +1921,6 @@ impl AurisApp {
                 text,
                 selection,
                 marked,
-                focus,
-                view,
-                theme.clone(),
-            ))
-    }
-
-    /// The taller box for the fields that take verses rather than names.
-    ///
-    /// Grows with its lines between two clamps, and a click lands the caret on the character
-    /// under it — the one thing a field whose Return commits never needed.
-    fn render_prompt_area(
-        &self,
-        field: &TextField,
-        focus: gpui::FocusHandle,
-        view: gpui::Entity<AurisApp>,
-        theme: &Theme,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        div()
-            .h(crate::ui::text_area::area_height(field.content(), 4, 12))
-            .w_full()
-            .rounded(Metrics::RADIUS_SM)
-            .bg(theme.surface_sunken)
-            .border_1()
-            .border_color(theme.accent)
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    let Some(text) = this
-                        .prompt
-                        .as_ref()
-                        .and_then(Prompt::field)
-                        .map(|field| field.content().to_string())
-                    else {
-                        return;
-                    };
-                    if let Some(offset) =
-                        crate::ui::text_area::area_offset_at(window, &text, event.position)
-                        && let Some(field) = this.prompt.as_mut().and_then(Prompt::field_mut)
-                    {
-                        field.place_caret(offset, event.modifiers.shift);
-                    }
-                    cx.stop_propagation();
-                    cx.notify();
-                }),
-            )
-            .child(crate::ui::text_area::editable_area(
-                field.content().to_string().into(),
-                field.selection(),
-                field.marked(),
-                // The margin counts what each line would sing — the same measure the song
-                // sheet's boxes show, minus the bar budget: a song composed from lyrics
-                // alone grows to fit its words.
-                self.session
-                    .measure_lyrics(field.content(), self.session.signature_at(Ticks::ZERO))
-                    .lines
-                    .iter()
-                    .map(|line| match line {
-                        Some(0) => "".into(),
-                        Some(count) => count.to_string().into(),
-                        None => "?".into(),
-                    })
-                    .collect(),
                 focus,
                 view,
                 theme.clone(),
@@ -2575,7 +2428,6 @@ mod tests {
                 index: 0,
             },
             PromptTarget::Lyrics { clip: ClipId(1) },
-            PromptTarget::ComposeLyrics,
             PromptTarget::Seed(ClipId(1)),
             PromptTarget::Tempo(AT),
             PromptTarget::TempoFrom(AT),
@@ -2621,7 +2473,6 @@ mod tests {
                 | PromptTarget::Lyric { .. }
                 | PromptTarget::Phonemes { .. }
                 | PromptTarget::Lyrics { .. }
-                | PromptTarget::ComposeLyrics
                 | PromptTarget::Seed(_)
                 | PromptTarget::Tempo(_)
                 | PromptTarget::TempoFrom(_)
@@ -2651,11 +2502,10 @@ mod tests {
 
     #[test]
     fn everything_that_is_a_notation_rather_than_a_name_says_so() {
-        // Prose hints explain phrase entry.
         for target in every_target() {
             assert_eq!(
                 target.hint().is_some(),
-                target.notation().is_some() || matches!(target, PromptTarget::ComposeLyrics),
+                target.notation().is_some(),
                 "{target:?} has the wrong idea about needing a hint",
             );
         }
@@ -3793,36 +3643,6 @@ mod window_tests {
             );
             assert_eq!(this.session.midi_clip(clip).unwrap().notes[1].lyric, "な");
         });
-    }
-
-    #[gpui::test]
-    fn a_rejected_verse_keeps_every_line_and_the_caret(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        resize(&app, cx, gpui::size(gpui::px(640.0), gpui::px(480.0)));
-        cx.dispatch_action(actions::ComposeFromLyrics);
-        paint(&app, cx);
-        let verse = format!("{}漢字", "さくら さいた\n".repeat(20));
-        cx.simulate_input(&verse);
-        cx.simulate_keystrokes("shift-left");
-        let rejected = app.read_with(cx, |this, _| {
-            this.prompt.as_ref().unwrap().field().unwrap().clone()
-        });
-        cx.simulate_keystrokes("secondary-enter");
-        paint(&app, cx);
-        app.read_with(cx, |this, _| {
-            let prompt = this
-                .prompt
-                .as_ref()
-                .expect("the verse is available to correct");
-            assert_eq!(prompt.field(), Some(&rejected));
-            assert_eq!(prompt.field().unwrap().content(), verse);
-            assert!(prompt.error.is_some());
-        });
-        let confirm = cx.debug_bounds("prompt-ok").expect("the action is drawn");
-        assert!(confirm.top() >= gpui::px(0.0));
-        assert!(confirm.bottom() <= gpui::px(480.0));
-        click("prompt-cancel", cx);
-        app.read_with(cx, |this, _| assert!(this.prompt.is_none()));
     }
 
     #[gpui::test]
