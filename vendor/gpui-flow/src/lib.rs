@@ -2,6 +2,7 @@ pub mod controls;
 pub mod edges;
 pub mod graph;
 pub mod minimap;
+mod rem_scope;
 pub mod store;
 pub mod types;
 

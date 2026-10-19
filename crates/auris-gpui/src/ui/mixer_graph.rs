@@ -16,7 +16,9 @@ use crate::app::AurisApp;
 use crate::theme::{Metrics, Theme};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::plugin_window::PluginSubject;
-use crate::ui::widgets::{ButtonStyle, button, db_to_meter_position, level_meter};
+use crate::ui::widgets::{
+    ButtonState, ButtonStyle, button, button_enabled, db_to_meter_position, level_meter,
+};
 
 const NODE_WIDTH: f32 = 176.0;
 const COLUMN: f32 = 360.0;
@@ -26,6 +28,8 @@ const WIRE_LANE_SPACING: f32 = 48.0;
 const SIGNAL_FLOW_SPACING: f32 = 120.0;
 const SIGNAL_FLOW_LENGTH: f32 = 24.0;
 const SIGNAL_FLOW_SPEED: f64 = 90.0;
+const MIN_ZOOM: f32 = 0.5;
+const MAX_ZOOM: f32 = 2.0;
 
 #[path = "mixer_graph_tooltip.rs"]
 mod wire_tooltip;
@@ -33,6 +37,10 @@ mod wire_tooltip;
 #[cfg(test)]
 #[path = "mixer_graph_wires_tests.rs"]
 mod wire_tests;
+
+#[cfg(test)]
+#[path = "mixer_graph_zoom_tests.rs"]
+mod zoom_tests;
 
 /// Presentation state kept across paints and panel moves.
 pub(crate) struct MixerCanvas {
@@ -132,6 +140,28 @@ fn wire_legend(label: &'static str, color: gpui::Hsla, stroke: EdgeStroke) -> An
         )
         .child(label)
         .into_any_element()
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Mirror the shared button API while adding the graph's presentation scale."
+)]
+fn node_button<I, L, F>(
+    zoom: f32,
+    id: I,
+    label: L,
+    style: ButtonStyle,
+    active: bool,
+    color: gpui::Hsla,
+    theme: &Theme,
+    click: F,
+) -> gpui::Stateful<gpui::Div>
+where
+    I: Into<gpui::ElementId>,
+    L: Into<SharedString>,
+    F: Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+{
+    button(id, label, style, active, color, theme, click).h(Metrics::CONTROL_HEIGHT * zoom)
 }
 
 fn node_id(node: MixerNode) -> SharedString {
@@ -252,10 +282,8 @@ impl AurisApp {
             let state = cx.new(|_| {
                 let mut state = FlowState::new(Vec::new(), Vec::new());
                 state.externally_managed = true;
-                // Released GPUI cannot scale arbitrary child controls. Keep the canvas at
-                // native control size and use panning, so faders remain readable and operable.
-                state.min_zoom = 1.0;
-                state.max_zoom = 1.0;
+                state.min_zoom = MIN_ZOOM;
+                state.max_zoom = MAX_ZOOM;
                 state
             });
             cx.observe(&state, |this, state, cx| {
@@ -306,6 +334,10 @@ impl AurisApp {
         }
         let theme = self.theme.clone();
         let view = self.mixer_canvas.as_ref().map(|canvas| canvas.view.clone());
+        let zoom = self
+            .mixer_canvas
+            .as_ref()
+            .map_or(1.0, |canvas| canvas.state.read(cx).viewport.zoom);
         div()
             .flex()
             .flex_col()
@@ -380,6 +412,42 @@ impl AurisApp {
                         }),
                     ))
                     .child(div().flex_1())
+                    .child(
+                        button_enabled(
+                            "mixer-zoom-out",
+                            "−",
+                            ButtonStyle::Ghost,
+                            ButtonState::available(false, zoom > MIN_ZOOM),
+                            theme.accent_soft,
+                            &theme,
+                            cx.listener(|this, _, _, cx| this.zoom_mixer(Some(1.0 / 1.2), cx)),
+                        )
+                        .tooltip(self.tip(Key::CmdZoomOut, "")),
+                    )
+                    .child(
+                        button(
+                            "mixer-zoom-reset",
+                            format!("{:.0}%", zoom * 100.0),
+                            ButtonStyle::Ghost,
+                            false,
+                            theme.accent_soft,
+                            &theme,
+                            cx.listener(|this, _, _, cx| this.zoom_mixer(None, cx)),
+                        )
+                        .tooltip(self.tip(Key::MixerZoomReset, "")),
+                    )
+                    .child(
+                        button_enabled(
+                            "mixer-zoom-in",
+                            "+",
+                            ButtonStyle::Ghost,
+                            ButtonState::available(false, zoom < MAX_ZOOM),
+                            theme.accent_soft,
+                            &theme,
+                            cx.listener(|this, _, _, cx| this.zoom_mixer(Some(1.2), cx)),
+                        )
+                        .tooltip(self.tip(Key::CmdZoomIn, "")),
+                    )
                     .child(button(
                         "mixer-animate-signals",
                         self.t(Key::MixerAnimateSignals),
@@ -720,10 +788,29 @@ impl AurisApp {
                         node.position = position;
                     }
                 }
+                state.zoom_at(1.0, 0.0, 0.0);
                 state.viewport = Default::default();
             });
             canvas.view.update(cx, |_, cx| cx.notify());
         }
+    }
+
+    /// Zoom about the visible canvas centre; a missing factor restores the native scale.
+    fn zoom_mixer(&mut self, factor: Option<f32>, cx: &mut gpui::Context<Self>) {
+        if let Some(canvas) = &self.mixer_canvas {
+            canvas.state.update(cx, |state, _| {
+                if let Some(bounds) = state.canvas_bounds {
+                    let zoom = factor.map_or(1.0, |factor| state.viewport.zoom * factor);
+                    state.zoom_at(
+                        zoom,
+                        f32::from(bounds.size.width) / 2.0,
+                        f32::from(bounds.size.height) / 2.0,
+                    );
+                }
+            });
+            canvas.view.update(cx, |_, cx| cx.notify());
+        }
+        cx.notify();
     }
 
     fn render_mixer_node(&mut self, id: &SharedString, cx: &mut gpui::Context<Self>) -> AnyElement {
@@ -739,13 +826,17 @@ impl AurisApp {
             MixerNode::Strip(t) | MixerNode::Effect(t, _) => t,
         };
         let theme = self.theme.clone();
+        let zoom = self
+            .mixer_canvas
+            .as_ref()
+            .map_or(1.0, |canvas| canvas.state.read(cx).viewport.zoom);
         let name = owner.and_then(|id| self.project().track(id)).map_or_else(
             || self.t(Key::Master).to_string(),
             |track| track.name.clone(),
         );
         let mut card = div()
-            .w(px(NODE_WIDTH))
-            .min_h(px(96.0))
+            .w(px(NODE_WIDTH * zoom))
+            .min_h(px(96.0 * zoom))
             .p_2()
             .flex()
             .flex_col()
@@ -783,7 +874,8 @@ impl AurisApp {
                     let enabled = effect.enabled;
                     let menu_label = label.clone();
                     card = card
-                        .child(button(
+                        .child(node_button(
+                            zoom,
                             SharedString::from(format!("graph-effect-open-{id}")),
                             label,
                             ButtonStyle::Ghost,
@@ -798,7 +890,8 @@ impl AurisApp {
                                 cx.notify();
                             }),
                         ))
-                        .child(button(
+                        .child(node_button(
+                            zoom,
                             SharedString::from(format!("graph-effect-enabled-{id}")),
                             self.t(Key::MenuEnabled),
                             ButtonStyle::Ghost,
@@ -810,7 +903,8 @@ impl AurisApp {
                                 cx.notify();
                             }),
                         ))
-                        .child(button(
+                        .child(node_button(
+                            zoom,
                             SharedString::from(format!("graph-effect-menu-{id}")),
                             self.t(Key::Effect),
                             ButtonStyle::Ghost,
@@ -829,7 +923,8 @@ impl AurisApp {
                     .map_or(&self.project().master, |t| &t.mixer);
                 let (gain, pan, muted, soloed) = (strip.gain_db, strip.pan, strip.mute, strip.solo);
                 card = card
-                    .child(button(
+                    .child(node_button(
+                        zoom,
                         SharedString::from(format!("graph-add-fx-{id}")),
                         self.t(Key::MenuAddEffect),
                         ButtonStyle::Ghost,
@@ -838,20 +933,26 @@ impl AurisApp {
                         &theme,
                         Self::opens_menu(cx, move |this, at| this.effect_picker_menu(at, owner)),
                     ))
-                    .child(self.fader(
-                        SharedString::from(format!("graph-gain-{id}")),
-                        self.t(Key::Volume),
-                        owner.map_or(ParamTarget::MasterGain, ParamTarget::TrackGain),
-                        gain,
-                        cx,
-                    ))
-                    .child(self.fader(
-                        SharedString::from(format!("graph-pan-{id}")),
-                        self.t(Key::Pan),
-                        owner.map_or(ParamTarget::MasterPan, ParamTarget::TrackPan),
-                        pan,
-                        cx,
-                    ));
+                    .child(
+                        self.fader_control(
+                            SharedString::from(format!("graph-gain-{id}")),
+                            self.t(Key::Volume),
+                            owner.map_or(ParamTarget::MasterGain, ParamTarget::TrackGain),
+                            gain,
+                            cx,
+                        )
+                        .h(Metrics::CONTROL_HEIGHT * zoom),
+                    )
+                    .child(
+                        self.fader_control(
+                            SharedString::from(format!("graph-pan-{id}")),
+                            self.t(Key::Pan),
+                            owner.map_or(ParamTarget::MasterPan, ParamTarget::TrackPan),
+                            pan,
+                            cx,
+                        )
+                        .h(Metrics::CONTROL_HEIGHT * zoom),
+                    );
                 if let Some(track) = owner {
                     let index = self.project().track_index(track).unwrap_or(0);
                     let sends: Vec<_> = self
@@ -868,7 +969,8 @@ impl AurisApp {
                                 .flex()
                                 .gap_1()
                                 .child(
-                                    button(
+                                    node_button(
+                                        zoom,
                                         SharedString::from(format!("graph-mute-{id}")),
                                         self.t(Key::MuteInitial),
                                         ButtonStyle::Normal,
@@ -883,7 +985,8 @@ impl AurisApp {
                                     .tooltip(self.tip(Key::CmdToggleTrackMute, "track.mute")),
                                 )
                                 .child(
-                                    button(
+                                    node_button(
+                                        zoom,
                                         SharedString::from(format!("graph-solo-{id}")),
                                         self.t(Key::SoloInitial),
                                         ButtonStyle::Normal,
@@ -898,7 +1001,7 @@ impl AurisApp {
                                     .tooltip(self.tip(Key::CmdToggleTrackSolo, "track.solo")),
                                 ),
                         )
-                        .child(div().h(px(6.0)).child(level_meter(
+                        .child(div().h(px(6.0 * zoom)).child(level_meter(
                             db_to_meter_position(level_db),
                             db_to_meter_position(level_db),
                             self.session.meters().track_clipped(index),
@@ -906,7 +1009,8 @@ impl AurisApp {
                             theme.meter_color(level_db),
                             &theme,
                         )))
-                        .child(button(
+                        .child(node_button(
+                            zoom,
                             SharedString::from(format!("graph-route-menu-{id}")),
                             self.t(Key::OutputShort),
                             ButtonStyle::Ghost,
@@ -916,7 +1020,8 @@ impl AurisApp {
                             Self::opens_menu(cx, move |this, at| this.output_menu(at, track)),
                         ));
                     if self.session.buses().next().is_some() {
-                        card = card.child(button(
+                        card = card.child(node_button(
+                            zoom,
                             SharedString::from(format!("graph-send-menu-{id}")),
                             self.t(Key::Sends),
                             ButtonStyle::Ghost,
@@ -935,12 +1040,13 @@ impl AurisApp {
                             send.target,
                             send.level_db,
                             send.pre_fader,
+                            zoom,
                             cx,
                         ));
                     }
                 } else {
                     let level_db = gain_to_db(self.master_level());
-                    card = card.child(div().h(px(6.0)).child(level_meter(
+                    card = card.child(div().h(px(6.0 * zoom)).child(level_meter(
                         db_to_meter_position(level_db),
                         db_to_meter_position(level_db),
                         self.session.meters().master_clipped(),

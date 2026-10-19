@@ -698,6 +698,14 @@ fn overlapping_output_sends_and_sidechain_are_individually_selected_deleted_and_
     });
     assert_eq!(wires.len(), 4);
     for (index, id) in wires.iter().enumerate() {
+        app.update(cx, |this, cx| {
+            let canvas = this.mixer_canvas.as_ref().unwrap();
+            canvas.state.update(cx, |state, _| {
+                state.zoom_at([0.75, 1.25, 1.5, 0.5][index], 0., 0.)
+            });
+            canvas.view.update(cx, |_, cx| cx.notify());
+        });
+        paint(&app, cx);
         let at = app.read_with(cx, |this, cx| {
             let state = this.mixer_canvas.as_ref().unwrap().state.read(cx);
             let edge = state.edges.iter().find(|edge| edge.id == *id).unwrap();

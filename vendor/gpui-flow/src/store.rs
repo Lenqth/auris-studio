@@ -315,8 +315,14 @@ impl FlowState {
             if node.hidden {
                 continue;
             }
-            let w = node.measured_width.map(|p| p.as_f32()).unwrap_or(150.0);
-            let h = node.measured_height.map(|p| p.as_f32()).unwrap_or(40.0);
+            let w = node
+                .measured_width
+                .map(|p| p.as_f32() / self.viewport.zoom)
+                .unwrap_or(150.0);
+            let h = node
+                .measured_height
+                .map(|p| p.as_f32() / self.viewport.zoom)
+                .unwrap_or(40.0);
             min_x = min_x.min(node.position.x);
             min_y = min_y.min(node.position.y);
             max_x = max_x.max(node.position.x + w);
@@ -334,7 +340,7 @@ impl FlowState {
         let zoom_y = container_height / content_height;
         let zoom = zoom_x.min(zoom_y).clamp(self.min_zoom, self.max_zoom);
 
-        self.viewport.zoom = zoom;
+        self.zoom_at(zoom, 0.0, 0.0);
         self.viewport.x = (container_width - content_width * zoom) / 2.0 - (min_x - padding) * zoom;
         self.viewport.y =
             (container_height - content_height * zoom) / 2.0 - (min_y - padding) * zoom;
@@ -345,11 +351,7 @@ impl FlowState {
         let factor = 1.2;
         let cx = container_width / 2.0;
         let cy = container_height / 2.0;
-        let old_zoom = self.viewport.zoom;
-        let new_zoom = (old_zoom * factor).clamp(self.min_zoom, self.max_zoom);
-        self.viewport.x = cx - (cx - self.viewport.x) * (new_zoom / old_zoom);
-        self.viewport.y = cy - (cy - self.viewport.y) * (new_zoom / old_zoom);
-        self.viewport.zoom = new_zoom;
+        self.zoom_at(self.viewport.zoom * factor, cx, cy);
     }
 
     /// Zoom out by a step, centered on the container center.
@@ -357,11 +359,26 @@ impl FlowState {
         let factor = 1.0 / 1.2;
         let cx = container_width / 2.0;
         let cy = container_height / 2.0;
-        let old_zoom = self.viewport.zoom;
-        let new_zoom = (old_zoom * factor).clamp(self.min_zoom, self.max_zoom);
-        self.viewport.x = cx - (cx - self.viewport.x) * (new_zoom / old_zoom);
-        self.viewport.y = cy - (cy - self.viewport.y) * (new_zoom / old_zoom);
-        self.viewport.zoom = new_zoom;
+        self.zoom_at(self.viewport.zoom * factor, cx, cy);
+    }
+
+    /// Set a bounded zoom, keeping a canvas-local screen point fixed in flow coordinates.
+    pub fn zoom_at(&mut self, zoom: f32, x: f32, y: f32) {
+        if !zoom.is_finite() || !x.is_finite() || !y.is_finite() {
+            return;
+        }
+        let zoom = zoom.clamp(self.min_zoom, self.max_zoom);
+        let ratio = zoom / self.viewport.zoom;
+        self.viewport.x = x - (x - self.viewport.x) * ratio;
+        self.viewport.y = y - (y - self.viewport.y) * ratio;
+        self.viewport.zoom = zoom;
+        // Measurements are in screen pixels. Keep cached endpoints and culling consistent
+        // until the node's next layout reports its exact new bounds.
+        for node in &mut self.nodes {
+            node.measured_width = node.measured_width.map(|width| width * ratio);
+            node.measured_height = node.measured_height.map(|height| height * ratio);
+        }
+        self.edge_label_bounds.clear();
     }
 
     /// Center the viewport on a specific flow coordinate.

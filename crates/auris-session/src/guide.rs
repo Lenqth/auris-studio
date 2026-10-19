@@ -649,6 +649,11 @@ pub mod architecture {
     //! window-space route, including pan, zoom and text-scale lane clearance. Labels select their
     //! exact edge ID directly. These are frontend geometry and presentation; session identities
     //! and the audible graph remain authoritative.
+    //! Ctrl+wheel zooms about the pointer between 50% and 200%; the desktop toolbar also steps
+    //! the zoom and restores 100% about the canvas centre. Nodes scope rem-based typography and
+    //! spacing to their viewport, with matching control and port dimensions. Cached node bounds
+    //! follow the zoom immediately and are refined during prepaint before edges are painted.
+    //! Zoom and pan are view state and do not change the document or consume an undo step.
     //! Delete, Backspace and the edge context menu use `Session::disconnect_mixer_edges` to
     //! preflight the complete selection, then remove it in one undo transaction. Insert-chain
     //! edges describe order and are not selectable. Every output branch has its own compensation

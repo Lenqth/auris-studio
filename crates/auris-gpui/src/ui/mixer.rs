@@ -298,7 +298,7 @@ impl AurisApp {
             .children(sends.into_iter().enumerate().map(
                 |(position, (send, bus, level_db, pre_fader))| {
                     self.send_row(
-                        index, position, track_id, send, bus, level_db, pre_fader, cx,
+                        index, position, track_id, send, bus, level_db, pre_fader, 1.0, cx,
                     )
                 },
             ))
@@ -393,6 +393,7 @@ impl AurisApp {
         bus: TrackId,
         level_db: f32,
         pre_fader: bool,
+        scale: f32,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
@@ -430,16 +431,19 @@ impl AurisApp {
                         )
                     }),
             )
-            .child(self.fader(
-                ("mixer-send", index * 64 + position),
-                self.t(Key::Sends),
-                ParamTarget::Send {
-                    track: track_id,
-                    send,
-                },
-                level_db,
-                cx,
-            ))
+            .child(
+                self.fader_control(
+                    ("mixer-send", index * 64 + position),
+                    self.t(Key::Sends),
+                    ParamTarget::Send {
+                        track: track_id,
+                        send,
+                    },
+                    level_db,
+                    cx,
+                )
+                .h(Metrics::CONTROL_HEIGHT * scale),
+            )
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {

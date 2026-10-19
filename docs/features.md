@@ -558,6 +558,11 @@ destination and live peak level in dBFS. Parallel wires have individual tooltips
 their ID. Silence reads **−∞ dBFS**. The card updates while open and closes on Escape or when
 the pointer leaves the wire.
 
+Use **Ctrl+wheel** over the graph to zoom about the pointer, from 50% to 200%. Nodes, controls,
+ports and labels resize together. The **−** and **+** buttons zoom about the canvas centre;
+click the percentage to return to 100%. An unmodified wheel pans the graph. These view changes
+do not enter the project's undo history.
+
 ## Setting the levels by listening
 
 **Compose → Balance the Mix** renders every track on its own, measures it, and moves its fader

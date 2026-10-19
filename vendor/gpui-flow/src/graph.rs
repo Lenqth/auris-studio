@@ -6,6 +6,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 
 use crate::edges;
+use crate::rem_scope::RemScope;
 use crate::store::FlowState;
 use crate::types::*;
 
@@ -265,20 +266,21 @@ impl FlowGraph {
                 node_bg,
                 node_border,
                 self.selection_color,
+                viewport.zoom,
             )
         } else {
             Vec::new()
         };
 
         // Per-node measurement canvas: captures actual wrapper size.
-        // Writes dimensions silently — the graph-level re-render is triggered once.
+        // Prepaint resolves endpoints before the edge layer paints. Notify only on a size change
+        // so labels and culling get the exact new bounds after zooming or adding a send row.
         let measure_state = self.state.clone();
         let measure_node_id = node.id.clone();
         let prev_w = node.measured_width;
         let prev_h = node.measured_height;
         let measure_canvas = canvas(
-            |_bounds, _window, _cx| {},
-            move |bounds, _: (), _window, cx| {
+            move |bounds, _window, cx| {
                 let w = bounds.size.width;
                 let h = bounds.size.height;
                 if prev_w != Some(w) || prev_h != Some(h) {
@@ -288,13 +290,15 @@ impl FlowGraph {
                             node.measured_height = Some(h);
                         }
                     });
+                    cx.notify(_entity_id);
                 }
             },
+            |_, (), _, _| {},
         )
         .size_full()
         .absolute();
 
-        div()
+        let element = div()
             .id(element_id)
             .debug_selector({
                 let id = node.id.clone();
@@ -379,7 +383,12 @@ impl FlowGraph {
             .child(content)
             .child(measure_canvas)
             .children(handle_elements)
-            .into_any_element()
+            .into_any_element();
+        RemScope {
+            child: element,
+            rem_size: window.rem_size() * viewport.zoom,
+        }
+        .into_any_element()
     }
 
     /// Render handle dots for a node.
@@ -392,8 +401,9 @@ impl FlowGraph {
         default_bg: u32,
         default_border: u32,
         selection_color: u32,
+        zoom: f32,
     ) -> Vec<AnyElement> {
-        let handle_size = 10.0;
+        let handle_size = 10.0 * zoom;
         let half = handle_size / 2.0;
         let is_snapped_node = snap_node_id == Some(node_id);
 
@@ -828,10 +838,11 @@ impl Render for FlowGraph {
                         let label_color = edge.color.unwrap_or(0xb1b1b7);
                         let mut label_border: Hsla = gpui::rgb(label_color).into();
                         label_border.a = 0.35;
-                        let font_size = window.rem_size() * 0.75;
-                        let line_height = window.rem_size();
-                        let padding_x = window.rem_size() * 0.5;
-                        let padding_y = window.rem_size() * 0.125;
+                        let rem_size = window.rem_size() * viewport.zoom;
+                        let font_size = rem_size * 0.75;
+                        let line_height = rem_size;
+                        let padding_x = rem_size * 0.5;
+                        let padding_y = rem_size * 0.125;
                         let run = window.text_style().to_run(label.len());
                         let text_width = window
                             .text_system()
@@ -857,73 +868,64 @@ impl Render for FlowGraph {
                         let menu_state = self.state.clone();
                         let select_focus = self.focus_handle.clone();
                         let menu_focus = self.focus_handle.clone();
+                        let element = div()
+                            .id(SharedString::from(format!("flow-edge-label-{}", edge.id)))
+                            .debug_selector(move || format!("flow-edge-label-{label_id}"))
+                            .absolute()
+                            .left(px(lx - state.origin.0) - text_width / 2.0 - padding_x - px(1.0))
+                            .top(px(ly - state.origin.1) - line_height / 2.0 - padding_y - px(1.0))
+                            .px_2()
+                            .py_0p5()
+                            .bg(gpui::rgb(bg))
+                            .rounded_sm()
+                            .text_size(font_size)
+                            .line_height(line_height)
+                            .border_1()
+                            .border_color(if edge.selected {
+                                Hsla::from(gpui::rgb(self.selection_color))
+                            } else {
+                                label_border
+                            })
+                            .text_color(gpui::rgb(label_color))
+                            .when(edge.selectable, |element| {
+                                element
+                                    .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                                        window.focus(&select_focus);
+                                        select_state.update(cx, |state, _| {
+                                            state.select_edge(
+                                                &select_id,
+                                                event.modifiers.secondary(),
+                                            )
+                                        });
+                                        cx.notify(entity_id);
+                                        cx.stop_propagation();
+                                    })
+                                    .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                                        window.focus(&menu_focus);
+                                        menu_state.update(cx, |state, cx| {
+                                            if !state
+                                                .edges
+                                                .iter()
+                                                .any(|edge| edge.id == menu_id && edge.selected)
+                                            {
+                                                state.select_edge(&menu_id, false);
+                                            }
+                                            state.pending_edge_menu =
+                                                Some((menu_id.clone(), event.position));
+                                            cx.notify();
+                                        });
+                                        cx.notify(entity_id);
+                                        cx.stop_propagation();
+                                    })
+                            })
+                            .child(label.to_string())
+                            .into_any_element();
                         edge_label_elements.push(
-                            div()
-                                .id(SharedString::from(format!("flow-edge-label-{}", edge.id)))
-                                .debug_selector(move || format!("flow-edge-label-{label_id}"))
-                                .absolute()
-                                .left(
-                                    px(lx - state.origin.0)
-                                        - text_width / 2.0
-                                        - padding_x
-                                        - px(1.0),
-                                )
-                                .top(
-                                    px(ly - state.origin.1)
-                                        - line_height / 2.0
-                                        - padding_y
-                                        - px(1.0),
-                                )
-                                .px_2()
-                                .py_0p5()
-                                .bg(gpui::rgb(bg))
-                                .rounded_sm()
-                                .text_size(font_size)
-                                .line_height(line_height)
-                                .border_1()
-                                .border_color(if edge.selected {
-                                    Hsla::from(gpui::rgb(self.selection_color))
-                                } else {
-                                    label_border
-                                })
-                                .text_color(gpui::rgb(label_color))
-                                .when(edge.selectable, |element| {
-                                    element
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            move |event, window, cx| {
-                                                window.focus(&select_focus);
-                                                select_state.update(cx, |state, _| {
-                                                    state.select_edge(
-                                                        &select_id,
-                                                        event.modifiers.secondary(),
-                                                    )
-                                                });
-                                                cx.notify(entity_id);
-                                                cx.stop_propagation();
-                                            },
-                                        )
-                                        .on_mouse_down(
-                                            MouseButton::Right,
-                                            move |event, window, cx| {
-                                                window.focus(&menu_focus);
-                                                menu_state.update(cx, |state, cx| {
-                                                    if !state.edges.iter().any(|edge| {
-                                                        edge.id == menu_id && edge.selected
-                                                    }) {
-                                                        state.select_edge(&menu_id, false);
-                                                    }
-                                                    state.pending_edge_menu =
-                                                        Some((menu_id.clone(), event.position));
-                                                    cx.notify();
-                                                });
-                                                cx.notify(entity_id);
-                                                cx.stop_propagation();
-                                            },
-                                        )
-                                })
-                                .child(label.to_string())
-                                .into_any_element(),
+                            RemScope {
+                                child: element,
+                                rem_size,
+                            }
+                            .into_any_element(),
                         );
                     }
                 }
@@ -1458,16 +1460,12 @@ impl Render for FlowGraph {
 
                     if event.modifiers.secondary() || event.modifiers.control {
                         // Zoom towards mouse
-                        let zoom_delta = -delta.y.as_f32() * 0.01;
-                        state_for_scroll.update(cx, |state, _cx| {
-                            let old_zoom = state.viewport.zoom;
-                            let new_zoom =
-                                (old_zoom + zoom_delta).clamp(state.min_zoom, state.max_zoom);
+                        let factor = (delta.y.as_f32() * 0.01).clamp(-4.0, 4.0).exp();
+                        state_for_scroll.update(cx, |state, cx| {
                             let mx = mouse_pos.x.as_f32() - state.origin.0;
                             let my = mouse_pos.y.as_f32() - state.origin.1;
-                            state.viewport.x = mx - (mx - state.viewport.x) * (new_zoom / old_zoom);
-                            state.viewport.y = my - (my - state.viewport.y) * (new_zoom / old_zoom);
-                            state.viewport.zoom = new_zoom;
+                            state.zoom_at(state.viewport.zoom * factor, mx, my);
+                            cx.notify();
                         });
                     } else {
                         // Pan
@@ -1478,6 +1476,7 @@ impl Render for FlowGraph {
                     }
 
                     cx.notify(entity_id);
+                    cx.stop_propagation();
                 }
             })
     }
