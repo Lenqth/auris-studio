@@ -1,14 +1,15 @@
 //! A graph presentation of the session's mixer, with document-authoritative connections.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::time::{Duration, Instant};
 
 use auris_i18n::Key;
 use auris_session::mixer_graph::{MixerEdge, MixerEdgeKind, MixerGraph, MixerNode};
 use auris_session::prelude::*;
 use gpui::{AnyElement, Axis, Entity, IntoElement, MouseButton, SharedString, div, prelude::*, px};
 use gpui_flow::{
-    Connection, EdgeStroke, FlowEdge, FlowGraph, FlowNode, FlowPoint, FlowState, HandleDef,
-    HandlePosition,
+    Connection, EdgeFlow, EdgeStroke, FlowEdge, FlowGraph, FlowNode, FlowPoint, FlowState,
+    HandleDef, HandlePosition,
 };
 
 use crate::app::AurisApp;
@@ -22,6 +23,9 @@ const COLUMN: f32 = 360.0;
 const ROW: f32 = 280.0;
 // Curve control points are separated enough to leave a label-height gap at their midpoints.
 const WIRE_LANE_SPACING: f32 = 48.0;
+const SIGNAL_FLOW_SPACING: f32 = 120.0;
+const SIGNAL_FLOW_LENGTH: f32 = 24.0;
+const SIGNAL_FLOW_SPEED: f64 = 90.0;
 
 #[cfg(test)]
 #[path = "mixer_graph_wires_tests.rs"]
@@ -35,6 +39,7 @@ pub(crate) struct MixerCanvas {
     by_id: HashMap<SharedString, MixerNode>,
     send: bool,
     palette: [u32; 4],
+    animation_started: Instant,
 }
 
 fn wire_style(kind: MixerEdgeKind, theme: &Theme) -> (gpui::Hsla, EdgeStroke) {
@@ -51,8 +56,14 @@ fn wire_activity(peak: f32) -> f32 {
         return 0.0;
     }
     // A logarithmic scale makes quiet but audible routes visible without flashing on digital
-    // noise. This is a meter of actual samples, with no decorative pulse or travelling motion.
+    // noise. Directional highlights use the same measured strength as the stationary glow.
     ((20.0 * peak.log10() + 60.0) / 60.0).clamp(0.0, 1.0)
+}
+
+fn signal_flow_phase(elapsed: Duration) -> f32 {
+    // Reduce in double precision before converting, so long-running sessions keep smooth motion.
+    (elapsed.as_secs_f64() * SIGNAL_FLOW_SPEED / f64::from(SIGNAL_FLOW_SPACING)).rem_euclid(1.0)
+        as f32
 }
 
 fn wire_palette(theme: &Theme) -> [u32; 4] {
@@ -260,13 +271,21 @@ impl AurisApp {
                 by_id: HashMap::new(),
                 send: !self.mixer_connect_send,
                 palette: [0; 4],
+                animation_started: Instant::now(),
             });
         }
         self.sync_mixer_graph(&document, cx);
         if let Some(canvas) = &self.mixer_canvas {
             canvas.state.update(cx, |state, _| {
+                state.edge_flow = self.appearance.animate_mixer_signals.then_some(EdgeFlow {
+                    phase: signal_flow_phase(canvas.animation_started.elapsed()),
+                    spacing: SIGNAL_FLOW_SPACING,
+                    length: SIGNAL_FLOW_LENGTH,
+                    color: u32::from(self.theme.text.to_rgb()) >> 8,
+                });
                 for (wire, edge) in state.edges.iter_mut().zip(&canvas.document.edges) {
                     wire.activity = wire_activity(self.session.mixer_edge_peak(edge));
+                    wire.animated = self.appearance.animate_mixer_signals;
                 }
             });
         }
@@ -346,6 +365,25 @@ impl AurisApp {
                         }),
                     ))
                     .child(div().flex_1())
+                    .child(button(
+                        "mixer-animate-signals",
+                        self.t(Key::MixerAnimateSignals),
+                        ButtonStyle::Ghost,
+                        self.appearance.animate_mixer_signals,
+                        theme.accent_soft,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            let mut appearance = this.appearance.clone();
+                            appearance.animate_mixer_signals = !appearance.animate_mixer_signals;
+                            if let Err(error) = this.apply_appearance(appearance, cx) {
+                                this.set_failed_status(format!(
+                                    "{}: {error}",
+                                    this.t(Key::AppearanceSaveFailed)
+                                ));
+                            }
+                            cx.notify();
+                        }),
+                    ))
                     .child(button(
                         "mixer-show-console",
                         self.t(Key::MixerConsole),

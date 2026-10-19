@@ -198,6 +198,7 @@ pub struct FlowEdge {
     pub selectable: bool,
     pub deletable: bool,
     pub hidden: bool,
+    /// Draw directional highlights when activity is positive and the owner supplies an edge flow.
     pub animated: bool,
     /// Optional label displayed at the edge midpoint.
     pub label: Option<SharedString>,
@@ -213,6 +214,19 @@ pub struct FlowEdge {
     /// Signal-driven glow strength in 0..1; zero leaves the normal wire unchanged.
     /// Presentation only: it never changes geometry, selection or hit testing.
     pub activity: f32,
+}
+
+/// Application-owned timing and style for directional signal highlights.
+#[derive(Clone, Copy, Debug)]
+pub struct EdgeFlow {
+    /// Increasing cycle position in 0..1, moving from source to target.
+    pub phase: f32,
+    /// Distance between highlight heads, in flow coordinates.
+    pub spacing: f32,
+    /// Length of a fading trail behind each head, in flow coordinates.
+    pub length: f32,
+    /// Theme foreground used to highlight the wire's own role color, as 0xRRGGBB.
+    pub color: u32,
 }
 
 impl FlowEdge {

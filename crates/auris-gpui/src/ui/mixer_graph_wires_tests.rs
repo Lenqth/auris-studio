@@ -6,7 +6,10 @@ use crate::{
 use gpui::{Modifiers, TestAppContext};
 use gpui_flow::{
     EdgeType,
-    edges::{compute_edge_label_position, compute_edge_path, hit_test_edges},
+    edges::{
+        EdgePath, compute_edge_label_position, compute_edge_path, flowing_edge_segments,
+        hit_test_edges,
+    },
 };
 
 fn measured_node(id: &str, x: f32, y: f32, handle: HandleDef) -> FlowNode {
@@ -26,6 +29,95 @@ fn signal_glow_has_a_logarithmic_floor_and_never_accepts_invalid_peaks() {
     assert!((wire_activity(0.1) - 2. / 3.).abs() < 1e-6);
     assert_eq!(wire_activity(1.), 1.);
     assert_eq!(wire_activity(4.), 1.);
+}
+
+#[test]
+fn signal_highlights_follow_arc_length_through_bends_and_reversed_routes() {
+    let path = EdgePath {
+        points: vec![(0., 0.), (40., 0.), (40., 90.), (120., 90.)],
+        label: (0., 0.),
+    };
+    let first = flowing_edge_segments(&path, 0.5, 120., 24.);
+    let later = flowing_edge_segments(&path, 0.55, 120., 24.);
+    assert_eq!(*first[2].0.points.last().unwrap(), (40., 20.));
+    let next = later[2].0.points.last().unwrap();
+    assert!((next.0 - 40.).abs() < 1e-5 && (next.1 - 26.).abs() < 1e-5);
+    assert_eq!(first[0].0.points, vec![(36., 0.), (40., 0.), (40., 4.)]);
+    assert!(first[0].1 < first[1].1 && first[1].1 < first[2].1);
+    for (section, _) in &first {
+        assert!(
+            section
+                .points
+                .iter()
+                .all(|point| path.distance(*point) < 1e-5)
+        );
+    }
+    let reversed = EdgePath {
+        points: vec![(100., 0.), (0., 0.)],
+        label: (0., 0.),
+    };
+    let from = flowing_edge_segments(&reversed, 0.2, 200., 24.);
+    let to = flowing_edge_segments(&reversed, 0.3, 200., 24.);
+    assert!((from[2].0.points.last().unwrap().0 - 60.).abs() < 1e-5);
+    assert!((to[2].0.points.last().unwrap().0 - 40.).abs() < 1e-5);
+}
+
+#[test]
+fn signal_highlights_wrap_scale_and_bound_pathological_inputs() {
+    let path = EdgePath {
+        points: vec![(0., 0.), (0., 0.), (0., 100.), (300., 100.)],
+        label: (0., 0.),
+    };
+    let reference = flowing_edge_segments(&path, 0.25, 120., 24.);
+    for phase in [1.25, -0.75] {
+        let wrapped = flowing_edge_segments(&path, phase, 120., 24.);
+        assert_eq!(wrapped.len(), reference.len());
+        for (a, b) in wrapped.iter().zip(&reference) {
+            assert_eq!(a.0.points, b.0.points);
+            assert_eq!(a.1, b.1);
+        }
+    }
+    let scaled = EdgePath {
+        points: path
+            .points
+            .iter()
+            .map(|p| (p.0 * 2. + 37., p.1 * 2. - 80.))
+            .collect(),
+        label: (0., 0.),
+    };
+    let highlights = flowing_edge_segments(&scaled, 0.25, 240., 48.);
+    for ((actual, _), (original, _)) in highlights.iter().zip(&reference) {
+        for (a, b) in actual.points.iter().zip(&original.points) {
+            assert!((a.0 - (b.0 * 2. + 37.)).abs() < 1e-4);
+            assert!((a.1 - (b.1 * 2. - 80.)).abs() < 1e-4);
+        }
+    }
+    for (phase, spacing, length) in [
+        (f32::NAN, 120., 24.),
+        (0., 0., 24.),
+        (0., 120., f32::INFINITY),
+    ] {
+        assert!(flowing_edge_segments(&path, phase, spacing, length).is_empty());
+    }
+    let zero = EdgePath {
+        points: vec![(0., 0.); 3],
+        label: (0., 0.),
+    };
+    assert!(flowing_edge_segments(&zero, 0.5, 120., 24.).is_empty());
+    let long = EdgePath {
+        points: vec![(0., 0.), (1e10, 0.)],
+        label: (0., 0.),
+    };
+    assert!(flowing_edge_segments(&long, 0.5, 1., 24.).len() <= 128 * 3);
+}
+
+#[test]
+fn signal_animation_uses_elapsed_time_even_after_a_long_session() {
+    assert!((signal_flow_phase(Duration::from_millis(100)) - 0.075).abs() < 1e-6);
+    assert!((signal_flow_phase(Duration::from_millis(1000)) - 0.75).abs() < 1e-6);
+    assert!((signal_flow_phase(Duration::from_millis(1500)) - 0.125).abs() < 1e-6);
+    let year = Duration::from_secs(365 * 24 * 60 * 60);
+    assert!((signal_flow_phase(year + Duration::from_millis(100)) - 0.075).abs() < 1e-6);
 }
 
 #[gpui::test]
@@ -59,10 +151,20 @@ fn live_wire_updates_preserve_individual_selection_and_pointer_geometry(cx: &mut
             edge.stroke = stroke;
             edge.lane_offset = (index as f32 - 1.) * WIRE_LANE_SPACING;
             edge.activity = wire_activity(0.1 * (index + 1) as f32);
+            edge.animated = true;
             edge
         })
         .collect();
-    let state = cx.new(|_| FlowState::new(nodes, edges));
+    let state = cx.new(|_| {
+        let mut state = FlowState::new(nodes, edges);
+        state.edge_flow = Some(EdgeFlow {
+            phase: 0.1,
+            spacing: 120.,
+            length: 24.,
+            color: u32::from(theme.text.to_rgb()) >> 8,
+        });
+        state
+    });
     let (view, cx) = cx.add_window_view(|_, cx| {
         FlowGraph::new(state.clone(), cx)
             .default_renderer(|_, _, _| div().w(px(100.)).h(px(80.)).into_any_element())
@@ -83,7 +185,10 @@ fn live_wire_updates_preserve_individual_selection_and_pointer_geometry(cx: &mut
         cx.simulate_click(gpui::point(px(at.0), px(at.1)), Modifiers::none());
         cx.run_until_parked();
         for activity in [1., 0.25, 0.] {
-            state.update(cx, |state, _| state.edges[index].activity = activity);
+            state.update(cx, |state, _| {
+                state.edges[index].activity = activity;
+                state.edge_flow.as_mut().unwrap().phase = activity * 0.5;
+            });
             view.update(cx, |_, cx| cx.notify());
             cx.run_until_parked();
             state.read_with(cx, |state, _| {
@@ -105,6 +210,57 @@ fn live_wire_updates_preserve_individual_selection_and_pointer_geometry(cx: &mut
             MouseButton::Right,
             Modifiers::none(),
         );
+    }
+}
+
+#[gpui::test]
+fn signal_motion_can_be_disabled_without_editing_the_mix_or_losing_selection(
+    cx: &mut TestAppContext,
+) {
+    let (app, cx) = open(cx);
+    app.update(cx, |this, cx| {
+        this.appearance.animate_mixer_signals = true;
+        this.panels.move_to(Panel::Mixer, Dock::Bottom);
+        this.panels.show(Panel::Mixer);
+        this.session.add_bus_track("Signal");
+        cx.notify();
+    });
+    paint(&app, cx);
+    let (id, start, before) = app.update(cx, |this, cx| {
+        let canvas = this.mixer_canvas.as_ref().unwrap();
+        let id = canvas.state.read(cx).edges[0].id.clone();
+        canvas
+            .state
+            .update(cx, |state, _| state.select_edge(&id, false));
+        (
+            id,
+            canvas.animation_started,
+            serde_json::to_value(this.project()).unwrap(),
+        )
+    });
+    for animated in [false, true] {
+        click("mixer-animate-signals", cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, cx| {
+            assert_eq!(this.appearance.animate_mixer_signals, animated);
+            let canvas = this.mixer_canvas.as_ref().unwrap();
+            assert_eq!(canvas.animation_started, start);
+            let state = canvas.state.read(cx);
+            assert_eq!(state.edge_flow.is_some(), animated);
+            assert!(
+                state
+                    .edges
+                    .iter()
+                    .find(|edge| edge.id == id)
+                    .unwrap()
+                    .selected
+            );
+            assert!(state.edges.iter().all(|edge| edge.animated == animated));
+            assert_eq!(serde_json::to_value(this.project()).unwrap(), before);
+            let stored: crate::appearance::Appearance =
+                serde_json::from_str(&serde_json::to_string(&this.appearance).unwrap()).unwrap();
+            assert_eq!(stored.animate_mixer_signals, animated);
+        });
     }
 }
 

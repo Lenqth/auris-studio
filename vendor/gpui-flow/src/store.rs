@@ -37,6 +37,8 @@ pub struct FlowState {
     pub edge_selection_color: Option<u32>,
     /// Text-scale multiplier for minimum separation between parallel lanes.
     pub edge_lane_scale: f32,
+    /// Optional owner-sampled signal animation; `None` keeps all wires static.
+    pub edge_flow: Option<EdgeFlow>,
     /// Optional document-authoritative connection preview, keyed by source and target.
     pub allowed_connections: Option<HashSet<(NodeId, NodeId)>>,
     /// Canvas origin in window coordinates, for embedding in a dock panel.
@@ -97,6 +99,7 @@ impl FlowState {
             pending_edge_menu: None,
             edge_selection_color: None,
             edge_lane_scale: 1.0,
+            edge_flow: None,
             allowed_connections: None,
             origin: (0.0, 0.0),
             nodes,

@@ -667,6 +667,13 @@ pub mod architecture {
     //! muted strips. Panic and output previews clear the bank. The desktop maps these readings
     //! logarithmically to a role-colored glow and slightly thicker core at its usual meter rate;
     //! selection outlines and pointer geometry remain independent of the signal level.
+    //! Active wires also carry short, fading highlights from source to target. The desktop
+    //! samples a monotonic clock at the same meter cadence, retaining its origin through edits,
+    //! theme changes and panning. Highlights advance by arc length along the shared flattened
+    //! route, including bends and parallel lanes, and scale with the viewport. Timing is entirely
+    //! in the frontend; animation never schedules work on the audio thread. The graph's
+    //! **Animate signals** control stores the motion preference in appearance settings; disabling
+    //! it retains level glow, fixed arrows and every selection/edit interaction.
     //!
     //! A bus is a [`TrackKind`](auris_core::TrackKind), not a thing of its own. That is what gives
     //! it a fader, a pan, a mute, an effect chain, a colour and an automation lane without any of

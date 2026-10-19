@@ -32,7 +32,12 @@ one bus. Their labels follow their lanes and identify each send independently.
 
 During playback, wires glow and become slightly thicker in proportion to the
 signal they actually carry. Outputs, sends and sidechains retain their own
-colors and line styles. Sends show their own gain and pre/post-fader tap;
+colors and line styles. Short highlights travel from each source towards its
+destination, following curves and bends at a steady visual speed. Their fading
+trails point back towards the source and their brightness follows the signal.
+Turn off **Animate signals** in the graph toolbar to stop moving highlights
+while retaining level glow and direction arrows. This preference is remembered.
+Sends show their own gain and pre/post-fader tap;
 insert-chain wires show the next effect's input. A bypassed effect's sidechain
 is inactive. Reverb and delay tails remain visible after Stop and fade with
 the audio. The display holds brief peaks and falls smoothly, like the meters.

@@ -1,10 +1,12 @@
 use crate::PixelsExt;
 pub mod bezier;
+mod flow;
 mod geometry;
 pub mod smooth_step;
 pub mod straight;
 
 use crate::{EdgeId, EdgeStroke, FlowEdge, FlowNode, FlowState, HandlePosition, HandleType};
+pub use flow::flowing_edge_segments;
 pub use geometry::{EdgePath, compute_edge_path};
 use gpui::{Background, PathBuilder, Point, SharedString, Window, px};
 
@@ -66,6 +68,31 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
             );
         }
         paint_edge_path(&path, edge.stroke, width + activity, color.clone(), window);
+        if edge.animated
+            && activity > 0.0
+            && let Some(flow) = state.edge_flow
+        {
+            let scale = state.viewport.zoom * state.edge_lane_scale;
+            let role = gpui::rgb(edge.color.unwrap_or(0xb1b1b7));
+            let foreground = gpui::rgb(flow.color);
+            for (segment, strength) in
+                flowing_edge_segments(&path, flow.phase, flow.spacing * scale, flow.length * scale)
+            {
+                let highlight = gpui::Rgba {
+                    r: role.r * 0.35 + foreground.r * 0.65,
+                    g: role.g * 0.35 + foreground.g * 0.65,
+                    b: role.b * 0.35 + foreground.b * 0.65,
+                    a: strength * activity,
+                };
+                paint_edge_path(
+                    &segment,
+                    EdgeStroke::Solid,
+                    width + activity,
+                    highlight.into(),
+                    window,
+                );
+            }
+        }
         if let Some(pair) = path.points.get(path.points.len().saturating_sub(2)..) {
             if pair.len() == 2 {
                 paint_arrowhead(window, pair[1].0, pair[1].1, pair[0].0, pair[0].1, color);

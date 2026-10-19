@@ -158,6 +158,8 @@ pub struct Appearance {
     pub scheme: String,
     /// An installed font family, or the platform interface font when unset.
     pub font_family: Option<String>,
+    /// Whether live mixer signals show moving directional highlights in addition to level glow.
+    pub animate_mixer_signals: bool,
     /// Palettes created in the settings window.
     pub custom_schemes: Vec<CustomScheme>,
 }
@@ -167,6 +169,7 @@ impl Default for Appearance {
         Self {
             scheme: DEFAULT_SCHEME.to_string(),
             font_family: None,
+            animate_mixer_signals: true,
             custom_schemes: Vec::new(),
         }
     }
@@ -313,6 +316,7 @@ mod tests {
             scheme: custom.id.clone(),
             font_family: Some("Example UI".to_owned()),
             custom_schemes: vec![custom],
+            animate_mixer_signals: false,
         };
         let text = serde_json::to_string(&appearance).unwrap();
         let loaded = serde_json::from_str::<Appearance>(&text)
@@ -445,6 +449,7 @@ mod tests {
             scheme: invalid.id.clone(),
             font_family: Some("  Example UI  ".to_owned()),
             custom_schemes: vec![invalid, valid.clone()],
+            animate_mixer_signals: false,
         }
         .normalised();
         assert_eq!(appearance.scheme, DEFAULT_SCHEME);
