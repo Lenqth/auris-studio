@@ -32,6 +32,45 @@ use crate::session::PluginWindow;
 use super::Session;
 
 impl Session {
+    /// Measures individual mixer connections while a graph reader is visible.
+    /// This is transient observation and never creates a document edit or an undo step.
+    pub fn watch_mixer_signals(&mut self, watched: bool) {
+        self.mixer_signals_watched = watched;
+        self.signal_meters.watch(watched);
+    }
+
+    /// Held linear peak actually carried by this connection, including its send gain and delay.
+    /// Insert-chain edges read the next insert's input; keys read the enabled effect's key input.
+    /// Missing connections and an unavailable audio device read silence.
+    pub fn mixer_edge_peak(&self, edge: &crate::mixer_graph::MixerEdge) -> f32 {
+        use crate::mixer_graph::{MixerEdgeKind, MixerNode};
+        use auris_engine::SignalRoute;
+
+        if !self.engine.is_running() {
+            return 0.0;
+        }
+        let owner = match edge.source {
+            MixerNode::Strip(owner) | MixerNode::Effect(owner, _) => owner,
+        };
+        let route = match (edge.kind, edge.target) {
+            (MixerEdgeKind::Output, MixerNode::Strip(target)) => owner.map(|source| {
+                SignalRoute::Output(
+                    source,
+                    target.map_or(auris_core::Output::Master, auris_core::Output::Bus),
+                )
+            }),
+            (MixerEdgeKind::Send { track, send, .. }, _) => Some(SignalRoute::Send(track, send)),
+            (MixerEdgeKind::Chain, MixerNode::Effect(owner, slot)) => {
+                Some(SignalRoute::InsertInput(owner, slot))
+            }
+            (MixerEdgeKind::Sidechain, MixerNode::Effect(owner, slot)) => {
+                Some(SignalRoute::Sidechain(owner, slot))
+            }
+            _ => None,
+        };
+        route.map_or(0.0, |route| self.signal_meters.peak(route))
+    }
+
     /// Writes a validated automation batch in one undo step, optionally replacing its lane.
     ///
     /// Invalid targets, out-of-range values, negative ticks and duplicate positions leave the
@@ -912,6 +951,39 @@ mod tests {
 
     /// The compressor's registry id, which is the one built-in that listens to a key.
     const COMPRESSOR: &str = "auris.fx.compressor";
+
+    #[test]
+    fn signal_observation_is_transient_and_follows_graph_rebuilds_and_undo() {
+        let mut session = session();
+        let track = session.add_bus_track("Source");
+        let bus = session.add_bus_track("Return");
+        session.add_send(track, bus).unwrap();
+        session.forget_history();
+        let before = session.project().clone();
+        let dirty = session.is_dirty();
+        session.watch_mixer_signals(true);
+        let old = Arc::clone(&session.signal_meters);
+        assert!(old.is_watched());
+        assert_eq!(session.project(), &before);
+        assert_eq!(session.is_dirty(), dirty);
+
+        session.add_effect(Some(track), COMPRESSOR).unwrap();
+        assert!(!Arc::ptr_eq(&old, &session.signal_meters));
+        assert!(!old.is_watched());
+        assert!(session.signal_meters.is_watched());
+        assert!(
+            session
+                .mixer_graph()
+                .edges
+                .iter()
+                .all(|edge| session.mixer_edge_peak(edge) == 0.)
+        );
+        session.watch_mixer_signals(false);
+        assert!(!session.signal_meters.is_watched());
+        session.watch_mixer_signals(true);
+        assert_eq!(undo_depth(&mut session), 1);
+        assert!(session.signal_meters.is_watched());
+    }
 
     #[test]
     fn automation_batches_validate_before_mutation_and_undo_as_one_edit() {

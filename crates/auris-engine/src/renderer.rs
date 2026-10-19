@@ -32,6 +32,9 @@ pub fn render_block(
 ) {
     out.clear();
     let total = out.frame_count();
+    if !offline && graph.signal_meters.is_watched() {
+        graph.signal_meters.begin_block(total, graph.sample_rate());
+    }
     for track in graph.tracks_mut() {
         track.peak = 0.0;
     }
@@ -137,6 +140,8 @@ fn render_segment(
         true => &[],
         false => &graph.monitors,
     };
+    let signal_meters =
+        (!offline && graph.signal_meters.is_watched()).then_some(graph.signal_meters.as_ref());
 
     // The routing order rather than the track list: a bus cannot go through its own strip until
     // everything routed into it has been mixed in, and only this order guarantees that.
@@ -183,7 +188,7 @@ fn render_segment(
         }
         track
             .strip
-            .process_chain(&mut track.scratch, sidechain_taps, &ctx);
+            .process_chain(&mut track.scratch, sidechain_taps, &ctx, signal_meters);
         // Delay compensation sits between the chain and the fader: the chain is what runs late,
         // and putting it here keeps the fader and the mute acting when they are moved rather
         // than a few milliseconds afterwards. Every copy the track goes on to produce is taken
@@ -196,10 +201,17 @@ fn render_segment(
             strip,
             ..
         } = track;
-        deliver_sends(sends, scratch, bus_inputs, true, ramp_frames);
+        deliver_sends(sends, scratch, bus_inputs, true, ramp_frames, signal_meters);
         strip.apply_gain_and_pan(scratch, ramp_frames);
         strip.apply_mute(scratch);
-        deliver_sends(sends, scratch, bus_inputs, false, ramp_frames);
+        deliver_sends(
+            sends,
+            scratch,
+            bus_inputs,
+            false,
+            ramp_frames,
+            signal_meters,
+        );
 
         // `apply_mute` is what moves the fade, so this is the block it closed on and the last one
         // this track renders until the mute opens again. Anything the instrument is still holding
@@ -268,12 +280,15 @@ fn render_segment(
                 Some(input) => input.mix_from(signal, 1.0),
                 None => master_scratch.mix_from(signal, 1.0),
             }
+            if let Some(meters) = signal_meters {
+                meters.observe(output.meter, signal.peak());
+            }
         }
     }
 
     graph
         .master
-        .process_chain(master_scratch, sidechain_taps, &ctx);
+        .process_chain(master_scratch, sidechain_taps, &ctx, signal_meters);
     graph.master.apply_gain_and_pan(master_scratch, ramp_frames);
     // Mute is the last stage of the strip: the effects still run — so a reverb tail does not
     // freeze and un-muting does not pop — but nothing leaves the bus.
@@ -324,6 +339,7 @@ fn deliver_sends(
     bus_inputs: &mut [AudioBuffer],
     pre_fader: bool,
     ramp_frames: usize,
+    meters: Option<&crate::SignalMeters>,
 ) {
     for send in sends.iter_mut() {
         if send.pre_fader != pre_fader {
@@ -335,14 +351,20 @@ fn deliver_sends(
         let (from, to) = send.gain.advance(source.frame_count(), ramp_frames);
         // A send with no delay to apply is mixed straight from the tap. Only one that is actually
         // held back — because the bus it feeds looks ahead — needs a copy to hold.
-        if send.delay.frames() == 0 {
-            mix_ramped(input, source, from, to);
-            continue;
+        let signal = if send.delay.frames() == 0 {
+            source
+        } else {
+            send.scratch.set_frame_count(source.frame_count());
+            send.scratch.copy_from(source);
+            send.delay.process(&mut send.scratch);
+            &send.scratch
+        };
+        if let Some(meters) = meters {
+            let peak = mix_ramped::<true>(input, signal, from, to);
+            meters.observe(send.meter, peak);
+        } else {
+            mix_ramped::<false>(input, signal, from, to);
         }
-        send.scratch.set_frame_count(source.frame_count());
-        send.scratch.copy_from(source);
-        send.delay.process(&mut send.scratch);
-        mix_ramped(input, &send.scratch, from, to);
     }
 }
 
@@ -350,12 +372,18 @@ fn deliver_sends(
 ///
 /// The mixing counterpart of the strip's own ramp, and there for the same reason: a send level
 /// that jumped between blocks would click.
-fn mix_ramped(out: &mut AudioBuffer, source: &AudioBuffer, from: f32, to: f32) {
+fn mix_ramped<const METER: bool>(
+    out: &mut AudioBuffer,
+    source: &AudioBuffer,
+    from: f32,
+    to: f32,
+) -> f32 {
     let channels = out.channel_count().min(source.channel_count());
     let frames = out.frame_count().min(source.frame_count());
     if frames == 0 {
-        return;
+        return 0.0;
     }
+    let mut peak = 0.0_f32;
     let step = (to - from) / frames as f32;
     let flat = (to - from).abs() <= f32::EPSILON;
     for channel in 0..channels {
@@ -363,16 +391,25 @@ fn mix_ramped(out: &mut AudioBuffer, source: &AudioBuffer, from: f32, to: f32) {
         let destination = &mut out.channel_mut(channel)[..frames];
         if flat {
             for (sample, value) in destination.iter_mut().zip(input) {
-                *sample += *value * from;
+                let contribution = *value * from;
+                *sample += contribution;
+                if METER {
+                    peak = peak.max(contribution.abs());
+                }
             }
             continue;
         }
         let mut gain = from;
         for (sample, value) in destination.iter_mut().zip(input) {
-            *sample += *value * gain;
+            let contribution = *value * gain;
+            *sample += contribution;
+            if METER {
+                peak = peak.max(contribution.abs());
+            }
             gain += step;
         }
     }
+    peak
 }
 
 /// Fills a track's scratch buffer with whatever it plays for this segment.

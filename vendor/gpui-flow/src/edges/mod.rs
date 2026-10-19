@@ -36,6 +36,26 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
         }
         let color: Background = gpui::rgb(edge.color.unwrap_or(0xb1b1b7)).into();
         let width = edge.stroke_width.unwrap_or(2.0);
+        let activity = if edge.activity.is_finite() {
+            edge.activity.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        if activity > 0.0 {
+            // The existing role hue and dash pattern carry through the glow. Selection is
+            // painted afterwards so a live connection still has an unambiguous focus outline.
+            for (spread, opacity) in [(10.0, 0.06), (6.0, 0.12), (3.0, 0.22)] {
+                let mut glow: gpui::Hsla = gpui::rgb(edge.color.unwrap_or(0xb1b1b7)).into();
+                glow.a = activity * opacity;
+                paint_edge_path(
+                    &path,
+                    edge.stroke,
+                    width + spread * activity,
+                    glow.into(),
+                    window,
+                );
+            }
+        }
         if edge.selected {
             paint_edge_path(
                 &path,
@@ -45,7 +65,7 @@ pub fn paint_edges(state: &FlowState, window: &mut Window) {
                 window,
             );
         }
-        paint_edge_path(&path, edge.stroke, width, color.clone(), window);
+        paint_edge_path(&path, edge.stroke, width + activity, color.clone(), window);
         if let Some(pair) = path.points.get(path.points.len().saturating_sub(2)..) {
             if pair.len() == 2 {
                 paint_arrowhead(window, pair[1].0, pair[1].1, pair[0].0, pair[0].1, color);

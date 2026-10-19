@@ -210,6 +210,9 @@ pub struct FlowEdge {
     /// Perpendicular separation of a Bezier lane, in flow coordinates.
     /// Endpoints remain attached to their original handles.
     pub lane_offset: f32,
+    /// Signal-driven glow strength in 0..1; zero leaves the normal wire unchanged.
+    /// Presentation only: it never changes geometry, selection or hit testing.
+    pub activity: f32,
 }
 
 impl FlowEdge {
@@ -235,6 +238,7 @@ impl FlowEdge {
             stroke_width: None,
             stroke: EdgeStroke::Solid,
             lane_offset: 0.0,
+            activity: 0.0,
         }
     }
 

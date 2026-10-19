@@ -75,6 +75,8 @@ pub(crate) struct OneShot {
 /// The gain is smoothed for the same reason a fader is: a send level moved during playback would
 /// otherwise step, and a step is a click.
 pub(crate) struct RenderSend {
+    /// Prepared slot in the graph's optional connection meters.
+    pub(crate) meter: Option<usize>,
     /// Which of the graph's bus input buffers this feeds.
     pub(crate) target: usize,
     /// Send level as a linear gain, ramped across the block it changes in.
@@ -90,6 +92,8 @@ pub(crate) struct RenderSend {
 
 /// One unity output branch with independent latency compensation.
 pub(crate) struct RenderOutput {
+    /// Prepared slot in the graph's optional connection meters.
+    pub(crate) meter: Option<usize>,
     /// Bus input slot, or the master when absent.
     pub(crate) target: Option<usize>,
     /// Independent post-fader delay for this path through the graph.

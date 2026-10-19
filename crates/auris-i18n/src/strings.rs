@@ -188,7 +188,7 @@ strings! {
     MixerGraph { en: "Signal flow", ja: "信号フロー" }
     MixerConsole { en: "Console", ja: "コンソール" }
     MixerLayout { en: "Arrange nodes", ja: "ノードを整列" }
-    MixerGraphHelp { en: "Drag an output port to add a bus or sidechain branch. Click a wire, then Delete or right-click to remove it. Faders act after inserts. Drag the background to pan.", ja: "出力端子からドラッグしてバスやサイドチェインへ接続。配線をクリックし、Deleteまたは右クリックで削除できます。フェーダーはエフェクト後に作用します。背景をドラッグして移動。" }
+    MixerGraphHelp { en: "Wires glow with signal level. Drag an output port to add a bus or sidechain branch. Click a wire, then Delete or right-click to remove it. Faders act after inserts. Drag the background to pan.", ja: "配線は信号の音量に応じて光ります。出力端子からドラッグしてバスやサイドチェインへ接続。配線をクリックし、Deleteまたは右クリックで削除できます。フェーダーはエフェクト後に作用します。背景をドラッグして移動。" }
     MixerConnectionRejected { en: "Cannot connect these nodes. Choose a bus input or sidechain that does not create a cycle.", ja: "このノードには接続できません。循環しないバス入力かサイドチェインを選んでください。" }
     Inspector { en: "Inspector", ja: "インスペクタ" }
     InspectorClip { en: "Clip", ja: "クリップ" }

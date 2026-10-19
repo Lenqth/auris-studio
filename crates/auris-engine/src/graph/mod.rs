@@ -1,9 +1,9 @@
 //! The flattened, render-ready form of a [`Project`].
 //!
 //! A [`RenderGraph`] is built on the UI thread — where allocating, instantiating plugins and
-//! walking the tempo map are all free — and then *moved* onto the audio thread. Nothing in it is
-//! shared: the audio thread owns the graph outright while it renders, and the previous graph is
-//! handed back so its destructor runs on the UI thread.
+//! walking the tempo map are all free — and then *moved* onto the audio thread. The audio thread
+//! owns its processing state outright; only lock-free observation taps are shared with readers.
+//! The previous graph is handed back so its destructor runs on the UI thread.
 //!
 //! Building resolves the three indirections the document model deliberately keeps:
 //!
@@ -192,6 +192,8 @@ pub struct RenderGraph {
     /// strip's signal — the document holds parameter values, not audio.
     pub(crate) scope: Arc<crate::scope::Scope>,
     pub(crate) visualizer_scope: Arc<crate::scope::Scope>,
+    /// Optional connection peaks; indices and storage are prepared before audio takes ownership.
+    pub(crate) signal_meters: Arc<crate::SignalMeters>,
     /// The live input, and the tracks it plays through, for everyone being monitored.
     ///
     /// A list rather than one, because a band monitors as a band. Walked once per track in the
@@ -286,6 +288,7 @@ impl RenderGraph {
             .find(|rate| rate.is_finite() && *rate > 0.0)
             .unwrap_or(DEFAULT_SAMPLE_RATE);
         let prepare = PrepareContext::new(sample_rate, max_block, RENDER_CHANNELS);
+        let signal_meters = Arc::new(crate::SignalMeters::for_project(project));
         // The solo resolution travels along the routing, so it is worked out for the whole project
         // at once rather than per track: soloing a drum track has to leave the drum bus open.
         let solo = project.solo_resolution();
@@ -307,7 +310,9 @@ impl RenderGraph {
             // `audible` carries only the solo resolution; the strip keeps its own mute so a
             // mute toggle is a command rather than a rebuild.
             let audible = solo.get(index).copied().unwrap_or(true);
-            let strip = RenderStrip::from_mixer(&track.mixer, audible, registry, placed, &prepare);
+            let mut strip =
+                RenderStrip::from_mixer(&track.mixer, audible, registry, placed, &prepare);
+            strip.signal_slots = signal_slots(Some(track.id), &track.mixer, &signal_meters);
             // A singer track plays through an instrument exactly as an instrument track does —
             // until a voice model exists, its `instrument_id` names the preview voice — so the
             // two kinds meet the same arm below, differing only in where the id, the state and
@@ -515,6 +520,7 @@ impl RenderGraph {
                 .outputs
                 .iter()
                 .map(|output| track::RenderOutput {
+                    meter: signal_meters.slot(crate::SignalRoute::Output(track.id, *output)),
                     target: output.bus().and_then(bus_slot),
                     delay: LatencyDelay::new(0, RENDER_CHANNELS),
                     scratch: AudioBuffer::new(RENDER_CHANNELS, 0, sample_rate),
@@ -525,6 +531,7 @@ impl RenderGraph {
                 .iter()
                 .filter_map(|send| {
                     Some(RenderSend {
+                        meter: signal_meters.slot(crate::SignalRoute::Send(track.id, send.id)),
                         target: bus_slot(send.target)?,
                         gain: SmoothedGain::new(db_to_gain(send.level_db)),
                         pre_fader: send.pre_fader,
@@ -559,6 +566,7 @@ impl RenderGraph {
         }
 
         let mut master = RenderStrip::from_mixer(&project.master, true, registry, placed, &prepare);
+        master.signal_slots = signal_slots(None, &project.master, &signal_meters);
 
         // Sidechain taps. Resolved after the strips are built rather than while, because only the
         // built effect can say whether it has any use for a key: a slot naming a source in front
@@ -676,6 +684,7 @@ impl RenderGraph {
             master_peak: [0.0, 0.0],
             scope: Arc::new(crate::scope::Scope::new()),
             visualizer_scope: Arc::new(crate::scope::Scope::new()),
+            signal_meters,
             monitors: Vec::new(),
         }
     }
@@ -708,6 +717,11 @@ impl RenderGraph {
     /// Attaches the independent stereo visualizer tap.
     pub fn set_visualizer_scope(&mut self, scope: Arc<crate::scope::Scope>) {
         self.visualizer_scope = scope;
+    }
+
+    /// Retains the connection-meter reader before this graph moves to the audio thread.
+    pub fn signal_meters(&self) -> Arc<crate::SignalMeters> {
+        Arc::clone(&self.signal_meters)
     }
 
     /// Plays a live input through each named track, and stops doing so through every other.
@@ -1097,6 +1111,7 @@ impl RenderGraph {
     /// Notes stay off until the next note-on rather than being chased back, because a panic that
     /// immediately restored what it had just killed would be useless.
     pub fn panic(&mut self) {
+        self.signal_meters.reset();
         self.metronome.reset();
         for track in &mut self.tracks {
             track.silence_voices();
@@ -1116,6 +1131,23 @@ impl RenderGraph {
         self.master.reset();
         self.master_peak = [0.0, 0.0];
     }
+}
+
+fn signal_slots(
+    owner: Option<TrackId>,
+    mixer: &MixerStrip,
+    meters: &crate::SignalMeters,
+) -> Vec<(Option<usize>, Option<usize>)> {
+    mixer
+        .effects
+        .iter()
+        .map(|effect| {
+            (
+                meters.slot(crate::SignalRoute::InsertInput(owner, effect.id)),
+                meters.slot(crate::SignalRoute::Sidechain(owner, effect.id)),
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]

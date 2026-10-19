@@ -655,6 +655,19 @@ pub mod architecture {
     //! delay and prepared scratch buffer, so copying to buses of different latencies does not
     //! alter the shared source buffer or allocate on the audio callback.
     //!
+    //! Each render graph also prepares its own [`SignalMeters`](auris_engine::SignalMeters),
+    //! keyed by stable route identities with slot indices resolved before audio takes ownership.
+    //! The session retains an atomic reader through graph rebuilds, replacing the bank so stale
+    //! edges never inherit readings. `Session::watch_mixer_signals` enables measurement only
+    //! while the graph is visible; `Session::mixer_edge_peak` reads an exact connection without
+    //! consuming its peak. Inserts measure their input, enabled keyed effects their actual key,
+    //! outputs their compensated branch, and sends their compensated, smoothed-gain contribution
+    //! before summing. Realtime reports neither allocate nor lock, and offline renders do not
+    //! publish. Peaks attack immediately and fall with the ordinary meters, even for skipped
+    //! muted strips. Panic and output previews clear the bank. The desktop maps these readings
+    //! logarithmically to a role-colored glow and slightly thicker core at its usual meter rate;
+    //! selection outlines and pointer geometry remain independent of the signal level.
+    //!
     //! A bus is a [`TrackKind`](auris_core::TrackKind), not a thing of its own. That is what gives
     //! it a fader, a pan, a mute, an effect chain, a colour and an automation lane without any of
     //! them being written a second time, and it is why every command that addresses a strip by

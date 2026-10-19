@@ -167,7 +167,7 @@ impl MeterBank {
     }
 
     /// Multiplier applied to the previous reading after `frames` have elapsed.
-    fn decay(frames: usize, sample_rate: f64) -> f32 {
+    pub(crate) fn decay(frames: usize, sample_rate: f64) -> f32 {
         if sample_rate <= 0.0 || frames == 0 {
             return 1.0;
         }

@@ -396,6 +396,8 @@ pub struct Session {
     motion_monitors: HashMap<TrackId, Arc<auris_core::motion::MotionMonitor>>,
     overview_scopes: HashMap<TrackId, Arc<auris_engine::Scope>>,
     overview_watched: bool,
+    signal_meters: Arc<auris_engine::SignalMeters>,
+    mixer_signals_watched: bool,
     motion_track: Option<TrackId>,
     /// Turns the window the engine publishes into a spectrum.
     ///
@@ -650,6 +652,8 @@ impl Session {
             motion_monitors: HashMap::new(),
             overview_scopes: HashMap::new(),
             overview_watched: false,
+            signal_meters: Arc::new(auris_engine::SignalMeters::default()),
+            mixer_signals_watched: false,
             motion_track: None,
             analyzer: auris_dsp::SpectrumAnalyzer::new(auris_engine::SCOPE_WINDOW),
             param_cache: HashMap::new(),
@@ -1321,6 +1325,9 @@ impl Session {
             rate,
         );
         self.graph_resource_error = graph.take_resource_error();
+        self.signal_meters.watch(false);
+        self.signal_meters = graph.signal_meters();
+        self.signal_meters.watch(self.mixer_signals_watched);
         for monitor in self.motion_monitors.values() {
             monitor.watch(false);
         }

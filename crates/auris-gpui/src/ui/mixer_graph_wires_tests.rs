@@ -17,6 +17,98 @@ fn measured_node(id: &str, x: f32, y: f32, handle: HandleDef) -> FlowNode {
 }
 
 #[test]
+fn signal_glow_has_a_logarithmic_floor_and_never_accepts_invalid_peaks() {
+    for peak in [0., -1., f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0001] {
+        assert_eq!(wire_activity(peak), 0.);
+    }
+    assert!((wire_activity(0.001)).abs() < 1e-6);
+    assert!((wire_activity(0.01) - 1. / 3.).abs() < 1e-6);
+    assert!((wire_activity(0.1) - 2. / 3.).abs() < 1e-6);
+    assert_eq!(wire_activity(1.), 1.);
+    assert_eq!(wire_activity(4.), 1.);
+}
+
+#[gpui::test]
+fn live_wire_updates_preserve_individual_selection_and_pointer_geometry(cx: &mut TestAppContext) {
+    let theme = Theme::from_scheme(&crate::theme::SCHEMES[0]);
+    let nodes = vec![
+        measured_node("a", 40., 100., HandleDef::source(HandlePosition::Right)).size(100., 80.),
+        measured_node("b", 640., 100., HandleDef::target(HandlePosition::Left)).size(100., 80.),
+    ];
+    let roles = [
+        ("out", MixerEdgeKind::Output),
+        (
+            "send",
+            MixerEdgeKind::Send {
+                track: TrackId(1),
+                send: SendId(1),
+                level_db: -6.,
+                pre_fader: true,
+            },
+        ),
+        ("key", MixerEdgeKind::Sidechain),
+    ];
+    let edges = roles
+        .into_iter()
+        .enumerate()
+        .map(|(index, (id, kind))| {
+            let (color, stroke) = wire_style(kind, &theme);
+            let mut edge = FlowEdge::new(id, "a", "b")
+                .label(id)
+                .color(u32::from(color.to_rgb()) >> 8);
+            edge.stroke = stroke;
+            edge.lane_offset = (index as f32 - 1.) * WIRE_LANE_SPACING;
+            edge.activity = wire_activity(0.1 * (index + 1) as f32);
+            edge
+        })
+        .collect();
+    let state = cx.new(|_| FlowState::new(nodes, edges));
+    let (view, cx) = cx.add_window_view(|_, cx| {
+        FlowGraph::new(state.clone(), cx)
+            .default_renderer(|_, _, _| div().w(px(100.)).h(px(80.)).into_any_element())
+    });
+    cx.run_until_parked();
+    for index in 0..3 {
+        let (points, at, id, stroke, color) = state.read_with(cx, |state, _| {
+            let edge = &state.edges[index];
+            let path = compute_edge_path(state, edge).unwrap();
+            (
+                path.points,
+                path.label,
+                edge.id.clone(),
+                edge.stroke,
+                edge.color,
+            )
+        });
+        cx.simulate_click(gpui::point(px(at.0), px(at.1)), Modifiers::none());
+        cx.run_until_parked();
+        for activity in [1., 0.25, 0.] {
+            state.update(cx, |state, _| state.edges[index].activity = activity);
+            view.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
+            state.read_with(cx, |state, _| {
+                let edge = &state.edges[index];
+                assert!(edge.selected);
+                assert_eq!(state.edges.iter().filter(|edge| edge.selected).count(), 1);
+                assert_eq!(edge.stroke, stroke);
+                assert_eq!(edge.color, color);
+                assert_eq!(compute_edge_path(state, edge).unwrap().points, points);
+                assert_eq!(hit_test_edges(state, at.0, at.1, 5.), Some(id.clone()));
+            });
+        }
+        right_press(cx, gpui::point(px(at.0), px(at.1)));
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.pending_edge_menu.as_ref().unwrap().0, id)
+        });
+        cx.simulate_mouse_up(
+            gpui::point(px(at.0), px(at.1)),
+            MouseButton::Right,
+            Modifiers::none(),
+        );
+    }
+}
+
+#[test]
 fn curved_lanes_share_geometry_for_painting_labels_and_nearest_hit_testing() {
     let nodes = vec![
         measured_node("a", 0., 0., HandleDef::source(HandlePosition::Right)),

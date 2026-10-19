@@ -46,6 +46,15 @@ fn wire_style(kind: MixerEdgeKind, theme: &Theme) -> (gpui::Hsla, EdgeStroke) {
     }
 }
 
+fn wire_activity(peak: f32) -> f32 {
+    if !peak.is_finite() || peak <= 0.0 {
+        return 0.0;
+    }
+    // A logarithmic scale makes quiet but audible routes visible without flashing on digital
+    // noise. This is a meter of actual samples, with no decorative pulse or travelling motion.
+    ((20.0 * peak.log10() + 60.0) / 60.0).clamp(0.0, 1.0)
+}
+
 fn wire_palette(theme: &Theme) -> [u32; 4] {
     [
         theme.mixer_output_color(),
@@ -207,8 +216,15 @@ fn positions(graph: &MixerGraph) -> HashMap<MixerNode, FlowPoint> {
 }
 
 impl AurisApp {
+    pub(crate) fn poll_mixer_signals(&mut self) {
+        self.session.watch_mixer_signals(
+            self.mixer_graph_visible && self.panels.is_open(crate::dock::Panel::Mixer),
+        );
+    }
+
     /// The graph is rebuilt from the document, preserving the positions of surviving identities.
     pub(crate) fn render_mixer_graph(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
+        self.poll_mixer_signals();
         let document = self.session.mixer_graph();
         if self.mixer_canvas.is_none() {
             let state = cx.new(|_| {
@@ -247,6 +263,13 @@ impl AurisApp {
             });
         }
         self.sync_mixer_graph(&document, cx);
+        if let Some(canvas) = &self.mixer_canvas {
+            canvas.state.update(cx, |state, _| {
+                for (wire, edge) in state.edges.iter_mut().zip(&canvas.document.edges) {
+                    wire.activity = wire_activity(self.session.mixer_edge_peak(edge));
+                }
+            });
+        }
         let theme = self.theme.clone();
         let view = self.mixer_canvas.as_ref().map(|canvas| canvas.view.clone());
         div()

@@ -2000,6 +2000,7 @@ impl AurisApp {
                         this.poll_visualizer();
                         this.poll_physical_view();
                         this.poll_track_grid();
+                        this.poll_mixer_signals();
                         // Separate from `poll` on purpose: that is housekeeping and this writes
                         // to disk. A success says nothing: it is a private recovery snapshot, and
                         // announcing one every half minute would drown out useful status. A

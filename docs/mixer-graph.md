@@ -30,6 +30,15 @@ The legend below the canvas shows the current colors. Wires sharing the same
 source and destination use separate curved lanes, including multiple sends to
 one bus. Their labels follow their lanes and identify each send independently.
 
+During playback, wires glow and become slightly thicker in proportion to the
+signal they actually carry. Outputs, sends and sidechains retain their own
+colors and line styles. Sends show their own gain and pre/post-fader tap;
+insert-chain wires show the next effect's input. A bypassed effect's sidechain
+is inactive. Reverb and delay tails remain visible after Stop and fade with
+the audio. The display holds brief peaks and falls smoothly, like the meters.
+Measurement runs only while **Signal flow** is open and does not change the
+sound, project or undo history.
+
 Click a wire or its label to select it. Selection adds a thicker accent outline
 while retaining the role color and line style. Press Delete or Backspace, or right-click the wire or label and choose
 **Delete connections**. Hold Ctrl on Windows or Command on macOS while clicking
