@@ -161,11 +161,6 @@ strings! {
     PromptLyric { en: "Lyric", ja: "歌詞" }
     PromptPhonemes { en: "Phonemes (space-separated IPA)", ja: "音素(スペース区切りの IPA)" }
     PromptLyrics { en: "Write Lyrics Across Selection", ja: "選択ノートに歌詞を流し込む" }
-    PromptComposeLyrics { en: "Compose from Lyrics", ja: "歌詞から作曲" }
-    HintComposeLyrics {
-        en: "One line per phrase (、！？ break too) · secondary-Return composes, a fresh take each run",
-        ja: "1行が1フレーズ(、や！？も切れ目)。secondary-Returnで作曲、実行のたびに新しいテイク"
-    }
     PromptSectionLyrics { en: "Lyrics", ja: "歌詞" }
     HintSectionLyrics {
         en: "One line per phrase · Tab walks the sections · empty makes a section instrumental",
@@ -605,7 +600,7 @@ strings! {
     JapaneseDictionaryHeading { en: "Japanese Dictionary", ja: "日本語辞書" }
     JapaneseDictionaryNote {
         en: "Reads kanji lyrics and the pitch accent a composed melody follows. A build ships with naist-jdic; choose a folder here only to override it, and Clear to return to the shipped one.",
-        ja: "漢字歌詞の読みと、歌詞から作曲するときのアクセントに使われます。naist-jdic は同梱されています。差し替えたい場合のみフォルダを指定し、「解除」で同梱辞書に戻ります。"
+        ja: "漢字歌詞の読みと、メロディの作曲に使う歌詞のアクセントを解析します。naist-jdic は同梱されています。差し替えたい場合のみフォルダを指定し、「解除」で同梱辞書に戻ります。"
     }
     ValueShippedDictionary {
         en: "Shipped dictionary (naist-jdic)",
@@ -626,7 +621,6 @@ strings! {
     CmdOpenProject { en: "Open Project", ja: "プロジェクトを開く" }
     CmdComposeSong { en: "Compose a Song…", ja: "曲を作る…" }
     CmdAccompanyMelody { en: "Accompany the Melody", ja: "旋律に伴奏をつける" }
-    CmdComposeFromLyrics { en: "Compose from Lyrics…", ja: "歌詞から作曲…" }
     CmdComposeFromSpec { en: "Compose from Specification…", ja: "仕様ファイルから作曲…" }
     CmdBalanceLevels { en: "Balance the Mix", ja: "ミックスの自動調整" }
     CmdOpenPluginWindow { en: "Open Plugin Window", ja: "プラグインの画面を開く" }
@@ -1421,7 +1415,6 @@ strings! {
     EditChangeInstrument { en: "changing the instrument", ja: "音源の変更" }
     EditAddClip { en: "adding a clip", ja: "クリップの追加" }
     EditAccompany { en: "adding an accompaniment", ja: "伴奏の追加" }
-    EditComposeLyrics { en: "composing from lyrics", ja: "歌詞からの作曲" }
     EditDeleteClip { en: "deleting a clip", ja: "クリップの削除" }
     EditCutClips { en: "cutting clips", ja: "クリップの切り取り" }
     EditPasteClips { en: "pasting clips", ja: "クリップの貼り付け" }
@@ -1706,10 +1699,6 @@ strings! {
     ErrorNothingToSing {
         en: "there are no notes to sing",
         ja: "歌うノートがありません"
-    }
-    ErrorNoLyrics {
-        en: "the lyrics contain nothing to sing",
-        ja: "歌詞に歌える言葉がありません"
     }
     ErrorSing {
         en: "the voice model failed",

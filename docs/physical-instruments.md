@@ -109,8 +109,8 @@ with more damping; picked/slap bass starts with harder contact; string pads star
 bow pressure and a longer release. These are starting parameters for Auris instruments, not GM
 patch emulation. Drum hints use the built-in Drum Kit.
 
-Accompaniment and lyric-song backing share the same choices. Native tracks require no SoundFont
-reference. An explicit SoundFont source or imported preset continues to choose that exact font.
+Accompaniment uses the same choices. Native tracks require no SoundFont reference. An explicit
+SoundFont source or imported preset continues to choose that exact font.
 Unsupported musical families use the session's existing reported fallback or an optional installed
 GM library. Melody roles start native violin with legato; pad roles start with slower bow motion
 and polyphony. Explicit parameter choices take precedence. Notes and their seeded recipes remain

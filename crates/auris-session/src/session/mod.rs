@@ -112,7 +112,7 @@ pub use levels::{
     ComposeBalanceResult, ComposeBalanceStep, LIMITER_ALLOWANCE_DB, NormalizeMixReport,
     TARGET_LUFS, TrackLevel, fader_for, faders_lift_db, master_gain_db,
 };
-pub use lyrics::{DEFAULT_LYRIC_PROGRESSION, LyricSongReport, LyricsMeasure};
+pub use lyrics::LyricsMeasure;
 pub use mixture::{
     MUSCRIPTOR_NOTICE, MixtureAnalysis, MixtureNote, MixtureOptions, transcribe_mixture_file,
 };

@@ -627,15 +627,6 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::sing::run(&args)).await
     }
-
-    /// Writes a song from Japanese lyrics and saves it as a new project: a melody searched under the words the Orpheus way, sung notes carrying each syllable, chords in the harmony lane, and a backing band unless `melody_only`. Where a Japanese dictionary is configured the melody follows the lyric's pitch accent; kana lyrics work without one, free of the accent. Phrases break at line breaks and punctuation. The same lyrics and `seed` write the same song; `sing` then gives the vocal its voice.
-    #[tool(input_schema = tool_schema("compose_lyrics"))]
-    async fn compose_lyrics(
-        &self,
-        Parameters(args): Parameters<toolbox::compose_lyrics::Args>,
-    ) -> Result<CallToolResult, ErrorData> {
-        blocking(move || toolbox::compose_lyrics::run(&args)).await
-    }
 }
 
 #[tool_handler]

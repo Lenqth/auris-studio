@@ -1677,6 +1677,8 @@ pub struct AurisApp {
     pub(crate) note_selection_preview: Option<auris_session::NoteSelectionPreview>,
     /// Keyboard focus target, so the action bindings reach this view.
     pub(crate) focus: FocusHandle,
+    /// Window whose transport consumed Space, so its release cannot also click a button.
+    pub(crate) transport_space_window: Option<gpui::WindowId>,
     /// Stable, focus-trapped keyboard targets for the controls in modal overlays.
     pub(crate) modal_focus: ModalFocus,
     /// Focus handles for the panels, which is what scopes a binding to one of them.
@@ -1937,6 +1939,21 @@ impl AurisApp {
         let input = InputSettings::load();
         let keymap = input.keys.clone();
         keymap.apply(cx);
+        // GPUI resolves shortcuts on key-down but implicitly clicks focused controls on key-up.
+        // Observe the action that actually ran, preserving local controls and unbound Space.
+        cx.observe_keystrokes(|this, event, window, _| {
+            if event.keystroke.key == "space" {
+                this.transport_space_window = event
+                    .action
+                    .as_ref()
+                    .is_some_and(|action| {
+                        action.as_any().is::<actions::TogglePlay>()
+                            || action.as_any().is::<actions::ReturnToZero>()
+                    })
+                    .then(|| window.window_handle().window_id());
+            }
+        })
+        .detach();
         let appearance = Appearance::load();
         let theme = appearance.theme();
         cx.set_global(theme.clone());
@@ -2110,6 +2127,7 @@ impl AurisApp {
             auditioning: None,
             note_selection_preview: None,
             focus: cx.focus_handle(),
+            transport_space_window: None,
             modal_focus: ModalFocus::new(cx),
             panes: PaneFocus::new(cx),
             last_pane: Pane::Arrangement,
