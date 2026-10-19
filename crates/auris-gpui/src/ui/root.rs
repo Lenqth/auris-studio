@@ -635,6 +635,15 @@ impl AurisApp {
             // clip, and the transaction it opened silently eats every edit made afterwards.
             .on_mouse_up_out(gpui::MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_key_down(Self::window_listener(cx, Self::on_key_down))
+            .capture_key_up(cx.listener(|this, event: &gpui::KeyUpEvent, window, cx| {
+                if event.keystroke.key == "space"
+                    && this.transport_space_window.take()
+                        == Some(window.window_handle().window_id())
+                {
+                    // Capture before GPUI turns the transport gesture into another button click.
+                    cx.stop_propagation();
+                }
+            }))
             .on_key_up(cx.listener(Self::on_key_up))
     }
 
@@ -3587,6 +3596,84 @@ mod window_tests {
     use crate::app::{AudioExportTarget, ExportState};
     use crate::dock::Panel;
     use crate::harness::{WINDOW, click, open, paint, resize, with_a_clip};
+
+    #[gpui::test]
+    fn transport_shortcuts_do_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let transport_commands = std::rc::Rc::new(std::cell::Cell::new(0));
+        let observed = transport_commands.clone();
+        cx.update(|_, cx| {
+            cx.observe_keystrokes(move |event, _, _| {
+                if event.action.as_ref().is_some_and(|action| {
+                    action.as_any().is::<actions::TogglePlay>()
+                        || action.as_any().is::<actions::ReturnToZero>()
+                }) {
+                    observed.set(observed.get() + 1);
+                }
+            })
+            .detach();
+        });
+        click("loop", cx);
+        paint(&app, cx);
+        assert!(app.read_with(cx, |this, _| this.project().loop_enabled));
+        // A real key gesture includes the release: GPUI's implicit button activation runs there.
+        for key in ["space", "space"] {
+            cx.simulate_keystrokes(key);
+            cx.simulate_event(gpui::KeyUpEvent {
+                keystroke: gpui::Keystroke::parse(key).unwrap(),
+            });
+            paint(&app, cx);
+            assert!(
+                app.read_with(cx, |this, _| this.project().loop_enabled),
+                "{key} must not click the Loop button again"
+            );
+        }
+        // No audio thread acknowledges transport state in this harness; observe its commands.
+        assert_eq!(transport_commands.get(), 2);
+    }
+
+    #[gpui::test]
+    fn unbound_transport_keys_still_activate_the_focused_button(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        cx.update(|_, cx| {
+            let mut keymap = crate::keymap::Keymap::default();
+            keymap.unbind(actions::bindable("transport.play").unwrap());
+            keymap.unbind(actions::bindable("transport.return").unwrap());
+            keymap.apply(cx);
+        });
+        click("loop", cx);
+        paint(&app, cx);
+        for (key, enabled) in [("space", false), ("enter", true)] {
+            cx.simulate_keystrokes(key);
+            cx.simulate_event(gpui::KeyUpEvent {
+                keystroke: gpui::Keystroke::parse(key).unwrap(),
+            });
+            paint(&app, cx);
+            assert_eq!(
+                app.read_with(cx, |this, _| this.project().loop_enabled),
+                enabled
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn remapped_transport_space_does_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        cx.update(|_, cx| {
+            let mut keymap = crate::keymap::Keymap::default();
+            assert!(keymap.set_at(actions::bindable("transport.play").unwrap(), 0, "enter"));
+            assert!(keymap.set_at(actions::bindable("transport.return").unwrap(), 0, "space"));
+            keymap.apply(cx);
+        });
+        click("loop", cx);
+        paint(&app, cx);
+        cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
+        paint(&app, cx);
+        assert!(app.read_with(cx, |this, _| this.project().loop_enabled));
+    }
 
     #[gpui::test]
     fn audio_export_choices_are_tentative_until_the_dialog_is_confirmed(cx: &mut TestAppContext) {
