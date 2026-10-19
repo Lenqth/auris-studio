@@ -133,6 +133,11 @@ uv run --with pytest --with numpy --with scipy --with soundfile pytest tools/eva
 uv run --with ruff ruff check tools/eval/drum_harshness.py tools/eval/test_drum_harshness.py
 ```
 
+The symbolic ruler is unchanged. A separate eight-second, four-hit snare diagnostic through
+`music.py`, using one window and the fixed rock prompts, changes TuneJury reward by -0.0575
+and MuQ-MuLan positive cosine by +0.00089. Conditions and excerpt positions match. These mixed
+isolated-hit scores do not establish improved song preference or perceived timbre.
+
 ## Held-out production results
 
 These are final actual 48 kHz Rust renders; lower distance is better.

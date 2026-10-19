@@ -321,5 +321,46 @@
         "12359.6": -1.9516164319648845
       }
     }
-  ]
+  ],
+  "symbolic_unchanged": true,
+  "learned_snare_diagnostic": {
+    "input": "four isolated velocity-1 snare hits in eight seconds, repeated/zero-padded by music.py",
+    "prompt_profile": "rock",
+    "segments": 1,
+    "before": {
+      "tunejury_reward": -1.447465181350708,
+      "positive_cosine": -0.1368229240179062,
+      "contrast_cosine": -0.03237801045179367,
+      "contrast_margin": -0.10444491356611252,
+      "positive_cosine_stddev": 0.0,
+      "contrast_margin_stddev": 0.0
+    },
+    "after": {
+      "tunejury_reward": -1.5049996376037598,
+      "positive_cosine": -0.13593444228172302,
+      "contrast_cosine": -0.034590937197208405,
+      "contrast_margin": -0.10134350508451462,
+      "positive_cosine_stddev": 0.0,
+      "contrast_margin_stddev": 0.0
+    },
+    "comparison": {
+      "status": "ok",
+      "delta": {
+        "tunejury_reward": -0.05753445625305176,
+        "positive_cosine": 0.0008884817361831665,
+        "contrast_cosine": -0.002212926745414734,
+        "contrast_margin": 0.0031014084815979004
+      },
+      "same_excerpt_positions": true
+    },
+    "wav_sha256": {
+      "before": "db25adbe2905b600944caaefbb760cbcd7138bd4dc0a5fe9b819e45a68475987",
+      "after": "94b8e0ddf328fe943ac81ee34662718c24d94c1333cc86dcc51e8038f44c4dce"
+    },
+    "report_sha256": {
+      "before": "28e994be05416cfb9f6a619edc91011e9374607a76affdd2a6ddc758da9ccd97",
+      "after": "1a814eb5acaa14dd68084d0a3855fabde00f399e4f45dcdbbf5ccf1cb0e04954"
+    },
+    "interpretation": "Mixed isolated-hit diagnostics, not evidence of improved song preference or perceived timbre."
+  }
 }
