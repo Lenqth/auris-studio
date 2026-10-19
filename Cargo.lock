@@ -743,6 +743,7 @@ dependencies = [
  "env_logger",
  "gpui",
  "gpui-component",
+ "gpui-flow",
  "image",
  "log",
  "markdown",
@@ -3538,6 +3539,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "gpui-flow"
+version = "0.1.0"
+dependencies = [
+ "gpui",
 ]
 
 [[package]]

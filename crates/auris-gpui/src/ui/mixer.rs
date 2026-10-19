@@ -21,6 +21,18 @@ impl AurisApp {
     /// Renders the mixer panel.
     pub(crate) fn render_mixer(
         &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        if self.mixer_graph_visible {
+            self.render_mixer_graph(cx)
+        } else {
+            self.render_mixer_console(window, cx).into_any_element()
+        }
+    }
+
+    fn render_mixer_console(
+        &mut self,
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement + use<> {
@@ -55,7 +67,19 @@ impl AurisApp {
                     .border_color(theme.border)
                     .text_xs()
                     .text_color(theme.text_muted)
-                    .child(self.t(Key::Mixer)),
+                    .child(self.t(Key::Mixer))
+                    .child(button(
+                        "mixer-show-graph",
+                        self.t(Key::MixerGraph),
+                        ButtonStyle::Ghost,
+                        false,
+                        theme.accent_soft,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.mixer_graph_visible = true;
+                            cx.notify();
+                        }),
+                    )),
             )
             .child(
                 self.scrolling(
@@ -352,7 +376,7 @@ impl AurisApp {
     /// double click and can be automated — all of that comes from being a mixer control rather
     /// than a number with a slider drawn next to it.
     #[allow(clippy::too_many_arguments)]
-    fn send_row(
+    pub(super) fn send_row(
         &self,
         index: usize,
         position: usize,
@@ -620,6 +644,7 @@ mod tests {
     fn add_send_is_only_shown_when_a_bus_can_receive_it(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         app.update(cx, |this, _| {
+            this.mixer_graph_visible = false;
             this.session
                 .add_default_instrument_track("Test")
                 .expect("the registry nominates an instrument");

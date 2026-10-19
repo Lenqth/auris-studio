@@ -70,6 +70,7 @@ pub use plugin_worker::{
 pub mod guide;
 pub mod history;
 pub mod library;
+pub mod mixer_graph;
 pub mod param;
 pub mod progressions;
 pub mod registry;

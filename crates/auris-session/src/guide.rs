@@ -612,6 +612,15 @@ pub mod architecture {
     //!
     //! # How it gets there: outputs, buses and sends
     //!
+    //! [`Session::mixer_graph`](crate::Session::mixer_graph) projects the document into stable
+    //! input, insert and fader nodes. Edges distinguish the serial insert chain, main output,
+    //! pre/post-fader sends and sidechain keys. The graph editor connects these identities with
+    //! [`Session::connect_mixer`](crate::Session::connect_mixer), which revalidates the complete
+    //! routing before delegating to an ordinary undoable command. Parallel processing uses bus
+    //! branches; inserts within each strip remain ordered. Layout belongs to the frontend and
+    //! never changes signal order. The graph and console read the same saved document, so an
+    //! undo, project load or model tool edit updates both views without a second routing store.
+    //!
     //! A track's audio does not necessarily go to the master. Its
     //! [`Output`](auris_core::Output) is either the master or a **bus**, and it may also carry any
     //! number of [`AuxSend`](auris_core::AuxSend)s — taps that feed a bus *as well as*, rather

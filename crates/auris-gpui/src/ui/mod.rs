@@ -27,6 +27,7 @@ pub mod library;
 pub mod log_panel;
 pub mod menu_bar;
 pub mod mixer;
+pub(crate) mod mixer_graph;
 pub(crate) mod music_analysis;
 pub(crate) mod note_snap;
 pub mod paint;
