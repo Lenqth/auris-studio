@@ -20,6 +20,7 @@ test "$(git -C "$source_dir" rev-parse HEAD)" = da9b5e364c465de65c49d91e696cd648
   --update --build --skip_tests --parallel 3 --use_coreml \
   --osx_arch x86_64 --compile_no_warning_as_error \
   --cmake_extra_defines CMAKE_OSX_DEPLOYMENT_TARGET=13.3 \
+  CMAKE_POLICY_VERSION_MINIMUM=3.5 \
   onnxruntime_BUILD_UNIT_TESTS=OFF
 
 # ort-sys accepts a single libonnxruntime.a, including its third-party objects.
