@@ -50,6 +50,7 @@ jobs:
           path: .release-tools
           sparse-checkout: |
             tools/fetch-dictionary.sh
+            tools/build-macos-intel-ort.sh
           sparse-checkout-cone-mode: false
 
       - name: Install the toolchain
@@ -64,11 +65,19 @@ jobs:
           clang_runtime="$(xcrun --sdk macosx clang -print-libgcc-file-name)"
           echo "RUSTFLAGS=${RUSTFLAGS:-} -C link-arg=$clang_runtime" >> "$GITHUB_ENV"
 
+      - name: Build ONNX Runtime for Intel Macs
+        run: bash .release-tools/tools/build-macos-intel-ort.sh
+
       - name: Build both architectures
         run: |
           for target in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+            if [ "$target" = x86_64-apple-darwin ] && [ -n "${ORT_INTEL_LIB_DIR:-}" ]; then
+              ORT_LIB_PATH="$ORT_INTEL_LIB_DIR" cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+            else
+              cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+            fi
           done
+          arch -x86_64 target/x86_64-apple-darwin/release/auris help > /dev/null
           native_target="$(rustc -vV | sed -n 's/^host: //p')"
           echo "AURIS_CLI=$PWD/target/$native_target/release/auris" >> "$GITHUB_ENV"
 
