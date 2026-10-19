@@ -26,8 +26,8 @@ env:
   CARGO_TERM_COLOR: always
   RELEASE_NAME: ${{ inputs.release_tag || github.ref_name }}
 
-# Deliberately uncached, unlike CI. This runs a handful of times a year and produces the files
-# other people download; a cold build is worth the twenty minutes.
+# Application builds are deliberately uncached. The pinned Intel ONNX Runtime library is
+# cached separately so a packaging recovery need not rebuild that third-party dependency.
 jobs:
   # One universal binary rather than one per architecture: both halves are built on the same
   # runner and joined with `lipo`, so an Intel Mac and an Apple Silicon one take the same file.
@@ -65,8 +65,22 @@ jobs:
           clang_runtime="$(xcrun --sdk macosx clang -print-libgcc-file-name)"
           echo "RUSTFLAGS=${RUSTFLAGS:-} -C link-arg=$clang_runtime" >> "$GITHUB_ENV"
 
+      - name: Restore the Intel ONNX Runtime library
+        id: intel-ort
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/auris-intel-ort-lib
+          key: onnxruntime-1.28.0-macos-x86_64-coreml-13.3-static-v1
+
       - name: Build ONNX Runtime for Intel Macs
         run: bash .release-tools/tools/build-macos-intel-ort.sh
+
+      - name: Save the Intel ONNX Runtime library
+        if: steps.intel-ort.outputs.cache-hit != 'true' && env.ORT_INTEL_LIB_DIR != ''
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/auris-intel-ort-lib
+          key: onnxruntime-1.28.0-macos-x86_64-coreml-13.3-static-v1
 
       - name: Build both architectures
         run: |

@@ -9,10 +9,16 @@ if [[ "$ort_version" != "2.0.0-rc.13" ]]; then
   exit 0
 fi
 
-work=$(mktemp -d "${RUNNER_TEMP:?}/auris-intel-ort.XXXXXX")
+lib_dir="${RUNNER_TEMP:?}/auris-intel-ort-lib"
+if [[ -f "$lib_dir/libonnxruntime.a" ]]; then
+  lipo "$lib_dir/libonnxruntime.a" -verify_arch x86_64
+  echo "ORT_INTEL_LIB_DIR=$lib_dir" >> "${GITHUB_ENV:?}"
+  exit 0
+fi
+
+work=$(mktemp -d "$RUNNER_TEMP/auris-intel-ort.XXXXXX")
 source_dir="$work/source"
 build_dir="$work/build"
-lib_dir="$work/lib"
 git clone --depth 1 --branch v1.28.0 https://github.com/microsoft/onnxruntime.git "$source_dir"
 test "$(git -C "$source_dir" rev-parse HEAD)" = da9b5e364c465de65c49d91e696cd6485270757f
 
@@ -29,5 +35,5 @@ mkdir -p "$lib_dir"
 find "$build_dir/Release" -type f -name '*.a' | sort > "$work/archives.txt"
 test -s "$work/archives.txt"
 libtool -static -o "$lib_dir/libonnxruntime.a" -filelist "$work/archives.txt"
-lipo -verify_arch x86_64 "$lib_dir/libonnxruntime.a"
+lipo "$lib_dir/libonnxruntime.a" -verify_arch x86_64
 echo "ORT_INTEL_LIB_DIR=$lib_dir" >> "${GITHUB_ENV:?}"
