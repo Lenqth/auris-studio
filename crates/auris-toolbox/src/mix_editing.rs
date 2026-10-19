@@ -136,7 +136,9 @@ pub mod effects {
             .enumerate()
             .map(|(i, s)| {
                 serde_json::json!({
-                    "slot": i + 1, "effect": s.effect_id, "enabled": s.enabled,
+                    "slot": i + 1, "slot_id":s.id.0,
+                    "node":auris_session::mixer_graph::MixerNode::Effect(track, s.id).key(),
+                    "effect": s.effect_id, "enabled": s.enabled,
                     "accepts_sidechain": session.effect_wants_sidechain(track, s.id),
                     "source": session.effect_sidechain(track, s.id).map(|id| format!("id:{}", id.0))
                 })

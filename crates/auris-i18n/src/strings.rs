@@ -180,6 +180,14 @@ strings! {
     MenuResetOrnaments { en: "Reset Pitch Ornaments", ja: "ピッチ装飾をリセット" }
     MenuWriteLyrics { en: "Write Lyrics…", ja: "歌詞をまとめて入力…" }
     Mixer { en: "Mixer", ja: "ミキサー" }
+    MixerGraph { en: "Signal flow", ja: "信号フロー" }
+    MixerAnimateSignals { en: "Animate signals", ja: "信号の動きを表示" }
+    MixerConsole { en: "Console", ja: "コンソール" }
+    MixerLayout { en: "Arrange nodes", ja: "ノードを整列" }
+    MixerZoomReset { en: "Reset graph zoom to 100%", ja: "グラフの倍率を100%に戻す" }
+    MixerFitView { en: "Fit graph", ja: "全体表示" }
+    MixerGraphHelp { en: "Light follows signal direction; brightness shows level. Drag an output port to add a bus or sidechain branch. Click a wire, then Delete or right-click to remove it. Faders act after inserts. Drag the background to pan; Ctrl+wheel to zoom.", ja: "光の動きは信号の向き、明るさは音量を示します。出力端子からドラッグしてバスやサイドチェインへ接続。配線をクリックし、Deleteまたは右クリックで削除できます。フェーダーはエフェクト後に作用します。背景をドラッグして移動、Ctrl＋ホイールで拡大・縮小。" }
+    MixerConnectionRejected { en: "Cannot connect these nodes. Choose a bus input or sidechain that does not create a cycle.", ja: "このノードには接続できません。循環しないバス入力かサイドチェインを選んでください。" }
     Inspector { en: "Inspector", ja: "インスペクタ" }
     InspectorClip { en: "Clip", ja: "クリップ" }
     InspectorGeneration { en: "Generation", ja: "生成" }
@@ -241,6 +249,9 @@ strings! {
     TrackKindBus { en: "Bus", ja: "バス" }
     // A strip is 128 px wide and every label on it is an abbreviation for that reason.
     OutputShort { en: "Out", ja: "出力" }
+    MixerConnectionFrom { en: "From", ja: "接続元" }
+    MixerConnectionTo { en: "To", ja: "接続先" }
+    MixerSignalLevel { en: "Signal level (peak)", ja: "信号レベル（ピーク）" }
     Sends { en: "Sends", ja: "センド" }
     AddBusShort { en: "Bus", ja: "バス" }
     // Marks a send taken before the fader, in the room a send row has beside the bus name. Not an
@@ -751,6 +762,8 @@ strings! {
     MenuRouteTo { en: "Output", ja: "出力先" }
     MenuAddSend { en: "Add Send", ja: "センドを追加" }
     MenuRemoveSend { en: "Remove Send", ja: "センドを削除" }
+    MixerNoOutput { en: "No output", ja: "未接続" }
+    MixerDeleteConnections { en: "Delete connections", ja: "配線を削除" }
     MenuSendPreFader { en: "Take Before the Fader", ja: "フェーダー前から取る" }
     MenuDuplicate { en: "Duplicate", ja: "複製" }
     MenuCut { en: "Cut", ja: "切り取り" }
@@ -1404,6 +1417,8 @@ strings! {
     EditDeleteTrack { en: "deleting a track", ja: "トラックの削除" }
     EditDuplicateTrack { en: "duplicating a track", ja: "トラックの複製" }
     EditMoveTrack { en: "moving a track", ja: "トラックの並べ替え" }
+    EditMoveMixerNodes { en: "moving mixer nodes", ja: "ミキサーノードの移動" }
+    EditArrangeMixerNodes { en: "arranging mixer nodes", ja: "ミキサーノードの自動配置" }
     EditRenameTrack { en: "renaming a track", ja: "トラック名の変更" }
     EditMuteTrack { en: "muting a track", ja: "トラックのミュート" }
     EditSoloTrack { en: "soloing a track", ja: "トラックのソロ" }

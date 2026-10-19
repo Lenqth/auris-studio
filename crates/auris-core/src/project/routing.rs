@@ -87,9 +87,8 @@ impl EffectSlot {
 
 /// Where a track's output goes once its own strip has finished with it.
 ///
-/// Two destinations rather than one field of [`Option<TrackId>`], because "no bus" is not an
-/// absence: every track feeds *something*, and the master bus is a real place. A track whose
-/// output is a bus is not routed to the master at all — the bus is, on its behalf.
+/// Each entry in a track's output list names a real destination. An empty list disconnects
+/// the track, while master and several buses can receive copies at the same time.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Output {
@@ -344,7 +343,9 @@ impl Project {
                     .is_some_and(|&index| self.tracks[index].kind.is_bus())
         };
         for track in &self.tracks {
-            if matches!(track.output, Output::Bus(target) if !usable_bus(target, track.id))
+            if track.outputs.iter().any(
+                |output| matches!(output, Output::Bus(target) if !usable_bus(*target, track.id)),
+            ) || track.outputs.iter().collect::<HashSet<_>>().len() != track.outputs.len()
                 || track
                     .sends
                     .iter()
@@ -511,12 +512,20 @@ impl Project {
         let mut repaired = false;
         for index in 0..self.tracks.len() {
             let owner = self.tracks[index].id;
-            if let Output::Bus(target) = self.tracks[index].output
-                && !usable(target, owner)
-            {
-                self.tracks[index].output = Output::Master;
-                repaired = true;
+            let mut seen = HashSet::new();
+            for output in &mut self.tracks[index].outputs {
+                if let Output::Bus(target) = *output
+                    && !usable(target, owner)
+                {
+                    *output = Output::Master;
+                    repaired = true;
+                }
             }
+            self.tracks[index].outputs.retain(|output| {
+                let unique = seen.insert(*output);
+                repaired |= !unique;
+                unique
+            });
             let before = self.tracks[index].sends.len();
             self.tracks[index]
                 .sends
@@ -527,23 +536,29 @@ impl Project {
         // Now every edge points at a real bus, so what is left is loops. Each edge is put back one
         // at a time and dropped if it closes one, which terminates and does not depend on where in
         // the document the loop happened to start.
-        let edges: Vec<(usize, Output, Vec<AuxSend>)> = self
+        let edges: Vec<(usize, Vec<Output>, Vec<AuxSend>)> = self
             .tracks
             .iter()
             .enumerate()
-            .map(|(index, track)| (index, track.output, track.sends.clone()))
+            .map(|(index, track)| (index, track.outputs.clone(), track.sends.clone()))
             .collect();
         for track in &mut self.tracks {
-            track.output = Output::Master;
+            track.outputs.clear();
             track.sends.clear();
         }
-        for (index, output, sends) in edges {
+        for (index, outputs, sends) in edges {
             let owner = self.tracks[index].id;
-            if let Output::Bus(target) = output {
-                if self.routing_would_cycle(owner, target) {
+            for output in outputs {
+                if output
+                    .bus()
+                    .is_some_and(|target| self.routing_would_cycle(owner, target))
+                {
                     repaired = true;
-                } else {
-                    self.tracks[index].output = output;
+                    if !self.tracks[index].outputs.contains(&Output::Master) {
+                        self.tracks[index].outputs.push(Output::Master);
+                    }
+                } else if !self.tracks[index].outputs.contains(&output) {
+                    self.tracks[index].outputs.push(output);
                 }
             }
             for send in sends {
@@ -802,8 +817,8 @@ mod tests {
         // The alternative to repairing it is a project that can never be rendered at all.
         let (mut project, _, _, bus) = bussed_project();
         let reverb = project.add_bus_track("Reverb");
-        project.track_mut(bus).unwrap().output = Output::Bus(reverb);
-        project.track_mut(reverb).unwrap().output = Output::Bus(bus);
+        project.track_mut(bus).unwrap().outputs = vec![Output::Bus(reverb)];
+        project.track_mut(reverb).unwrap().outputs = vec![Output::Bus(bus)];
 
         assert!(project.repair_routing());
         // One of the two edges survives — which one does not matter, only that no track can now
@@ -826,7 +841,7 @@ mod tests {
     fn a_route_to_something_that_is_not_a_bus_is_dropped_on_load() {
         let (mut project, kick, snare, _) = bussed_project();
         // An instrument track is not a mixing point, and neither is a track that is not there.
-        project.track_mut(kick).unwrap().output = Output::Bus(snare);
+        project.track_mut(kick).unwrap().outputs = vec![Output::Bus(snare)];
         project
             .track_mut(snare)
             .unwrap()
@@ -834,7 +849,7 @@ mod tests {
             .push(AuxSend::new(SendId(9), TrackId(9_999)));
 
         assert!(project.repair_routing());
-        assert_eq!(project.track(kick).unwrap().output, Output::Master);
+        assert_eq!(project.track(kick).unwrap().outputs, vec![Output::Master]);
         assert!(project.track(snare).unwrap().sends.is_empty());
     }
 
@@ -878,7 +893,7 @@ mod tests {
             .push(AuxSend::new(SendId(77), bus));
 
         assert!(project.remove_track(bus));
-        assert_eq!(project.track(kick).unwrap().output, Output::Master);
+        assert_eq!(project.track(kick).unwrap().outputs, vec![Output::Master]);
         assert!(project.track(snare).unwrap().sends.is_empty());
     }
 
@@ -995,7 +1010,7 @@ mod tests {
         let kick = project.add_instrument_track("Kick", "x");
         let bass = project.add_instrument_track("Bass", "x");
         let bus = project.add_bus_track("Sub");
-        project.track_mut(bass).unwrap().output = Output::Bus(bus);
+        project.track_mut(bass).unwrap().outputs = vec![Output::Bus(bus)];
         assert!(!project.sidechain_would_cycle(Some(kick), bus));
 
         key_from(&mut project, Some(bass), kick);

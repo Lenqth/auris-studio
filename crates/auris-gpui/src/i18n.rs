@@ -133,6 +133,8 @@ pub fn edit_key(edit: Edit) -> Key {
         Edit::DuplicateTrack => Key::EditDuplicateTrack,
         Edit::ConvertTrackToAudio => Key::EditConvertTrackToAudio,
         Edit::MoveTrack => Key::EditMoveTrack,
+        Edit::MoveMixerNodes => Key::EditMoveMixerNodes,
+        Edit::ArrangeMixerNodes => Key::EditArrangeMixerNodes,
         Edit::RenameTrack => Key::EditRenameTrack,
         Edit::SetTrackColor => Key::EditSetTrackColor,
         Edit::SetTrackHeight => Key::EditSetTrackHeight,

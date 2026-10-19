@@ -295,6 +295,13 @@ For example, two successive quarter notes:
 {\"pitch\":65,\"start_beat\":1,\"duration_beats\":1,\"velocity\":0.8}]}.
 Use short batches of up to 32 notes to keep each response manageable.
 Use multiple tracks for distinct musical parts and set_level to balance them.
+Read read_mixer_graph before routing or effect edits. Track nodes combine the source and fader controls;
+inserts still run before the fader. Copy stable track/effect node IDs instead of effect positions.
+set_mixer_track changes fader/pan/mute/solo by node ID; track:master accepts fader/pan.
+connect_mixer adds output branches without replacing existing destinations, or adds bus sends/sidechains; every connection must remain a DAG. disconnect_mixer removes only the named edge; no outputs means disconnected.
+Parallel effects use add_track kind bus and sends. Use add_mixer_effect, move_mixer_effect,
+enable_mixer_effect and mixer_effect_parameters/set_mixer_effect_parameter for inserts;
+set_mixer_send changes existing send levels and tap points. Re-read the graph after edits.
 After changing a sound, inspect_audio again: retained faders do not guarantee retained loudness.
 Set an explicit loudness and true-peak goal. normalize_mix moves all source faders together
 and reports the measured result; a peak or fader limit can leave it short of the goal.
@@ -2300,7 +2307,13 @@ mod tests {
         assert!(names.contains(&"search_instruments"));
         assert!(names.contains(&"similar_instruments"));
         assert!(names.contains(&"instrument_diagnostics"));
-        assert_eq!(names.len(), 23);
+        assert_eq!(
+            names.len(),
+            23 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+        );
+        for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
+            assert!(names.contains(name), "{name}");
+        }
         for expected in toolbox::live_agent::definitions() {
             let exposed = actual
                 .iter()

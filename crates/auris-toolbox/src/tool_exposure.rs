@@ -39,7 +39,7 @@ impl ToolGroups {
         for group in &self.0 {
             text.push_str(match group.as_str() {
                 "manual" => "For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes or replace_notes writes notes. ",
-                "mix" => "For mixing, inspect mixer, use native dB/pan units, and measure or listen to the same range before and after edits. After sound changes remeasure loudness; normalize_mix moves source faders toward a requested target. Render inspects the encoded WAV; use verify_render for target, peak and ending checks. ",
+                "mix" => "For mixing, read mixer_graph for stable track/effect nodes and outgoing edges; follow next_offset. Track nodes contain fader controls; inserts still process before the fader. Edit graph connections and inserts through mixer_graph; all output/send/sidechain cycles are rejected. Parallel effects use bus branches. Inspect mixer parameters in native dB/pan units, and measure or listen to the same range before and after edits. After sound changes remeasure loudness; normalize_mix moves source faders toward a requested target. Render inspects the encoded WAV; use verify_render for target, peak and ending checks. ",
                 "transcription" => "For transcription, analyze the source and fetch tool_help before applying recognized notes. ",
                 "vocals" => "For vocals, inspect singer availability and write lyrics before singing. ",
                 "composition" => "For generated compositions, fetch spec_reference, validate with check_spec and compose; regeneration is an explicit edit. ",
@@ -58,7 +58,8 @@ pub fn tool_group(name: &str) -> &'static str {
         | "transcribe_audio"
         | "transcribe_mixture" => "transcription",
         "write_lyrics" | "sing" => "vocals",
-        "effects"
+        "mixer_graph"
+        | "effects"
         | "automation"
         | "mixer"
         | "set_level"

@@ -612,11 +612,94 @@ pub mod architecture {
     //!
     //! # How it gets there: outputs, buses and sends
     //!
+    //! [`Session::mixer_graph`](crate::Session::mixer_graph) projects the document into stable
+    //! track and insert nodes. Each track node owns its source and fader controls; inserts
+    //! still process before gain and pan. The terminal insert is the output connection point,
+    //! or the track itself for an empty chain. Edges distinguish the serial insert chain, main output,
+    //! pre/post-fader sends and sidechain keys. The graph editor connects these identities with
+    //! [`Session::connect_mixer`](crate::Session::connect_mixer), which revalidates the complete
+    //! routing before delegating to an ordinary undoable command. Parallel processing uses bus
+    //! branches; inserts within each strip remain ordered. Layout belongs to the frontend and
+    //! never changes signal order. The graph and console read the same saved document, so an
+    //! undo, project load or model tool edit updates both views without a second routing store.
+    //! [`GraphAction`](crate::mixer_graph::commands::GraphAction) is the shared saved-file and
+    //! live-agent graph contract. Stable `track:N`, `track:master` and `effect:N` identities
+    //! survive renaming and reordering. Reads page nodes in processing order and include their
+    //! outgoing edges. The toolbox exposes `mixer_graph` to MCP; rig receives flat tools from
+    //! the same operation schema. The live permission policy classifies graph reads separately
+    //! from edits and connection/effect removal. Persistence stays with the caller: live edits
+    //! are undoable and unsaved, while MCP checkpoints actual changes once.
+    //!
     //! A track's audio does not necessarily go to the master. Its
     //! [`Output`](auris_core::Output) is either the master or a **bus**, and it may also carry any
-    //! number of [`AuxSend`](auris_core::AuxSend)s — taps that feed a bus *as well as*, rather
-    //! than instead of, its own output. One reverb shared by six tracks at six different levels is
-    //! six sends; a single fader over a whole drum kit is six outputs.
+    //! number of outputs and [`AuxSend`](auris_core::AuxSend)s. Every output receives a unity
+    //! post-fader copy, while sends have independent levels and pre/post-fader taps. No outputs
+    //! means disconnected; sends and sidechain keys can still carry its signal. Graph connections
+    //! add destinations without replacing others, and disconnection removes exactly one edge.
+    //! The console's output menu toggles the same destinations. Legacy single-output commands
+    //! replace the destination list explicitly. Older documents' `output` fields load as one
+    //! destination, and the current format stores an `outputs` list, including an empty list.
+    //!
+    //! The graph owns selection and pointer geometry, while the session owns deletion and undo.
+    //! Editable edges have stable identities independent of graph order and insert positions.
+    //! The desktop distinguishes outputs, sends and sidechains with themed colors, solid/dashed/
+    //! dotted strokes, and labels. Duplicate source/target pairs are placed in deterministic
+    //! parallel Bezier lanes ordered by role and stable send ID. Their endpoints stay attached
+    //! to the ports. Painting, label anchors and nearest-wire hit testing share a flattened
+    //! window-space route, including pan, zoom and text-scale lane clearance. Labels select their
+    //! exact edge ID directly. These are frontend geometry and presentation; session identities
+    //! and the audible graph remain authoritative.
+    //! Ctrl+wheel zooms about the pointer between 50% and 200%; the desktop toolbar also steps
+    //! the zoom and restores 100% about the canvas centre. Nodes scope rem-based typography and
+    //! spacing to their viewport, with matching control and port dimensions. Cached node bounds
+    //! follow the zoom immediately and are refined during prepaint before edges are painted.
+    //! Node positions, zoom and canvas-local pan are stored in `Project::mixer_graph_view`,
+    //! keyed by the same stable node identities as the model tools. Old files default to the
+    //! automatic layout at 100%. Camera navigation marks the project unsaved without an undo
+    //! step. Shift-dragging the background selects intersecting nodes; dragging any selected
+    //! node moves the complete selection, whose members use the selection border. A node drag
+    //! records one `Edit::MoveMixerNodes` transaction for all moved nodes and pointer updates;
+    //! automatic arrangement records one `Edit::ArrangeMixerNodes`. No-op gestures
+    //! preserve history. Missing automatic coordinates seed snapshots before the first edit;
+    //! subsequent camera synchronization never overwrites authored historical positions.
+    //! Layout undo/redo and rollback restore coordinates without rebuilding audio, while camera
+    //! navigation stays current. The desktop applies restored positions even when routing is
+    //! unchanged. Opening another document discards the old canvas and restores
+    //! that project's view, including fit scales below 50%; new nodes use the automatic layout.
+    //! **Fit graph** frames all visible nodes, flattened wire paths and measured labels with
+    //! screen-space padding. It extends the minimum zoom below 50% when needed, while leaving
+    //! node positions and the session's routing untouched.
+    //! Up to two later layout passes refine the fit after newly visible cards are measured;
+    //! a viewport change cancels queued refinements.
+    //! Delete, Backspace and the edge context menu use `Session::disconnect_mixer_edges` to
+    //! preflight the complete selection, then remove it in one undo transaction. Insert-chain
+    //! edges describe order and are not selectable. Every output branch has its own compensation
+    //! delay and prepared scratch buffer, so copying to buses of different latencies does not
+    //! alter the shared source buffer or allocate on the audio callback.
+    //!
+    //! Each render graph also prepares its own [`SignalMeters`](auris_engine::SignalMeters),
+    //! keyed by stable route identities with slot indices resolved before audio takes ownership.
+    //! The session retains an atomic reader through graph rebuilds, replacing the bank so stale
+    //! edges never inherit readings. `Session::watch_mixer_signals` enables measurement only
+    //! while the graph is visible; `Session::mixer_edge_peak` reads an exact connection without
+    //! consuming its peak. Inserts measure their input, enabled keyed effects their actual key,
+    //! outputs their compensated branch, and sends their compensated, smoothed-gain contribution
+    //! before summing. Realtime reports neither allocate nor lock, and offline renders do not
+    //! publish. Peaks attack immediately and fall with the ordinary meters, even for skipped
+    //! muted strips. Panic and output previews clear the bank. The desktop maps these readings
+    //! logarithmically to a role-colored glow and slightly thicker core at its usual meter rate;
+    //! selection outlines and pointer geometry remain independent of the signal level.
+    //! Active wires also carry short, fading highlights from source to target. The desktop
+    //! samples a monotonic clock at the same meter cadence, retaining its origin through edits,
+    //! theme changes and panning. Highlights advance by arc length along the shared flattened
+    //! route, including bends and parallel lanes, and scale with the viewport. Timing is entirely
+    //! in the frontend; animation never schedules work on the audio thread. The graph's
+    //! **Animate signals** control stores the motion preference in appearance settings; disabling
+    //! it retains level glow, fixed arrows and every selection/edit interaction.
+    //! Hovering a wire or its label shows the named endpoints and the same measured peak in
+    //! dBFS, including insert links. The card reads current document names and levels at the
+    //! normal UI cadence; silence is negative infinity and levels above full scale stay visible.
+    //! Label bounds own their exact route, while bare strokes use nearest-path hit testing.
     //!
     //! A bus is a [`TrackKind`](auris_core::TrackKind), not a thing of its own. That is what gives
     //! it a fader, a pan, a mute, an effect chain, a colour and an automation lane without any of

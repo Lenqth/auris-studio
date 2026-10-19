@@ -86,6 +86,7 @@ pub mod monitor;
 pub mod offline;
 pub mod renderer;
 pub mod scope;
+pub mod signal_meter;
 pub mod transport;
 
 #[cfg(test)]
@@ -115,4 +116,5 @@ pub use offline::{
 };
 pub use renderer::render_block;
 pub use scope::{SCOPE_HISTORY, SCOPE_WINDOW, Scope, ScopeSource};
+pub use signal_meter::{SignalMeters, SignalRoute};
 pub use transport::{CountIn, Transport};

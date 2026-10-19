@@ -396,6 +396,8 @@ pub struct Session {
     motion_monitors: HashMap<TrackId, Arc<auris_core::motion::MotionMonitor>>,
     overview_scopes: HashMap<TrackId, Arc<auris_engine::Scope>>,
     overview_watched: bool,
+    signal_meters: Arc<auris_engine::SignalMeters>,
+    mixer_signals_watched: bool,
     motion_track: Option<TrackId>,
     /// Turns the window the engine publishes into a spectrum.
     ///
@@ -650,6 +652,8 @@ impl Session {
             motion_monitors: HashMap::new(),
             overview_scopes: HashMap::new(),
             overview_watched: false,
+            signal_meters: Arc::new(auris_engine::SignalMeters::default()),
+            mixer_signals_watched: false,
             motion_track: None,
             analyzer: auris_dsp::SpectrumAnalyzer::new(auris_engine::SCOPE_WINDOW),
             param_cache: HashMap::new(),
@@ -1080,7 +1084,7 @@ impl Session {
     /// A transaction that made no difference records no undo step and triggers no rebuild — so
     /// a click that only selected something cannot push real history off the end of the stack.
     pub fn end_transaction(&mut self) -> bool {
-        let Some(transaction) = self.transaction.take() else {
+        let Some(mut transaction) = self.transaction.take() else {
             return false;
         };
         if transaction.before == self.project {
@@ -1088,7 +1092,17 @@ impl Session {
             self.dirty = transaction.dirty_before;
             return false;
         }
-        self.history.push(transaction.edit, &transaction.before);
+        let edit = if matches!(
+            transaction.edit,
+            Edit::MoveMixerNodes | Edit::ArrangeMixerNodes
+        ) && !self.only_mixer_layout_changed(&mut transaction.before)
+        {
+            // A scripted batch may include audible edits under a layout gesture's label.
+            Edit::ExternalChanges
+        } else {
+            transaction.edit
+        };
+        self.history.push(edit, &transaction.before);
         // A finished gesture breaks a run of repeats, the same way any ordinary edit does. Without
         // this a drag would leave `last_record` set to the edit it made, and a nudge of the same
         // kind a moment later would fold into the step the drag had already pushed — one Undo
@@ -1117,7 +1131,7 @@ impl Session {
     ///
     /// Returns whether anything was put back.
     pub fn revert_transaction(&mut self) -> bool {
-        let Some(transaction) = self.transaction.take() else {
+        let Some(mut transaction) = self.transaction.take() else {
             return false;
         };
         if transaction.before == self.project {
@@ -1128,7 +1142,16 @@ impl Session {
             }
             return false;
         }
-        self.replace_project(transaction.before);
+        if matches!(
+            transaction.edit,
+            Edit::MoveMixerNodes | Edit::ArrangeMixerNodes
+        ) && !self.needs_rebuild
+            && self.only_mixer_layout_changed(&mut transaction.before)
+        {
+            self.restore_history_project(transaction.edit, transaction.before);
+        } else {
+            self.replace_project(transaction.before);
+        }
         self.dirty = transaction.dirty_before;
         true
     }
@@ -1152,11 +1175,7 @@ impl Session {
             self.hosted.clear();
             self.vst3.clear();
         }
-        if edit == Edit::ExternalChanges {
-            self.replace_external_project(project);
-        } else {
-            self.replace_project(project);
-        }
+        self.restore_history_project(edit, project);
         self.dirty = self.project != self.saved_edit_project;
         Some(edit)
     }
@@ -1177,11 +1196,7 @@ impl Session {
             self.hosted.clear();
             self.vst3.clear();
         }
-        if edit == Edit::ExternalChanges {
-            self.replace_external_project(project);
-        } else {
-            self.replace_project(project);
-        }
+        self.restore_history_project(edit, project);
         self.dirty = self.project != self.saved_edit_project;
         Some(edit)
     }
@@ -1202,6 +1217,32 @@ impl Session {
     /// later, and undoing it then does what pressing undo during it looked like it would.
     pub fn can_undo(&self) -> bool {
         self.transaction.is_none() && self.history.can_undo()
+    }
+
+    fn only_mixer_layout_changed(&self, before: &mut Project) -> bool {
+        let nodes = std::mem::replace(
+            &mut before.mixer_graph_view.nodes,
+            self.project.mixer_graph_view.nodes.clone(),
+        );
+        let layout_only = *before == self.project;
+        before.mixer_graph_view.nodes = nodes;
+        layout_only
+    }
+
+    fn restore_history_project(&mut self, edit: Edit, project: Project) {
+        if matches!(edit, Edit::MoveMixerNodes | Edit::ArrangeMixerNodes) {
+            // Save may since have stamped the build or collected assets. A layout edit must
+            // retain those changes as well as live plugin state, rather than adopting its file.
+            self.project.mixer_graph_view.nodes = project.mixer_graph_view.nodes;
+            self.last_record = None;
+            self.revision = self.revision.wrapping_add(1);
+            return;
+        }
+        if edit == Edit::ExternalChanges {
+            self.replace_external_project(project);
+        } else {
+            self.replace_project(project);
+        }
     }
 
     /// `true` when there is something to redo, and no gesture is open. See [`Self::can_undo`].
@@ -1321,6 +1362,9 @@ impl Session {
             rate,
         );
         self.graph_resource_error = graph.take_resource_error();
+        self.signal_meters.watch(false);
+        self.signal_meters = graph.signal_meters();
+        self.signal_meters.watch(self.mixer_signals_watched);
         for monitor in self.motion_monitors.values() {
             monitor.watch(false);
         }

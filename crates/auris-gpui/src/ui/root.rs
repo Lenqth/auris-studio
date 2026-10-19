@@ -2845,10 +2845,12 @@ impl AurisApp {
     fn on_delete_selection(
         &mut self,
         _: &actions::DeleteSelection,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.delete_selection();
+        if !self.delete_focused_mixer_connections(window, cx) {
+            self.delete_selection();
+        }
         cx.notify();
     }
 
@@ -3276,6 +3278,9 @@ impl AurisApp {
         // leave it hanging over a stopped engine.
         if self.close_menu() || self.close_menu_bar() {
             cx.notify();
+            return;
+        }
+        if self.dismiss_mixer_wire_tooltip(cx) {
             return;
         }
         if self.export_dialog.take().is_some() {

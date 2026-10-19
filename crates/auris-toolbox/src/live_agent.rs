@@ -41,7 +41,7 @@ pub fn definitions() -> Vec<Definition> {
             let Some(action) = branch["properties"]["action"]["const"].as_str() else {
                 continue;
             };
-            if action == "compose" {
+            if matches!(action, "compose" | "mixer_graph") {
                 continue;
             }
             let mut parameters = branch.clone();
@@ -68,12 +68,63 @@ pub fn definitions() -> Vec<Definition> {
             });
         }
     }
+    let root = super::parameter_schema::<auris_session::mixer_graph::commands::GraphAction>();
+    if let Some(branches) = root["oneOf"].as_array() {
+        for branch in branches {
+            let Some(action) = branch["properties"]["action"]["const"].as_str() else {
+                continue;
+            };
+            let Some((_, name)) = auris_session::mixer_graph::commands::GRAPH_TOOLS
+                .iter()
+                .find(|(key, _)| *key == action)
+            else {
+                continue;
+            };
+            let mut parameters = branch.clone();
+            let description = parameters["description"]
+                .as_str()
+                .unwrap_or(action)
+                .to_owned();
+            parameters.as_object_mut().unwrap().remove("description");
+            parameters["properties"]
+                .as_object_mut()
+                .unwrap()
+                .remove("action");
+            if let Some(required) = parameters["required"].as_array_mut() {
+                required.retain(|value| value != "action");
+            }
+            tools.push(Definition {
+                name: (*name).into(),
+                description,
+                parameters,
+            });
+        }
+    }
     tools
 }
 
 /// Translate a flat tool into a validated canonical command. `None` identifies a reference tool.
 /// Unknown fields and attempts to supply the action discriminator are rejected.
 pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
+    if let Some((action, _)) = auris_session::mixer_graph::commands::GRAPH_TOOLS
+        .iter()
+        .find(|(_, name)| *name == tool)
+    {
+        let mut object = args
+            .as_object()
+            .ok_or("Expected a flat argument object")?
+            .clone();
+        if object.contains_key("action") || object.contains_key("command") {
+            return Err("Pass graph fields directly, without action or command wrappers".into());
+        }
+        object.insert("action".into(), (*action).into());
+        let operation = serde_json::from_value(Value::Object(object)).map_err(|error| {
+            format!(
+                "Invalid arguments for {tool}: {error}; read its tool definition for exact fields"
+            )
+        })?;
+        return Ok(Some(Command::MixerGraph { operation }));
+    }
     let action = match tool {
         "inspect_project" => "inspect",
         "list_instruments"
@@ -207,6 +258,69 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_graph_action_has_a_flat_tool_and_canonical_command() {
+        let definitions = definitions();
+        for (action, tool) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
+            let definition = definitions
+                .iter()
+                .find(|definition| definition.name == *tool)
+                .unwrap();
+            assert!(definition.parameters["properties"].get("action").is_none());
+            assert!(definition.parameters["properties"].get("project").is_none());
+            assert!(!definition.description.is_empty());
+            let args = match *action {
+                "read" => serde_json::json!({}),
+                "connect" | "disconnect" => {
+                    serde_json::json!({"source":"track:1","target":"track:2","kind":"send"})
+                }
+                "add_effect" => {
+                    serde_json::json!({"input":"track:1","effect":"auris.fx.compressor"})
+                }
+                "remove_effect" => serde_json::json!({"node":"effect:3"}),
+                "move_effect" => serde_json::json!({"node":"effect:3","position":1}),
+                "enable_effect" => serde_json::json!({"node":"effect:3","enabled":false}),
+                "set_send" => serde_json::json!({"send_id":4,"level_db":-12}),
+                "parameters" => serde_json::json!({"node":"effect:3"}),
+                "set_parameter" => {
+                    serde_json::json!({"node":"effect:3","param":"threshold_db","value":-18})
+                }
+                "set_strip" => serde_json::json!({"node":"track:1","gain_db":-12,"pan":0}),
+                _ => panic!("unhandled graph action"),
+            };
+            let Some(Command::MixerGraph { operation }) = command(tool, &args).unwrap() else {
+                panic!("graph command was not dispatched");
+            };
+            assert_eq!(operation.tool_name(), *tool);
+            let mut wire = serde_json::to_value(&operation).unwrap();
+            wire.as_object_mut().unwrap().remove("action");
+            let Some(Command::MixerGraph {
+                operation: restored,
+            }) = command(tool, &wire).unwrap()
+            else {
+                panic!("graph command did not round-trip");
+            };
+            assert_eq!(
+                serde_json::to_value(&operation).unwrap(),
+                serde_json::to_value(restored).unwrap()
+            );
+            assert_eq!(definition.parameters["additionalProperties"], false);
+            assert!(!definition.parameters.to_string().contains("\"$ref\""));
+            let canonical = serde_json::json!({"command":Command::MixerGraph { operation }});
+            assert!(
+                auris_session::agent_policy::Operation::parse("edit_project", &canonical).is_ok()
+            );
+        }
+        assert!(command("connect_mixer", &serde_json::json!({"action":"connect","source":"track:1","target":"track:2","kind":"send"})).is_err());
+        assert!(
+            command(
+                "connect_mixer",
+                &serde_json::json!({"source":"track:1","target":"track:2","kind":"chain"})
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn track_kind_is_a_string_enum_and_array_errors_explain_the_field() {
@@ -357,7 +471,10 @@ mod tests {
             ("replace_notes", serde_json::json!({"clip":1,"notes":[]})),
         ];
         let tools = definitions();
-        assert_eq!(tools.len(), fixtures.len());
+        assert_eq!(
+            tools.len(),
+            fixtures.len() + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+        );
         for (name, args) in fixtures {
             let tool = tools.iter().find(|tool| tool.name == name).unwrap();
             let properties = tool.parameters["properties"].as_object().unwrap();
@@ -411,7 +528,10 @@ mod tests {
     #[test]
     fn flat_catalog_covers_commands_without_a_tagged_union_or_file_destinations() {
         let tools = definitions();
-        assert_eq!(tools.len(), 21);
+        assert_eq!(
+            tools.len(),
+            21 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+        );
         assert!(
             command("compose_song", &serde_json::json!({}))
                 .unwrap()

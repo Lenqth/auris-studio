@@ -15,11 +15,12 @@
 //! could only begin on a sixteenth is a filter sweep with a stutter in it. The frontend is
 //! where a grid is offered, through the modifier every other drag already answers to.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use auris_core::automation::{Automation, AutomationCurve, AutomationPoint};
 use auris_core::param::{ParamDescriptor, ParamId, ParamUnit};
 use auris_core::plugin::PluginState;
+use auris_core::project::{MixerGraphView, MixerNodePosition};
 use auris_core::time::Ticks;
 use auris_core::{EffectSlotId, TrackId};
 use auris_engine::EngineCommand;
@@ -32,6 +33,120 @@ use crate::session::PluginWindow;
 use super::Session;
 
 impl Session {
+    /// Seeds automatically computed coordinates without marking the project as edited.
+    /// Existing authored positions in any snapshot remain intact, including the redo branch.
+    pub fn seed_mixer_node_positions(&mut self, nodes: &BTreeMap<String, MixerNodePosition>) {
+        let seed = |project: &mut auris_core::Project| {
+            seed_positions(&mut project.mixer_graph_view, nodes);
+        };
+        seed(&mut self.project);
+        seed(&mut self.saved_project);
+        seed(&mut self.saved_edit_project);
+        self.history.for_each_project_mut(seed);
+        if let Some(transaction) = &mut self.transaction {
+            seed(&mut transaction.before);
+        }
+    }
+
+    /// Moves the given existing mixer nodes as one undoable edit, or part of an open gesture.
+    /// Invalid identities or coordinates reject the whole request. Audio is not rebuilt.
+    pub fn move_mixer_nodes(&mut self, nodes: BTreeMap<String, MixerNodePosition>) -> bool {
+        self.edit_mixer_layout(nodes, Edit::MoveMixerNodes)
+    }
+
+    /// Records an automatic arrangement as one undo step without changing audio or the camera.
+    pub fn arrange_mixer_nodes(&mut self, nodes: BTreeMap<String, MixerNodePosition>) -> bool {
+        self.edit_mixer_layout(nodes, Edit::ArrangeMixerNodes)
+    }
+
+    fn edit_mixer_layout(
+        &mut self,
+        nodes: BTreeMap<String, MixerNodePosition>,
+        edit: Edit,
+    ) -> bool {
+        let identities: std::collections::HashSet<_> = self
+            .mixer_graph()
+            .nodes
+            .into_iter()
+            .map(|node| node.key())
+            .collect();
+        if nodes.iter().any(|(key, position)| {
+            !position.x.is_finite() || !position.y.is_finite() || !identities.contains(key)
+        }) || nodes
+            .iter()
+            .all(|(key, position)| self.project.mixer_graph_view.nodes.get(key) == Some(position))
+        {
+            return false;
+        }
+        self.record(edit);
+        self.project.mixer_graph_view.nodes.extend(nodes);
+        true
+    }
+
+    /// Stores camera changes and passive layout synchronization without recording an undo step.
+    /// Camera changes follow undo/redo; historical authored node positions remain intact.
+    pub fn set_mixer_graph_view(&mut self, view: MixerGraphView) {
+        let view = view.sanitized();
+        if self.project.mixer_graph_view == view {
+            return;
+        }
+        let synchronize = |project: &mut auris_core::Project| {
+            let stored = &mut project.mixer_graph_view;
+            stored.zoom = view.zoom;
+            stored.pan_x = view.pan_x;
+            stored.pan_y = view.pan_y;
+            seed_positions(stored, &view.nodes);
+        };
+        self.history.for_each_project_mut(synchronize);
+        if let Some(transaction) = &mut self.transaction {
+            synchronize(&mut transaction.before);
+            transaction.dirty_before = true;
+        }
+        self.project.mixer_graph_view = view;
+        self.dirty = true;
+        // A staged save must not overwrite navigation that happened after it was captured.
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Measures individual mixer connections while a graph reader is visible.
+    /// This is transient observation and never creates a document edit or an undo step.
+    pub fn watch_mixer_signals(&mut self, watched: bool) {
+        self.mixer_signals_watched = watched;
+        self.signal_meters.watch(watched);
+    }
+
+    /// Held linear peak actually carried by this connection, including its send gain and delay.
+    /// Insert-chain edges read the next insert's input; keys read the enabled effect's key input.
+    /// Missing connections and an unavailable audio device read silence.
+    pub fn mixer_edge_peak(&self, edge: &crate::mixer_graph::MixerEdge) -> f32 {
+        use crate::mixer_graph::{MixerEdgeKind, MixerNode};
+        use auris_engine::SignalRoute;
+
+        if !self.engine.is_running() {
+            return 0.0;
+        }
+        let owner = match edge.source {
+            MixerNode::Strip(owner) | MixerNode::Effect(owner, _) => owner,
+        };
+        let route = match (edge.kind, edge.target) {
+            (MixerEdgeKind::Output, MixerNode::Strip(target)) => owner.map(|source| {
+                SignalRoute::Output(
+                    source,
+                    target.map_or(auris_core::Output::Master, auris_core::Output::Bus),
+                )
+            }),
+            (MixerEdgeKind::Send { track, send, .. }, _) => Some(SignalRoute::Send(track, send)),
+            (MixerEdgeKind::Chain, MixerNode::Effect(owner, slot)) => {
+                Some(SignalRoute::InsertInput(owner, slot))
+            }
+            (MixerEdgeKind::Sidechain, MixerNode::Effect(owner, slot)) => {
+                Some(SignalRoute::Sidechain(owner, slot))
+            }
+            _ => None,
+        };
+        route.map_or(0.0, |route| self.signal_meters.peak(route))
+    }
+
     /// Writes a validated automation batch in one undo step, optionally replacing its lane.
     ///
     /// Invalid targets, out-of-range values, negative ticks and duplicate positions leave the
@@ -889,6 +1004,14 @@ impl Session {
     }
 }
 
+fn seed_positions(view: &mut MixerGraphView, nodes: &BTreeMap<String, MixerNodePosition>) {
+    for (key, position) in nodes {
+        if position.x.is_finite() && position.y.is_finite() {
+            view.nodes.entry(key.clone()).or_insert(*position);
+        }
+    }
+}
+
 /// How a new lane over a parameter should get between its points.
 ///
 /// A parameter with discrete positions holds; everything else runs in a straight line.
@@ -912,6 +1035,256 @@ mod tests {
 
     /// The compressor's registry id, which is the one built-in that listens to a key.
     const COMPRESSOR: &str = "auris.fx.compressor";
+
+    #[test]
+    fn mixer_layout_gestures_and_arrangement_undo_without_rebuilding_audio_or_rewinding_camera() {
+        let mut session = session();
+        let track = session.add_bus_track("Layout");
+        let key = crate::mixer_graph::MixerNode::Strip(Some(track)).key();
+        let baseline: BTreeMap<_, _> = [
+            (key.clone(), MixerNodePosition { x: 24., y: 80. }),
+            ("track:master".into(), MixerNodePosition { x: 400., y: 50. }),
+        ]
+        .into();
+        session.forget_history();
+        let revision = session.revision();
+        session.seed_mixer_node_positions(&baseline);
+        assert!(!session.is_dirty());
+        assert_eq!(session.revision(), revision);
+        let meters = Arc::clone(&session.signal_meters);
+        session.begin_transaction(Edit::MoveMixerNodes);
+        for x in [40., 60., 95.] {
+            assert!(
+                session.move_mixer_nodes([(key.clone(), MixerNodePosition { x, y: 110. })].into())
+            );
+            assert!(!session.can_undo());
+        }
+        assert!(session.end_transaction());
+        let moved = session.project().mixer_graph_view.nodes.clone();
+        let mut view = session.project().mixer_graph_view.clone();
+        view.zoom = 0.25;
+        view.pan_x = -130.;
+        view.pan_y = 55.;
+        session.set_mixer_graph_view(view.clone());
+        assert_eq!(session.undo(), Some(Edit::MoveMixerNodes));
+        assert_eq!(session.project().mixer_graph_view.nodes, baseline);
+        assert!(!session.can_undo(), "one drag creates one step");
+        assert_eq!(session.project().mixer_graph_view.zoom, view.zoom);
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+        assert_eq!(session.redo(), Some(Edit::MoveMixerNodes));
+        assert_eq!(session.project().mixer_graph_view, view);
+
+        assert!(session.arrange_mixer_nodes(baseline.clone()));
+        assert!(!session.arrange_mixer_nodes(baseline.clone()));
+        assert_eq!(session.undo(), Some(Edit::ArrangeMixerNodes));
+        assert_eq!(session.project().mixer_graph_view.nodes, moved);
+        assert_eq!(session.redo(), Some(Edit::ArrangeMixerNodes));
+        assert_eq!(session.project().mixer_graph_view.nodes, baseline);
+        assert_eq!(
+            (
+                session.project().mixer_graph_view.pan_x,
+                session.project().mixer_graph_view.pan_y
+            ),
+            (view.pan_x, view.pan_y)
+        );
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+
+        session.forget_history();
+        session.begin_transaction(Edit::MoveMixerNodes);
+        session.move_mixer_nodes([(key, MixerNodePosition { x: 1000., y: 900. })].into());
+        assert!(session.revert_transaction());
+        assert_eq!(session.project().mixer_graph_view.nodes, baseline);
+        assert!(!session.is_dirty());
+        assert!(!session.can_undo());
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+    }
+
+    #[test]
+    fn invalid_and_unchanged_mixer_layouts_keep_the_redo_branch_and_saved_state() {
+        let mut session = session();
+        let baseline: BTreeMap<_, _> =
+            [("track:master".into(), MixerNodePosition { x: 24., y: 80. })].into();
+        session.seed_mixer_node_positions(&baseline);
+        session.forget_history();
+        session.move_mixer_nodes(
+            [("track:master".into(), MixerNodePosition { x: 90., y: 80. })].into(),
+        );
+        session.undo().unwrap();
+        let before = session.project().clone();
+        for nodes in [
+            BTreeMap::new(),
+            baseline,
+            [(
+                "track:master".into(),
+                MixerNodePosition {
+                    x: f32::NAN,
+                    y: 80.,
+                },
+            )]
+            .into(),
+            [
+                ("track:master".into(), MixerNodePosition { x: 42., y: 80. }),
+                ("track:999".into(), MixerNodePosition::default()),
+            ]
+            .into(),
+        ] {
+            assert!(!session.move_mixer_nodes(nodes));
+            assert_eq!(session.project(), &before);
+            assert!(session.can_redo());
+            assert!(!session.is_dirty());
+        }
+        assert!(session.redo().is_some());
+    }
+
+    #[test]
+    fn mixer_layout_transactions_restore_other_edits_when_a_caller_includes_them() {
+        let mut session = session();
+        let baseline = [("track:master".into(), MixerNodePosition::default())].into();
+        session.seed_mixer_node_positions(&baseline);
+        session.forget_history();
+        session.begin_transaction(Edit::MoveMixerNodes);
+        let track = session.add_bus_track("Included edit");
+        session.move_mixer_nodes(
+            [("track:master".into(), MixerNodePosition { x: 55., y: 55. })].into(),
+        );
+        session.end_transaction();
+        assert_eq!(session.undo(), Some(Edit::ExternalChanges));
+        assert!(session.project().track(track).is_none());
+        assert_eq!(session.project().mixer_graph_view.nodes, baseline);
+        session.redo().unwrap();
+        assert!(session.project().track(track).is_some());
+        session.begin_transaction(Edit::MoveMixerNodes);
+        let cancelled = session.add_bus_track("Cancelled batch");
+        session.move_mixer_nodes(
+            [("track:master".into(), MixerNodePosition { x: 80., y: 90. })].into(),
+        );
+        session.revert_transaction();
+        assert!(session.project().track(cancelled).is_none());
+    }
+
+    #[test]
+    fn mixer_layout_undo_after_save_keeps_save_metadata_and_the_live_audio_graph() {
+        let mut session = session();
+        let baseline = [("track:master".into(), MixerNodePosition::default())].into();
+        session.seed_mixer_node_positions(&baseline);
+        session.forget_history();
+        session.move_mixer_nodes(
+            [("track:master".into(), MixerNodePosition { x: 120., y: 70. })].into(),
+        );
+        let moved = session.project().mixer_graph_view.nodes.clone();
+        let scratch = Scratch::new("mixer-layout-save-undo");
+        session.save_as(&scratch.join("Layout.auris")).unwrap();
+        let saved_by = session.project().saved_by.clone();
+        assert!(!saved_by.is_empty());
+        let meters = Arc::clone(&session.signal_meters);
+        session.undo().unwrap();
+        assert_eq!(session.project().mixer_graph_view.nodes, baseline);
+        assert_eq!(session.project().saved_by, saved_by);
+        assert!(session.is_dirty());
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+        session.redo().unwrap();
+        assert_eq!(session.project().mixer_graph_view.nodes, moved);
+        assert_eq!(session.project().saved_by, saved_by);
+        assert!(!session.is_dirty());
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+    }
+
+    #[test]
+    fn mixer_view_is_saved_without_audio_rebuild_or_musical_history_changes() {
+        use auris_core::project::{MixerGraphView, MixerNodePosition};
+        let mut session = session();
+        session.forget_history();
+        let meters = Arc::clone(&session.signal_meters);
+        let view = MixerGraphView {
+            nodes: [(
+                "track:master".into(),
+                MixerNodePosition { x: -72.0, y: 800.0 },
+            )]
+            .into(),
+            zoom: 0.125,
+            pan_x: 31.0,
+            pan_y: -700.0,
+        };
+        session.set_mixer_graph_view(view.clone());
+        assert!(session.is_dirty());
+        assert!(!session.can_undo());
+        assert!(Arc::ptr_eq(&meters, &session.signal_meters));
+        let revision = session.revision();
+        session.set_mixer_graph_view(view.clone());
+        assert_eq!(session.revision(), revision);
+
+        session.add_bus_track("Undoable");
+        session.undo().unwrap();
+        let mut moved = view.clone();
+        moved.pan_x = 500.0;
+        session.set_mixer_graph_view(moved.clone());
+        assert!(session.can_redo());
+        session.redo().unwrap();
+        assert_eq!(session.project().mixer_graph_view, moved);
+        session.undo().unwrap();
+        assert_eq!(session.project().mixer_graph_view, moved);
+
+        session.begin_transaction(Edit::ExternalChanges);
+        session.set_mixer_graph_view(view.clone());
+        assert!(!session.end_transaction());
+        assert!(!session.can_undo());
+        assert!(session.is_dirty());
+
+        let scratch = Scratch::new("mixer-view");
+        let report = session.save_as(&scratch.join("View.auris")).unwrap();
+        assert!(!session.is_dirty());
+        session.new_project();
+        assert_eq!(
+            session.project().mixer_graph_view,
+            MixerGraphView::default()
+        );
+        session.open(&report.document).unwrap();
+        assert_eq!(session.project().mixer_graph_view, view);
+        assert!(!session.is_dirty());
+
+        let job = session.begin_save_in_place().unwrap();
+        let result = job
+            .run(&std::sync::atomic::AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        session.set_mixer_graph_view(moved.clone());
+        assert!(session.continue_save(result).is_none());
+        assert_eq!(session.project().mixer_graph_view, moved);
+        assert!(session.is_dirty());
+    }
+
+    #[test]
+    fn signal_observation_is_transient_and_follows_graph_rebuilds_and_undo() {
+        let mut session = session();
+        let track = session.add_bus_track("Source");
+        let bus = session.add_bus_track("Return");
+        session.add_send(track, bus).unwrap();
+        session.forget_history();
+        let before = session.project().clone();
+        let dirty = session.is_dirty();
+        session.watch_mixer_signals(true);
+        let old = Arc::clone(&session.signal_meters);
+        assert!(old.is_watched());
+        assert_eq!(session.project(), &before);
+        assert_eq!(session.is_dirty(), dirty);
+
+        session.add_effect(Some(track), COMPRESSOR).unwrap();
+        assert!(!Arc::ptr_eq(&old, &session.signal_meters));
+        assert!(!old.is_watched());
+        assert!(session.signal_meters.is_watched());
+        assert!(
+            session
+                .mixer_graph()
+                .edges
+                .iter()
+                .all(|edge| session.mixer_edge_peak(edge) == 0.)
+        );
+        session.watch_mixer_signals(false);
+        assert!(!session.signal_meters.is_watched());
+        session.watch_mixer_signals(true);
+        assert_eq!(undo_depth(&mut session), 1);
+        assert!(session.signal_meters.is_watched());
+    }
 
     #[test]
     fn automation_batches_validate_before_mutation_and_undo_as_one_edit() {

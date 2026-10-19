@@ -469,13 +469,6 @@ impl AurisApp {
         self.reveal_track(id);
     }
 
-    /// Points a track's output at a bus, or back at the master.
-    pub(crate) fn set_track_output(&mut self, track: TrackId, output: Output) {
-        if let Err(error) = self.session.set_track_output(track, output) {
-            self.set_failed_status(self.failure(Key::CmdSetTrackOutput, &error));
-        }
-    }
-
     /// Adds a send from a track to a bus.
     pub(crate) fn add_send(&mut self, track: TrackId, bus: TrackId) {
         if let Err(error) = self.session.add_send(track, bus) {
@@ -1000,6 +993,7 @@ impl AurisApp {
     /// no command for going back — the scroll is not part of the document, so nothing restored
     /// it either.
     pub(crate) fn reset_view(&mut self) {
+        self.mixer_canvas = None;
         // The observed editor closes on the next draw, before reused clip ids can be edited.
         self.rhythm_window = None;
         self.export_dialog = None;

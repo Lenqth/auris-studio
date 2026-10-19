@@ -768,6 +768,19 @@ impl AurisApp {
         value: f32,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        self.fader_control(id, label, target, value, cx)
+            .into_any_element()
+    }
+
+    /// A fader with concrete styling, so a zoomed graph can size its control to the viewport.
+    pub(crate) fn fader_control(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        label: &'static str,
+        target: ParamTarget,
+        value: f32,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
         let theme = self.theme.clone();
         let descriptor = Session::mixer_descriptor(target)
             .unwrap_or_else(|| ParamDescriptor::new(0u32, "value", "value", 0.0, 1.0, 0.0));
@@ -806,7 +819,6 @@ impl AurisApp {
             gpui::MouseButton::Right,
             Self::opens_menu(cx, move |this, at| this.param_menu(at, target, label)),
         )
-        .into_any_element()
     }
 
     /// Asks for a parameter's value as a number.

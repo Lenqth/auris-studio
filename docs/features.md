@@ -537,6 +537,20 @@ back the tracks that *do not* pass through it, so the mix stays in step; and a t
 master dry while sending to that same bus has each copy delayed on its own, so the dry and the wet
 still arrive together instead of comb-filtering each other.
 
+In the mixer's graph view, hover over a wire or its label to see the connection's source,
+destination and live peak level in dBFS. Parallel wires have individual tooltips; sends include
+their ID. Silence reads **−∞ dBFS**. The card updates while open and closes on Escape or when
+the pointer leaves the wire.
+
+Use **Ctrl+wheel** over the graph to zoom about the pointer, normally from 50% to 200%. Nodes, controls,
+ports and labels resize together. The **−** and **+** buttons zoom about the canvas centre;
+click the percentage to return to 100%. An unmodified wheel pans the graph. These view changes
+do not enter the project's undo history.
+
+**Fit graph** centres all nodes, wires and labels in the visible canvas with a margin. For a
+large graph it can zoom below 50%; that fitted scale also becomes available to the normal zoom
+controls. Node positions and audio routing stay as they were.
+
 ## Setting the levels by listening
 
 **Compose → Balance the Mix** renders every track on its own, measures it, and moves its fader

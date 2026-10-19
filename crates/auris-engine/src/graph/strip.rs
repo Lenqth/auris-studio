@@ -300,6 +300,8 @@ pub struct RenderStrip {
     /// by [`RenderGraph::build_with`](crate::graph::RenderGraph::build_with), which is the only
     /// place that can see the whole routing at once.
     pub(crate) sidechain: Vec<Option<usize>>,
+    /// Optional insert-input and key meter slots, parallel to `effects`.
+    pub(crate) signal_slots: Vec<(Option<usize>, Option<usize>)>,
 }
 
 impl RenderStrip {
@@ -320,6 +322,7 @@ impl RenderStrip {
             effects: Vec::new(),
             enabled: Vec::new(),
             sidechain: Vec::new(),
+            signal_slots: Vec::new(),
         }
     }
 
@@ -528,18 +531,28 @@ impl RenderStrip {
         buffer: &mut AudioBuffer,
         taps: &[AudioBuffer],
         ctx: &ProcessContext,
+        meters: Option<&crate::SignalMeters>,
     ) {
         let keyed = self
             .effects
             .iter_mut()
             .zip(&self.enabled)
             .zip(&self.sidechain);
-        for ((effect, enabled), key) in keyed {
+        for (index, ((effect, enabled), key)) in keyed.enumerate() {
+            let slots = self.signal_slots.get(index).copied().unwrap_or_default();
+            if let Some(meters) = meters {
+                meters.observe(slots.0, buffer.peak());
+            }
             if !*enabled {
                 continue;
             }
             match key.and_then(|tap| taps.get(tap)) {
-                Some(key) => effect.process_with_sidechain(buffer, key, ctx),
+                Some(key) => {
+                    if let Some(meters) = meters {
+                        meters.observe(slots.1, key.peak());
+                    }
+                    effect.process_with_sidechain(buffer, key, ctx);
+                }
                 None => effect.process(buffer, ctx),
             }
         }

@@ -54,6 +54,7 @@ mod drums;
 mod editing;
 mod listening;
 mod mix_editing;
+pub mod mixer_graph;
 mod project_files;
 mod recognition;
 mod reports;
@@ -123,6 +124,11 @@ sound. automation with target kind instrument and operation action read discover
 parameters; set_instrument_param sets a static value. Use native parameter units.
 
 mixer reads levels and processing. set_level adjusts fader/pan; set_track_state sets mute/solo.
+Use mixer_graph operation {\"action\":\"read\"} for the DAG and stable track/effect node IDs.
+Track nodes combine source and fader controls; inserts still run before the fader. Prefer
+mixer_graph connect/disconnect and effect actions for graph edits. Copy returned IDs, including
+track:master, rather than guessing names or effect positions. All output/send/sidechain cycles
+are refused. Parallel effects branch through buses. Follow next_offset and verify the result.
 routing reads or changes outputs and creates/removes sends; its send_level operation changes an existing
 send level. A bus name alone adds no processing: effects inserts real effect slots and
 connects sidechains. effects and automation take operation objects, such as {\"action\":\"list\"}
@@ -186,6 +192,10 @@ pub mod search_documentation {
     }
 
     const DOCUMENTS: &[(&str, &str)] = &[
+        (
+            "docs/mixer-graph.md",
+            include_str!("../../../docs/mixer-graph.md"),
+        ),
         (
             "docs/music-analysis.md",
             include_str!("../../../docs/music-analysis.md"),
@@ -801,11 +811,16 @@ pub mod describe {
             }
             // Where the track goes, said only when it is somewhere other than the obvious place.
             let mut routing: Vec<String> = track
-                .output
-                .bus()
+                .outputs
+                .iter()
+                .filter_map(|output| output.bus())
                 .map(|bus| format!("-> {}", name_of(bus)))
-                .into_iter()
                 .collect();
+            if track.outputs.is_empty() {
+                routing.push("-> disconnected".into());
+            } else if track.outputs.len() > 1 && track.outputs.contains(&Output::Master) {
+                routing.insert(0, "-> master".into());
+            }
             routing.extend(track.sends.iter().map(|send| {
                 let tap = if send.pre_fader { " pre" } else { "" };
                 format!("=> {} {:+.1} dB{tap}", name_of(send.target), send.level_db)
@@ -1044,6 +1059,10 @@ pub mod mixer {
             if let Some(id) = row.track {
                 text.push_str(&format!("  selector id:{}\n", id.0));
             }
+            text.push_str(&format!(
+                "  graph node {}\n",
+                auris_session::mixer_graph::MixerNode::Strip(row.track).key()
+            ));
             if let Some(lane) = session.project().automation.lane(gain_target) {
                 text.push_str(&format!("  gain envelope {:?} (dB), {} points; first 16 below. Use automation for paged detail:\n", lane.curve, lane.points().len()));
                 for point in lane.points().iter().take(16) {
@@ -1082,7 +1101,11 @@ pub mod mixer {
                 text.push_str(&format!("  => {target} {level:+.1} dB{tap}{automated}\n"));
             }
             for (position, (slot, effect_id)) in row.effects.iter().enumerate() {
-                text.push_str(&format!("  fx [{}] {effect_id}:\n", position + 1));
+                text.push_str(&format!(
+                    "  fx [{}] {effect_id} (graph node {}):\n",
+                    position + 1,
+                    auris_session::mixer_graph::MixerNode::Effect(row.track, *slot).key()
+                ));
                 let mut index = 0u32;
                 loop {
                     let target = ParamTarget::Effect {
@@ -2986,6 +3009,7 @@ fn track_by_name<'p>(project: &'p Project, name: &str) -> Result<&'p Track, Stri
     let name = name.trim();
     if let Some(id) = name
         .strip_prefix("id:")
+        .or_else(|| name.strip_prefix("track:"))
         .and_then(|id| id.parse::<u64>().ok())
     {
         return project
@@ -3126,6 +3150,9 @@ const MAX_TOOL_BEATS: f64 = 16_384.0;
 
 /// A mixer strip address: a track by name, or `None` for the master bus as "master".
 fn strip_by_name(project: &Project, name: &str) -> Result<Option<TrackId>, String> {
+    if name.eq_ignore_ascii_case("track:master") {
+        return Ok(None);
+    }
     if project
         .tracks
         .iter()

@@ -1,0 +1,26 @@
+[package]
+name = "gpui-flow"
+version = "0.1.0"
+edition = "2024"
+description = "A node-based flow graph editor for GPUI, inspired by React Flow / xyflow."
+license = "MIT"
+repository = "https://github.com/pacifio/gpui-flow"
+homepage = "https://github.com/pacifio/gpui-flow"
+readme = "README.md"
+keywords = ["gpui", "flow", "graph", "node-editor", "react-flow"]
+categories = ["gui", "graphics"]
+
+[dependencies]
+gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
+
+[profile.dev]
+debug = "limited"
+split-debuginfo = "unpacked"
+opt-level = 1
+
+[profile.dev.package]
+gpui = { opt-level = 3 }
+taffy = { opt-level = 3 }
+
+[lints.clippy]
+type_complexity = "allow"

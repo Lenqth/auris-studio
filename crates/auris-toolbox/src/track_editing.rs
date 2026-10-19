@@ -176,6 +176,7 @@ pub mod routing {
         let destination = |id: TrackId| {
             serde_json::json!({
                 "track": format!("id:{}", id.0),
+                "node": auris_session::mixer_graph::MixerNode::Strip(Some(id)).key(),
                 "name": project.track(id).map(|track| &track.name)
             })
         };
@@ -199,8 +200,10 @@ pub mod routing {
             .collect();
         serde_json::json!({
             "track": format!("id:{}", id.0),
+            "node": auris_session::mixer_graph::MixerNode::Strip(Some(id)).key(),
             "name": track.name,
-            "output": track.output.bus().map(destination).unwrap_or_else(|| serde_json::json!({"track":"master"})),
+            "output": track.outputs.first().map(|output| output.bus().map(destination).unwrap_or_else(|| serde_json::json!({"track":"master"}))),
+            "outputs": track.outputs.iter().map(|output| output.bus().map(destination).unwrap_or_else(|| serde_json::json!({"track":"master"}))).collect::<Vec<_>>(),
             "sends": sends,
             "available_buses": buses
         })
@@ -501,7 +504,7 @@ mod tests {
         let send_id = added["sends"][0]["send_id"].as_u64().unwrap();
         let reopened = opened(&fixture.path).unwrap();
         let track = reopened.project().track(fixture.lead).unwrap();
-        assert_eq!(track.output, Output::Bus(fixture.bus));
+        assert_eq!(track.outputs, vec![Output::Bus(fixture.bus)]);
         assert_eq!(track.sends.len(), 1);
         assert_eq!(track.sends[0].level_db, -12.0);
         assert!(track.sends[0].pre_fader);
@@ -540,7 +543,7 @@ mod tests {
             .unwrap();
         let reopened = opened(&fixture.path).unwrap();
         let track = reopened.project().track(fixture.lead).unwrap();
-        assert_eq!(track.output, Output::Master);
+        assert_eq!(track.outputs, vec![Output::Master]);
         assert!(track.sends.is_empty());
     }
 

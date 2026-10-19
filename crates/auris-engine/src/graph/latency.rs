@@ -94,11 +94,11 @@ pub(super) struct LatencyPlan {
     /// What each track is held back by so that every source lines up, by track index.
     pub(super) node: Vec<usize>,
     /// What each of a track's outgoing edges is held back by so that everything arriving at a bus
-    /// lines up: the output edge first, then one per send, by track index.
+    /// lines up: all output branches first, then one per send, by track index.
     pub(super) edges: Vec<Vec<usize>>,
 }
 
-/// What each of a track's outgoing edges costs downstream of the track itself, output edge first.
+/// What each outgoing edge costs downstream: output branches first, then sends.
 ///
 /// Written into `out` rather than returned so the caller can reuse one allocation across a whole
 /// graph — this runs once per node per pass and none of it happens on the audio thread, but a
@@ -119,7 +119,7 @@ fn edge_costs(
             .unwrap_or(master_cost),
     };
     out.clear();
-    out.push(resolve(track.output));
+    out.extend(track.outputs.iter().map(|output| resolve(output.target)));
     out.extend(track.sends.iter().map(|send| resolve(Some(send.target))));
 }
 

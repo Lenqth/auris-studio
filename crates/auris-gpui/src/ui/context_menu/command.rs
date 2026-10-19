@@ -397,8 +397,10 @@ pub enum MenuCommand {
         /// Where the list is dropped.
         at: Point<Pixels>,
     },
-    /// Point a track's output at a bus, or back at the master.
-    SetTrackOutput(TrackId, Output),
+    /// Add or remove one destination while retaining the other output branches.
+    ToggleTrackOutput(TrackId, Output),
+    /// Disconnect selected graph edges in one undoable document edit.
+    DeleteMixerConnections(Vec<auris_session::mixer_graph::MixerEdge>),
     /// Open the list of buses a track could send to.
     ShowSendPicker {
         /// Track the send would come from.
@@ -1265,7 +1267,21 @@ impl AurisApp {
                 let menu = self.output_menu(at, track);
                 self.open_menu(menu);
             }
-            MenuCommand::SetTrackOutput(track, output) => self.set_track_output(track, output),
+            MenuCommand::DeleteMixerConnections(edges) => self.delete_mixer_connections(&edges),
+            MenuCommand::ToggleTrackOutput(track, output) => {
+                let remove = self
+                    .project()
+                    .track(track)
+                    .is_some_and(|track| track.outputs.contains(&output));
+                let result = if remove {
+                    self.session.remove_track_output(track, output)
+                } else {
+                    self.session.add_track_output(track, output)
+                };
+                if let Err(error) = result {
+                    self.set_failed_status(self.failure(Key::MixerGraph, &error));
+                }
+            }
             MenuCommand::ShowSendPicker { track, at } => {
                 let menu = self.send_picker_menu(at, track);
                 self.open_menu(menu);

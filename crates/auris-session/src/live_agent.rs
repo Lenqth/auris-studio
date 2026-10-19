@@ -19,6 +19,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Read or edit the live mixer DAG through stable node identities.
+    MixerGraph {
+        /// The validated graph operation; persistence belongs to the frontend.
+        operation: crate::mixer_graph::commands::GraphAction,
+    },
     /// Read the current arrangement and stable track/clip IDs. Use read_notes for note data.
     Inspect {},
     /// Read bounded scan/measurement failures after searching. Does not rescan.
@@ -321,6 +326,9 @@ impl Session {
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::MixerGraph { operation } => self
+                .apply_mixer_graph(&operation)
+                .map(|report| report.to_string()),
             Command::InstrumentDiagnostics { offset, limit } => self
                 .sound_library_job(plugin_paths)
                 .diagnostics(offset, limit),

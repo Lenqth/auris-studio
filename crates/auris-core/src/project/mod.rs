@@ -50,8 +50,10 @@ mod volume_contour;
 pub use ghost::{GhostNotes, GhostPattern};
 pub use pitch_performance::PitchPerformance;
 pub use volume_contour::{VolumeContour, VolumeContourPreset};
+mod mixer_view;
 mod recipe;
 mod routing;
+pub use mixer_view::{MixerGraphView, MixerNodePosition};
 mod track;
 mod transform;
 
@@ -215,6 +217,9 @@ pub struct Project {
     pub tracks: Vec<Track>,
     /// Master bus strip.
     pub master: MixerStrip,
+    /// Mixer graph node positions and camera, restored independently of the audio graph.
+    #[serde(default)]
+    pub mixer_graph_view: MixerGraphView,
     /// Imported file metadata by id.
     pub audio_sources: BTreeMap<SourceId, AudioSource>,
     /// Imported SoundFont metadata by id.
@@ -281,10 +286,11 @@ impl Default for Project {
 
 impl Project {
     /// Schema version written into saved files and required when opening them.
+    /// Version 32 stores zero or more track outputs; older files' single outputs load as one route.
     /// Version 31 adds power, added-tone, 6/9 and thirteenth chord qualities to stored harmony.
     /// Version 30 adds eleventh chord qualities to stored harmony.
     /// Version 29 adds ordered, named manual drum lanes beside generation-role assignments.
-    pub const FORMAT_VERSION: u32 = 31;
+    pub const FORMAT_VERSION: u32 = 32;
 
     /// An empty project.
     ///
@@ -309,6 +315,7 @@ impl Project {
             automation: crate::automation::Automation::new(),
             tracks: Vec::new(),
             master: MixerStrip::default(),
+            mixer_graph_view: MixerGraphView::default(),
             audio_sources: BTreeMap::new(),
             soundfonts: BTreeMap::new(),
             loop_region: None,

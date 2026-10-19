@@ -899,6 +899,9 @@ impl AudioEngine {
             interleave(&self.scratch, &mut data[start..end], self.channels);
             if previewing {
                 self.meters.clear_tracks_from(0);
+                if let Some(graph) = &self.graph {
+                    graph.signal_meters.reset();
+                }
                 for channel in 0..2 {
                     let peak = if channel < self.scratch.channel_count() {
                         self.scratch

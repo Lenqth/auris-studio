@@ -1698,6 +1698,12 @@ pub struct AurisApp {
     /// them. Without the handle the two would be separate scroll positions that happen to look
     /// alike until somebody used both.
     pub(crate) mixer_scroll: gpui::ScrollHandle,
+    /// Graph presentation; the session remains the sole owner of signal routing.
+    pub(crate) mixer_canvas: Option<crate::ui::mixer_graph::MixerCanvas>,
+    /// Whether the mixer shows signal flow or the console.
+    pub(crate) mixer_graph_visible: bool,
+    /// Whether a connection gesture adds an auxiliary send instead of changing the output.
+    pub(crate) mixer_connect_send: bool,
     /// The same, for the browser's list of instruments and effects.
     pub(crate) library_scroll: gpui::ScrollHandle,
     /// The same, for the inspector's column of settings.
@@ -2011,6 +2017,7 @@ impl AurisApp {
                         this.poll_visualizer();
                         this.poll_physical_view();
                         this.poll_track_grid();
+                        this.poll_mixer_signals();
                         // Separate from `poll` on purpose: that is housekeeping and this writes
                         // to disk. A success says nothing: it is a private recovery snapshot, and
                         // announcing one every half minute would drown out useful status. A
@@ -2135,6 +2142,9 @@ impl AurisApp {
             arrangement_width: px(900.0),
             canvas: CanvasBounds::default(),
             mixer_scroll: gpui::ScrollHandle::new(),
+            mixer_canvas: None,
+            mixer_graph_visible: true,
+            mixer_connect_send: false,
             library_scroll: gpui::ScrollHandle::new(),
             inspector_scroll: gpui::ScrollHandle::new(),
             inspector_collapsed: [false; 4],

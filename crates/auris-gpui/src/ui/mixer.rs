@@ -21,6 +21,18 @@ impl AurisApp {
     /// Renders the mixer panel.
     pub(crate) fn render_mixer(
         &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        if self.mixer_graph_visible {
+            self.render_mixer_graph(cx)
+        } else {
+            self.render_mixer_console(window, cx).into_any_element()
+        }
+    }
+
+    fn render_mixer_console(
+        &mut self,
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement + use<> {
@@ -55,7 +67,19 @@ impl AurisApp {
                     .border_color(theme.border)
                     .text_xs()
                     .text_color(theme.text_muted)
-                    .child(self.t(Key::Mixer)),
+                    .child(self.t(Key::Mixer))
+                    .child(button(
+                        "mixer-show-graph",
+                        self.t(Key::MixerGraph),
+                        ButtonStyle::Ghost,
+                        false,
+                        theme.accent_soft,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.mixer_graph_visible = true;
+                            cx.notify();
+                        }),
+                    )),
             )
             .child(
                 self.scrolling(
@@ -106,19 +130,27 @@ impl AurisApp {
         let level_db = gain_to_db(self.track_level(index));
         let clipped = self.session.meters().track_clipped(index);
         let selected = self.selected_track == Some(track_id);
-        let output = track.output;
+        let outputs = track.outputs.clone();
         let sends: Vec<(SendId, TrackId, f32, bool)> = track
             .sends
             .iter()
             .map(|send| (send.id, send.target, send.level_db, send.pre_fader))
             .collect();
-        let destination = match output {
-            Output::Master => self.t(Key::Master).to_string(),
-            Output::Bus(bus) => self
-                .project()
-                .track(bus)
-                .map(|bus| bus.name.clone())
-                .unwrap_or_else(|| self.t(Key::Master).to_string()),
+        let destinations: Vec<_> = outputs
+            .iter()
+            .map(|output| match *output {
+                Output::Master => self.t(Key::Master).to_string(),
+                Output::Bus(bus) => self
+                    .project()
+                    .track(bus)
+                    .map(|bus| bus.name.clone())
+                    .unwrap_or_else(|| self.t(Key::Master).to_string()),
+            })
+            .collect();
+        let destination = if destinations.is_empty() {
+            self.t(Key::MixerNoOutput).to_string()
+        } else {
+            destinations.join(", ")
         };
 
         let effect_rows: Vec<AnyElement> = insert_rows(&effects)
@@ -266,7 +298,7 @@ impl AurisApp {
             .children(sends.into_iter().enumerate().map(
                 |(position, (send, bus, level_db, pre_fader))| {
                     self.send_row(
-                        index, position, track_id, send, bus, level_db, pre_fader, cx,
+                        index, position, track_id, send, bus, level_db, pre_fader, 1.0, cx,
                     )
                 },
             ))
@@ -352,7 +384,7 @@ impl AurisApp {
     /// double click and can be automated — all of that comes from being a mixer control rather
     /// than a number with a slider drawn next to it.
     #[allow(clippy::too_many_arguments)]
-    fn send_row(
+    pub(super) fn send_row(
         &self,
         index: usize,
         position: usize,
@@ -361,6 +393,7 @@ impl AurisApp {
         bus: TrackId,
         level_db: f32,
         pre_fader: bool,
+        scale: f32,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
@@ -398,16 +431,19 @@ impl AurisApp {
                         )
                     }),
             )
-            .child(self.fader(
-                ("mixer-send", index * 64 + position),
-                self.t(Key::Sends),
-                ParamTarget::Send {
-                    track: track_id,
-                    send,
-                },
-                level_db,
-                cx,
-            ))
+            .child(
+                self.fader_control(
+                    ("mixer-send", index * 64 + position),
+                    self.t(Key::Sends),
+                    ParamTarget::Send {
+                        track: track_id,
+                        send,
+                    },
+                    level_db,
+                    cx,
+                )
+                .h(Metrics::CONTROL_HEIGHT * scale),
+            )
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
@@ -620,6 +656,7 @@ mod tests {
     fn add_send_is_only_shown_when_a_bus_can_receive_it(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         app.update(cx, |this, _| {
+            this.mixer_graph_visible = false;
             this.session
                 .add_default_instrument_track("Test")
                 .expect("the registry nominates an instrument");

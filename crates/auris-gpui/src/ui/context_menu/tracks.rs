@@ -608,22 +608,22 @@ impl AurisApp {
         let current = self
             .project()
             .track(track)
-            .map(|track| track.output)
+            .map(|track| track.outputs.clone())
             .unwrap_or_default();
         let mut menu = ContextMenu::new(anchor, self.t(Key::MenuRouteTo)).toggle(
             self.t(Key::Master),
-            MenuCommand::SetTrackOutput(track, Output::Master),
-            current == Output::Master,
+            MenuCommand::ToggleTrackOutput(track, Output::Master),
+            current.contains(&Output::Master),
         );
         for (bus, name) in self.bus_names() {
             // Greyed rather than left out: the list is every bus in the project, and a bus that
             // silently went missing from it would look like a bus that had been deleted. The
             // dimmed row is the answer to why this one cannot be chosen.
             menu = menu.toggle_greyed_unless(
-                self.session.can_route(track, bus),
+                current.contains(&Output::Bus(bus)) || self.session.can_route(track, bus),
                 name,
-                MenuCommand::SetTrackOutput(track, Output::Bus(bus)),
-                current == Output::Bus(bus),
+                MenuCommand::ToggleTrackOutput(track, Output::Bus(bus)),
+                current.contains(&Output::Bus(bus)),
             );
         }
         menu
