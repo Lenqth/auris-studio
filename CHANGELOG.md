@@ -23,8 +23,8 @@ format rather than a convention: `## <version> — <date>`.
 
 ### Editing and desktop
 
-* **Choose a track grid or the existing track list.** The grid offers another way to browse
-  and select tracks while keeping the same project and editing commands.
+* **Switch between the timeline and a track grid.** Monitor physical-instrument motion and
+  stereo waveforms in a responsive grid, with track selection, mute and solo controls.
 * **Control piano-roll snapping more precisely.** Smart and fixed grids, relative or absolute
   snapping, and temporary snap overrides support both aligned notes and intentional offsets.
   Toolbar customization and note preview controls make common editing actions easier to reach.
