@@ -473,18 +473,21 @@ pub fn list_models_background(
         .name("auris-model-list".into())
         .spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                if prefs.backend == "codex" {
+                if matches!(prefs.backend.as_str(), "codex" | "claude") {
                     let runtime = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()
                         .map_err(|error| error.to_string())?;
                     return runtime.block_on(async {
-                        tokio::time::timeout(
-                            MODEL_LIST_PATIENCE,
-                            backends::codex::list_models(&prefs),
-                        )
+                        tokio::time::timeout(MODEL_LIST_PATIENCE, async {
+                            if prefs.backend == "claude" {
+                                backends::claude::list_models(&prefs).await
+                            } else {
+                                backends::codex::list_models(&prefs).await
+                            }
+                        })
                         .await
-                        .map_err(|_| "Codex model listing timed out".to_string())?
+                        .map_err(|_| "CLI model listing timed out".to_string())?
                     });
                 }
                 let Command::Models(options) =

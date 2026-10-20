@@ -3,8 +3,8 @@ use super::*;
 
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
-    pub(super) fields: [TextField; 3],
-    pub(super) focus: [FocusHandle; 3],
+    pub(super) fields: [TextField; 4],
+    pub(super) focus: [FocusHandle; 4],
     pub(super) active: Option<usize>,
 }
 
@@ -15,8 +15,10 @@ impl AgentSettings {
                 TextField::new(prefs.url.clone()),
                 TextField::new(prefs.api_key_env.clone()),
                 TextField::new(prefs.codex_path.clone()),
+                TextField::new(prefs.claude_path.clone()),
             ],
             focus: [
+                cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
@@ -42,6 +44,7 @@ impl SettingsWindow {
         self.agent.prefs.url = self.agent.fields[0].content().trim().to_owned();
         self.agent.prefs.api_key_env = self.agent.fields[1].content().trim().to_owned();
         self.agent.prefs.codex_path = self.agent.fields[2].content().trim().to_owned();
+        self.agent.prefs.claude_path = self.agent.fields[3].content().trim().to_owned();
         let draft = self.agent.prefs.clone();
         let result = self.app.update(cx, move |app, cx| {
             // Model and live permission controls belong to the panel and may have changed
@@ -62,6 +65,7 @@ impl SettingsWindow {
             }
             prefs.backend = draft.backend;
             prefs.codex_path = draft.codex_path;
+            prefs.claude_path = draft.claude_path;
             prefs.provider = draft.provider;
             prefs.url = draft.url;
             prefs.api_key_env = draft.api_key_env;
@@ -99,7 +103,12 @@ impl SettingsWindow {
     }
 
     fn agent_field(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
-        let id = ["agent-url", "agent-key-env", "agent-codex-path"][index];
+        let id = [
+            "agent-url",
+            "agent-key-env",
+            "agent-codex-path",
+            "agent-claude-path",
+        ][index];
         let focus = self.agent.focus[index].clone();
         let field = &self.agent.fields[index];
         div()
@@ -148,6 +157,7 @@ impl SettingsWindow {
             vec![
                 ("rig".to_owned(), "Rig".to_owned(), String::new()),
                 ("codex".to_owned(), "Codex CLI".to_owned(), String::new()),
+                ("claude".to_owned(), "Claude Code".to_owned(), String::new()),
             ],
             &backend,
             |this, value, cx| {
@@ -184,7 +194,13 @@ impl SettingsWindow {
             section_title(self.t(Key::AgentBackendLabel), &theme),
             backend_control,
         ];
-        if backend == "codex" {
+        if backend == "claude" {
+            rows.extend([
+                section_title(self.t(Key::AgentClaudePathLabel), &theme),
+                self.agent_field(3, cx),
+                note(self.t(Key::AgentClaudeHelp), &theme),
+            ]);
+        } else if backend == "codex" {
             rows.extend([
                 section_title(self.t(Key::AgentCodexPathLabel), &theme),
                 self.agent_field(2, cx),
@@ -311,6 +327,20 @@ mod tests {
 
     #[gpui::test]
     fn codex_settings_select_the_runtime_and_preserve_rig_connection(cx: &mut TestAppContext) {
+        cli_settings_select_the_runtime(cx, "codex", "agent-codex-path", "down enter");
+    }
+
+    #[gpui::test]
+    fn claude_settings_select_the_runtime_and_preserve_rig_connection(cx: &mut TestAppContext) {
+        cli_settings_select_the_runtime(cx, "claude", "agent-claude-path", "down down enter");
+    }
+
+    fn cli_settings_select_the_runtime(
+        cx: &mut TestAppContext,
+        backend: &str,
+        selector: &'static str,
+        keystrokes: &str,
+    ) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, cx| {
             this.settings.agent = AgentPreferences {
@@ -328,37 +358,40 @@ mod tests {
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
         crate::harness::click("agent-backend", cx);
-        cx.simulate_keystrokes("down enter");
-        assert!(cx.debug_bounds("agent-codex-path").is_some());
+        cx.simulate_keystrokes(keystrokes);
+        assert!(cx.debug_bounds(selector).is_some());
         // GPUI retains debug bounds for removed controls across frames. Check the draft
-        // instead; the newly drawn Codex field above verifies the backend-specific view.
+        // instead; the newly drawn executable field verifies the backend-specific view.
         handle
             .update(cx, |this, _, _| {
-                assert_eq!(this.agent.prefs.backend, "codex")
+                assert_eq!(this.agent.prefs.backend, backend)
             })
             .unwrap();
         app.read_with(cx, |this, _| {
             assert_eq!(this.settings.agent.model, "rig-model")
         });
-        crate::harness::click("agent-codex-path", cx);
-        cx.simulate_input("C:\\Tools\\codex.exe");
+        crate::harness::click(selector, cx);
+        let path = format!("C:\\Tools\\{backend}.exe");
+        cx.simulate_input(&path);
         handle
             .update(cx, |this, _, cx| {
                 this.apply_agent_with(cx, |_| Ok::<(), String>(()))
             })
             .unwrap();
         app.read_with(cx, |this, _| {
-            assert_eq!(this.settings.agent.backend, "codex");
-            assert_eq!(this.settings.agent.codex_path, "C:\\Tools\\codex.exe");
+            assert_eq!(this.settings.agent.backend, backend);
             assert_eq!(this.settings.agent.provider, "openai");
             assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
             assert_eq!(this.settings.agent.api_key_env, "RIG_KEY");
             assert!(this.settings.agent.model.is_empty());
-            assert_eq!(this.agent_chat.backend, "codex");
-            assert_eq!(
-                this.agent_chat.preferences().codex_path,
-                "C:\\Tools\\codex.exe"
-            );
+            assert_eq!(this.agent_chat.backend, backend);
+            if backend == "claude" {
+                assert_eq!(this.settings.agent.claude_path, path);
+                assert_eq!(this.agent_chat.preferences().claude_path, path);
+            } else {
+                assert_eq!(this.settings.agent.codex_path, path);
+                assert_eq!(this.agent_chat.preferences().codex_path, path);
+            }
         });
     }
 

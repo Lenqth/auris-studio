@@ -766,6 +766,7 @@ pub(crate) struct AgentChat {
     pub(crate) backend: String,
     /// Optional native Codex executable path.
     pub(crate) codex_path: String,
+    pub(crate) claude_path: String,
     /// What the provider last answered the model question with.
     pub(crate) models: Vec<ModelOption>,
     /// Whether that question is in flight.
@@ -878,6 +879,7 @@ impl Default for AgentChat {
             provider_openai: false,
             backend: String::new(),
             codex_path: String::new(),
+            claude_path: String::new(),
             models: Vec::new(),
             fetching_models: false,
             models_error: None,
@@ -1048,6 +1050,7 @@ impl AgentChat {
         self.provider_openai = prefs.provider.trim() == "openai";
         self.backend = prefs.backend.clone();
         self.codex_path = prefs.codex_path.clone();
+        self.claude_path = prefs.claude_path.clone();
         self.chosen_model = prefs.model.trim().to_string();
         self.url_field = TextField::new(prefs.url.clone());
         self.key_env_field = TextField::new(prefs.api_key_env.clone());
@@ -1076,6 +1079,7 @@ impl AgentChat {
         AgentPreferences {
             backend: self.backend.clone(),
             codex_path: self.codex_path.clone(),
+            claude_path: self.claude_path.clone(),
             policy: self.policy.clone(),
             auto_compact_percent: self.auto_compact_percent,
             context_tokens: Some(self.context_tokens),

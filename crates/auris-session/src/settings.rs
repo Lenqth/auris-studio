@@ -344,10 +344,12 @@ impl ReasoningEffort {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPreferences {
-    /// Conversation runtime: empty or "rig", or "codex" for the official Codex CLI.
+    /// Conversation runtime: empty or "rig", "codex", or "claude" for Claude Code CLI.
     pub backend: String,
     /// Optional native Codex executable path. Empty searches the installed CLI.
     pub codex_path: String,
+    /// Optional native Claude Code executable path. Empty searches PATH and the native install.
+    pub claude_path: String,
     /// Live agent mode and operation allow/deny rules, including the embedded live MCP.
     pub policy: crate::agent_policy::Policy,
     /// Auto-compaction threshold in percent; absent means 85, zero disables it.
@@ -656,6 +658,27 @@ fn home() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn claude_preferences_round_trip_and_older_cli_preferences_keep_their_defaults() {
+        let old: AgentPreferences = serde_json::from_str(
+            r#"{"backend":"codex","codex_path":"C:/Tools/codex.exe","model":"existing"}"#,
+        )
+        .unwrap();
+        assert!(old.claude_path.is_empty());
+        assert_eq!(old.codex_path, "C:/Tools/codex.exe");
+        let claude = AgentPreferences {
+            backend: "claude".into(),
+            claude_path: "C:/Tools/claude.exe".into(),
+            model: "sonnet".into(),
+            ..old
+        };
+        assert_eq!(
+            serde_json::from_str::<AgentPreferences>(&serde_json::to_string(&claude).unwrap())
+                .unwrap(),
+            claude
+        );
+    }
 
     #[test]
     fn defaults_round_trip_through_json() {
