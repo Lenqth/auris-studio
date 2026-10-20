@@ -1,0 +1,179 @@
+{
+  "date": "2026-10-21",
+  "revision": "a5564e38",
+  "platform": "Windows x86_64, dev profile, local CPU inference",
+  "source": {
+    "title": "Ode to Joy, SATB, Mutopia-2009/08/05-528",
+    "midi_url": "https://www.ibiblio.org/mutopia/ftp/BeethovenLv/ode/ode.mid",
+    "score_url": "https://www.ibiblio.org/mutopia/ftp/BeethovenLv/ode/ode.ly",
+    "audio": "Controlled synthesis of the independent MIDI; not an independent acoustic recording"
+  },
+  "controller": "Codex using actual saved-project MCP calls",
+  "live_cover_scope": "Bundled inference and canonical session command; attachment host covered by existing tests, not an interactive UI experiment",
+  "mcp_catalog_tools": 66,
+  "mcp_catalog_compact_utf8_bytes": 74825,
+  "basic_pitch_model_sha256": "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec",
+  "matching": "Maximum one-to-one bipartite pitch/onset matching. Exact MIDI pitch; tolerances in seconds. No offset requirement.",
+  "metrics": {
+    "midi_roundtrip_notes_preserved": true,
+    "source_notes": 238,
+    "basic-pitch-piano": {
+      "0.05": {
+        "reference_notes": 238,
+        "estimated_notes": 273,
+        "matched": 238,
+        "precision": 0.8717948717948718,
+        "recall": 1.0,
+        "f1": 0.9315068493150684,
+        "median_onset_error_seconds": 0.0061805755165904586,
+        "median_duration_error_seconds": 0.010953339082111602
+      },
+      "0.1": {
+        "reference_notes": 238,
+        "estimated_notes": 273,
+        "matched": 238,
+        "precision": 0.8717948717948718,
+        "recall": 1.0,
+        "f1": 0.9315068493150684,
+        "median_onset_error_seconds": 0.0061805755165904586,
+        "median_duration_error_seconds": 0.010953339082111602
+      },
+      "inference_seconds": 0.3858808,
+      "acceptance": {
+        "existing_music_retained": true,
+        "tempo_retained": true,
+        "one_undo_restored": true
+      }
+    },
+    "basic-pitch-mixed": {
+      "0.05": {
+        "reference_notes": 238,
+        "estimated_notes": 154,
+        "matched": 94,
+        "precision": 0.6103896103896104,
+        "recall": 0.3949579831932773,
+        "f1": 0.47959183673469385,
+        "median_onset_error_seconds": 0.006049631120053078,
+        "median_duration_error_seconds": 0.04679633355689816
+      },
+      "0.1": {
+        "reference_notes": 238,
+        "estimated_notes": 154,
+        "matched": 132,
+        "precision": 0.8571428571428571,
+        "recall": 0.5546218487394958,
+        "f1": 0.673469387755102,
+        "median_onset_error_seconds": 0.012528504359494264,
+        "median_duration_error_seconds": 0.06870301172112292
+      },
+      "inference_seconds": 0.3744771,
+      "acceptance": {
+        "existing_music_retained": true,
+        "tempo_retained": true,
+        "one_undo_restored": true
+      }
+    }
+  },
+  "attachment_limit_bytes": 26214400,
+  "stereo_wav_seconds_at_limit": {
+    "44100_16": 148.60746031746032,
+    "48000_16": 136.53310416666667,
+    "48000_24": 91.02206944444444,
+    "48000_32": 68.26655208333334
+  },
+  "files": {
+    "ode.mid": {
+      "bytes": 2192,
+      "sha256": "fb1604c08c865b275b464d74e5a7c526ff1a8acccdf9853cb92f0778daaed14b"
+    },
+    "ode.ly": {
+      "bytes": 2907,
+      "sha256": "a0c865aa9f71221605362622d281405071e0734540e86ce131131757cc803a71"
+    },
+    "original-melody.json": {
+      "bytes": 5761,
+      "sha256": "3c16bc4de9429dfe4a7578d8343e1dff4e5abc04d5a5301d9f115b5a0d741ac1"
+    },
+    "original-accompaniment.json": {
+      "bytes": 24934,
+      "sha256": "b9c0a6072c5f162743e33fd6a86facaee2051862ad18f2280fbf983cbb7cbe6b"
+    },
+    "original.wav": {
+      "bytes": 11520068,
+      "sha256": "83d79e2f822bd18ea7881bef34c72553b506c9e81cae854826c9168a5d2c0200"
+    },
+    "original-finished.wav": {
+      "bytes": 12960068,
+      "sha256": "4714d743999d4672efd95210ccfb282962cb5e8e94a3f5d01edfdb58fd466ae5"
+    },
+    "ode-cover.wav": {
+      "bytes": 11059268,
+      "sha256": "049e881f2939744ad9643c69d1d20cdb790b95654ac716080678d820b2e81410"
+    },
+    "ode-cover-finished.wav": {
+      "bytes": 12441668,
+      "sha256": "75b2e11e8c2b99697b9b44b2653d0c934cf0ade72f99739f3f33f546ab81d6d2"
+    },
+    "ode-mixed-source.wav": {
+      "bytes": 11059268,
+      "sha256": "7625d7fedbe07ebc09ad4c0474b9874bc5fdb54b77af9f79ef42672a2ec46f32"
+    },
+    "audio-piano-draft.wav": {
+      "bytes": 12441668,
+      "sha256": "00f0c2387a9039317724acaa233071148d6c2c8a992f89d6e522470cfd5638f9"
+    },
+    "audio-mixed-draft.wav": {
+      "bytes": 12441668,
+      "sha256": "30906bb123d6caa28be646f164de993d25356f4088718875dc92dbac3f918f0c"
+    }
+  },
+  "validation": {
+    "cargo_fmt_all_check": "pass",
+    "cargo_clippy_workspace_all_targets": "pass",
+    "cargo_test_workspace": {
+      "passed": 4245,
+      "failed": 0,
+      "ignored": 18
+    },
+    "evaluation_examples": "Both ran successfully"
+  },
+  "live_surface": {
+    "live_edit_harmony_resolves_to_command": false,
+    "live_singer_creation": "Added track ID 1",
+    "live_tools": [
+      "create_piano_cover",
+      "inspect_project",
+      "instrument_diagnostics",
+      "inspect_audio",
+      "search_instruments",
+      "similar_instruments",
+      "read_notes",
+      "add_track",
+      "rename_track",
+      "remove_track",
+      "set_instrument",
+      "set_level",
+      "normalize_mix",
+      "set_track_state",
+      "add_clip",
+      "add_note",
+      "add_notes",
+      "replace_notes",
+      "set_tempo",
+      "set_loop",
+      "remove_notes",
+      "set_mixer_track",
+      "read_mixer_graph",
+      "connect_mixer",
+      "disconnect_mixer",
+      "add_mixer_effect",
+      "remove_mixer_effect",
+      "move_mixer_effect",
+      "enable_mixer_effect",
+      "set_mixer_send",
+      "mixer_effect_parameters",
+      "set_mixer_effect_parameter"
+    ],
+    "live_vocal_operations_present": []
+  }
+}
