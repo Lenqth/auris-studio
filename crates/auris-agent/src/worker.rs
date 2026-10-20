@@ -169,6 +169,42 @@ struct Channels {
     tools: Mutex<()>,
     vision: AtomicBool,
     visual: std::sync::Mutex<Option<Message>>,
+    execution_root: Option<PathBuf>,
+    execution_lease: std::sync::Mutex<Option<std::fs::File>>,
+}
+
+fn conversation_execution_root(path: &Path) -> Option<PathBuf> {
+    let parent = path.parent()?;
+    if path.file_name() == Some(std::ffi::OsStr::new("memory.json")) {
+        parent.parent().map(Path::to_path_buf)
+    } else {
+        Some(parent.to_path_buf())
+    }
+}
+
+fn acquire_execution_lease(root: &Path, stopped: &AtomicBool) -> Result<std::fs::File, String> {
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(root.join("runtime.lock"))
+        .map_err(|error| error.to_string())?;
+    // A just-cancelled worker may still be closing its provider. Give it a bounded handover
+    // interval, on this worker thread, without keeping an idle conversation's project locked.
+    for _ in 0..20 {
+        if stopped.load(Ordering::Acquire) {
+            return Err("The agent worker stopped".into());
+        }
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::Error(error)) => return Err(error.to_string()),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+        }
+    }
+    Err("Another conversation is running for this project. Stop it in the other window before continuing.".into())
 }
 
 pub(super) struct VisualTurn(Option<Bridge>);
@@ -262,10 +298,37 @@ impl Bridge {
     }
 
     pub(super) fn emit(&self, event: serde_json::Value) {
+        if (matches!(event["event"].as_str(), Some("answer" | "error" | "ended"))
+            || (event["event"] == "compacted" && event["manual"] == true))
+            && let Ok(mut lease) = self.0.execution_lease.lock()
+        {
+            lease.take();
+        }
         let _ = self.0.events.send(event);
     }
     pub(super) async fn receive(&self) -> Option<String> {
-        self.0.commands.lock().await.recv().await
+        let message = self.0.commands.lock().await.recv().await?;
+        let starts_turn = serde_json::from_str::<serde_json::Value>(&message)
+            .ok()
+            .is_some_and(|wire| wire.get("say").is_some() || wire["compact"] == true);
+        if starts_turn && let Some(root) = &self.0.execution_root {
+            let result = (|| {
+                let mut lease = self
+                    .0
+                    .execution_lease
+                    .lock()
+                    .map_err(|_| "Conversation execution lock failed".to_string())?;
+                if lease.is_none() {
+                    *lease = Some(acquire_execution_lease(root, &self.0.stopped)?);
+                }
+                Ok::<_, String>(())
+            })();
+            if let Err(message) = result {
+                self.emit(serde_json::json!({"event":"error", "message":message}));
+                return None;
+            }
+        }
+        Some(message)
     }
     pub(super) async fn exchange(
         &self,
@@ -301,7 +364,6 @@ impl Worker {
         fresh: bool,
         history: Option<HistorySnapshot>,
     ) -> Result<Self, String> {
-        let backend = backends::Backend::from_preferences(&prefs)?;
         let history_path = folder
             .as_ref()
             .map(|folder| folder.join(".auris-conversation.json"));
@@ -310,6 +372,33 @@ impl Worker {
         {
             return Err("The conversation snapshot belongs to another project".into());
         }
+        Self::spawn_at(prefs, history_path, fresh, history, None)
+    }
+
+    /// Resume exactly the validated memory selected by the host, including an unsaved
+    /// document's private recovery conversation. No provider session identifier is required.
+    pub fn spawn_conversation(
+        prefs: auris_session::AgentPreferences,
+        history: HistorySnapshot,
+    ) -> Result<Self, String> {
+        let execution_root = conversation_execution_root(history.path());
+        Self::spawn_at(
+            prefs,
+            Some(history.path().to_path_buf()),
+            false,
+            Some(history),
+            execution_root,
+        )
+    }
+
+    fn spawn_at(
+        prefs: auris_session::AgentPreferences,
+        history_path: Option<PathBuf>,
+        fresh: bool,
+        history: Option<HistorySnapshot>,
+        execution_root: Option<PathBuf>,
+    ) -> Result<Self, String> {
+        let backend = backends::Backend::from_preferences(&prefs)?;
         let (commands, incoming) = async_mpsc::unbounded_channel();
         let (events_out, events) = mpsc::channel();
         let stopped = Arc::new(AtomicBool::new(false));
@@ -321,6 +410,8 @@ impl Worker {
             tools: Mutex::new(()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
+            execution_root,
+            execution_lease: std::sync::Mutex::new(None),
         }));
         let (cancel, cancelled) = oneshot::channel();
         std::thread::Builder::new()
@@ -406,6 +497,8 @@ pub(crate) fn test_bridge() -> (
             tools: Mutex::new(()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
+            execution_root: None,
+            execution_lease: std::sync::Mutex::new(None),
         })),
         commands,
         receiver,
@@ -541,6 +634,50 @@ mod tests {
             }
             assert_ne!(value["event"], "ended", "worker ended before {event}");
         }
+    }
+
+    #[tokio::test]
+    async fn project_turns_are_exclusive_but_idle_conversations_release_the_lease() {
+        let root = tempfile::tempdir().unwrap();
+        let (mut first, send_first, _first_events) = test_bridge();
+        let (mut second, send_second, second_events) = test_bridge();
+        Arc::get_mut(&mut first.0).unwrap().execution_root = Some(root.path().to_path_buf());
+        Arc::get_mut(&mut second.0).unwrap().execution_root = Some(root.path().to_path_buf());
+        send_first.send(r#"{"say":"First turn"}"#.into()).unwrap();
+        assert!(first.receive().await.is_some());
+        first.emit(serde_json::json!({"event":"compacted", "manual":false}));
+        send_second
+            .send(r#"{"say":"Concurrent turn"}"#.into())
+            .unwrap();
+        assert!(second.receive().await.is_none());
+        assert!(
+            second_events.recv().unwrap()["message"]
+                .as_str()
+                .unwrap()
+                .contains("Another conversation")
+        );
+        first.emit(serde_json::json!({"event":"answer", "text":"Complete"}));
+        send_second.send(r#"{"say":"Next turn"}"#.into()).unwrap();
+        assert!(second.receive().await.is_some());
+        second.emit(serde_json::json!({"event":"ended"}));
+        send_first.send(r#"{"compact":true}"#.into()).unwrap();
+        assert!(first.receive().await.is_some());
+        first.emit(serde_json::json!({"event":"compacted", "manual":true}));
+        assert!(acquire_execution_lease(root.path(), &AtomicBool::new(false)).is_ok());
+    }
+
+    #[test]
+    fn conversation_execution_scope_is_the_project_store_not_its_parent() {
+        let root = tempfile::tempdir().unwrap();
+        let store = root.path().join(".auris/agent/conversations");
+        assert_eq!(
+            conversation_execution_root(&store.join("first/memory.json")),
+            Some(store)
+        );
+        assert_eq!(
+            conversation_execution_root(&root.path().join(".auris-conversation.json")),
+            Some(root.path().to_path_buf())
+        );
     }
 
     #[test]
@@ -807,6 +944,8 @@ mod tests {
             tools: Mutex::new(()),
             vision: AtomicBool::new(true),
             visual: std::sync::Mutex::new(None),
+            execution_root: None,
+            execution_lease: std::sync::Mutex::new(None),
         }));
         let scope = VisualTurn::new(Some(bridge.clone()));
         for revision in 1..=3 {

@@ -1919,6 +1919,7 @@ fn selection_with_primary(clips: &mut BTreeSet<ClipId>, primary: Option<ClipId>)
 
 impl Drop for AurisApp {
     fn drop(&mut self) {
+        let _ = self.flush_conversation_storage();
         if let Some(cancelled) = self.plugin_discovery_cancel.take() {
             cancelled.store(true, Ordering::Relaxed);
         }
@@ -1940,6 +1941,15 @@ impl Drop for AurisApp {
 impl AurisApp {
     /// Builds the application, starting audio and opening an empty document.
     pub fn new(cx: &mut Context<Self>) -> Self {
+        cx.on_app_quit(|this, cx| {
+            let complete = this.flush_conversation_storage();
+            cx.background_executor().spawn(async move {
+                if let Some(complete) = complete {
+                    let _ = complete.recv_timeout(std::time::Duration::from_millis(95));
+                }
+            })
+        })
+        .detach();
         let settings = Settings::load();
         let language = settings.language();
         let input = InputSettings::load();

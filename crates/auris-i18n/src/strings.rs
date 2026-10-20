@@ -2015,12 +2015,34 @@ new のオプション
     EditExternalChanges { en: "external changes", ja: "外部からの変更" }
     AgentSaveFirst { en: "Save this project before sending it to the agent.", ja: "エージェントに送る前にプロジェクトを保存してください。" }
     AgentNewConversation { en: "New conversation", ja: "新しい会話" }
-    AgentNewConversationTitle { en: "Start a new conversation?", ja: "新しい会話を始めますか？" }
-    AgentNewConversationBody {
-        en: "The current Agent conversation for this project will be permanently deleted, and any running Agent work will stop. The project and its undo history will not change.",
-        ja: "このプロジェクトの現在のエージェント会話を完全に削除し、実行中の作業も停止します。プロジェクトとUndo履歴は変更されません。"
-    }
-    AgentNewConversationConfirm { en: "Delete history and start", ja: "履歴を削除して開始" }
+    AgentConversations { en: "Conversations", ja: "会話一覧" }
+    AgentEarlierMessages { en: "Load earlier messages", ja: "以前のメッセージを読み込む" }
+    AgentBackToConversation { en: "Back to conversation", ja: "会話に戻る" }
+    AgentSearchConversations { en: "Search conversation titles", ja: "会話名を検索" }
+    AgentArchivedConversations { en: "Archived", ja: "アーカイブ済み" }
+    AgentArchiveConversation { en: "Archive", ja: "アーカイブ" }
+    AgentRestoreConversation { en: "Restore", ja: "一覧に戻す" }
+    AgentRenameConversation { en: "Rename conversation", ja: "会話名の変更" }
+    AgentDeleteConversation { en: "Delete…", ja: "削除…" }
+    AgentDeleteConversationTitle { en: "Delete “{name}”?", ja: "「{name}」を削除しますか？" }
+    AgentDeleteConversationBody { en: "This conversation's history and draft will be permanently deleted. Music already created and the project's undo history will remain.", ja: "この会話の履歴と下書きを完全に削除します。作成済みの曲とプロジェクトのUndo履歴は残ります。" }
+    AgentUntitledConversation { en: "Untitled conversation", ja: "新しい会話" }
+    AgentConversationActions { en: "Conversation actions", ja: "会話の操作" }
+    AgentNoConversations { en: "No conversations here. Start a new conversation.", ja: "会話はありません。「新しい会話」から始められます。" }
+    AgentNoMatchingConversations { en: "No matching conversation titles.", ja: "一致する会話名はありません。" }
+    AgentConversationsLoading { en: "Loading conversations…", ja: "会話を読み込み中…" }
+    AgentConversationRetry { en: "Retry", ja: "再試行" }
+    AgentReloadConversation { en: "Reload history…", ja: "履歴を再読み込み…" }
+    AgentReloadConversationTitle { en: "Reload this conversation?", ja: "会話を再読み込みしますか？" }
+    AgentReloadConversationBody { en: "The saved history will replace messages this window could not save. Your unsent draft and the current music will be kept.", ja: "このウィンドウで保存できなかったメッセージを、保存済みの履歴で置き換えます。送信前の下書きと現在の曲は残ります。" }
+    AgentReloadConversationConfirm { en: "Reload history", ja: "履歴を再読み込み" }
+    AgentConversationInterrupted { en: "This turn was interrupted. Check the current project before continuing.", ja: "この応答は中断されました。続ける前に現在のプロジェクトを確認してください。" }
+    AgentStopAndResumeConversation { en: "Stop current work and resume this conversation", ja: "現在の作業を停止して、この会話を再開" }
+    AgentConversationYou { en: "You", ja: "あなた" }
+    AgentConversationNow { en: "Just now", ja: "たった今" }
+    AgentConversationMinutes { en: "{n} min ago", ja: "{n}分前" }
+    AgentConversationHours { en: "{n} hr ago", ja: "{n}時間前" }
+    AgentConversationDays { en: "{n} days ago", ja: "{n}日前" }
     AgentStop { en: "Stop", ja: "停止" }
     AgentSend { en: "Send", ja: "送信" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }

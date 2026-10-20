@@ -22,6 +22,13 @@ use super::timeline::progression_target;
 pub enum MenuCommand {
     /// Copies the Markdown source of the message captured when its menu opened.
     CopyAgentMarkdown(String),
+    /// A command scoped to the conversation identified when the menu opened.
+    AgentConversation {
+        /// Stable conversation identity.
+        id: String,
+        /// Rename, archive or delete.
+        action: String,
+    },
     /// Changes the piano roll's grid without changing the arrangement or document.
     PianoRollGrid(auris_session::PianoRollGrid),
     /// Selects relative or absolute positioning for note drags.
@@ -849,6 +856,9 @@ impl AurisApp {
         match command {
             MenuCommand::CopyAgentMarkdown(text) => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+            }
+            MenuCommand::AgentConversation { id, action } => {
+                self.conversation_menu_command(id, &action, cx)
             }
             MenuCommand::PianoRollGrid(grid) => {
                 self.settings.piano_roll_grid = grid;

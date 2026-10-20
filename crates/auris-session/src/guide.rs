@@ -9,6 +9,23 @@
 //! each crate's own front page explains what that crate is for, and this one explains why the
 //! boundaries between them are where they are.
 //!
+//! # Agent conversations
+//!
+//! [`crate::conversations::ConversationStore`] manages project-local conversations independently
+//! of the score. Creating, renaming, archiving, deleting or opening a conversation neither changes
+//! the music nor records an Undo step. The desktop owns navigation and focus; the agent library
+//! owns bounded model memory and provider execution. Readable transcripts and composer drafts
+//! survive model-memory compaction. Resuming a conversation continues against the current score,
+//! never the score that existed when a historical message was written.
+//!
+//! Storage runs on background threads. Stable locks serialize metadata edits, transcript revisions
+//! reject stale windows, and runtime memory generation tombstones prevent deleted conversations
+//! from reappearing after late worker writes. Browsing a different conversation does not detach
+//! the running worker or transfer its approvals. A different conversation becomes executable only
+//! after the current worker is stopped. A project-wide process lease prevents simultaneous turns
+//! in different windows and is released between turns. Save As copies storage after cancellation;
+//! it never transfers live worker channels to a different document.
+//!
 //! # Track overview
 //!
 //! [`crate::Session::watch_track_overview`] enables simultaneous observation of the tracks.

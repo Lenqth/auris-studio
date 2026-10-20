@@ -45,6 +45,7 @@
 pub mod agent_policy;
 pub mod audio_inspection;
 pub mod audio_review;
+pub mod conversations;
 mod export_inspection;
 pub mod live_agent;
 pub use export_inspection::{ExportInspection, inspect_export};
