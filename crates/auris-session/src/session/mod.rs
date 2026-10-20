@@ -127,6 +127,7 @@ pub use readiness::{PlaybackReadiness, PlaybackState};
 pub use recognition::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
     ClipInstrumentAnalysis, ClipMixtureAnalysis, analyze_audio_file, analyze_instrument_file,
+    transcribe_piano_file,
 };
 pub use rhythm::{RhythmGrid, RhythmRow};
 pub use singer::{

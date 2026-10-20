@@ -75,6 +75,7 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.create_piano_cover",
     "edit_project.read_mixer_graph",
     "edit_project.connect_mixer",
     "edit_project.disconnect_mixer",

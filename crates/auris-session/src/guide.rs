@@ -248,6 +248,14 @@ pub mod architecture {
     //! bounded attachment bytes. This is explicitly not listening or note transcription.
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
+    //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
+    //! attachment IDs. `create_piano_cover` resolves only these IDs, transcribes on a worker
+    //! using the bundled Apache-2.0 Basic Pitch ONNX model, and asks the same live permission
+    //! gate to apply the exact note draft. [`Session::create_piano_cover`](crate::Session::create_piano_cover)
+    //! maps source seconds through the current tempo map and adds a physical-piano track/clip
+    //! as one undo transaction. No source file path, model download or saved-project edit is
+    //! exposed to the model. Notes remain estimates; this is transcription, not listening.
+    //! Native audio API turns retain the same scoped references alongside their audio content.
     //! If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than

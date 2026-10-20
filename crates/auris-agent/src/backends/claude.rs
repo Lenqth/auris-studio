@@ -743,7 +743,7 @@ mod tests {
 
     /// A scripted Claude peer uses the real MCP endpoint, permission gate and document history.
     #[tokio::test]
-    async fn claude_mcp_edits_an_unsaved_song_and_respects_denied_permissions() {
+    async fn claude_mcp_transcribes_an_attachment_and_respects_denied_permissions() {
         for allowed in [true, false] {
             tokio::time::timeout(Duration::from_secs(10), async {
                 let (bridge, commands, events) = crate::worker::test_bridge();
@@ -767,12 +767,13 @@ mod tests {
                     assert_eq!(prompt["type"], "user");
                     assert_eq!(prompt["client_composed"], true);
                     assert!(prompt["message"]["content"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
+                    let metadata: Value = serde_json::from_str(prompt["message"]["content"][1]["text"].as_str().unwrap().lines().nth(1).unwrap()).unwrap();
                     let client = reqwest::Client::new();
                     let request = |value: Value| client.post(&mcp.url).bearer_auth(&mcp.token).header("Accept", "application/json, text/event-stream").json(&value);
                     let init = request(json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"claude-fixture","version":"1"}}})).send().await.unwrap();
                     let session = init.headers().get("mcp-session-id").unwrap().to_str().unwrap().to_owned();
                     request(json!({"jsonrpc":"2.0","method":"notifications/initialized"})).header("mcp-session-id", &session).send().await.unwrap();
-                    let response = request(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_track","arguments":{"name":"Claude lead","kind":"instrument"}}})).header("mcp-session-id", &session).send().await.unwrap().text().await.unwrap();
+                    let response = request(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_piano_cover","arguments":{"attachment":metadata["attachment_id"],"name":"Claude lead"}}})).header("mcp-session-id", &session).send().await.unwrap().text().await.unwrap();
                     let result: Value = serde_json::from_str(&response).ok().or_else(|| response.lines().filter_map(|line| line.strip_prefix("data: ")).find_map(|line| serde_json::from_str(line).ok())).unwrap();
                     assert_eq!(result["result"]["isError"] == true, !allowed, "{result}");
                     reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Finished"})).await;
@@ -875,7 +876,14 @@ mod tests {
                         .unwrap();
                 }
                 "edit" => {
-                    assert_eq!(event["command"]["action"], "add_track");
+                    assert_eq!(event["command"]["action"], "create_piano_cover");
+                    assert!(
+                        event["command"]["transcription"]["notes"]
+                            .as_array()
+                            .unwrap()
+                            .len()
+                            >= 3
+                    );
                     let result = session
                         .agent_command(serde_json::from_value(event["command"].clone()).unwrap());
                     worker.send(&json!({"event":"edit_result","ok":result.is_ok(),"text":result.unwrap_or_else(|error| error)}).to_string()).unwrap();

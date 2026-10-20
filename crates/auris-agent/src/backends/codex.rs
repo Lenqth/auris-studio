@@ -590,7 +590,7 @@ mod tests {
 
     /// Real MCP HTTP traffic and real session commands, with a scripted Codex RPC peer.
     #[tokio::test]
-    async fn codex_mcp_edits_an_unsaved_song_and_undo_restores_it() {
+    async fn codex_mcp_transcribes_an_attachment_and_undo_restores_the_unsaved_song() {
         tokio::time::timeout(Duration::from_secs(10), async {
             let (bridge, commands, events) = crate::worker::test_bridge();
             let mcp = LiveMcp::start(ToolHost::new(bridge.clone())).await.unwrap();
@@ -614,10 +614,13 @@ mod tests {
                 reply(&mut writer, json!({"id":request["id"],"result":{"thread":{"id":"thread"}}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "mcpServerStatus/list");
-                reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"add_track":{}}}]}})).await;
+                reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"create_piano_cover":{}}}]}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "turn/start");
                 assert!(request["params"]["input"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
+                let metadata: Value = serde_json::from_str(request["params"]["input"][1]["text"].as_str().unwrap().lines().nth(1).unwrap()).unwrap();
+                // Replacing the user's file after submission must not change the retained source.
+                std::fs::write(&audio, b"replaced after attachment").unwrap();
                 reply(&mut writer, json!({"id":request["id"],"result":{"turn":{"id":"turn"}}})).await;
 
                 let client = reqwest::Client::new();
@@ -628,7 +631,7 @@ mod tests {
                 let session = init.headers().get("mcp-session-id").unwrap().to_str().unwrap().to_owned();
                 let notify = request(json!({"jsonrpc":"2.0","method":"notifications/initialized"})).header("mcp-session-id", &session).send().await.unwrap();
                 assert!(notify.status().is_success());
-                let response = request(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_track","arguments":{"name":"Codex lead","kind":"instrument"}}})).header("mcp-session-id", &session).send().await.unwrap();
+                let response = request(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_piano_cover","arguments":{"attachment":metadata["attachment_id"],"name":"Codex lead"}}})).header("mcp-session-id", &session).send().await.unwrap();
                 let status = response.status();
                 let body = response.text().await.unwrap();
                 // Legacy negotiated sessions return SSE, while newer clients may use JSON.
@@ -662,6 +665,7 @@ mod tests {
                         "edit" => {
                             edits += 1;
                             let command = serde_json::from_value(event["command"].clone()).unwrap();
+                            assert!(event["command"]["transcription"]["notes"].as_array().unwrap().len() >= 3);
                             let text = session.agent_command(command).unwrap();
                             commands.send(json!({"event":"edit_result","ok":true,"text":text}).to_string()).unwrap();
                         }
@@ -674,6 +678,8 @@ mod tests {
                 }
                 assert_eq!((permissions, edits), (1, 1));
                 assert!(session.project().tracks.iter().any(|track| track.name == "Codex lead"));
+                let piano = session.project().tracks.iter().find(|track|track.name == "Codex lead").unwrap();
+                assert_eq!(piano.kind.as_instrument().unwrap().instrument_id, "auris.physical.piano");
                 assert!(session.path().is_none());
                 assert!(session.is_dirty());
                 session.undo();

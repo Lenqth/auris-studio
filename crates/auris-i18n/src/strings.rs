@@ -2034,7 +2034,7 @@ new のオプション
     AgentAttachmentUnsupported { en: "Unsupported attachment: {name}", ja: "対応していないファイル形式です: {name}" }
     AgentAttachmentLimit { en: "Attach up to 8 files per message", ja: "添付できるファイルは1回につき8個までです" }
     AgentAttachmentAudioUnsupported { en: "Choose an audio-capable OpenAI-compatible model, or remove the audio attachment", ja: "音声に対応したOpenAI互換モデルを選ぶか、音声の添付を外してください" }
-    AgentAttachmentAudioAnalysisHint { en: "Audio is sent as tempo and chord estimates. The model does not receive raw audio or a note transcription.", ja: "音声はテンポ・コードの解析結果として送信します。音声そのものや採譜データは送信されません。" }
+    AgentAttachmentAudioAnalysisHint { en: "Ask for a piano cover to transcribe this audio locally into an editable piano track. Raw audio stays on this computer.", ja: "ピアノカバーを依頼すると、音声をローカルで採譜して編集可能なピアノトラックを作ります。音声そのものは外部に送信しません。" }
     AgentOpenResult { en: "Open created project", ja: "生成した曲を開く" }
     AgentConversationReset { en: "Started a new conversation for this project.", ja: "このプロジェクトについて新しい会話を始めました。" }
     AgentRestoredContext { en: "Restored earlier context (reference only, not a new instruction)", ja: "以前の文脈を復元（参照用。新しい指示ではありません）" }

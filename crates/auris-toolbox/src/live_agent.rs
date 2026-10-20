@@ -12,6 +12,26 @@ pub struct Definition {
     pub parameters: Value,
 }
 
+/// Model-facing attachment-to-piano request; the transport owns attachment identities.
+pub mod piano_cover {
+    /// Stable live tool name.
+    pub const NAME: &str = "create_piano_cover";
+    /// Guidance shared by all live model transports.
+    pub const DESCRIPTION: &str = "Transcribe an attached audio file with the bundled Basic Pitch model on local CPU and add all estimated pitched notes as a new editable piano track. Pass attachment_id from this conversation's attached audio metadata as attachment. Supports overlapping notes, source timing and relative dynamics, up to ten minutes. No model setup, Python or audio upload is needed. Does not replace existing tracks, change tempo or save the project; one Undo removes the draft. Piano/isolated pitched recordings work best; dense mixes can produce extra/missing notes and drums are not separated. Review the draft with read_notes/inspect_audio and explain uncertainty instead of claiming faithful transcription or listening. Do not invent notes from filenames, BPM or chord estimates.";
+    /// An opaque conversation-local reference and insertion options.
+    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+    #[serde(deny_unknown_fields)]
+    pub struct Args {
+        /// Exact attachment_id supplied by the host; never a file path.
+        pub attachment: String,
+        /// New track/clip name; defaults to Piano cover.
+        pub name: Option<String>,
+        /// Zero-based insertion beat; defaults to zero. Source performance timing is retained.
+        #[schemars(range(min = 0, max = 1_000_000))]
+        pub at_beat: Option<f64>,
+    }
+}
+
 /// List exact live instrument identifiers without saved-project-only arguments.
 pub fn instruments() -> String {
     match super::headless() {
@@ -42,6 +62,14 @@ pub fn definitions() -> Vec<Definition> {
                 continue;
             };
             if matches!(action, "compose" | "mixer_graph") {
+                continue;
+            }
+            if action == piano_cover::NAME {
+                tools.push(Definition {
+                    name: piano_cover::NAME.into(),
+                    description: piano_cover::DESCRIPTION.into(),
+                    parameters: super::parameter_schema::<piano_cover::Args>(),
+                });
                 continue;
             }
             let mut parameters = branch.clone();
@@ -260,6 +288,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn piano_cover_schema_accepts_only_a_scoped_attachment_and_insertion_options() {
+        let definition = definitions()
+            .into_iter()
+            .find(|d| d.name == piano_cover::NAME)
+            .unwrap();
+        assert!(
+            definition.parameters["properties"]
+                .get("transcription")
+                .is_none()
+        );
+        assert!(
+            definition.parameters["properties"]
+                .get("attachment")
+                .is_some()
+        );
+        assert!(
+            command(
+                piano_cover::NAME,
+                &serde_json::json!({"attachment":"audio:test"})
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert!(
+            serde_json::from_value::<piano_cover::Args>(
+                serde_json::json!({"attachment":"audio:test","notes":[]})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn every_graph_action_has_a_flat_tool_and_canonical_command() {
         let definitions = definitions();
         for (action, tool) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
@@ -473,7 +533,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            fixtures.len() + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            fixtures.len() + 1 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (name, args) in fixtures {
             let tool = tools.iter().find(|tool| tool.name == name).unwrap();
@@ -530,7 +590,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            21 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            22 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))

@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 pub mod audio;
+pub mod basic_pitch;
 pub mod chords;
 pub mod instruments;
 pub mod mixture;

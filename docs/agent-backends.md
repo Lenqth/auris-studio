@@ -34,13 +34,28 @@ audio files are analyzed locally and sent as text measurements: duration,
 constant-tempo alternatives, estimated beats and major/minor chord candidates.
 Long reports sample up to 256 beats and 256 chord windows across the recording,
 with source timestamps and sampling strides. Analysis runs in the background
-without editing or importing into the song. A hint beside the attachments explains
-that this route sends analysis, not raw audio. It does not recover lyrics, melody
-or a polyphonic score, so a faithful piano cover still needs note transcription
-or a supplied MIDI/score.
+without editing or importing into the song. Raw audio stays local on these routes.
+
+To create a piano cover, attach the recording and ask, for example, “Transcribe
+this audio and make a piano cover.” The agent's `create_piano_cover` tool runs
+the bundled Apache-2.0 Basic Pitch model locally and adds an editable physical-piano
+track with overlapping notes, source timing and estimated relative velocities.
+No Python, model setup or separate audio-model connection is needed. The draft
+preserves the project's tempo and existing tracks, remains unsaved, and one Undo
+removes it. Review extra/missing notes, timing and dynamics before export.
+
+Transcription accepts up to ten minutes and eight channels. Piano or isolated
+pitched recordings work best; dense mixes can contain errors and percussion is
+not separated. This is a note draft, not guaranteed faithful sheet music or a
+two-hand playable arrangement. See [music analysis](music-analysis.md).
+
+Audio references are immutable snapshots scoped to the conversation, retained
+within eight files/25 MiB in aggregate. Attaching more files can expire older
+references; reattach a file if the agent reports that its reference expired.
 
 For native audio input, use an OpenAI-compatible model implementing `input_audio`.
 The panel keeps the draft available when the selected rig provider cannot send audio.
+Native API turns can use the same attachment-to-piano tool.
 
 ## Codex setup
 

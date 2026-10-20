@@ -54,8 +54,8 @@ pub struct AudioChordSegment {
     pub reading: ChordReading,
 }
 
-/// One isolated-voice note hypothesis before musical quantization.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// One note hypothesis in source seconds before musical quantization.
+#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct TranscribedNote {
     /// MIDI pitch, 0..=127.
     pub pitch: u8,

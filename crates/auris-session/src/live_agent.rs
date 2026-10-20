@@ -19,6 +19,15 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Apply an already computed polyphonic draft as a new editable piano track.
+    CreatePianoCover {
+        /// Validated local transcription; supplied by the attachment host, never a file path.
+        transcription: crate::PianoTranscription,
+        /// New track and clip name.
+        name: String,
+        /// Insertion position in zero-based quarter-note beats.
+        at_beat: f64,
+    },
     /// Read or edit the live mixer DAG through stable node identities.
     MixerGraph {
         /// The validated graph operation; persistence belongs to the frontend.
@@ -326,6 +335,22 @@ impl Session {
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::CreatePianoCover {
+                transcription,
+                name,
+                at_beat,
+            } => {
+                if !at_beat.is_finite() || !(0.0..=1_000_000.0).contains(&at_beat) {
+                    return Err("at_beat must be finite and within 0..1000000".into());
+                }
+                let count = transcription.notes.len();
+                let (track, clip) = self
+                    .create_piano_cover(&transcription, Ticks::from_beats(at_beat), &name)
+                    .map_err(error)?;
+                Ok(serde_json::json!({"track":track.0,"clip":clip.0,"notes":count,
+                    "model_sha256":transcription.model_sha256,"source_seconds":transcription.seconds,
+                    "status":"Added an editable piano transcription draft. Review missed/extra notes and timing. Changes are unsaved and undoable; use inspect_audio/read_notes to review."}).to_string())
+            }
             Command::MixerGraph { operation } => self
                 .apply_mixer_graph(&operation)
                 .map(|report| report.to_string()),

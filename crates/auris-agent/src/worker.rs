@@ -169,6 +169,7 @@ struct Channels {
     tools: Mutex<()>,
     vision: AtomicBool,
     visual: std::sync::Mutex<Option<Message>>,
+    audio_references: std::sync::Mutex<attachments::AudioReferences>,
 }
 
 pub(super) struct VisualTurn(Option<Bridge>);
@@ -189,6 +190,25 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(super) fn retain_audio(
+        &self,
+        file: Arc<tempfile::NamedTempFile>,
+        bytes: u64,
+    ) -> Result<String, String> {
+        self.0
+            .audio_references
+            .lock()
+            .map_err(|_| "Audio reference storage failed".to_string())?
+            .insert(file, bytes)
+    }
+
+    pub(super) fn audio_reference(&self, id: &str) -> Result<Arc<tempfile::NamedTempFile>, String> {
+        self.0
+            .audio_references
+            .lock()
+            .map_err(|_| "Audio reference storage failed".to_string())?
+            .get(id)
+    }
     pub(super) fn analysis_control(&self) -> auris_session::AnalysisControl {
         auris_session::AnalysisControl::cancelled_by(self.0.stopped.clone())
     }
@@ -325,6 +345,7 @@ impl Worker {
             tools: Mutex::new(()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
+            audio_references: std::sync::Mutex::new(Default::default()),
         }));
         let (cancel, cancelled) = oneshot::channel();
         std::thread::Builder::new()
@@ -410,6 +431,7 @@ pub(crate) fn test_bridge() -> (
             tools: Mutex::new(()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
+            audio_references: std::sync::Mutex::new(Default::default()),
         })),
         commands,
         receiver,
@@ -811,6 +833,7 @@ mod tests {
             tools: Mutex::new(()),
             vision: AtomicBool::new(true),
             visual: std::sync::Mutex::new(None),
+            audio_references: std::sync::Mutex::new(Default::default()),
         }));
         let scope = VisualTurn::new(Some(bridge.clone()));
         for revision in 1..=3 {
