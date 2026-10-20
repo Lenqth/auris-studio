@@ -68,9 +68,11 @@ response. Default effort keeps the CLI default; None and Minimal map to Low.
 
 Claude Code connects to the same authenticated live MCP endpoint as Codex, so it
 can edit unsaved songs through the normal permission and Undo paths. Each worker
-gets a private working directory and MCP configuration, with builtin tools,
-inherited settings, hooks, plugins, slash commands and Chrome disabled. Only
-Auris MCP tools are allowed. The bearer token stays in the temporary
+gets private MCP configuration, with inherited settings, hooks, plugins, slash
+commands and Chrome disabled. Its explicit native shell and file tools pass
+through the desktop's approval policy. Saved conversations use the project folder
+as their working directory; unsaved conversations use disposable scratch space.
+The bearer token stays in the temporary
 configuration file, which is removed when the worker ends. CLI session
 persistence is disabled; Auris stores the conversation and restores its text
 when a worker is replaced. Stop revokes tools, interrupts the turn and terminates
@@ -105,9 +107,12 @@ every call. Its listener and child process are revoked when the worker ends.
 Stop requests interrupt the Codex turn before the
 process is terminated, while the window immediately stops accepting old edits.
 
-The child uses a private working directory. Auris disables inherited MCP servers,
-plugins, apps, hooks, shell execution and subagents for this invocation, and checks
-the effective MCP catalog before sending a prompt. User configuration files are
+CLI configuration uses a private directory, while native tools work in the saved
+project folder or disposable scratch space for an unsaved conversation. Auris
+disables inherited MCP servers, plugins, apps, hooks and subagents for this
+invocation, and checks the effective MCP catalog before sending a prompt. Native
+shell and file operations use the same approval policy; their external effects
+are not covered by Auris Undo. User configuration files are
 not edited. Unexpected server-side requests are refused. Process arguments never
 include the live MCP bearer token.
 

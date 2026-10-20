@@ -97,14 +97,12 @@ fn command(
     }
     for setting in [
         "model_provider=\"openai\"",
-        "features.shell_tool=false",
+        "approvals_reviewer=\"user\"",
         "features.shell_snapshot=false",
-        "features.unified_exec=false",
         "features.hooks=false",
         "features.plugins=false",
         "features.apps=false",
         "features.multi_agent=false",
-        "features.apply_patch_freeform=false",
         "features.code_mode=false",
         "features.remote_plugin=false",
         "features.memories=false",
@@ -114,6 +112,10 @@ fn command(
         "project_doc_max_bytes=0",
     ] {
         command.args(["-c", setting]);
+    }
+    // Model discovery and independent approval review have no native execution tools.
+    for feature in ["shell_tool", "unified_exec", "apply_patch_freeform"] {
+        command.args(["-c", &format!("features.{feature}={}", token.is_some())]);
     }
     for setting in overrides {
         command.args(["-c", setting]);
@@ -236,7 +238,7 @@ impl Rpc {
 
     async fn reject_request(&mut self, message: &Value) -> Result<(), String> {
         if message.get("id").is_some() && message.get("method").is_some() {
-            self.send(json!({"id":message["id"],"error":{"code":-32601,"message":"Auris permits document operations through its live MCP tools only"}})).await?;
+            self.send(json!({"id":message["id"],"error":{"code":-32601,"message":"Unsupported or out-of-turn Codex request"}})).await?;
         }
         Ok(())
     }
@@ -263,6 +265,18 @@ impl Rpc {
                 } else {
                     Ok(message["result"].clone())
                 };
+            }
+            if method == "turn/start"
+                && message.get("id").is_some()
+                && message.get("method").is_some()
+            {
+                // Approval can precede the turn/start response. Handle it only after the
+                // returned turn ID is available for conversation-scope validation.
+                if self.deferred.len() >= 1024 {
+                    return Err("Codex sent too many pending requests".into());
+                }
+                self.deferred.push_back(message);
+                continue;
             }
             self.reject_request(&message).await?;
             if message.get("method").is_some() && message.get("id").is_none() {
@@ -306,6 +320,44 @@ fn require_chatgpt(account: &Value) -> Result<(), String> {
     }
 }
 
+pub(crate) async fn review(
+    prefs: &auris_session::AgentPreferences,
+    prompt: &str,
+) -> Result<String, String> {
+    let cwd = tempfile::tempdir().map_err(|error| error.to_string())?;
+    let mut rpc = Rpc::connect(prefs, cwd.path(), None).await?;
+    let result = async {
+        let thread = rpc.request("thread/start", json!({"model":prefs.model,"cwd":cwd.path(),"ephemeral":true,
+            "sandbox":"read-only","approvalPolicy":"never","baseInstructions":crate::approval_review::INSTRUCTIONS})).await?;
+        let id = thread["thread"]["id"].as_str().ok_or("Missing reviewer thread")?.to_owned();
+        rpc.thread = Some(id.clone());
+        let turn = rpc.request("turn/start", json!({"threadId":id,"input":[{"type":"text","text":prompt}]})).await?;
+        rpc.turn = turn["turn"]["id"].as_str().map(str::to_owned);
+        let mut answer = String::new();
+        loop {
+            let message = match rpc.deferred.pop_front() { Some(message) => message, None => rpc.read().await? };
+            rpc.reject_request(&message).await?;
+            let params = &message["params"];
+            if params["threadId"].as_str().is_some_and(|thread| thread != id) { continue; }
+            match message["method"].as_str() {
+                Some("item/agentMessage/delta") => answer.push_str(params["delta"].as_str().unwrap_or_default()),
+                Some("item/completed") if params["item"]["type"] == "agentMessage" && answer.is_empty() =>
+                    answer = params["item"]["text"].as_str().unwrap_or_default().to_owned(),
+                Some("item/started") if !matches!(params["item"]["type"].as_str(), Some("reasoning" | "agentMessage" | "userMessage")) =>
+                    return Err("Approval reviewer attempted to use a tool".into()),
+                Some("turn/completed") => {
+                    rpc.turn = None;
+                    return if params["turn"]["status"] == "completed" { Ok(answer) } else { Err("Approval reviewer failed".into()) };
+                }
+                _ => {}
+            }
+            if answer.len() > 8192 { return Err("Approval review response was too large".into()); }
+        }
+    }.await;
+    rpc.stop().await;
+    result
+}
+
 pub(crate) async fn list_models(prefs: &auris_session::AgentPreferences) -> Result<String, String> {
     let cwd = tempfile::tempdir().map_err(|e| e.to_string())?;
     let mut rpc = Rpc::connect(prefs, cwd.path(), None).await?;
@@ -345,8 +397,11 @@ pub(crate) async fn run(
     history: Option<HistorySnapshot>,
     cancelled: oneshot::Receiver<()>,
 ) -> Result<(), String> {
-    // Use a private working directory so project configs/instructions cannot alter the runtime.
+    // Keep CLI configuration private; the model's working directory is the saved project.
     let working = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let cwd = super::native_project_directory(history_path.as_deref())
+        .unwrap_or(working.path())
+        .to_path_buf();
     let mcp = LiveMcp::start(ToolHost::new(bridge.clone())).await?;
     let mut cancelled = cancelled;
     let mut rpc = tokio::select! {
@@ -358,7 +413,7 @@ pub(crate) async fn run(
         biased;
         _ = &mut cancelled => Ok(()),
         _ = mcp.cancelled() => Err("Codex cancelled a pending live tool request. Inspect the document before starting another conversation".into()),
-        result = conversation(&mut rpc, prefs, bridge, &mcp, working.path(), HistoryInput { path: history_path, fresh, snapshot: history }) => result,
+        result = conversation(&mut rpc, prefs, bridge, &mcp, &cwd, HistoryInput { path: history_path, fresh, snapshot: history }) => result,
     };
     mcp.abort_calls();
     rpc.stop().await;
@@ -394,7 +449,7 @@ async fn conversation(
     if !preloaded {
         bridge.emit(json!({"event":"history","summary":memory.summary,"turns":memory.turns}));
     }
-    let thread = rpc.request("thread/start", json!({"model":prefs.model,"cwd":cwd,"ephemeral":true,"sandbox":"read-only","approvalPolicy":"on-request","baseInstructions":crate::preamble()})).await?;
+    let thread = rpc.request("thread/start", json!({"model":prefs.model,"cwd":cwd,"ephemeral":true,"sandbox":"read-only","approvalPolicy":"untrusted","baseInstructions":super::cli_preamble()})).await?;
     let thread_id = thread["thread"]["id"]
         .as_str()
         .ok_or("Codex did not return a thread ID")?
@@ -480,13 +535,40 @@ fn validate_servers(servers: &Value) -> Result<(), String> {
 
 async fn receive_turn(rpc: &mut Rpc, bridge: &Bridge, thread: &str) -> Result<String, String> {
     let mut answer = String::new();
+    let mut native_items = std::collections::HashMap::<String, Value>::new();
     loop {
         let message = match rpc.deferred.pop_front() {
             Some(message) => message,
             None => rpc.read().await?,
         };
-        rpc.reject_request(&message).await?;
         let params = &message["params"];
+        if message.get("id").is_some() && message.get("method").is_some() {
+            let operation = match message["method"].as_str() {
+                Some("item/commandExecution/requestApproval") => Some("cli_command"),
+                Some("item/fileChange/requestApproval") => Some("cli_file_change"),
+                _ => None,
+            };
+            if let Some(operation) = operation
+                && params["threadId"] == thread
+                && params["turnId"].as_str() == rpc.turn.as_deref()
+                && rpc.turn.is_some()
+            {
+                let _guard = bridge.tool_lock().await;
+                let item = params["itemId"]
+                    .as_str()
+                    .and_then(|id| native_items.get(id));
+                let result = crate::permissions::authorize(
+                    Some(bridge),
+                    operation,
+                    &json!({"backend":"codex","request":params,"item":item}).to_string(),
+                )
+                .await;
+                rpc.send(json!({"id":message["id"],"result":{"decision":if result.is_ok() { "accept" } else { "decline" }}})).await?;
+            } else {
+                rpc.reject_request(&message).await?;
+            }
+            continue;
+        }
         if params["threadId"].as_str().is_some_and(|id| id != thread) {
             continue;
         }
@@ -497,6 +579,36 @@ async fn receive_turn(rpc: &mut Rpc, bridge: &Bridge, thread: &str) -> Result<St
             continue;
         }
         match message["method"].as_str().unwrap_or_default() {
+            "item/started" | "item/completed"
+                if matches!(
+                    params["item"]["type"].as_str(),
+                    Some("commandExecution" | "fileChange")
+                ) =>
+            {
+                let item = &params["item"];
+                let tool = if item["type"] == "commandExecution" {
+                    "cli_command"
+                } else {
+                    "cli_file_change"
+                };
+                if message["method"] == "item/started" {
+                    if let Some(id) = item["id"].as_str() {
+                        native_items.insert(id.to_owned(), item.clone());
+                    }
+                    bridge.emit(json!({"event":"phase","phase":"tool"}));
+                    bridge
+                        .emit(json!({"event":"call","call_id":item["id"],"tool":tool,"args":item}));
+                } else {
+                    if let Some(id) = item["id"].as_str() {
+                        native_items.remove(id);
+                    }
+                    let text = item["aggregatedOutput"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| item.to_string());
+                    bridge.emit(json!({"event":"result","call_id":item["id"],"tool":tool,"ok":item["status"] == "completed" && item["exitCode"].as_i64().is_none_or(|code| code == 0),"text":text}));
+                }
+            }
             "item/agentMessage/delta" => {
                 let text = params["delta"].as_str().unwrap_or_default();
                 answer.push_str(text);
@@ -564,6 +676,33 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     #[test]
+    fn only_the_live_worker_enables_native_execution_tools() {
+        let cwd = tempfile::tempdir().unwrap();
+        let prefs = auris_session::AgentPreferences {
+            codex_path: if cfg!(windows) {
+                "C:/Tools/codex.exe"
+            } else {
+                "/usr/local/bin/codex"
+            }
+            .into(),
+            ..Default::default()
+        };
+        for token in [None, Some("private-token")] {
+            let command = command(&prefs, cwd.path(), &[], token).unwrap();
+            let args: Vec<_> = command
+                .as_std()
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            for feature in ["shell_tool", "unified_exec", "apply_patch_freeform"] {
+                assert!(args.contains(&format!("features.{feature}={}", token.is_some())));
+            }
+            assert!(args.contains(&"approvals_reviewer=\"user\"".into()));
+            assert!(!args.iter().any(|arg| arg.contains("private-token")));
+        }
+    }
+
+    #[test]
     fn subscription_backend_rejects_api_keys_and_signed_out_accounts() {
         assert!(require_chatgpt(&json!({"account":{"type":"chatgpt"}})).is_ok());
         assert!(require_chatgpt(&json!({"account":{"type":"apiKey"}})).is_err());
@@ -586,6 +725,49 @@ mod tests {
             .write_all(format!("{value}\n").as_bytes())
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_approvals_include_the_diff_and_reject_other_turns() {
+        for (allowed, stale) in [(true, false), (false, false), (true, true)] {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                let (bridge, commands, events) = crate::worker::test_bridge();
+                let (client, server) = tokio::io::duplex(32768);
+                let (reader, writer) = tokio::io::split(client);
+                let mut rpc = Rpc::transport(None, writer, reader);
+                rpc.turn = Some("turn".into());
+                let item = json!({"id":"edit-1","type":"fileChange","status":"inProgress","changes":[{"path":"export.py","diff":"+print('export')"}]});
+                let peer = async {
+                    let (reader, mut writer) = tokio::io::split(server);
+                    let mut lines = BufReader::new(reader).lines();
+                    reply(&mut writer, json!({"method":"item/started","params":{"threadId":"thread","turnId":"turn","item":item}})).await;
+                    reply(&mut writer, json!({"id":900,"method":"item/fileChange/requestApproval","params":{"threadId":"thread","turnId":if stale { "old" } else { "turn" },"itemId":"edit-1"}})).await;
+                    let response: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                    assert_eq!(response["id"], 900);
+                    if stale { assert!(response.get("error").is_some()); }
+                    else { assert_eq!(response["result"]["decision"], if allowed { "accept" } else { "decline" }); }
+                    reply(&mut writer, json!({"method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed"}}})).await;
+                };
+                let owner = async {
+                    if stale { return; }
+                    loop {
+                        match events.try_recv() {
+                            Ok(event) if event["event"] == "permission" => {
+                                assert_eq!(event["tool"], "cli_file_change");
+                                assert_eq!(event["args"]["item"], item);
+                                commands.send(json!({"event":"permission_result","id":event["id"],"ok":allowed,"reason":"fixture"}).to_string()).unwrap();
+                                break;
+                            }
+                            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => tokio::task::yield_now().await,
+                            Err(error) => panic!("{error}"),
+                        }
+                    }
+                };
+                let (result, (), ()) = tokio::join!(receive_turn(&mut rpc, &bridge, "thread"), peer, owner);
+                result.unwrap();
+                if stale { assert!(!events.try_iter().any(|event| event["event"] == "permission")); }
+            }).await.unwrap();
+        }
     }
 
     /// Real MCP HTTP traffic and real session commands, with a scripted Codex RPC peer.

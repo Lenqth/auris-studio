@@ -1,8 +1,36 @@
 //! Conversation runtimes. Provider-specific messages never cross the worker boundary.
 
 use crate::*;
+use std::path::Path;
 pub(super) mod claude;
 pub(super) mod codex;
+
+fn native_project_directory(history: Option<&Path>) -> Option<&Path> {
+    let history = history?;
+    if history.file_name()? == ".auris-conversation.json" {
+        return history.parent();
+    }
+    if history.file_name()? != "memory.json" {
+        return None;
+    }
+    // Only project-local conversation stores identify a saved project. Recovery stores
+    // remain private; unsaved conversations use the CLI's disposable working directory.
+    let mut directory = history.parent()?.parent()?;
+    for component in ["conversations", "agent", ".auris"] {
+        if directory.file_name()? != component {
+            return None;
+        }
+        directory = directory.parent()?;
+    }
+    Some(directory)
+}
+
+fn cli_preamble() -> String {
+    format!(
+        "{}\nNative shell and file tools are available for the user's external-file and scripting tasks. Edit the open song through Auris live MCP tools so unsaved changes and undo stay coherent. Never rewrite its .auris file behind the window. External file writes and shell effects are durable and are not covered by Auris Undo. Request approvals when needed; never work around a refusal. Use explicit persistent paths for requested deliverables; temporary working files are removed when this conversation ends.",
+        crate::preamble()
+    )
+}
 
 /// Replay completed text when a CLI worker replaces an ephemeral conversation.
 fn memory_context(memory: &memory::Memory) -> String {
@@ -73,5 +101,39 @@ impl Backend {
                 } => result,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_project_directory_uses_the_project_outside_conversation_storage() {
+        assert_eq!(
+            native_project_directory(Some(Path::new(
+                "Song/.auris/agent/conversations/id/memory.json"
+            ))),
+            Some(Path::new("Song"))
+        );
+    }
+
+    #[test]
+    fn native_project_directory_keeps_unsaved_recovery_storage_private() {
+        assert_eq!(
+            native_project_directory(Some(Path::new(
+                "config/agent-recovery/workspace/id/memory.json"
+            ))),
+            None
+        );
+    }
+
+    #[test]
+    fn native_project_directory_supports_legacy_history_and_unsaved_scratch() {
+        assert_eq!(
+            native_project_directory(Some(Path::new("Song/.auris-conversation.json"))),
+            Some(Path::new("Song"))
+        );
+        assert_eq!(native_project_directory(None), None);
     }
 }

@@ -1423,7 +1423,10 @@ verbatim, automatically or using Compact context. The text store has a final saf
 256 turns and one million characters; tool payloads and encoded audio are not retained. The current
 selection is sent afresh with each message. New conversation clears the saved text memory.
 
-The panel offers Read-only, Edit, Plan and Bypass modes, operation allow/deny rules,
-and confirmation before operations that require approval. See
+The panel offers Read-only, Edit, Plan, Auto review and Bypass modes, operation
+allow/deny rules, and confirmation before operations that require approval.
+Codex and Claude Code also provide native file and shell tools. Auto review uses
+a separate model conversation to review pending operations on the user's behalf,
+returning uncertain decisions to manual confirmation. See
 [Agent permissions and context compaction](agent-workflows.md#agent-permissions-and-context-compaction)
 for mode semantics and keyboard commands.

@@ -258,6 +258,14 @@ pub mod architecture {
     //! the application never reads or copies its credential files. The model catalogue probes
     //! available connections off the UI thread; selecting a model selects its route as one
     //! decision. API endpoint configuration is retained independently of that selection.
+    //! CLI backends also expose native shell and file tools. Their working directory is the
+    //! saved project folder, or disposable scratch space for an unsaved song. Native approvals
+    //! cross the desktop's policy gate as `cli_command`, `cli_file_change`, or `cli_file_read`;
+    //! external effects are durable and do not join the document's undo history. Codex keeps a
+    //! read-only sandbox and untrusted-command approval policy: trusted sandboxed reads can run
+    //! directly, while file writes and command escalations require a decision. Claude routes
+    //! its explicit native tool catalog through ask rules and the stdio approval callback.
+    //! Native tools operate on external files; the open song is still edited through live MCP.
     //! Reference attachments are bounded and encoded in the transport worker, never on the
     //! UI or audio thread. Text files are marked as reference data rather than user requests.
     //! If
@@ -287,6 +295,13 @@ pub mod architecture {
     //! Deny rules override every mode; plan mode forbids mutations even with an allow rule.
     //! One-time approvals bind the exact command to the current document revision. Standalone MCP keeps
     //! its independent file-based tool catalog and does not consult this policy.
+    //! Auto-review mode delegates operations needing confirmation to a separate conversation
+    //! with the selected backend/model and no execution tools. It receives human requests and
+    //! exact operation evidence, never authority from the executing model. Deny rules run first;
+    //! review approval grants only a one-time permit after the desktop checks the document and
+    //! policy again. A refusal blocks the operation; uncertainty, malformed output, unavailable
+    //! models and timeout leave manual confirmation available. Cancelling the pending approval
+    //! also cancels the review. Bypass skips this review as well as user confirmation.
     //! The MCP presentation supports explicit short project handles (never an implicit current
     //! project), startup task groups, concise schemas and full on-demand help. Discovery handles
     //! have a random process scope and are checked against the owning library snapshot; refresh,
