@@ -25,7 +25,7 @@ use crate::ui::scrollbars::ScrollPanel;
 use crate::ui::text_field::TextField;
 use crate::ui::widgets::{
     ButtonState, ButtonStyle, bounded_button_enabled, bounded_picker_label, button, button_enabled,
-    disclosure,
+    disclosure, menu_picker,
 };
 
 pub(crate) mod controls;
@@ -45,8 +45,23 @@ pub(crate) struct NavigateAgentModel {
 /// The selector context wins before window actions such as Down-to-select-the-next-track while
 /// the model control owns focus. Tab deliberately remains unbound so normal focus traversal can
 /// continue after dismissing the menu.
-pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 7] {
+pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 10] {
     [
+        gpui::KeyBinding::new(
+            "escape",
+            NavigateAgentModel { key: "escape" },
+            Some("AurisAgentDropdown"),
+        ),
+        gpui::KeyBinding::new(
+            "enter",
+            crate::ui::widgets::ClaimDisclosureActivation,
+            Some("AurisAgentDropdown"),
+        ),
+        gpui::KeyBinding::new(
+            "space",
+            crate::ui::widgets::ClaimDisclosureActivation,
+            Some("AurisAgentDropdown"),
+        ),
         gpui::KeyBinding::new(
             "up",
             NavigateAgentModel { key: "up" },
@@ -2569,13 +2584,18 @@ impl AurisApp {
             .min_w_0()
             .overflow_hidden()
             .bg(theme.surface_sunken)
-            // Model options stop propagation; any other click in the panel is outside the
-            // selector and dismisses it before carrying on to its own control.
+            // Dropdown triggers and options stop propagation; other panel clicks dismiss
+            // the open menu before carrying on to their own control.
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _: &MouseDownEvent, _, cx| {
-                    if this.agent_chat.model_menu {
+                    if this.agent_chat.model_menu
+                        || this.agent_chat.controls.mode_menu
+                        || this.agent_chat.controls.effort_menu
+                    {
                         this.agent_chat.model_menu = false;
+                        this.agent_chat.controls.mode_menu = false;
+                        this.agent_chat.controls.effort_menu = false;
                         cx.notify();
                     }
                 }),
@@ -3108,6 +3128,8 @@ impl AurisApp {
             .position(|option| option.name == self.agent_chat.chosen_model)
             .unwrap_or(0);
         self.agent_chat.model_menu = true;
+        self.agent_chat.controls.mode_menu = false;
+        self.agent_chat.controls.effort_menu = false;
         self.agent_chat
             .model_scroll
             .scroll_to_item(self.agent_chat.model_highlighted);
@@ -3231,6 +3253,7 @@ impl AurisApp {
                 .into_any_element()
         };
         div()
+            .relative()
             .flex()
             .flex_col()
             .gap_1()
@@ -3316,10 +3339,7 @@ impl AurisApp {
             .into_any_element()
     }
 
-    /// A closed dropdown: the current choice and an arrow, opening on a click.
-    ///
-    /// Not a popup window — the options render as rows underneath, pushing the section down,
-    /// which is all a two-item provider list and a one-server model list need.
+    /// A focusable model field with the shared dropdown frame and trailing arrow.
     fn model_dropdown(
         &self,
         current: String,
@@ -3447,17 +3467,21 @@ impl AurisApp {
         let id = "agent-model-option";
         let mut list = div()
             .id((id, usize::MAX))
+            .debug_selector(|| "agent-model-options".into())
             .flex()
             .flex_col()
             .max_h(px(160.0))
+            .p_1()
             .overflow_y_scroll()
             .track_scroll(&self.agent_chat.model_scroll)
             .w_full()
             .min_w_0()
             .rounded(Metrics::RADIUS_SM)
             .border_1()
-            .border_color(theme.border_subtle)
+            .border_color(theme.border)
             .bg(theme.surface_raised)
+            .shadow_lg()
+            .occlude()
             .on_mouse_down(
                 MouseButton::Left,
                 |_: &MouseDownEvent, _, cx: &mut gpui::App| {
@@ -3473,6 +3497,8 @@ impl AurisApp {
                     .flex()
                     .items_center()
                     .h(Metrics::CONTROL_HEIGHT)
+                    .flex_shrink_0()
+                    .rounded(Metrics::RADIUS_SM)
                     .px_1p5()
                     .min_w_0()
                     .text_xs()
@@ -3489,6 +3515,10 @@ impl AurisApp {
                             cx.notify();
                         }),
                     )
+                    .child(div().w(px(12.0)).flex_shrink_0().when(
+                        self.agent_chat.models[index].name == self.agent_chat.chosen_model,
+                        |this| this.child(icon(Icon::Check, px(12.0), theme.accent)),
+                    ))
                     .child(
                         div()
                             .flex_1()
@@ -3499,12 +3529,26 @@ impl AurisApp {
                     .tooltip(crate::ui::tooltip::keyed_tip(tooltip, "", theme)),
             );
         }
-        list.into_any_element()
+        Self::agent_dropdown_popup(list)
     }
 
-    /// A compact secondary control whose options expand beneath the control row.
+    /// Paints a dropdown above the conversation without changing the controls' layout.
+    fn agent_dropdown_popup(list: impl IntoElement) -> AnyElement {
+        gpui::deferred(
+            div()
+                .absolute()
+                .top_full()
+                .left_0()
+                .w_full()
+                .pt_1()
+                .child(list),
+        )
+        .into_any_element()
+    }
+
+    /// A compact secondary control using the same field style as other pickers.
     fn dropdown(
-        &self,
+        &mut self,
         id: &'static str,
         current: String,
         open: bool,
@@ -3512,40 +3556,74 @@ impl AurisApp {
         toggle: impl Fn(&mut Self, &mut gpui::Context<Self>) + 'static,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        disclosure(
+        let focus = if id == "agent-mode-menu" {
+            &mut self.agent_chat.controls.mode_focus
+        } else {
+            &mut self.agent_chat.controls.effort_focus
+        }
+        .get_or_insert_with(|| cx.focus_handle().tab_index(0).tab_stop(true))
+        .clone();
+        menu_picker(
             id,
-            current,
-            open,
+            bounded_picker_label(current),
             theme,
             cx.listener(move |this, _, _, cx| {
                 toggle(this, cx);
                 cx.notify();
             }),
         )
+        .w_full()
+        .track_focus(&focus)
+        .key_context("AurisAgentDropdown")
+        .on_action(|_: &crate::ui::widgets::ClaimDisclosureActivation, _, _| {})
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                if let Some(field) = this.agent_chat.field_mut() {
+                    field.unmark();
+                }
+                this.agent_chat.focused = None;
+                window.focus(&focus);
+                cx.stop_propagation();
+            }),
+        )
+        .when(open, |this| this.border_color(theme.accent))
+        .on_action(cx.listener(|this, _: &NavigateAgentModel, _, cx| {
+            this.agent_chat.controls.mode_menu = false;
+            this.agent_chat.controls.effort_menu = false;
+            cx.stop_propagation();
+            cx.notify();
+        }))
         .into_any_element()
     }
 
-    /// The keyboard-accessible choices for an expanded secondary control.
+    /// The keyboard-accessible choices in a secondary dropdown.
     fn option_rows(
         &self,
         id: &'static str,
         names: &[String],
+        selected: usize,
         theme: &Theme,
         pick: impl Fn(&mut Self, usize, &mut gpui::Context<Self>) + Clone + 'static,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let mut list = div()
             .id((id, usize::MAX))
+            .debug_selector(move || format!("{id}-popup"))
             .flex()
             .flex_col()
-            .gap_1()
             .p_1()
             .max_h(px(160.0))
             .overflow_y_scroll()
             .rounded(Metrics::RADIUS_SM)
             .border_1()
-            .border_color(theme.border_subtle)
-            .bg(theme.surface_raised);
+            .border_color(theme.border)
+            .bg(theme.surface_raised)
+            .shadow_lg()
+            .occlude()
+            .on_mouse_down(MouseButton::Left, |_: &MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+            });
         for (index, name) in names.iter().enumerate() {
             let pick = pick.clone();
             list = list.child(
@@ -3561,10 +3639,16 @@ impl AurisApp {
                         cx.notify();
                     }),
                 )
-                .w_full(),
+                .w_full()
+                .flex_shrink_0()
+                .justify_start()
+                .gap_1()
+                .when(index == selected, |this| {
+                    this.child(icon(Icon::Check, px(12.0), theme.accent))
+                }),
             );
         }
-        list.into_any_element()
+        Self::agent_dropdown_popup(list)
     }
 
     fn agent_slash_completions(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
@@ -3958,12 +4042,82 @@ mod tests {
         });
         crate::harness::paint(&app, cx);
         assert!(cx.debug_bounds("agent-mode-menu").is_some());
+        assert!(
+            cx.debug_bounds("agent-mode-menu-dropdown-indicator")
+                .is_some()
+        );
         assert!(cx.debug_bounds("agent-mode-option-1").is_none());
+        let controls = cx.debug_bounds("agent-panel-controls").unwrap();
         crate::harness::click("agent-mode-menu", cx);
         assert!(cx.debug_bounds("agent-mode-option-1").is_some());
+        assert_eq!(cx.debug_bounds("agent-panel-controls").unwrap(), controls);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(
+                    this.agent_chat
+                        .controls
+                        .mode_focus
+                        .as_ref()
+                        .unwrap()
+                        .is_focused(window),
+                    "the mode trigger retains focus after opening"
+                );
+            });
+        });
+        cx.simulate_keystrokes("escape");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(
+                !this.agent_chat.controls.mode_menu,
+                "Escape dismisses the mode menu state"
+            )
+        });
+        cx.simulate_keystrokes("tab");
+        crate::harness::paint(&app, cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(
+                    this.agent_chat
+                        .controls
+                        .effort_focus
+                        .as_ref()
+                        .unwrap()
+                        .is_focused(window)
+                );
+            });
+        });
+        cx.simulate_keystrokes("shift-tab");
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.agent_chat.controls.mode_menu));
         crate::harness::click("agent-mode-option-1", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(this.settings.agent.policy.mode, Mode::Edit)
+        });
+    }
+
+    #[gpui::test]
+    fn manual_compaction_is_available_through_the_composer(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.input = TextField::new("/compact");
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-compact").is_none());
+        crate::harness::click("agent-send", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(
+                this.agent_chat
+                    .entries
+                    .contains(&ChatEntry::Note(Key::AgentCompactEmpty))
+            );
         });
     }
 
@@ -5590,15 +5744,11 @@ mod tests {
         let panel = cx
             .debug_bounds("agent-panel")
             .expect("the minimum-width agent panel is visible");
-        for selector in ["agent-new-conversation", "agent-compact"] {
-            let control = cx
-                .debug_bounds(selector)
-                .unwrap_or_else(|| panic!("{selector} is visible"));
-            assert!(
-                control.left() >= panel.left() && control.right() <= panel.right(),
-                "{selector} escapes the minimum-width panel: {control:?} outside {panel:?}"
-            );
-        }
+        let control = cx.debug_bounds("agent-new-conversation").unwrap();
+        assert!(
+            control.left() >= panel.left() && control.right() <= panel.right(),
+            "new conversation escapes the minimum-width panel: {control:?} outside {panel:?}"
+        );
 
         cx.simulate_keystrokes("tab tab");
         crate::harness::paint(&app, cx);
@@ -5700,7 +5850,6 @@ mod tests {
         assert!(panel.size.width <= crate::dock::PanelLayout::MIN_SIDE);
         for selector in [
             "agent-new-conversation",
-            "agent-compact",
             "agent-model",
             "agent-models-refresh",
             "agent-gauge-meter",
@@ -5717,13 +5866,11 @@ mod tests {
                 "{selector} escapes the 180px Agent panel: {control:?} outside {panel:?}"
             );
         }
-        for selector in ["agent-new-conversation", "agent-compact"] {
-            let control = cx.debug_bounds(selector).unwrap();
-            assert!(
-                control.size.width >= panel.size.width * 0.5,
-                "{selector} collapsed instead of yielding its label: {control:?} inside {panel:?}"
-            );
-        }
+        let control = cx.debug_bounds("agent-new-conversation").unwrap();
+        assert!(
+            control.size.width >= panel.size.width * 0.5,
+            "new conversation collapsed instead of yielding its label: {control:?} inside {panel:?}"
+        );
         // The minimum dock deliberately scrolls its three header sections. Reproduce a mouse
         // user following the visible scroll cue before opening the model menu.
         app.update(cx, |this, _| {

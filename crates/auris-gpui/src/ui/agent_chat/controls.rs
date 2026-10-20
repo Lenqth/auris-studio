@@ -10,6 +10,8 @@ pub(super) struct Controls {
     pub(super) compacting: bool,
     pub(super) mode_menu: bool,
     pub(super) effort_menu: bool,
+    pub(super) mode_focus: Option<gpui::FocusHandle>,
+    pub(super) effort_focus: Option<gpui::FocusHandle>,
     pub(super) slash_selected: usize,
 }
 
@@ -432,8 +434,9 @@ impl AurisApp {
         self.agent_chat.controls.compacting = true;
     }
 
-    pub(super) fn agent_controls(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
-        let theme = &self.theme;
+    pub(super) fn agent_controls(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
+        let theme = self.theme.clone();
+        let theme = &theme;
         let operation_busy = self.agent_operation_busy();
         let mode = self.settings.agent.policy.mode;
         let effort = self.settings.agent.effort;
@@ -458,6 +461,7 @@ impl AurisApp {
                     if !this.agent_operation_busy() {
                         this.agent_chat.controls.mode_menu = !this.agent_chat.controls.mode_menu;
                         this.agent_chat.controls.effort_menu = false;
+                        this.agent_chat.model_menu = false;
                     }
                 },
                 cx,
@@ -476,6 +480,7 @@ impl AurisApp {
                         this.agent_chat.controls.effort_menu =
                             !this.agent_chat.controls.effort_menu;
                         this.agent_chat.controls.mode_menu = false;
+                        this.agent_chat.model_menu = false;
                     }
                 },
                 cx,
@@ -496,18 +501,6 @@ impl AurisApp {
                 cx.notify();
             }),
         ));
-        row = row.child(bounded_button_enabled(
-            "agent-compact",
-            self.t(Key::AgentCompact),
-            ButtonStyle::Normal,
-            ButtonState::available(false, !operation_busy),
-            theme.accent,
-            theme,
-            cx.listener(|this, _, _, cx| {
-                this.agent_compact();
-                cx.notify();
-            }),
-        ));
         let mode_names = [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
             .map(|choice| self.t(mode_key(choice)).to_string());
         let efforts = effort_choices(self.agent_chat.provider_openai);
@@ -516,40 +509,54 @@ impl AurisApp {
             .map(|choice| self.t(effort_key(*choice)).to_string())
             .collect();
         div()
+            .relative()
             .flex()
             .flex_col()
             .child(row)
             .when(self.agent_chat.controls.mode_menu, |this| {
-                this.child(self.option_rows(
-                    "agent-mode-option",
-                    &mode_names,
-                    theme,
-                    |this, index, _| {
-                        if let Some(mode) = [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
-                            .get(index)
-                            .copied()
-                        {
-                            this.agent_mode(mode);
-                        }
-                    },
-                    cx,
-                ))
+                this.child(
+                    self.option_rows(
+                        "agent-mode-option",
+                        &mode_names,
+                        [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
+                            .iter()
+                            .position(|choice| *choice == mode)
+                            .unwrap_or(0),
+                        theme,
+                        |this, index, _| {
+                            if let Some(mode) =
+                                [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
+                                    .get(index)
+                                    .copied()
+                            {
+                                this.agent_mode(mode);
+                            }
+                        },
+                        cx,
+                    ),
+                )
             })
             .when(self.agent_chat.controls.effort_menu, |this| {
-                this.child(self.option_rows(
-                    "agent-effort-option",
-                    &effort_names,
-                    theme,
-                    move |this, index, _| {
-                        if let Some(effort) = effort_choices(this.agent_chat.provider_openai)
-                            .get(index)
-                            .copied()
-                        {
-                            this.agent_effort(effort);
-                        }
-                    },
-                    cx,
-                ))
+                this.child(
+                    self.option_rows(
+                        "agent-effort-option",
+                        &effort_names,
+                        efforts
+                            .iter()
+                            .position(|choice| *choice == effort)
+                            .unwrap_or(0),
+                        theme,
+                        move |this, index, _| {
+                            if let Some(effort) = effort_choices(this.agent_chat.provider_openai)
+                                .get(index)
+                                .copied()
+                            {
+                                this.agent_effort(effort);
+                            }
+                        },
+                        cx,
+                    ),
+                )
             })
             .into_any_element()
     }
