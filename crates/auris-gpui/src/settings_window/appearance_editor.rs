@@ -881,11 +881,19 @@ impl SettingsWindow {
             } else {
                 self.theme.border
             })
+            .cursor_text()
             .on_mouse_down(
                 gpui::MouseButton::Left,
-                cx.listener(move |this, _, window, cx| {
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                     if let Some(editor) = &mut this.appearance_editor {
                         editor.active = field;
+                        crate::ui::prompt::click_field(
+                            editor.field(),
+                            &focus,
+                            active,
+                            window,
+                            event,
+                        );
                     }
                     window.focus(&focus);
                     cx.notify();
