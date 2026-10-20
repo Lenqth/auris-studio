@@ -233,7 +233,11 @@ pub mod architecture {
     //! a cancellable worker thread with an async runtime; channels carry requests, permission
     //! decisions and live-edit results. The worker never owns or edits the window's session.
     //! Dropping a worker cancels its network/approval waits without joining on the UI thread.
-    //! Neither a child process nor a companion executable is needed. If
+    //! Rig runs in-process. The optional Codex backend launches the official `codex app-server`
+    //! over stdio and connects it to a per-conversation, authenticated loopback MCP endpoint.
+    //! Both backends use one live tool host and the same desktop permission/edit path; this
+    //! embedded MCP never opens saved projects independently. Codex owns its ChatGPT login;
+    //! the application never reads or copies its credentials. If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than
     //! adding the dependency.
@@ -255,10 +259,10 @@ pub mod architecture {
     //! OpenAI-compatible API — offers read-only toolbox references and live session commands.
     //! The desktop executes [`live_agent::Command`](crate::live_agent::Command) against the
     //! currently open session, so changes appear immediately and remain unsaved and undoable.
-    //! The desktop owns [`agent_policy::Policy`](crate::agent_policy::Policy): every rig tool
+    //! The desktop owns [`agent_policy::Policy`](crate::agent_policy::Policy): every live tool
     //! asks it for a decision, and live edits are checked again immediately before execution.
     //! Deny rules override every mode; plan mode forbids mutations even with an allow rule.
-    //! One-time approvals bind the exact command to the current document revision. MCP keeps
+    //! One-time approvals bind the exact command to the current document revision. Standalone MCP keeps
     //! its independent file-based tool catalog and does not consult this policy.
     //! The MCP presentation supports explicit short project handles (never an implicit current
     //! project), startup task groups, concise schemas and full on-demand help. Discovery handles

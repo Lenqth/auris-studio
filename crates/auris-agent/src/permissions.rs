@@ -1,4 +1,4 @@
-//! Every rig tool crosses the same fail-closed permission gate.
+//! Every live backend crosses the same fail-closed permission gate.
 use super::*;
 use auris_session::agent_policy::{Decision, Operation};
 use std::sync::atomic::{AtomicU64, Ordering};

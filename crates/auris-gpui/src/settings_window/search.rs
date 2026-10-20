@@ -58,6 +58,9 @@ impl Section {
             Self::Agent => &[
                 Key::AgentPanel,
                 Key::AgentProviderLabel,
+                Key::AgentBackendLabel,
+                Key::AgentCodexPathLabel,
+                Key::AgentCodexHelp,
                 Key::AgentUrlLabel,
                 Key::AgentKeyEnvLabel,
                 Key::AgentContextTokens,

@@ -252,7 +252,7 @@ pub(crate) enum AgentEvent {
     },
     /// A tool was asked.
     Call {
-        /// Rig's unique id for this invocation, independent of the tool name.
+        /// The backend's unique id for this invocation, independent of the tool name.
         call_id: String,
         /// Its wire name.
         tool: String,
@@ -261,7 +261,7 @@ pub(crate) enum AgentEvent {
     },
     /// A tool answered or refused.
     Result {
-        /// Rig's unique id for the invocation this completes.
+        /// The backend's unique id for the invocation this completes.
         call_id: String,
         /// Its wire name.
         tool: String,
@@ -762,6 +762,10 @@ pub(crate) struct AgentChat {
     pub(crate) key_env_field: TextField,
     /// Whether the provider under edit is the OpenAI-compatible one.
     pub(crate) provider_openai: bool,
+    /// Conversation runtime, independent of the rig API provider.
+    pub(crate) backend: String,
+    /// Optional native Codex executable path.
+    pub(crate) codex_path: String,
     /// What the provider last answered the model question with.
     pub(crate) models: Vec<ModelOption>,
     /// Whether that question is in flight.
@@ -872,6 +876,8 @@ impl Default for AgentChat {
             url_field: TextField::new(String::new()),
             key_env_field: TextField::new(String::new()),
             provider_openai: false,
+            backend: String::new(),
+            codex_path: String::new(),
             models: Vec::new(),
             fetching_models: false,
             models_error: None,
@@ -1040,6 +1046,8 @@ impl AgentChat {
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
         self.provider_openai = prefs.provider.trim() == "openai";
+        self.backend = prefs.backend.clone();
+        self.codex_path = prefs.codex_path.clone();
         self.chosen_model = prefs.model.trim().to_string();
         self.url_field = TextField::new(prefs.url.clone());
         self.key_env_field = TextField::new(prefs.api_key_env.clone());
@@ -1066,6 +1074,8 @@ impl AgentChat {
     /// The settings section's fields, read back out as preferences.
     pub(crate) fn preferences(&self) -> AgentPreferences {
         AgentPreferences {
+            backend: self.backend.clone(),
+            codex_path: self.codex_path.clone(),
             policy: self.policy.clone(),
             auto_compact_percent: self.auto_compact_percent,
             context_tokens: Some(self.context_tokens),
@@ -4427,7 +4437,7 @@ mod tests {
     #[gpui::test]
     fn live_agent_edits_an_unsaved_document_and_undo_restores_it(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
-        app.update(cx, |this, _| {
+        let before = app.update(cx, |this, _| {
             // This editing test must not inherit modes saved by settings-window tests.
             this.settings.agent.policy = Default::default();
             let before = this.project().clone();
@@ -4438,9 +4448,11 @@ mod tests {
             assert!(this.project().tracks.iter().any(|track| track.name == "Agent lead"));
             assert!(this.session.is_dirty());
             assert!(this.session.path().is_none());
-            this.session.undo();
-            assert_eq!(this.project(), &before);
+            before
         });
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("secondary-z");
+        app.read_with(cx, |this, _| assert_eq!(this.project(), &before));
     }
 
     #[gpui::test]

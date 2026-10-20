@@ -344,7 +344,11 @@ impl ReasoningEffort {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPreferences {
-    /// Live agent mode and operation allow/deny rules. MCP is unaffected.
+    /// Conversation runtime: empty or "rig", or "codex" for the official Codex CLI.
+    pub backend: String,
+    /// Optional native Codex executable path. Empty searches the installed CLI.
+    pub codex_path: String,
+    /// Live agent mode and operation allow/deny rules, including the embedded live MCP.
     pub policy: crate::agent_policy::Policy,
     /// Auto-compaction threshold in percent; absent means 85, zero disables it.
     pub auto_compact_percent: Option<u8>,

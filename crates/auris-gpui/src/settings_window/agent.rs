@@ -3,8 +3,8 @@ use super::*;
 
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
-    pub(super) fields: [TextField; 2],
-    pub(super) focus: [FocusHandle; 2],
+    pub(super) fields: [TextField; 3],
+    pub(super) focus: [FocusHandle; 3],
     pub(super) active: Option<usize>,
 }
 
@@ -14,8 +14,10 @@ impl AgentSettings {
             fields: [
                 TextField::new(prefs.url.clone()),
                 TextField::new(prefs.api_key_env.clone()),
+                TextField::new(prefs.codex_path.clone()),
             ],
             focus: [
+                cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
             ],
@@ -39,11 +41,27 @@ impl SettingsWindow {
     {
         self.agent.prefs.url = self.agent.fields[0].content().trim().to_owned();
         self.agent.prefs.api_key_env = self.agent.fields[1].content().trim().to_owned();
+        self.agent.prefs.codex_path = self.agent.fields[2].content().trim().to_owned();
         let draft = self.agent.prefs.clone();
         let result = self.app.update(cx, move |app, cx| {
             // Model and live permission controls belong to the panel and may have changed
             // since this settings window opened. Never overwrite them with this draft.
             let mut prefs = app.settings.agent.clone();
+            let previous_backend = if prefs.backend.is_empty() {
+                "rig"
+            } else {
+                &prefs.backend
+            };
+            let next_backend = if draft.backend.is_empty() {
+                "rig"
+            } else {
+                &draft.backend
+            };
+            if previous_backend != next_backend {
+                prefs.model.clear();
+            }
+            prefs.backend = draft.backend;
+            prefs.codex_path = draft.codex_path;
             prefs.provider = draft.provider;
             prefs.url = draft.url;
             prefs.api_key_env = draft.api_key_env;
@@ -81,7 +99,7 @@ impl SettingsWindow {
     }
 
     fn agent_field(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
-        let id = ["agent-url", "agent-key-env"][index];
+        let id = ["agent-url", "agent-key-env", "agent-codex-path"][index];
         let focus = self.agent.focus[index].clone();
         let field = &self.agent.fields[index];
         div()
@@ -119,6 +137,26 @@ impl SettingsWindow {
 
     pub(super) fn render_agent(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
+        let backend = if self.agent.prefs.backend.is_empty() {
+            "rig"
+        } else {
+            &self.agent.prefs.backend
+        }
+        .to_owned();
+        let backend_control = self.dropdown(
+            "agent-backend",
+            vec![
+                ("rig".to_owned(), "Rig".to_owned(), String::new()),
+                ("codex".to_owned(), "Codex CLI".to_owned(), String::new()),
+            ],
+            &backend,
+            |this, value, cx| {
+                this.agent.prefs.backend = value;
+                this.agent.active = None;
+                cx.notify();
+            },
+            cx,
+        );
         let provider = self.agent.prefs.provider.clone();
         let provider = if provider.is_empty() {
             "ollama".to_owned()
@@ -143,15 +181,27 @@ impl SettingsWindow {
             cx,
         );
         let mut rows = vec![
-            section_title(self.t(Key::AgentProviderLabel), &theme),
-            provider_control,
-            section_title(self.t(Key::AgentUrlLabel), &theme),
-            self.agent_field(0, cx),
-            section_title(self.t(Key::AgentKeyEnvLabel), &theme),
-            self.agent_field(1, cx),
-            note(self.t(Key::AgentModelInPanel), &theme),
+            section_title(self.t(Key::AgentBackendLabel), &theme),
+            backend_control,
         ];
-        if provider == "ollama" {
+        if backend == "codex" {
+            rows.extend([
+                section_title(self.t(Key::AgentCodexPathLabel), &theme),
+                self.agent_field(2, cx),
+                note(self.t(Key::AgentCodexHelp), &theme),
+            ]);
+        } else {
+            rows.extend([
+                section_title(self.t(Key::AgentProviderLabel), &theme),
+                provider_control,
+                section_title(self.t(Key::AgentUrlLabel), &theme),
+                self.agent_field(0, cx),
+                section_title(self.t(Key::AgentKeyEnvLabel), &theme),
+                self.agent_field(1, cx),
+                note(self.t(Key::AgentModelInPanel), &theme),
+            ]);
+        }
+        if backend == "rig" && provider == "ollama" {
             let context = self.agent.prefs.context_tokens.unwrap_or(32768);
             let output = self.agent.prefs.output_tokens.unwrap_or(4096);
             rows.push(section_title(self.t(Key::AgentContextTokens), &theme));
@@ -258,6 +308,59 @@ impl SettingsWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn codex_settings_select_the_runtime_and_preserve_rig_connection(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent = AgentPreferences {
+                model: "rig-model".into(),
+                provider: "openai".into(),
+                url: "https://example.invalid/v1".into(),
+                api_key_env: "RIG_KEY".into(),
+                ..Default::default()
+            };
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        crate::harness::click("agent-backend", cx);
+        cx.simulate_keystrokes("down enter");
+        assert!(cx.debug_bounds("agent-codex-path").is_some());
+        // GPUI retains debug bounds for removed controls across frames. Check the draft
+        // instead; the newly drawn Codex field above verifies the backend-specific view.
+        handle
+            .update(cx, |this, _, _| {
+                assert_eq!(this.agent.prefs.backend, "codex")
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.model, "rig-model")
+        });
+        crate::harness::click("agent-codex-path", cx);
+        cx.simulate_input("C:\\Tools\\codex.exe");
+        handle
+            .update(cx, |this, _, cx| {
+                this.apply_agent_with(cx, |_| Ok::<(), String>(()))
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.backend, "codex");
+            assert_eq!(this.settings.agent.codex_path, "C:\\Tools\\codex.exe");
+            assert_eq!(this.settings.agent.provider, "openai");
+            assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
+            assert_eq!(this.settings.agent.api_key_env, "RIG_KEY");
+            assert!(this.settings.agent.model.is_empty());
+            assert_eq!(this.agent_chat.backend, "codex");
+            assert_eq!(
+                this.agent_chat.preferences().codex_path,
+                "C:\\Tools\\codex.exe"
+            );
+        });
+    }
 
     #[gpui::test]
     fn connection_settings_move_out_of_the_panel_and_preserve_live_model_changes(

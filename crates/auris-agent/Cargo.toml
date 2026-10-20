@@ -33,7 +33,9 @@ schemars = "1"
 serde.workspace = true
 serde_json.workspace = true
 # `time` bounds the `models` listing, so a black-holed server resolves into an error.
-tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "time"] }
-
-[dev-dependencies]
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "time", "process", "io-util", "net"] }
+rmcp = { version = "3.5.1", features = ["server", "transport-streamable-http-server"] }
+axum = "0.8"
+tokio-util = { version = "0.7", features = ["codec", "rt"] }
+uuid = { version = "1", features = ["v4"] }
 tempfile.workspace = true
