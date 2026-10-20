@@ -672,7 +672,12 @@ where
 }
 
 /// A select-like value field with a disclosure indicator in a stable trailing lane.
-fn menu_picker<I, L, F>(id: I, value: L, theme: &Theme, on_click: F) -> gpui::Stateful<gpui::Div>
+pub(crate) fn menu_picker<I, L, F>(
+    id: I,
+    value: L,
+    theme: &Theme,
+    on_click: F,
+) -> gpui::Stateful<gpui::Div>
 where
     I: Into<ElementId>,
     L: IntoElement,
