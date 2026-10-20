@@ -5,6 +5,52 @@ Codex CLI backends use the same live commands, permissions and Undo history. Sta
 `inspect_project`, then use `add_track`, `set_instrument`, `add_clip` and `add_notes`
 to construct the arrangement. Pass arguments directly without a command or action wrapper.
 
+## Live harmony and vocals
+
+For a new song, write its musical decisions into the document with `edit_harmony`, for example
+`{"start_bar":1,"bars":16,"key":"D major","chords":"| I | vi | IV | V |"}`.
+The chart repeats over the requested bars. The previous key resumes after the range;
+existing interior key points remain. The operation edits the key/chord map, preserves notes
+and mix, and is one Undo step. Audible chord notes alone do not populate this map.
+`clear_chords:true` clears the selected range; omit `chords` when clearing.
+
+### Live vocal production
+
+Create a `singer` track and a note clip, then add its melody with `add_notes`.
+`list_voices` discovers installed voice entries in pages of 16; follow `next_offset`.
+Discovery does not validate or download a model. Use a returned absolute `voice` path in
+`set_singer_voice` with the numeric `track` ID. An optional `speaker` selects a named style.
+`inspect_singer` reads back the chosen voice, available speaker names, and take state.
+Speaker lists page at 128 names; follow `next_offset` as `offset` to read more.
+To change speaker, repeat the selected voice path with the desired name; invalid names or
+models leave the prior selection unchanged. Loading and inference use the existing local
+automatic-access policy: network/device model paths and remote VOICEVOX URLs are refused;
+local loopback VOICEVOX is supported and its Engine must already be running.
+
+`write_lyrics` takes `clip` and `text`, for example `{"clip":2,"text":"さくらさいた"}`.
+Kana is split into moras and phonemes; non-kana text requires the installed Japanese dictionary.
+Omit `from` to begin at the earliest note, or copy a zero-based storage index from `read_notes`
+to begin there in time order. This differs from the saved-file MCP tool's 1-based note number.
+Unfilled later notes retain their words. Check the returned `filled` count and `available`
+capacity and read back the notes before claiming the whole phrase was entered.
+
+Call `sing` with the singer's `track` and optional `seed` to create the actual playback take.
+The previous take seed is retained when omitted, or zero is used for the first take.
+`inspect_singer` returns `take_state:"current"` on completion, `"missing"` before synthesis,
+and `"stale"` when the score or voice has changed. A temporary guide voice is not a completed
+vocal take. Voice discovery, loading, synthesis and WAV staging run off the UI thread.
+Stopping the conversation cancels pending work; changed documents, superseded voice loads
+and revoked permissions cannot accept its results. Explicit agent work pauses automatic
+singer rendering until it finishes. Selection, lyrics and completed takes are separate
+Undo steps and remain unsaved; synthesis stages its audio in the session's working folder.
+
+All these live operations use the same permission gate for rig, Codex and Claude Code.
+Read-only/plan mode can list voices and inspect singers but cannot edit harmony, choose a
+voice, write lyrics, or apply a sung take. Errors are returned to the model, not reported as
+successful song production.
+
+### Track and note editing
+
 `add_track` takes a name and one string kind, for example
 `{"name":"Drums","kind":"drum"}`. Kinds are `instrument`, `drum`, `singer`, `audio`
 and `bus`. Copy the returned numeric track ID into `set_instrument` and `add_clip`;

@@ -1,5 +1,9 @@
 # Agent production audit: composition and piano covers
 
+Follow-up: live harmony editing and the complete voice-selection/lyrics/synthesis workflow
+are now implemented; see [Live vocal production](agent-workflows.md#live-vocal-production).
+The findings below record revision `a5564e38`; the other issues remain separate work items.
+
 On 2026-10-21, the public tools could complete an original instrumental piece and a
 MIDI-based piano cover, but the live agent could neither write the document's chord progression
 nor complete singer selection, lyric entry and voice synthesis.

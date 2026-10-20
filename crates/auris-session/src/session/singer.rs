@@ -809,6 +809,11 @@ impl Session {
         self.begin_singer_voice_load_with_access(file, VoicePathAccess::Explicit)
     }
 
+    /// Captures a local-access voice load for an agent, enforcing the automatic path/URL policy.
+    pub fn begin_local_singer_voice_load(&mut self, file: &Path) -> SingerVoiceLoadJob {
+        self.begin_singer_voice_load_with_access(file, VoicePathAccess::Automatic)
+    }
+
     /// Captures an explicit load of the voice currently selected on `track`.
     pub fn begin_singer_track_voice_load(
         &mut self,
@@ -920,6 +925,17 @@ impl Session {
         track: TrackId,
         voice_load: &SingerVoiceLoadResult,
     ) -> Result<(), SessionError> {
+        self.set_singer_voice_selection_from_load(track, voice_load, None)
+    }
+
+    /// Chooses a validated voice and speaker together as one edit, with no filesystem access.
+    /// An unknown speaker or stale load leaves the document and Undo history untouched.
+    pub fn set_singer_voice_selection_from_load(
+        &mut self,
+        track: TrackId,
+        voice_load: &SingerVoiceLoadResult,
+        speaker: Option<&str>,
+    ) -> Result<(), SessionError> {
         self.require_singer(track)?;
         if !Arc::ptr_eq(&self.registry, &voice_load.owner)
             || self.revision != voice_load.revision
@@ -929,7 +945,9 @@ impl Session {
         {
             return Err(auris_singer::SingError::Cancelled.into());
         }
-        let chosen = self.singer_voice_choice(&voice_load.path, &voice_load.loaded);
+        voice_load.speaker_id(speaker)?;
+        let mut chosen = self.singer_voice_choice(&voice_load.path, &voice_load.loaded);
+        chosen.0.speaker = speaker.map(str::to_owned);
         self.apply_singer_voice_choice(track, Some(chosen));
         Ok(())
     }

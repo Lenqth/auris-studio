@@ -281,6 +281,13 @@ pub mod architecture {
     //! as one undo transaction. No source file path, model download or saved-project edit is
     //! exposed to the model. Notes remain estimates; this is transcription, not listening.
     //! Native audio API turns retain the same scoped references alongside their audio content.
+    //! Live agents write bounded harmony with `edit_harmony` and singer lyrics with
+    //! `write_lyrics`; both are undoable document edits and never regenerate notes.
+    //! `list_voices`, `inspect_singer`, `set_singer_voice` and `sing` complete the vocal workflow.
+    //! Voice discovery, local-access model loading, synthesis and WAV staging run on cancellable
+    //! workers through `live_agent::VocalJob`. Only the UI continues a job against the original
+    //! document revision, applies a validated voice/speaker or publishes its staged take, and
+    //! records Undo. The same live policy gate covers these operations on every model transport.
     //! If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than

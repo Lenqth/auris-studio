@@ -293,6 +293,8 @@ fn preamble() -> String {
 Call inspect_project first. Use the operation-specific tools with flat JSON arguments,
 without command or action wrappers. Use the numeric IDs returned by inspection and edits.
 For a song request, choose the harmony, melody, rhythm and arrangement yourself.
+For a new composition, use edit_harmony to write the chosen key and Roman-numeral chord progression into the document before writing the notes. Audible chord notes alone do not populate the project's harmony map. Update an existing progression only when the requested edit calls for it; edit_harmony never regenerates existing notes.
+For a vocal song, add_track kind singer, add_clip and add_notes create the score. list_voices discovers local voice paths; set_singer_voice selects a voice and optional named speaker. inspect_singer reads back the selected voice, offered speakers and take state. write_lyrics uses the singer clip ID and optional zero-based storage index from read_notes; verify the filled count and lyrics. Then sing creates the actual playback take on a worker; inspect_singer must report a current take before claiming vocals are finished. Missing voices, unavailable synthesis servers and failed/cancelled synthesis are errors, never completed vocals. These live operations leave the document unsaved and are undoable.
 Use search_instruments with focused query words (default 10 results), then set_instrument with the returned id. Use similar_instruments for acoustic alternatives; while status is indexing, continue other work and retry later. Do not fetch the whole library by default. IDs include SoundFont sounds and advertised CLAP/VST3 presets; never invent IDs. Use add_track, add_clip and add_notes to write your music.
 Batch a short phrase into one add_notes call. Each note has pitch, start_beat,
 duration_beats and velocity. start_beat is its position; duration_beats is its length.
@@ -2302,9 +2304,19 @@ mod tests {
         assert!(names.contains(&"search_instruments"));
         assert!(names.contains(&"similar_instruments"));
         assert!(names.contains(&"instrument_diagnostics"));
+        for name in [
+            "edit_harmony",
+            "list_voices",
+            "inspect_singer",
+            "set_singer_voice",
+            "write_lyrics",
+            "sing",
+        ] {
+            assert!(names.contains(&name), "{name}");
+        }
         assert_eq!(
             names.len(),
-            24 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            30 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
             assert!(names.contains(name), "{name}");

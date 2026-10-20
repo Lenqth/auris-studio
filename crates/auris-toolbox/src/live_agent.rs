@@ -174,7 +174,13 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         | "add_clip"
         | "add_note"
         | "remove_notes"
-        | "replace_notes" => tool,
+        | "replace_notes"
+        | "edit_harmony"
+        | "list_voices"
+        | "inspect_singer"
+        | "set_singer_voice"
+        | "write_lyrics"
+        | "sing" => tool,
         _ => return Ok(None),
     };
     let mut object = args
@@ -286,6 +292,34 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_composition_and_vocal_workflows_are_callable_without_saved_project_arguments() {
+        for (name, args) in [
+            (
+                "edit_harmony",
+                serde_json::json!({"start_bar":1,"bars":4,"key":"D major","chords":"| I | IV | V | I |"}),
+            ),
+            ("list_voices", serde_json::json!({})),
+            ("inspect_singer", serde_json::json!({"track":1})),
+            (
+                "set_singer_voice",
+                serde_json::json!({"track":1,"voice":"/voices/test.voicevox.json","speaker":"First"}),
+            ),
+            (
+                "write_lyrics",
+                serde_json::json!({"clip":2,"text":"さくら"}),
+            ),
+            ("sing", serde_json::json!({"track":1,"seed":42})),
+        ] {
+            let definitions = definitions();
+            assert!(
+                definitions.iter().any(|tool| tool.name == name),
+                "missing {name}"
+            );
+            assert!(command(name, &args).unwrap().is_some(), "unresolved {name}");
+        }
+    }
 
     #[test]
     fn piano_cover_schema_accepts_only_a_scoped_attachment_and_insertion_options() {
@@ -470,6 +504,21 @@ mod tests {
     fn every_live_operation_has_a_round_tripping_flat_contract() {
         let fixtures = [
             (
+                "edit_harmony",
+                serde_json::json!({"start_bar":1,"bars":4,"key":null,"chords":"| I | IV | V | I |","clear_chords":false}),
+            ),
+            ("list_voices", serde_json::json!({"offset":0})),
+            ("inspect_singer", serde_json::json!({"track":1,"offset":0})),
+            (
+                "set_singer_voice",
+                serde_json::json!({"track":1,"voice":"/voice/test.voicevox.json","speaker":null}),
+            ),
+            (
+                "write_lyrics",
+                serde_json::json!({"clip":1,"text":"あ","from":null}),
+            ),
+            ("sing", serde_json::json!({"track":1,"seed":null})),
+            (
                 "search_instruments",
                 serde_json::json!({"query":"piano","limit":10,"offset":0,"refresh":false,"source":null,"library":null}),
             ),
@@ -590,7 +639,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            22 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            28 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))

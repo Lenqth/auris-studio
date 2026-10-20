@@ -80,6 +80,12 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.edit_harmony",
+    "edit_project.list_voices",
+    "edit_project.inspect_singer",
+    "edit_project.set_singer_voice",
+    "edit_project.write_lyrics",
+    "edit_project.sing",
     "edit_project.create_piano_cover",
     "edit_project.read_mixer_graph",
     "edit_project.connect_mixer",
@@ -146,6 +152,8 @@ impl Operation {
             let mutating = !matches!(
                 parsed,
                 crate::live_agent::Command::Inspect {}
+                    | crate::live_agent::Command::ListVoices { .. }
+                    | crate::live_agent::Command::InspectSinger { .. }
                     | crate::live_agent::Command::InspectAudio { .. }
                     | crate::live_agent::Command::ReadNotes { .. }
                     | crate::live_agent::Command::ListInstruments { .. }
@@ -243,6 +251,54 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn harmony_and_vocals_respect_edit_read_only_plan_and_deny_rules() {
+        for command in [
+            serde_json::json!({"action":"edit_harmony","start_bar":1,"bars":4,"chords":"| I | V |"}),
+            serde_json::json!({"action":"set_singer_voice","track":1,"voice":"/voice/test.voicevox.json"}),
+            serde_json::json!({"action":"write_lyrics","clip":2,"text":"さくら"}),
+            serde_json::json!({"action":"sing","track":1}),
+        ] {
+            let operation =
+                Operation::parse("edit_project", &serde_json::json!({"command":command})).unwrap();
+            assert!(operation.mutating);
+            assert_eq!(Policy::default().decide(&operation), Decision::Allow);
+            for mode in [Mode::ReadOnly, Mode::Plan] {
+                assert!(matches!(
+                    Policy {
+                        mode,
+                        ..Default::default()
+                    }
+                    .decide(&operation),
+                    Decision::Deny(_)
+                ));
+            }
+            let policy = Policy {
+                mode: Mode::Bypass,
+                deny: vec![operation.name.clone()],
+                ..Default::default()
+            };
+            assert!(matches!(policy.decide(&operation), Decision::Deny(_)));
+            assert!(OPERATIONS.contains(&operation.name.as_str()));
+        }
+        for command in [
+            serde_json::json!({"action":"list_voices"}),
+            serde_json::json!({"action":"inspect_singer","track":1}),
+        ] {
+            let operation =
+                Operation::parse("edit_project", &serde_json::json!({"command":command})).unwrap();
+            assert!(!operation.mutating);
+            assert_eq!(
+                Policy {
+                    mode: Mode::ReadOnly,
+                    ..Default::default()
+                }
+                .decide(&operation),
+                Decision::Allow
+            );
+        }
+    }
 
     #[test]
     fn native_approvals_require_consent_and_auto_review_never_overrides_denials() {

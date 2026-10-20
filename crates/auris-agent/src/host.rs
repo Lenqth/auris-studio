@@ -103,6 +103,49 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn live_vocal_and_harmony_calls_reach_the_canonical_permission_gate_before_edits() {
+        for (name, args) in [
+            (
+                "edit_harmony",
+                json!({"start_bar":1,"bars":4,"chords":"| I | IV | V | I |"}),
+            ),
+            (
+                "set_singer_voice",
+                json!({"track":1,"voice":"/voice/test.voicevox.json"}),
+            ),
+            ("write_lyrics", json!({"clip":2,"text":"さくら"})),
+            ("sing", json!({"track":1})),
+        ] {
+            let (bridge, commands, events) = crate::worker::test_bridge();
+            let host = ToolHost::new(bridge);
+            let call = host.call(name, args);
+            let owner = async {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                let event = loop {
+                    assert!(std::time::Instant::now() < deadline);
+                    match events.try_recv() {
+                        Ok(event) => break event,
+                        Err(std::sync::mpsc::TryRecvError::Empty) => tokio::task::yield_now().await,
+                        Err(e) => panic!("{e}"),
+                    }
+                };
+                assert_eq!(event["event"], "permission");
+                let operation = auris_session::agent_policy::Operation::parse(
+                    event["tool"].as_str().unwrap(),
+                    &event["args"],
+                )
+                .unwrap();
+                assert_eq!(operation.name, format!("edit_project.{name}"));
+                assert!(operation.mutating);
+                commands.send(json!({"event":"permission_result","id":event["id"],"ok":false,"reason":"Read-only"}).to_string()).unwrap();
+            };
+            let (result, ()) = tokio::join!(call, owner);
+            assert!(result.is_err());
+            assert!(events.try_recv().is_err());
+        }
+    }
+
+    #[tokio::test]
     async fn piano_cover_uses_retained_audio_and_the_canonical_permission_gate() {
         for allowed in [false, true] {
             let folder = tempfile::tempdir().unwrap();
