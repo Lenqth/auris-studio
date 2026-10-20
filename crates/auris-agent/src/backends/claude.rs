@@ -16,7 +16,8 @@ use tokio::{
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const FRAME_LIMIT: usize = 8 * 1024 * 1024;
+// The CLI may echo base64 images from a bounded 25 MiB reference turn.
+const FRAME_LIMIT: usize = 40 * 1024 * 1024;
 
 fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.claude_path.trim().is_empty() {
@@ -342,19 +343,22 @@ async fn conversation(
             continue;
         }
         let (said, attachments) = crate::parse_say(&line)?;
-        if !attachments.is_empty() {
-            bridge.emit(json!({"event":"error","message":"Claude Code reference attachments are not supported. Choose another model or remove the attached files before sending"}));
-            continue;
-        }
         let prompt = format!(
             "{context}\n[Current Auris permission policy: {}]\n{said}",
             wire["policy"]
         );
+        let content = match crate::attachments::cli_input(prompt, attachments, bridge, true).await {
+            Ok(content) => content,
+            Err(message) => {
+                bridge.emit(json!({"event":"error","message":message}));
+                continue;
+            }
+        };
         context.clear();
         mcp.set_active(true);
         cli.send(
             json!({"type":"user","session_id":"","parent_tool_use_id":null,"client_composed":true,
-            "message":{"role":"user","content":prompt}}),
+            "message":{"role":"user","content":content}}),
         )
         .await?;
         let answer = receive_turn(cli, bridge).await;
@@ -747,7 +751,10 @@ mod tests {
                 let (client, server) = tokio::io::duplex(32768);
                 let (reader, writer) = tokio::io::split(client);
                 let mut cli = Cli::transport(None, writer, reader);
-                commands.send(json!({"say":"Add a track"}).to_string()).unwrap();
+                let references = tempfile::tempdir().unwrap();
+                let audio = references.path().join("reference.wav");
+                crate::attachments::tests::reference_wav(&audio, false);
+                commands.send(json!({"say":"Add a track","attachments":[audio]}).to_string()).unwrap();
                 let preferences = prefs();
                 let drive = async { conversation(&mut cli, &preferences, &bridge, &mcp, None, false, None).await.unwrap() };
                 let peer = async {
@@ -759,6 +766,7 @@ mod tests {
                     let prompt: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                     assert_eq!(prompt["type"], "user");
                     assert_eq!(prompt["client_composed"], true);
+                    assert!(prompt["message"]["content"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
                     let client = reqwest::Client::new();
                     let request = |value: Value| client.post(&mcp.url).bearer_auth(&mcp.token).header("Accept", "application/json, text/event-stream").json(&value);
                     let init = request(json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"claude-fixture","version":"1"}}})).send().await.unwrap();

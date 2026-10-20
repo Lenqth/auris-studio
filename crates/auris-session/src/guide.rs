@@ -243,6 +243,11 @@ pub mod architecture {
     //! decision. API endpoint configuration is retained independently of that selection.
     //! Reference attachments are bounded and encoded in the transport worker, never on the
     //! UI or audio thread. Text files are marked as reference data rather than user requests.
+    //! Codex and Claude Code receive audio references as local CPU tempo/chord measurements,
+    //! using the session's existing file analysis service on a temporary snapshot of the
+    //! bounded attachment bytes. This is explicitly not listening or note transcription.
+    //! Long reports sample timestamped beats and chord windows with their strides disclosed.
+    //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than

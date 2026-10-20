@@ -25,13 +25,22 @@ there attaches a reference; dropping audio onto the arrangement imports it into
 the song. Attached filenames remain visible and each file can be removed before
 sending. A message accepts at most eight files and 25 MiB in total.
 
-Rig and Codex accept reference attachments. PNG, JPEG, GIF and WebP are sent as
+Rig, Codex and Claude Code accept reference attachments. PNG, JPEG, GIF and WebP are sent as
 image parts. UTF-8 text, Markdown, lyrics, CSV, JSON and source files are sent as
 delimited reference data, up to 256 KiB
 per text file. Instructions inside an attachment remain reference content.
-The selected model must support the supplied media. Audio files use an
-OpenAI-compatible model implementing `input_audio`; the panel explains this
-requirement before sending and keeps the draft available when it is not met.
+The selected model must support the supplied media. With Codex or Claude Code,
+audio files are analyzed locally and sent as text measurements: duration,
+constant-tempo alternatives, estimated beats and major/minor chord candidates.
+Long reports sample up to 256 beats and 256 chord windows across the recording,
+with source timestamps and sampling strides. Analysis runs in the background
+without editing or importing into the song. A hint beside the attachments explains
+that this route sends analysis, not raw audio. It does not recover lyrics, melody
+or a polyphonic score, so a faithful piano cover still needs note transcription
+or a supplied MIDI/score.
+
+For native audio input, use an OpenAI-compatible model implementing `input_audio`.
+The panel keeps the draft available when the selected rig provider cannot send audio.
 
 ## Codex setup
 

@@ -189,6 +189,10 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(super) fn analysis_control(&self) -> auris_session::AnalysisControl {
+        auris_session::AnalysisControl::cancelled_by(self.0.stopped.clone())
+    }
+
     pub(super) fn set_vision(&self, vision: bool) {
         self.0.vision.store(vision, Ordering::Relaxed);
     }

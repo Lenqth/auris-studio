@@ -4012,6 +4012,22 @@ impl AurisApp {
                         .child(error),
                 )
             })
+            .when(
+                matches!(self.settings.agent.backend.as_str(), "codex" | "claude")
+                    && attachments.iter().any(|path| {
+                        auris_agent::attachment_kind(path)
+                            == Some(auris_agent::AttachmentKind::Audio)
+                    }),
+                |this| {
+                    this.child(
+                        div()
+                            .px_1p5()
+                            .text_xs()
+                            .text_color(theme.text_muted)
+                            .child(self.t(Key::AgentAttachmentAudioAnalysisHint)),
+                    )
+                },
+            )
             .when(!attachments.is_empty(), |this| {
                 this.child(
                     div()
@@ -6032,7 +6048,8 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.settings.agent = AgentPreferences {
-                backend: "codex".into(),
+                backend: "rig".into(),
+                provider: "ollama".into(),
                 model: "fixture".into(),
                 ..Default::default()
             };
@@ -6045,6 +6062,44 @@ mod tests {
             assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
             assert_eq!(this.agent_chat.attachments, [PathBuf::from("mix.wav")]);
             assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn cli_audio_references_pass_send_validation_and_wait_for_history(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let folder = tempfile::tempdir().unwrap();
+        app.update(cx, |this, _| {
+            this.session
+                .save_as(&folder.path().join("References.auris"))
+                .unwrap();
+            for backend in ["codex", "claude"] {
+                this.agent_chat.pending_send = None;
+                this.settings.agent = AgentPreferences {
+                    backend: backend.into(),
+                    provider: "ollama".into(),
+                    model: "fixture".into(),
+                    ..Default::default()
+                };
+                this.agent_chat
+                    .load_preferences(&this.settings.agent.clone());
+                this.agent_chat.input = TextField::new("Inspect this mix");
+                this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+                let (_sender, receiver) = std::sync::mpsc::channel();
+                this.agent_chat.history_load = Some(PendingHistoryLoad {
+                    token: this.agent_document_token(),
+                    receiver,
+                });
+                this.agent_send();
+                assert!(this.agent_chat.attachment_error.is_none());
+                let pending = this.agent_chat.pending_send.as_ref().unwrap();
+                assert_eq!(pending.attachments, [PathBuf::from("mix.wav")]);
+                assert_eq!(pending.preferences.backend, backend);
+                assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
+                assert!(this.agent_chat.link.is_none());
+            }
         });
     }
 

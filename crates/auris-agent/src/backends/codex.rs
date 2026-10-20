@@ -421,7 +421,7 @@ async fn conversation(
             "{context}\n[Current Auris permission policy: {}]\n{said}",
             wire["policy"]
         );
-        let input = match crate::attachments::codex_input(&prompt, &attachments) {
+        let input = match crate::attachments::cli_input(prompt, attachments, bridge, false).await {
             Ok(input) => input,
             Err(message) => {
                 bridge.emit(json!({"event":"error","message":message}));
@@ -599,7 +599,9 @@ mod tests {
             let mut rpc = Rpc::transport(None, writer, reader);
             let prefs = auris_session::AgentPreferences { backend:"codex".into(), model:"fixture".into(), ..Default::default() };
             let cwd = tempfile::tempdir().unwrap();
-            commands.send(json!({"say":"Add an instrument track", "display":"Add a track"}).to_string()).unwrap();
+            let audio = cwd.path().join("reference.wav");
+            crate::attachments::tests::reference_wav(&audio, false);
+            commands.send(json!({"say":"Add an instrument track", "display":"Add a track", "attachments":[audio]}).to_string()).unwrap();
             let drive = async {
                 conversation(&mut rpc, &prefs, &bridge, &mcp, cwd.path(), HistoryInput { path: None, fresh: false, snapshot: None }).await.unwrap();
             };
@@ -615,6 +617,7 @@ mod tests {
                 reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"add_track":{}}}]}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "turn/start");
+                assert!(request["params"]["input"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
                 reply(&mut writer, json!({"id":request["id"],"result":{"turn":{"id":"turn"}}})).await;
 
                 let client = reqwest::Client::new();
