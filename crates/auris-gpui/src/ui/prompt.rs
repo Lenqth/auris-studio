@@ -2306,7 +2306,7 @@ pub(crate) fn editable_text<V: gpui::EntityInputHandler>(
             // Registering the handler is only legal during paint, and only matters while this
             // element exists — which is exactly as long as the sheet holding it is open.
             window.handle_input(&focus, ElementInputHandler::new(bounds, view.clone()), cx);
-            paint_field(
+            let scroll = paint_field(
                 window,
                 cx,
                 bounds,
@@ -2315,9 +2315,113 @@ pub(crate) fn editable_text<V: gpui::EntityInputHandler>(
                 marked.clone(),
                 &theme,
             );
+            remember_paint(window.window_handle().window_id(), &focus, bounds, scroll);
         },
     )
     .size_full()
+}
+
+/// Where one editable field was last painted: its window, its focus, its bounds and its scroll.
+struct PaintedField {
+    window: gpui::WindowId,
+    /// Weak, so a field that has gone away is not kept alive by having once been drawn.
+    focus: gpui::WeakFocusHandle,
+    bounds: Bounds<Pixels>,
+    scroll: Pixels,
+}
+
+thread_local! {
+    /// Where each one-line field was last painted, and how far it was scrolled.
+    ///
+    /// A click arrives outside a paint, and the shaped line that turns its position into a
+    /// character is only known inside one. Kept per window and per field: a single cell was
+    /// overwritten by whichever field painted last, so a click in a settings box could be
+    /// measured against a field in another window — positions are window-relative, so bounds
+    /// alone cannot tell the two apart.
+    static PAINTED: std::cell::RefCell<Vec<PaintedField>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Records where `focus`'s field was painted in `window`, replacing its previous paint.
+fn remember_paint(
+    window: gpui::WindowId,
+    focus: &gpui::FocusHandle,
+    bounds: Bounds<Pixels>,
+    scroll: Pixels,
+) {
+    PAINTED.with_borrow_mut(|painted| {
+        // Fields whose handles are gone can never be clicked again; dropping them here keeps
+        // the list as short as the number of fields alive.
+        painted.retain(|entry| {
+            entry.focus.upgrade().is_some() && !(entry.window == window && entry.focus == *focus)
+        });
+        painted.push(PaintedField {
+            window,
+            focus: focus.downgrade(),
+            bounds,
+            scroll,
+        });
+    });
+}
+
+/// Where `focus`'s field was last painted in `window`, if it has been.
+fn painted_field(
+    window: gpui::WindowId,
+    focus: &gpui::FocusHandle,
+) -> Option<(Bounds<Pixels>, Pixels)> {
+    PAINTED.with_borrow(|painted| {
+        painted
+            .iter()
+            .find(|entry| entry.window == window && entry.focus == *focus)
+            .map(|entry| (entry.bounds, entry.scroll))
+    })
+}
+
+/// The byte offset in `text` under a window position, if `focus`'s field was painted there in
+/// this window.
+fn field_offset_at(
+    window: &mut Window,
+    focus: &gpui::FocusHandle,
+    text: &str,
+    position: gpui::Point<Pixels>,
+) -> Option<usize> {
+    let (bounds, scroll) = painted_field(window.window_handle().window_id(), focus)?;
+    if !bounds.contains(&position) {
+        return None;
+    }
+    let x = position.x - bounds.origin.x - FIELD_PADDING + scroll;
+    let line: SharedString = text.to_string().into();
+    let run = window.text_style().to_run(line.len());
+    let shaped = window
+        .text_system()
+        .shape_line(line, TEXT_SIZE, &[run], None);
+    Some(shaped.closest_index_for_x(x))
+}
+
+/// Lands the caret where a click on a one-line field fell.
+///
+/// A field is made with everything selected, which is right for a rename and wrong for a
+/// settings box: there, a click that left the selection alone left no caret either, and the
+/// user could not see where typing would go. A click into the field already being edited lands
+/// the caret on the character under it; a click that starts editing — when the field was drawn
+/// as plain text and there is no painted line to measure — puts it at the end.
+///
+/// `focus` is the field's own handle, the one its `editable_text` was given: the click is
+/// measured against where that field was painted in this window, and no other.
+pub(crate) fn click_field(
+    field: &mut TextField,
+    focus: &gpui::FocusHandle,
+    editing: bool,
+    window: &mut Window,
+    event: &MouseDownEvent,
+) {
+    let offset = editing
+        .then(|| field_offset_at(window, focus, field.content(), event.position))
+        .flatten();
+    match offset {
+        Some(offset) => field.place_caret(offset, event.modifiers.shift),
+        None => field.caret_to_end(),
+    }
 }
 
 /// Draws the text, its selection and the IME's pre-edit underline.
@@ -2329,6 +2433,7 @@ fn caret_offset(selection: &Range<usize>, marked: Option<&Range<usize>>) -> usiz
     marked.map_or(selection.end, |marked| marked.end)
 }
 
+/// Paints one field and answers how far its text was scrolled, for a click to be measured by.
 fn paint_field(
     window: &mut Window,
     cx: &mut gpui::App,
@@ -2337,7 +2442,7 @@ fn paint_field(
     selection: &Range<usize>,
     marked: Option<Range<usize>>,
     theme: &Theme,
-) {
+) -> Pixels {
     let origin = point(
         bounds.origin.x + FIELD_PADDING,
         bounds.origin.y + (bounds.size.height - TEXT_SIZE * 1.35) / 2.0,
@@ -2418,7 +2523,8 @@ fn paint_field(
                 theme.accent,
             );
         }
-    });
+        scroll
+    })
 }
 
 #[cfg(test)]
