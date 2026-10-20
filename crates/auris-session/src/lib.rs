@@ -90,6 +90,7 @@ pub mod voice_setup;
 pub use auris_analysis::audio::{
     AudioAnalysis, AudioChordSegment, AudioOptions, TempoAnalysis, TempoCandidate, TranscribedNote,
 };
+pub use auris_analysis::basic_pitch::PianoTranscription;
 pub use auris_analysis::chords::{
     ChordCandidate, ChordOptions, ChordReading, ChordState, SymbolicChordSegment,
 };
@@ -141,6 +142,7 @@ pub use session::{
 pub use session::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
     ClipInstrumentAnalysis, ClipMixtureAnalysis, analyze_audio_file, analyze_instrument_file,
+    transcribe_piano_file,
 };
 pub use session::{
     DrumKitAnalysis, DrumProbeFont, DrumProbeRequest, DrumProbeSample, DrumScanOptions,

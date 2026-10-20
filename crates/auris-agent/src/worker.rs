@@ -169,6 +169,7 @@ struct Channels {
     tools: Mutex<()>,
     vision: AtomicBool,
     visual: std::sync::Mutex<Option<Message>>,
+    audio_references: std::sync::Mutex<attachments::AudioReferences>,
     execution_root: Option<PathBuf>,
     execution_lease: std::sync::Mutex<Option<std::fs::File>>,
 }
@@ -225,6 +226,29 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(super) fn retain_audio(
+        &self,
+        file: Arc<tempfile::NamedTempFile>,
+        bytes: u64,
+    ) -> Result<String, String> {
+        self.0
+            .audio_references
+            .lock()
+            .map_err(|_| "Audio reference storage failed".to_string())?
+            .insert(file, bytes)
+    }
+
+    pub(super) fn audio_reference(&self, id: &str) -> Result<Arc<tempfile::NamedTempFile>, String> {
+        self.0
+            .audio_references
+            .lock()
+            .map_err(|_| "Audio reference storage failed".to_string())?
+            .get(id)
+    }
+    pub(super) fn analysis_control(&self) -> auris_session::AnalysisControl {
+        auris_session::AnalysisControl::cancelled_by(self.0.stopped.clone())
+    }
+
     pub(super) fn set_vision(&self, vision: bool) {
         self.0.vision.store(vision, Ordering::Relaxed);
     }
@@ -412,6 +436,7 @@ impl Worker {
             visual: std::sync::Mutex::new(None),
             execution_root,
             execution_lease: std::sync::Mutex::new(None),
+            audio_references: std::sync::Mutex::new(Default::default()),
         }));
         let (cancel, cancelled) = oneshot::channel();
         std::thread::Builder::new()
@@ -499,6 +524,7 @@ pub(crate) fn test_bridge() -> (
             visual: std::sync::Mutex::new(None),
             execution_root: None,
             execution_lease: std::sync::Mutex::new(None),
+            audio_references: std::sync::Mutex::new(Default::default()),
         })),
         commands,
         receiver,
@@ -946,6 +972,7 @@ mod tests {
             visual: std::sync::Mutex::new(None),
             execution_root: None,
             execution_lease: std::sync::Mutex::new(None),
+            audio_references: std::sync::Mutex::new(Default::default()),
         }));
         let scope = VisualTurn::new(Some(bridge.clone()));
         for revision in 1..=3 {

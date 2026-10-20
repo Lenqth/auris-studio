@@ -4123,6 +4123,22 @@ impl AurisApp {
                         .child(error),
                 )
             })
+            .when(
+                matches!(self.settings.agent.backend.as_str(), "codex" | "claude")
+                    && attachments.iter().any(|path| {
+                        auris_agent::attachment_kind(path)
+                            == Some(auris_agent::AttachmentKind::Audio)
+                    }),
+                |this| {
+                    this.child(
+                        div()
+                            .px_1p5()
+                            .text_xs()
+                            .text_color(theme.text_muted)
+                            .child(self.t(Key::AgentAttachmentAudioAnalysisHint)),
+                    )
+                },
+            )
             .when(!attachments.is_empty(), |this| {
                 this.child(
                     div()
@@ -4913,6 +4929,32 @@ mod tests {
             assert!(this.project().tracks.iter().any(|track| track.name == "Agent lead"));
             assert!(this.session.is_dirty());
             assert!(this.session.path().is_none());
+            before
+        });
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("secondary-z");
+        app.read_with(cx, |this, _| assert_eq!(this.project(), &before));
+    }
+
+    #[gpui::test]
+    fn live_agent_piano_cover_respects_read_only_and_keyboard_undo(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        let before = app.update(cx, |this,_| {
+            let before = this.project().clone();
+            let command = serde_json::json!({"action":"create_piano_cover","name":"Piano cover","at_beat":0.0,
+                "transcription":{"model_sha256":"2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec","seconds":1.0,
+                "notes":[{"pitch":60,"start":0.0,"end":1.0,"strength":0.7}]}});
+            this.settings.agent.policy = Default::default();
+            this.settings.agent.policy.mode = Mode::ReadOnly;
+            assert!(this.agent_edit(command.clone()).is_err());
+            assert_eq!(this.project(),&before);
+            this.settings.agent.policy.mode = Mode::Edit;
+            this.agent_edit(command).unwrap();
+            let piano = this.project().tracks.last().unwrap().kind.as_instrument().unwrap();
+            assert_eq!(piano.instrument_id,"auris.physical.piano");
+            assert_eq!(piano.clips[0].notes.len(),1);
+            assert!(this.session.path().is_none());
+            assert!(this.session.is_dirty());
             before
         });
         crate::harness::paint(&app, cx);
@@ -6151,7 +6193,8 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.settings.agent = AgentPreferences {
-                backend: "codex".into(),
+                backend: "rig".into(),
+                provider: "ollama".into(),
                 model: "fixture".into(),
                 ..Default::default()
             };
@@ -6164,6 +6207,44 @@ mod tests {
             assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
             assert_eq!(this.agent_chat.attachments, [PathBuf::from("mix.wav")]);
             assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn cli_audio_references_pass_send_validation_and_wait_for_history(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let folder = tempfile::tempdir().unwrap();
+        app.update(cx, |this, _| {
+            this.session
+                .save_as(&folder.path().join("References.auris"))
+                .unwrap();
+            for backend in ["codex", "claude"] {
+                this.agent_chat.pending_send = None;
+                this.settings.agent = AgentPreferences {
+                    backend: backend.into(),
+                    provider: "ollama".into(),
+                    model: "fixture".into(),
+                    ..Default::default()
+                };
+                this.agent_chat
+                    .load_preferences(&this.settings.agent.clone());
+                this.agent_chat.input = TextField::new("Inspect this mix");
+                this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+                let (_sender, receiver) = std::sync::mpsc::channel();
+                this.agent_chat.history_load = Some(PendingHistoryLoad {
+                    token: this.agent_document_token(),
+                    receiver,
+                });
+                this.agent_send();
+                assert!(this.agent_chat.attachment_error.is_none());
+                let pending = this.agent_chat.pending_send.as_ref().unwrap();
+                assert_eq!(pending.attachments, [PathBuf::from("mix.wav")]);
+                assert_eq!(pending.preferences.backend, backend);
+                assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
+                assert!(this.agent_chat.link.is_none());
+            }
         });
     }
 

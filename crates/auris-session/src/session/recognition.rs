@@ -23,6 +23,17 @@ fn failure(error: impl ToString) -> SessionError {
     SessionError::MusicAnalysis(error.to_string())
 }
 
+/// Transcribes overlapping pitched notes locally using the bundled Apache-2.0 Basic Pitch model.
+/// No document is opened or changed. Run on a cancellable worker, never the UI/audio thread.
+pub fn transcribe_piano_file(
+    path: &Path,
+    control: &AnalysisControl,
+) -> Result<crate::PianoTranscription, SessionError> {
+    check_cancel(control)?;
+    let audio = super::decode_audio(path, auris_analysis::basic_pitch::SAMPLE_RATE)?;
+    auris_analysis::basic_pitch::transcribe(&audio, control).map_err(failure)
+}
+
 /// A bounded selection of immutable written notes ready for a worker.
 #[derive(Clone, Debug)]
 pub struct ChordAnalysisJob {
@@ -659,7 +670,7 @@ impl Session {
         self.validate_transcription(report)?;
         let origin = self.project.tempo_map.ticks_to_seconds(start).0;
         let notes = self.map_transcription(&report.notes, origin, 1.0, start, Ticks(i64::MAX));
-        self.create_analysis_track(notes, start, name)
+        self.create_analysis_track(notes, start, name, None)
     }
 
     /// Creates a new instrument track matching the analyzed clip's placement and repeats.
@@ -669,7 +680,7 @@ impl Session {
         name: &str,
     ) -> Result<(TrackId, ClipId), SessionError> {
         let notes = self.clip_transcription_notes(report)?;
-        self.create_analysis_track(notes, report.job.clip.start, name)
+        self.create_analysis_track(notes, report.job.clip.start, name, None)
     }
 
     fn create_analysis_track(
@@ -677,6 +688,7 @@ impl Session {
         notes: Vec<Note>,
         start: Ticks,
         name: &str,
+        instrument: Option<&str>,
     ) -> Result<(TrackId, ClipId), SessionError> {
         if self.transaction.is_some() {
             return Err(SessionError::EditInProgress);
@@ -687,7 +699,10 @@ impl Session {
         let length = notes.iter().map(Note::end).max().unwrap_or(Ticks(1));
         self.begin_transaction(Edit::AddInstrumentTrack);
         let outcome = (|| {
-            let track = self.add_default_instrument_track(name)?;
+            let track = match instrument {
+                Some(id) => self.add_instrument_track(name, id)?,
+                None => self.add_default_instrument_track(name)?,
+            };
             let clip = self.add_midi_clip(track, name, start, length)?;
             self.project
                 .midi_clip_mut(clip)
@@ -701,6 +716,31 @@ impl Session {
             self.end_transaction();
         }
         outcome
+    }
+
+    /// Adds all estimated pitches as one editable physical-piano track in one undo step.
+    /// Source seconds map through the current tempo map, preserving rubato and overlapping notes.
+    /// Existing tracks, project tempo and source audio are preserved.
+    pub fn create_piano_cover(
+        &mut self,
+        draft: &crate::PianoTranscription,
+        start: Ticks,
+        name: &str,
+    ) -> Result<(TrackId, ClipId), SessionError> {
+        draft.validate().map_err(failure)?;
+        if name.trim().is_empty() || name.len() > 256 || start.raw() < 0 {
+            return Err(failure(
+                "use a nonempty name up to 256 bytes and a nonnegative start",
+            ));
+        }
+        let origin = self.project.tempo_map.ticks_to_seconds(start).0;
+        let notes = self.map_transcription(&draft.notes, origin, 1.0, start, Ticks(i64::MAX));
+        self.create_analysis_track(
+            notes,
+            start,
+            name,
+            Some(crate::registry::DEFAULT_INSTRUMENT),
+        )
     }
 
     /// Converts audio chord windows through the clip's trim, stretch and repeat placement.
@@ -869,6 +909,105 @@ mod tests {
     use auris_core::theory::key::Key;
     fn session() -> Session {
         Session::new(SessionOptions::headless()).unwrap()
+    }
+
+    #[test]
+    fn piano_cover_preserves_polyphony_timing_and_the_song_in_one_undo_step() {
+        let mut s = session();
+        s.add_default_instrument_track("Existing").unwrap();
+        s.set_bpm(90.0);
+        let before = s.project().clone();
+        let draft = crate::PianoTranscription {
+            model_sha256: auris_analysis::basic_pitch::MODEL_SHA256.into(),
+            seconds: 2.0,
+            notes: [60, 64, 67]
+                .into_iter()
+                .map(|pitch| TranscribedNote {
+                    pitch,
+                    start: 0.25,
+                    end: 1.5,
+                    strength: 0.7,
+                })
+                .collect(),
+        };
+        let start = Ticks::from_beats(4.0);
+        let (track, clip) = s.create_piano_cover(&draft, start, "Piano cover").unwrap();
+        assert_eq!(
+            s.project()
+                .track(track)
+                .unwrap()
+                .kind
+                .as_instrument()
+                .unwrap()
+                .instrument_id,
+            "auris.physical.piano"
+        );
+        let (_, clip) = s.project().midi_clip(clip).unwrap();
+        assert_eq!(clip.start, start);
+        assert_eq!(clip.notes.len(), 3);
+        for note in &clip.notes {
+            let origin = s.project().tempo_map.ticks_to_seconds(start).0;
+            let onset = s.project().tempo_map.ticks_to_seconds(start + note.start).0 - origin;
+            let end = s.project().tempo_map.ticks_to_seconds(start + note.end()).0 - origin;
+            assert!((onset - 0.25).abs() < 0.002);
+            assert!((end - 1.5).abs() < 0.002);
+        }
+        assert_eq!(s.project().tempo_map, before.tempo_map);
+        assert_eq!(s.project().tracks[0], before.tracks[0]);
+        s.undo();
+        assert_eq!(s.project(), &before);
+        let mut invalid = draft;
+        invalid.notes[0].end = f64::NAN;
+        assert!(s.create_piano_cover(&invalid, start, "Bad").is_err());
+        assert_eq!(s.project(), &before);
+    }
+
+    #[test]
+    fn piano_cover_transcribes_a_rendered_physical_piano_chord() {
+        use crate::prelude::{OfflineOptions, RenderProgress, WavExportSettings};
+        let folder = tempfile::tempdir().unwrap();
+        let file = folder.path().join("piano.wav");
+        let mut source = session();
+        source.set_bpm(120.0);
+        let track = source
+            .add_instrument_track("Source", crate::registry::DEFAULT_INSTRUMENT)
+            .unwrap();
+        let clip = source
+            .add_midi_clip(track, "Chord", Ticks::ZERO, Ticks::from_beats(5.0))
+            .unwrap();
+        for pitch in [60, 64, 67] {
+            source
+                .add_note(
+                    clip,
+                    Note::new(pitch, Ticks::from_beats(0.5), Ticks::from_beats(2.5)),
+                )
+                .unwrap();
+        }
+        source
+            .render_job()
+            .render_to_wav(
+                &file,
+                &WavExportSettings::default(),
+                &OfflineOptions {
+                    sample_rate: Some(22_050.0),
+                    end_frames: Some(55_125),
+                    include_tail: false,
+                    ..Default::default()
+                },
+                &mut RenderProgress::default(),
+            )
+            .unwrap();
+        let draft = transcribe_piano_file(&file, &Default::default()).unwrap();
+        for pitch in [60, 64, 67] {
+            assert!(
+                draft
+                    .notes
+                    .iter()
+                    .any(|note| note.pitch == pitch && note.start < 0.5 && note.end > 0.8),
+                "missing {pitch}: {:?}",
+                draft.notes
+            );
+        }
     }
     #[test]
     fn mixture_groups_are_one_undo_step_and_source_edits_invalidate_the_draft() {

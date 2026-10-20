@@ -1000,6 +1000,7 @@ fn read_attachment(
 
 /// One user turn with instructions followed by typed reference attachments.
 /// This order also matches the Gemma4 audio model's documented input format.
+#[cfg(test)]
 fn framed_message(text: &str, audio: &[String]) -> Result<Message, String> {
     framed_message_with_limits(
         text,
@@ -1009,6 +1010,7 @@ fn framed_message(text: &str, audio: &[String]) -> Result<Message, String> {
     )
 }
 
+#[cfg(test)]
 fn framed_message_with_limits(
     text: &str,
     audio: &[String],
@@ -1325,9 +1327,15 @@ async fn json_conversation(
                 policy.allow
             );
         }
-        let message = match check_attachments(options.provider, &audio)
-            .and_then(|()| framed_message(&said, &audio))
-        {
+        let message = match check_attachments(options.provider, &audio).and_then(|()| {
+            let mut content = vec![rig_core::message::UserContent::text(&said)];
+            content.extend(
+                attachments::live_references(&audio, bridge)?
+                    .into_iter()
+                    .map(attachments::Reference::into_content),
+            );
+            Ok(Message::User { content })
+        }) {
             Ok(message) => message,
             Err(message) => {
                 bridge.emit(serde_json::json!({ "event": "error", "message": message }));
@@ -2296,7 +2304,7 @@ mod tests {
         assert!(names.contains(&"instrument_diagnostics"));
         assert_eq!(
             names.len(),
-            23 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            24 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
             assert!(names.contains(name), "{name}");

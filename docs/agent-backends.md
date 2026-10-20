@@ -25,13 +25,37 @@ there attaches a reference; dropping audio onto the arrangement imports it into
 the song. Attached filenames remain visible and each file can be removed before
 sending. A message accepts at most eight files and 25 MiB in total.
 
-Rig and Codex accept reference attachments. PNG, JPEG, GIF and WebP are sent as
+Rig, Codex and Claude Code accept reference attachments. PNG, JPEG, GIF and WebP are sent as
 image parts. UTF-8 text, Markdown, lyrics, CSV, JSON and source files are sent as
 delimited reference data, up to 256 KiB
 per text file. Instructions inside an attachment remain reference content.
-The selected model must support the supplied media. Audio files use an
-OpenAI-compatible model implementing `input_audio`; the panel explains this
-requirement before sending and keeps the draft available when it is not met.
+The selected model must support the supplied media. With Codex or Claude Code,
+audio files are analyzed locally and sent as text measurements: duration,
+constant-tempo alternatives, estimated beats and major/minor chord candidates.
+Long reports sample up to 256 beats and 256 chord windows across the recording,
+with source timestamps and sampling strides. Analysis runs in the background
+without editing or importing into the song. Raw audio stays local on these routes.
+
+To create a piano cover, attach the recording and ask, for example, “Transcribe
+this audio and make a piano cover.” The agent's `create_piano_cover` tool runs
+the bundled Apache-2.0 Basic Pitch model locally and adds an editable physical-piano
+track with overlapping notes, source timing and estimated relative velocities.
+No Python, model setup or separate audio-model connection is needed. The draft
+preserves the project's tempo and existing tracks, remains unsaved, and one Undo
+removes it. Review extra/missing notes, timing and dynamics before export.
+
+Transcription accepts up to ten minutes and eight channels. Piano or isolated
+pitched recordings work best; dense mixes can contain errors and percussion is
+not separated. This is a note draft, not guaranteed faithful sheet music or a
+two-hand playable arrangement. See [music analysis](music-analysis.md).
+
+Audio references are immutable snapshots scoped to the conversation, retained
+within eight files/25 MiB in aggregate. Attaching more files can expire older
+references; reattach a file if the agent reports that its reference expired.
+
+For native audio input, use an OpenAI-compatible model implementing `input_audio`.
+The panel keeps the draft available when the selected rig provider cannot send audio.
+Native API turns can use the same attachment-to-piano tool.
 
 ## Codex setup
 
