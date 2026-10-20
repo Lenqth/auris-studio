@@ -1853,6 +1853,7 @@ impl AurisApp {
 
     /// Stops the worker and checks for completed writes, which remain undoable.
     fn agent_stop(&mut self, cx: &mut gpui::Context<Self>) {
+        self.agent_chat.controls.review = None;
         self.agent_chat.controls.pending = None;
         self.agent_chat.restore_pending_focus = false;
         self.agent_chat.controls.permits.clear();
@@ -2260,6 +2261,9 @@ impl AurisApp {
         }
         self.poll_agent_inspection();
         self.poll_agent_sound_search();
+        if self.poll_agent_review() {
+            cx.notify();
+        }
         loop {
             let Some(link) = self.agent_chat.link.as_ref() else {
                 return;
@@ -2942,6 +2946,8 @@ impl AurisApp {
         let ratio = self.agent_chat.context_ratio();
         let phase = if self.agent_chat.controls.compacting {
             Key::AgentCompacting
+        } else if self.agent_chat.controls.review.is_some() {
+            Key::AgentReviewing
         } else if self.agent_chat.controls.pending.is_some() {
             Key::AgentAwaitingApproval
         } else {
@@ -3874,7 +3880,8 @@ impl AurisApp {
             });
         for (index, name) in names.iter().enumerate() {
             let pick = pick.clone();
-            let row_id: gpui::ElementId = if id == "agent-mode-option" && index == 4 {
+            let permissions = id == "agent-mode-option" && index + 1 == names.len();
+            let row_id: gpui::ElementId = if permissions {
                 "agent-permissions".into()
             } else {
                 (id, index).into()
@@ -3889,10 +3896,7 @@ impl AurisApp {
                     theme,
                     cx.listener(move |this, _, window, cx| {
                         pick(this, index, cx);
-                        if id == "agent-mode-option"
-                            && index == 4
-                            && let Some(focus) = &this.agent_chat.controls.mode_focus
-                        {
+                        if permissions && let Some(focus) = &this.agent_chat.controls.mode_focus {
                             window.focus(focus);
                         }
                         cx.notify();

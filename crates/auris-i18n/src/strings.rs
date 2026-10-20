@@ -1924,9 +1924,14 @@ new のオプション
     AgentEditMode { en: "Edit", ja: "編集" }
     AgentPlanMode { en: "Plan", ja: "プラン" }
     AgentBypassMode { en: "Bypass", ja: "バイパス" }
+    AgentAutoReview { en: "Auto review", ja: "自動審査" }
+    AgentReviewing { en: "Reviewing approval…", ja: "操作の承認を審査中…" }
+    AgentReviewResult { en: "Auto review — {decision}: {reason}", ja: "自動審査 — {decision}: {reason}" }
+    AgentReviewFailed { en: "Auto review unavailable. Review this operation manually. {reason}", ja: "自動審査を完了できませんでした。操作内容を確認し、許可するか判断してください。{reason}" }
+    AgentExternalOperation { en: "External file changes and command effects are not covered by Undo.", ja: "外部ファイルの変更やコマンドの実行結果は、元に戻す操作の対象外です。" }
     AgentApprovalMode { en: "Approval mode", ja: "承認モード" }
     AgentPermissions { en: "Permission rules…", ja: "許可ルール…" }
-    AgentPermissionHelp { en: "Deny rules always win. Read-only and Plan block changes; Edit allows ordinary edits. Bypass skips confirmation. Exact rules cycle Default → Allow → Deny. Broad * rules switch only between Default and Deny; use /allow name for deliberate broad access. Commands: /mode bypass, /allow name, /deny name, /default name, /permissions.", ja: "禁止ルールは常に優先されます。読み取り専用とプランは変更を禁止し、編集は通常の編集を許可、バイパスは確認を省略します。個別ルールは 標準 → 許可 → 禁止 の順で切り替わります。* を含む広域ルールは 標準 と 禁止 のみを切り替えます。広域の許可が必要な場合に限り /allow 操作名を使ってください。ほかに /mode bypass、/allow 操作名、/deny 操作名、/default 操作名、/permissions も使えます。" }
+    AgentPermissionHelp { en: "Deny rules always win. Read-only and Plan block changes; Edit allows ordinary live edits and asks before native commands or file changes. Auto review checks operations needing approval using the selected model; uncertainty returns to manual confirmation. Bypass skips confirmation. Exact rules cycle Default → Allow → Deny. Broad * rules switch only between Default and Deny; use /allow name for deliberate broad access. Commands: /mode auto_review, /allow name, /deny name, /default name, /permissions.", ja: "禁止ルールは常に優先されます。読み取り専用とプランは変更を禁止します。編集では通常の曲の編集を許可し、外部コマンドやファイル変更は確認します。自動審査では選択中のモデルが承認を判断し、判断できなければ手動確認に戻します。バイパスは確認を省略します。個別ルールは 標準 → 許可 → 禁止 の順で切り替わります。* を含む広域ルールは 標準 と 禁止 のみを切り替えます。広域の許可には /allow 操作名を使います。ほかに /mode auto_review、/deny 操作名、/default 操作名、/permissions も使えます。" }
     AgentRuleDefault { en: "Default", ja: "標準" }
     AgentRuleAllow { en: "Allow", ja: "許可" }
     AgentRuleDeny { en: "Deny", ja: "禁止" }

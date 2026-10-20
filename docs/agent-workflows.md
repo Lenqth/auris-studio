@@ -363,7 +363,7 @@ inspect the current document and resume. Completed live edits remain in the sess
 
 ## Agent permissions and context compaction
 
-The rig Agent Panel has four persistent modes, following the permission model in
+The Agent Panel has five persistent modes, following the permission model in
 [Picocode](https://github.com/uthree/picocode):
 
 | Mode | Behavior |
@@ -371,6 +371,7 @@ The rig Agent Panel has four persistent modes, following the permission model in
 | Read-only | Read immediately; reject document changes and request approval for internet search unless allowed by a rule. |
 | Edit | Apply ordinary live edits; confirm removals, arrangement replacement, and internet search. |
 | Plan | Inspect and propose a plan; reject document changes, including allow-listed changes. |
+| Auto review | Apply ordinary live edits; have an independent model review operations that would require confirmation in Edit mode. |
 | Bypass | Skip confirmations while continuing to enforce deny rules. |
 
 Deny rules win over every mode and allow rule. Read-only and Plan reject document
@@ -388,16 +389,43 @@ Starting a new conversation asks for explicit confirmation before it stops activ
 work, clears the visible transcript, and deletes the saved conversation history.
 Cancelling the confirmation leaves the conversation and active work untouched.
 
-Use the mode buttons or `/mode read_only|edit|plan|bypass`. Shift+Tab cycles the
+Use the mode buttons or `/mode read_only|edit|plan|auto_review|bypass`. Shift+Tab cycles the
 three ordinary modes; bypass requires an explicit choice. While an approval is
 pending, Shift+Tab denies it without changing the mode. `/permissions` opens
 rules, and `/allow OPERATION`, `/deny OPERATION`, `/default OPERATION` edit them.
 While confirmation is pending, Escape denies, Ctrl+Enter (Command+Enter on macOS)
 allows once, and adding Shift always allows.
 
-These modes govern rig calls only. Even bypass edits only the open document;
-file creation, export, and saving remain outside its tool catalog. MCP retains its
-existing tools and does not apply the Agent Panel's policy.
+These modes govern live tools in every backend. Rig exposes the live document
+catalog. Codex and Claude Code also expose native shell and file tools. Native
+approvals appear as `cli_command`, `cli_file_change`, and (for Claude) `cli_file_read`
+in Permissions. File changes and commands require confirmation in Edit mode unless
+allowed by an exact or broad rule. Read-only and Plan reject native command and
+file-change approvals even when allow-listed. Native file changes and command effects
+are outside Auris Undo. Edit the open song through live tools rather than rewriting
+its `.auris` file behind the window.
+
+CLI tools start in the saved project's folder. An unsaved song uses temporary
+scratch space that is removed when the conversation stops; name an explicit
+persistent destination for deliverables. Codex retains a read-only sandbox and an
+untrusted-command approval policy, so trusted sandboxed reads do not prompt. Writes
+and elevated commands go through the panel's approval gate. Claude exposes Bash,
+Read, Glob, Grep, Write, Edit and NotebookEdit, using ask rules to route native calls
+through the panel. Unrelated MCP servers, plugins and hooks remain isolated.
+Standalone MCP retains its saved-file tools and does not apply the panel policy.
+
+Select **Auto review** or enter `/mode auto_review` to have a model approve on your
+behalf. The reviewer uses the selected backend and model in a separate conversation
+without tools. It assesses the human requests, exact arguments, command text and
+available file diff. Clear, low-risk work can receive a one-time approval; clear
+refusals block the operation. Uncertain decisions, timeouts, unavailable models,
+oversized input and invalid responses return to manual confirmation. The transcript
+shows the decision and reason. You can approve or deny manually while review runs;
+doing so cancels the pending review. A changed document invalidates a mutation
+approval, and late results cannot approve another request. Review never creates an
+Always allow rule and never overrides a deny rule. It adds a model request for each
+review; it is a fallible recommendation, not an operating-system sandbox. Bypass
+continues to skip both human confirmation and automatic review.
 
 Compact context or `/compact` summarizes older exchanges with the configured model,
 without granting that model tools. The latest two completed exchanges are kept

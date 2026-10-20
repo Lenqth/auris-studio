@@ -2,9 +2,18 @@
 use super::*;
 use auris_session::agent_policy::{Decision, Mode, OPERATIONS, Operation};
 
+const MODES: [Mode; 5] = [
+    Mode::ReadOnly,
+    Mode::Edit,
+    Mode::Plan,
+    Mode::AutoReview,
+    Mode::Bypass,
+];
+
 #[derive(Default)]
 pub(super) struct Controls {
     pub(super) pending: Option<Pending>,
+    pub(super) review: Option<(u64, auris_agent::approval_review::ReviewJob)>,
     pub(super) permits: Vec<(serde_json::Value, u64)>,
     pub(super) rules_open: bool,
     pub(super) compacting: bool,
@@ -33,12 +42,14 @@ pub(super) enum Approval {
     Once,
     Always,
     Deny,
+    Reviewed,
 }
 
 fn mode_key(mode: Mode) -> Key {
     match mode {
         Mode::ReadOnly => Key::AgentReadOnly,
         Mode::Edit => Key::AgentEditMode,
+        Mode::AutoReview => Key::AgentAutoReview,
         Mode::Plan => Key::AgentPlanMode,
         Mode::Bypass => Key::AgentBypassMode,
     }
@@ -95,6 +106,7 @@ pub(super) fn slash_matches(value: &str) -> Vec<SlashMatch> {
         ("/read-only", false, Key::AgentSlashMode),
         ("/edit", false, Key::AgentSlashMode),
         ("/plan", false, Key::AgentSlashMode),
+        ("/auto-review", false, Key::AgentSlashMode),
         ("/bypass", false, Key::AgentSlashMode),
     ];
     let Some((command, argument)) = value.split_once(' ') else {
@@ -111,7 +123,7 @@ pub(super) fn slash_matches(value: &str) -> Vec<SlashMatch> {
     let argument = argument.trim_start();
     let (values, description): (Vec<&str>, Key) = match command {
         "/mode" => (
-            vec!["read-only", "edit", "plan", "bypass"],
+            vec!["read-only", "edit", "plan", "auto_review", "bypass"],
             Key::AgentSlashMode,
         ),
         "/effort" => (
@@ -256,7 +268,7 @@ impl AurisApp {
         match self.settings.agent.policy.decide(&operation) {
             Decision::Allow => self.permission_result(id, true, "Allowed by current permissions"),
             Decision::Deny(reason) => self.permission_result(id, false, &reason),
-            Decision::Ask => {
+            decision @ (Decision::Ask | Decision::Review) => {
                 if self.agent_chat.controls.pending.is_some() {
                     self.permission_result(id, false, "Another operation is awaiting confirmation");
                     return;
@@ -267,6 +279,39 @@ impl AurisApp {
                     args,
                     revision: self.session.revision(),
                 });
+                if decision == Decision::Review {
+                    let requests = self
+                        .agent_chat
+                        .entries
+                        .iter()
+                        .filter_map(|entry| {
+                            if let ChatEntry::You(text) = entry {
+                                Some(text.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    let pending = self.agent_chat.controls.pending.as_ref().unwrap();
+                    let result = auris_agent::approval_review::start(
+                        self.agent_chat.preferences(),
+                        requests,
+                        pending.operation.name.clone(),
+                        pending.args.clone(),
+                        self.session
+                            .path()
+                            .and_then(Path::parent)
+                            .map(Path::to_path_buf),
+                    );
+                    match result {
+                        Ok(job) => self.agent_chat.controls.review = Some((id, job)),
+                        Err(error) => {
+                            self.agent_chat.push_entry(ChatEntry::Status(
+                                self.t(Key::AgentReviewFailed).replace("{reason}", &error),
+                            ));
+                        }
+                    }
+                }
                 self.agent_chat.restore_pending_focus =
                     !self.panels.is_open(crate::dock::Panel::Agent);
                 self.focus_agent_field(AgentField::Chat);
@@ -284,11 +329,69 @@ impl AurisApp {
         self.focus_agent_field(AgentField::Chat);
     }
 
+    pub(super) fn poll_agent_review(&mut self) -> bool {
+        let Some((id, job)) = &self.agent_chat.controls.review else {
+            return false;
+        };
+        let Some(result) = job.poll() else {
+            return false;
+        };
+        let id = *id;
+        self.agent_chat.controls.review = None;
+        self.apply_agent_review(id, result);
+        true
+    }
+
+    fn apply_agent_review(
+        &mut self,
+        id: u64,
+        result: Result<auris_agent::approval_review::Review, String>,
+    ) {
+        let Some(pending) = self
+            .agent_chat
+            .controls
+            .pending
+            .as_ref()
+            .filter(|pending| pending.id == id)
+        else {
+            return;
+        };
+        if self.settings.agent.policy.decide(&pending.operation) != Decision::Review {
+            return;
+        }
+        use auris_agent::approval_review::Verdict;
+        match result {
+            Ok(review) => {
+                let label = self.t(match review.verdict {
+                    Verdict::Approve => Key::AgentRuleAllow,
+                    Verdict::Ask => Key::AgentAwaitingApproval,
+                    Verdict::Deny => Key::AgentRuleDeny,
+                });
+                self.agent_chat.push_entry(ChatEntry::Status(
+                    self.t(Key::AgentReviewResult)
+                        .replace("{decision}", label)
+                        .replace("{reason}", &review.reason),
+                ));
+                match review.verdict {
+                    Verdict::Approve => self.agent_approval(Approval::Reviewed),
+                    Verdict::Deny => self.agent_approval(Approval::Deny),
+                    Verdict::Ask => {}
+                }
+            }
+            Err(reason) => {
+                self.agent_chat.push_entry(ChatEntry::Status(
+                    self.t(Key::AgentReviewFailed).replace("{reason}", &reason),
+                ));
+            }
+        }
+    }
+
     fn agent_approval_with_save(
         &mut self,
         answer: Approval,
         save: impl FnOnce(&auris_session::Settings) -> Result<(), String>,
     ) -> Result<(), String> {
+        self.agent_chat.controls.review = None;
         self.agent_chat.restore_pending_focus = false;
         let Some(pending) = self.agent_chat.controls.pending.as_ref() else {
             return Ok(());
@@ -322,7 +425,15 @@ impl AurisApp {
                     .permits
                     .push((command.clone(), pending.revision));
             }
-            self.permission_result(pending.id, true, "Explicitly approved by the user");
+            self.permission_result(
+                pending.id,
+                true,
+                if matches!(answer, Approval::Reviewed) {
+                    "Approved by independent automatic review"
+                } else {
+                    "Explicitly approved by the user"
+                },
+            );
         }
         Ok(())
     }
@@ -344,8 +455,10 @@ impl AurisApp {
         match self.settings.agent.policy.decide(&operation) {
             Decision::Allow => Ok(()),
             Decision::Deny(reason) => Err(reason),
-            Decision::Ask if approved => Ok(()),
-            Decision::Ask => Err("This edit needs a fresh confirmation before it can run.".into()),
+            Decision::Ask | Decision::Review if approved => Ok(()),
+            Decision::Ask | Decision::Review => {
+                Err("This edit needs a fresh confirmation before it can run.".into())
+            }
         }
     }
 
@@ -356,11 +469,13 @@ impl AurisApp {
             "/read-only" => Some(Mode::ReadOnly),
             "/edit" => Some(Mode::Edit),
             "/plan" => Some(Mode::Plan),
+            "/auto-review" => Some(Mode::AutoReview),
             "/bypass" => Some(Mode::Bypass),
             "/mode" => match value {
                 "read_only" | "read-only" => Some(Mode::ReadOnly),
                 "edit" => Some(Mode::Edit),
                 "plan" => Some(Mode::Plan),
+                "auto_review" | "auto-review" => Some(Mode::AutoReview),
                 "bypass" => Some(Mode::Bypass),
                 _ => None,
             },
@@ -406,7 +521,7 @@ impl AurisApp {
                 },
                 "/mode" => {
                     self.agent_chat.push_entry(ChatEntry::Error(
-                        "/mode read_only | edit | plan | bypass".into(),
+                        "/mode read_only | edit | plan | auto_review | bypass".into(),
                     ));
                 }
                 _ => return false,
@@ -437,7 +552,7 @@ impl AurisApp {
     pub(super) fn agent_controls(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
         let mode = self.settings.agent.policy.mode;
-        let mut mode_names = [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
+        let mut mode_names = MODES
             .map(|choice| self.t(mode_key(choice)).to_owned())
             .to_vec();
         mode_names.push(self.t(Key::AgentPermissions).to_owned());
@@ -459,30 +574,21 @@ impl AurisApp {
                 cx,
             ))
             .when(self.agent_chat.controls.mode_menu, |this| {
-                this.child(
-                    self.option_rows(
-                        "agent-mode-option",
-                        &mode_names,
-                        [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
-                            .iter()
-                            .position(|choice| *choice == mode)
-                            .unwrap_or(0),
-                        &theme,
-                        |this, index, _| {
-                            if let Some(mode) =
-                                [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
-                                    .get(index)
-                                    .copied()
-                            {
-                                this.agent_mode(mode);
-                            } else {
-                                this.agent_chat.controls.mode_menu = false;
-                                this.set_agent_rules_open(!this.agent_chat.controls.rules_open);
-                            }
-                        },
-                        cx,
-                    ),
-                )
+                this.child(self.option_rows(
+                    "agent-mode-option",
+                    &mode_names,
+                    MODES.iter().position(|choice| *choice == mode).unwrap_or(0),
+                    &theme,
+                    |this, index, _| {
+                        if let Some(mode) = MODES.get(index).copied() {
+                            this.agent_mode(mode);
+                        } else {
+                            this.agent_chat.controls.mode_menu = false;
+                            this.set_agent_rules_open(!this.agent_chat.controls.rules_open);
+                        }
+                    },
+                    cx,
+                ))
             })
             .into_any_element()
     }
@@ -641,6 +747,12 @@ impl AurisApp {
                 self.project().name,
                 pending.operation.name
             ))
+            .when(self.agent_chat.controls.review.is_some(), |this| {
+                this.child(self.t(Key::AgentReviewing))
+            })
+            .when(pending.operation.name.starts_with("cli_"), |this| {
+                this.child(self.t(Key::AgentExternalOperation))
+            })
             .child(
                 div()
                     .id("agent-approval-details")
@@ -664,6 +776,136 @@ impl AurisApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn auto_review_is_an_explicit_mode_and_permissions_keep_their_own_menu_row(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models_error = Some("offline fixture".into());
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-mode-menu", cx);
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-mode-option-3", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.policy.mode, Mode::AutoReview)
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-mode-menu", cx);
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-permissions", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.controls.rules_open);
+            assert_eq!(this.settings.agent.policy.mode, Mode::AutoReview);
+        });
+    }
+
+    #[gpui::test]
+    fn reviewed_approvals_are_one_time_and_uncertainty_keeps_manual_confirmation(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use auris_agent::approval_review::{Review, Verdict};
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent.policy = PolicyForTest::default();
+            let track = this
+                .session
+                .add_default_instrument_track("Reviewed lead")
+                .unwrap();
+            let command = command(track.0);
+            let args = serde_json::json!({"command":command.clone()});
+            this.agent_permission(101, "edit_project".into(), args);
+            this.settings.agent.policy.mode = Mode::AutoReview;
+            for result in [
+                Ok(Review {
+                    verdict: Verdict::Ask,
+                    reason: "Needs consent".into(),
+                }),
+                Err("offline".into()),
+            ] {
+                this.apply_agent_review(101, result);
+                assert!(this.agent_chat.controls.pending.is_some());
+                assert!(this.agent_edit(command.clone()).is_err());
+            }
+            this.apply_agent_review(
+                99,
+                Ok(Review {
+                    verdict: Verdict::Approve,
+                    reason: "Stale request".into(),
+                }),
+            );
+            assert!(this.agent_chat.controls.pending.is_some());
+            this.apply_agent_review(
+                101,
+                Ok(Review {
+                    verdict: Verdict::Approve,
+                    reason: "Requested scoped edit".into(),
+                }),
+            );
+            assert!(this.agent_chat.controls.pending.is_none());
+            assert!(this.settings.agent.policy.allow.is_empty());
+            this.agent_edit(command.clone()).unwrap();
+            assert!(this.agent_edit(command).is_err());
+        });
+    }
+
+    #[gpui::test]
+    fn reviewed_approvals_cannot_survive_document_changes_denial_or_cancellation(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use auris_agent::approval_review::{Review, Verdict};
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            let track = this
+                .session
+                .add_default_instrument_track("Keep lead")
+                .unwrap();
+            let command = command(track.0);
+            for scenario in ["revision", "deny", "cancel", "review_denied"] {
+                this.settings.agent.policy = PolicyForTest::default();
+                this.agent_permission(
+                    102,
+                    "edit_project".into(),
+                    serde_json::json!({"command":command.clone()}),
+                );
+                this.settings.agent.policy.mode = Mode::AutoReview;
+                match scenario {
+                    "revision" => {
+                        this.session
+                            .add_default_instrument_track("Concurrent edit")
+                            .unwrap();
+                    }
+                    "deny" => {
+                        this.settings
+                            .agent
+                            .policy
+                            .set_rule("edit_project.remove_track", Some(false))
+                            .unwrap();
+                    }
+                    "cancel" => this.agent_approval(Approval::Deny),
+                    _ => {}
+                }
+                this.apply_agent_review(
+                    102,
+                    Ok(Review {
+                        verdict: if scenario == "review_denied" {
+                            Verdict::Deny
+                        } else {
+                            Verdict::Approve
+                        },
+                        reason: scenario.into(),
+                    }),
+                );
+                assert!(this.agent_edit(command.clone()).is_err(), "{scenario}");
+                assert!(this.project().track(track).is_some());
+                this.agent_chat.controls.pending = None;
+            }
+        });
+    }
 
     fn command(track: u64) -> serde_json::Value {
         serde_json::json!({"action":"remove_track","track":track})

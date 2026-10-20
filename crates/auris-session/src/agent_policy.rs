@@ -12,9 +12,11 @@ pub enum Mode {
     /// Allow ordinary document edits; ask before removal, replacement or network access.
     #[default]
     Edit,
+    /// Review operations needing confirmation with an independent model before asking the user.
+    AutoReview,
     /// Investigate and propose a plan; document mutations are denied.
     Plan,
-    /// Skip confirmations, while still enforcing deny rules and the live-document boundary.
+    /// Skip human confirmation and automatic review, while still enforcing deny rules.
     Bypass,
 }
 
@@ -24,17 +26,18 @@ impl Mode {
         match self {
             Self::ReadOnly => "read_only",
             Self::Edit => "edit",
+            Self::AutoReview => "auto_review",
             Self::Plan => "plan",
             Self::Bypass => "bypass",
         }
     }
 
-    /// Cycle ordinary modes. Bypass always requires an explicit selection.
+    /// Cycle ordinary modes. Auto-review and bypass require an explicit selection.
     pub fn next(self) -> Self {
         match self {
             Self::ReadOnly => Self::Edit,
             Self::Edit => Self::Plan,
-            Self::Plan | Self::Bypass => Self::ReadOnly,
+            Self::Plan | Self::AutoReview | Self::Bypass => Self::ReadOnly,
         }
     }
 }
@@ -58,6 +61,8 @@ pub enum Decision {
     Allow,
     /// Wait for an explicit user answer.
     Ask,
+    /// Ask an independent reviewer; uncertainty falls back to user confirmation.
+    Review,
     /// Refuse and explain the constraint to the model.
     Deny(String),
 }
@@ -113,6 +118,9 @@ pub const OPERATIONS: &[&str] = &[
     "spec_reference",
     "search_documentation",
     "search_internet",
+    "cli_command",
+    "cli_file_change",
+    "cli_file_read",
 ];
 
 impl Operation {
@@ -169,8 +177,8 @@ impl Operation {
         } else if !tool.contains('.') && OPERATIONS.contains(&tool) {
             Ok(Self {
                 name: tool.into(),
-                mutating: false,
-                confirm: tool == "search_internet",
+                mutating: matches!(tool, "cli_command" | "cli_file_change"),
+                confirm: matches!(tool, "search_internet" | "cli_command" | "cli_file_change"),
             })
         } else {
             Err(format!("Tool '{tool}' is not available to the live agent"))
@@ -195,17 +203,21 @@ impl Policy {
             ));
         }
         if self.mode == Mode::ReadOnly && operation.mutating {
-            return Decision::Deny("Read-only mode does not permit document changes. Switch to Edit mode before requesting this operation.".into());
+            return Decision::Deny("Read-only mode does not permit changes or command approvals. Switch to Edit mode before requesting this operation.".into());
         }
         if self.mode == Mode::Plan && operation.mutating {
-            return Decision::Deny("Plan mode does not permit document changes. Inspect and present a plan; the user must switch modes before execution.".into());
+            return Decision::Deny("Plan mode does not permit changes or command approvals. Inspect and present a plan; the user must switch modes before execution.".into());
         }
         if self.mode == Mode::Bypass
             || matches(&self.allow)
             || (!operation.mutating && !operation.confirm)
-            || (self.mode == Mode::Edit && operation.mutating && !operation.confirm)
+            || (matches!(self.mode, Mode::Edit | Mode::AutoReview)
+                && operation.mutating
+                && !operation.confirm)
         {
             Decision::Allow
+        } else if self.mode == Mode::AutoReview {
+            Decision::Review
         } else {
             Decision::Ask
         }
@@ -230,6 +242,40 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_approvals_require_consent_and_auto_review_never_overrides_denials() {
+        for tool in ["cli_command", "cli_file_change"] {
+            let operation =
+                Operation::parse(tool, &serde_json::json!({"backend":"codex"})).unwrap();
+            let mut policy = Policy::default();
+            assert_eq!(policy.decide(&operation), Decision::Ask);
+            policy.mode = Mode::AutoReview;
+            assert_eq!(policy.decide(&operation), Decision::Review);
+            policy.set_rule(tool, Some(false)).unwrap();
+            assert!(matches!(policy.decide(&operation), Decision::Deny(_)));
+            policy.set_rule(tool, Some(true)).unwrap();
+            for mode in [Mode::ReadOnly, Mode::Plan] {
+                policy.mode = mode;
+                assert!(matches!(policy.decide(&operation), Decision::Deny(_)));
+            }
+            policy.mode = Mode::AutoReview;
+            assert_eq!(policy.decide(&operation), Decision::Allow);
+            assert_eq!(
+                serde_json::to_string(&policy.mode).unwrap(),
+                "\"auto_review\""
+            );
+        }
+        let policy = Policy {
+            mode: Mode::AutoReview,
+            ..Policy::default()
+        };
+        assert_eq!(policy.decide(&edit()), Decision::Allow);
+        assert_eq!(
+            policy.decide(&Operation::parse("search_internet", &serde_json::json!({})).unwrap()),
+            Decision::Review
+        );
+    }
 
     #[test]
     fn graph_reads_edits_and_removals_use_the_live_permission_boundary() {

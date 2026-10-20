@@ -4,6 +4,13 @@ use crate::*;
 pub(super) mod claude;
 pub(super) mod codex;
 
+fn cli_preamble() -> String {
+    format!(
+        "{}\nNative shell and file tools are available for the user's external-file and scripting tasks. Edit the open song through Auris live MCP tools so unsaved changes and undo stay coherent. Never rewrite its .auris file behind the window. External file writes and shell effects are durable and are not covered by Auris Undo. Request approvals when needed; never work around a refusal. Use explicit persistent paths for requested deliverables; temporary working files are removed when this conversation ends.",
+        crate::preamble()
+    )
+}
+
 /// Replay completed text when a CLI worker replaces an ephemeral conversation.
 fn memory_context(memory: &memory::Memory) -> String {
     if memory.turns.is_empty() && memory.summary.is_empty() {

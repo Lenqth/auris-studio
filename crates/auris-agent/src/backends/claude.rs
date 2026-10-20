@@ -17,6 +17,32 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const FRAME_LIMIT: usize = 8 * 1024 * 1024;
+const NATIVE_TOOLS: &[&str] = &[
+    "Bash",
+    "Read",
+    "Glob",
+    "Grep",
+    "Write",
+    "Edit",
+    "NotebookEdit",
+];
+
+fn native_operation(tool: &str) -> Option<&'static str> {
+    match tool {
+        "Bash" => Some("cli_command"),
+        "Write" | "Edit" | "NotebookEdit" => Some("cli_file_change"),
+        "Read" | "Glob" | "Grep" => Some("cli_file_read"),
+        _ => None,
+    }
+}
+
+fn tool_name(name: &str) -> Option<&str> {
+    if native_operation(name).is_some() {
+        return Some(name);
+    }
+    name.strip_prefix("mcp__auris_live__")
+        .filter(|name| ToolHost::contains(name))
+}
 
 fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.claude_path.trim().is_empty() {
@@ -46,7 +72,11 @@ fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String
         .ok_or_else(|| "Claude Code CLI was not found. Install Claude Code, sign in with claude, or set its executable path in Agent settings".into())
 }
 
-fn command(prefs: &auris_session::AgentPreferences, cwd: &Path) -> Result<Command, String> {
+fn command(
+    prefs: &auris_session::AgentPreferences,
+    cwd: &Path,
+    native: bool,
+) -> Result<Command, String> {
     let mut command = Command::new(executable(prefs)?);
     command
         .args([
@@ -65,19 +95,21 @@ fn command(prefs: &auris_session::AgentPreferences, cwd: &Path) -> Result<Comman
         .arg(cwd.join("mcp.json"))
         .args([
             "--tools",
-            "",
+            if native { "Bash,Read,Glob,Grep,Write,Edit,NotebookEdit" } else { "" },
             "--disable-slash-commands",
             "--no-chrome",
             "--permission-mode",
-            "dontAsk",
+            if native { "default" } else { "dontAsk" },
+            "--permission-prompt-tool",
+            "stdio",
             "--settings",
         ])
         .arg(
             json!({"disableAllHooks":true,"autoMemoryEnabled":false,"enabledPlugins":{},
-            "permissions":{"allow":["mcp__auris_live__*"]}})
+            "permissions":{"allow":["mcp__auris_live__*"],"ask":if native { NATIVE_TOOLS } else { &[] }}})
             .to_string(),
         )
-        .args(["--system-prompt", &crate::preamble()])
+        .args(["--system-prompt", &if native { super::cli_preamble() } else { crate::approval_review::INSTRUCTIONS.into() }])
         .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -169,8 +201,11 @@ impl Cli {
     async fn spawn(
         prefs: &auris_session::AgentPreferences,
         cwd: &Path,
+        native: bool,
+        project: Option<&Path>,
     ) -> Result<(Self, Value), String> {
-        let mut child = command(prefs, cwd)?
+        let mut child = command(prefs, cwd, native)?
+            .current_dir(project.unwrap_or(cwd))
             .spawn()
             .map_err(|error| format!("Cannot start Claude Code: {error}"))?;
         let input = child
@@ -207,7 +242,7 @@ impl Cli {
     async fn reject_request(&mut self, message: &Value) -> Result<(), String> {
         if message["type"] == "control_request" {
             self.send(json!({"type":"control_response","response":{"subtype":"error",
-                "request_id":message["request_id"],"error":"Auris permits operations through its live MCP tools only"}})).await?;
+                "request_id":message["request_id"],"error":"Unsupported or out-of-turn Claude Code request"}})).await?;
         }
         Ok(())
     }
@@ -254,7 +289,7 @@ pub(crate) async fn list_models(prefs: &auris_session::AgentPreferences) -> Resu
     let cwd = working_directory()?;
     write_mcp_config(cwd.path(), None)?;
     let (mut cli, initialized) =
-        tokio::time::timeout(STARTUP_TIMEOUT, Cli::spawn(prefs, cwd.path()))
+        tokio::time::timeout(STARTUP_TIMEOUT, Cli::spawn(prefs, cwd.path(), false, None))
             .await
             .map_err(|_| "Claude Code startup timed out".to_string())??;
     cli.stop().await;
@@ -273,6 +308,54 @@ pub(crate) async fn list_models(prefs: &auris_session::AgentPreferences) -> Resu
     Ok(json!({"models":models}).to_string())
 }
 
+pub(crate) async fn review(
+    prefs: &auris_session::AgentPreferences,
+    prompt: &str,
+) -> Result<String, String> {
+    let cwd = working_directory()?;
+    write_mcp_config(cwd.path(), None)?;
+    let (mut cli, _) = Cli::spawn(prefs, cwd.path(), false, None).await?;
+    let result = async {
+        cli.send(
+            json!({"type":"user","session_id":"","parent_tool_use_id":null,
+            "message":{"role":"user","content":prompt}}),
+        )
+        .await?;
+        loop {
+            let message = cli.read().await?;
+            cli.reject_request(&message).await?;
+            if message["type"] == "system"
+                && message["subtype"] == "init"
+                && message["tools"]
+                    .as_array()
+                    .is_none_or(|tools| !tools.is_empty())
+            {
+                return Err("Approval reviewer exposed tools".into());
+            }
+            if message["type"] == "assistant"
+                && message["message"]["content"]
+                    .as_array()
+                    .is_some_and(|parts| parts.iter().any(|part| part["type"] == "tool_use"))
+            {
+                return Err("Approval reviewer attempted to use a tool".into());
+            }
+            if message["type"] == "result" {
+                return if message["subtype"] == "success" && message["is_error"] != true {
+                    message["result"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or("Missing reviewer answer".into())
+                } else {
+                    Err("Approval reviewer failed".into())
+                };
+            }
+        }
+    }
+    .await;
+    cli.stop().await;
+    result
+}
+
 pub(crate) async fn run(
     prefs: &auris_session::AgentPreferences,
     bridge: &Bridge,
@@ -282,13 +365,14 @@ pub(crate) async fn run(
     cancelled: oneshot::Receiver<()>,
 ) -> Result<(), String> {
     let cwd = working_directory()?;
+    let project = history_path.as_deref().and_then(Path::parent);
     let mcp = LiveMcp::start(ToolHost::new(bridge.clone())).await?;
     write_mcp_config(cwd.path(), Some(&mcp))?;
     let mut cancelled = cancelled;
     let (mut cli, _) = tokio::select! {
         biased;
         _ = &mut cancelled => return Ok(()),
-        result = tokio::time::timeout(STARTUP_TIMEOUT, Cli::spawn(prefs, cwd.path())) =>
+        result = tokio::time::timeout(STARTUP_TIMEOUT, Cli::spawn(prefs, cwd.path(), true, project)) =>
             result.map_err(|_| "Claude Code startup timed out".to_string())??,
     };
     let result = tokio::select! {
@@ -395,12 +479,9 @@ fn validate_tools(message: &Value) -> Result<(), String> {
         .as_array()
         .ok_or("Claude Code did not return its tool catalog")?;
     if tools.is_empty()
-        || tools.iter().any(|tool| {
-            tool.as_str().is_none_or(|name| {
-                name.strip_prefix("mcp__auris_live__")
-                    .is_none_or(|name| !ToolHost::contains(name))
-            })
-        })
+        || tools
+            .iter()
+            .any(|tool| tool.as_str().is_none_or(|name| tool_name(name).is_none()))
     {
         return Err("Claude Code exposed tools outside the Auris live catalog".into());
     }
@@ -413,7 +494,29 @@ async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> 
     let mut calls = std::collections::HashMap::new();
     loop {
         let message = cli.read().await?;
-        cli.reject_request(&message).await?;
+        if message["type"] == "control_request" {
+            let request = &message["request"];
+            if request["subtype"] == "can_use_tool"
+                && request["input"].is_object()
+                && let Some(operation) = request["tool_name"].as_str().and_then(native_operation)
+            {
+                let _guard = bridge.tool_lock().await;
+                let result = crate::permissions::authorize(Some(bridge), operation,
+                    &json!({"backend":"claude","tool":request["tool_name"],"input":request["input"]}).to_string()).await;
+                let response = match result {
+                    Ok(()) => json!({"behavior":"allow","updatedInput":request["input"]}),
+                    Err(reason) => json!({"behavior":"deny","message":reason}),
+                };
+                cli.send(
+                    json!({"type":"control_response","response":{"subtype":"success",
+                    "request_id":message["request_id"],"response":response}}),
+                )
+                .await?;
+            } else {
+                cli.reject_request(&message).await?;
+            }
+            continue;
+        }
         if !message["parent_tool_use_id"].is_null() {
             continue;
         }
@@ -445,13 +548,9 @@ async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> 
                                 }
                             }
                             "tool_use" => {
-                                let tool = part["name"]
-                                    .as_str()
-                                    .and_then(|name| name.strip_prefix("mcp__auris_live__"))
-                                    .filter(|name| ToolHost::contains(name))
-                                    .ok_or(
-                                        "Claude Code requested a tool outside the Auris catalog",
-                                    )?;
+                                let tool = part["name"].as_str().and_then(tool_name).ok_or(
+                                    "Claude Code requested a tool outside the Auris catalog",
+                                )?;
                                 let id = part["id"]
                                     .as_str()
                                     .ok_or("Claude Code omitted a tool call ID")?;
@@ -549,7 +648,7 @@ mod tests {
         assert!(validate_tools(&json!({"tools":["mcp__auris_live__add_track"]})).is_ok());
         for tools in [
             json!([]),
-            json!(["Bash"]),
+            json!(["Agent"]),
             json!(["mcp__other__add_track"]),
             json!(["mcp__auris_live__missing"]),
         ] {
@@ -569,7 +668,7 @@ mod tests {
             .into(),
             ..prefs()
         };
-        let command = command(&prefs, cwd.path()).unwrap();
+        let command = command(&prefs, cwd.path(), false).unwrap();
         let args: Vec<_> = command
             .as_std()
             .get_args()
@@ -585,6 +684,61 @@ mod tests {
                 .any(|arg| arg.contains("Bearer") || arg.contains("bypassPermissions"))
         );
         assert_eq!(command.as_std().get_current_dir(), Some(cwd.path()));
+        let native = super::command(&prefs, cwd.path(), true).unwrap();
+        let args: Vec<_> = native
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.windows(2)
+                .any(|args| args == ["--permission-mode", "default"])
+        );
+        let settings = args
+            .windows(2)
+            .find(|args| args[0] == "--settings")
+            .unwrap();
+        let settings: Value = serde_json::from_str(&settings[1]).unwrap();
+        assert_eq!(settings["permissions"]["ask"], json!(NATIVE_TOOLS));
+        assert!(
+            validate_tools(
+                &json!({"tools":["Bash","Read","Edit","mcp__auris_live__inspect_project"]})
+            )
+            .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn native_permissions_wait_for_the_desktop_and_preserve_exact_input() {
+        for allowed in [true, false] {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                let (bridge, commands, events) = crate::worker::test_bridge();
+                let (client, server) = tokio::io::duplex(32768);
+                let (reader, writer) = tokio::io::split(client);
+                let mut cli = Cli::transport(None, writer, reader);
+                let input = json!({"command":"python export.py","description":"Export the requested WAV"});
+                let peer = async {
+                    let (reader, mut writer) = tokio::io::split(server);
+                    let mut lines = BufReader::new(reader).lines();
+                    reply(&mut writer, json!({"type":"control_request","request_id":"native-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":input}})).await;
+                    let response: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                    assert_eq!(response["response"]["request_id"], "native-1");
+                    assert_eq!(response["response"]["response"]["behavior"], if allowed { "allow" } else { "deny" });
+                    if allowed { assert_eq!(response["response"]["response"]["updatedInput"], input); }
+                    reply(&mut writer, json!({"type":"result","subtype":"success","result":"Finished"})).await;
+                };
+                let owner = async {
+                    let event = loop {
+                        match events.try_recv() { Ok(event) => break event, Err(std::sync::mpsc::TryRecvError::Empty) => tokio::task::yield_now().await, Err(error) => panic!("{error}") }
+                    };
+                    assert_eq!(event["tool"], "cli_command");
+                    assert_eq!(event["args"]["input"], input);
+                    commands.send(json!({"event":"permission_result","id":event["id"],"ok":allowed,"reason":"fixture"}).to_string()).unwrap();
+                };
+                let (answer, (), ()) = tokio::join!(receive_turn(&mut cli, &bridge), peer, owner);
+                assert_eq!(answer.unwrap(), "Finished");
+            }).await.unwrap();
+        }
     }
 
     #[tokio::test]
@@ -810,11 +964,13 @@ mod tests {
         let cwd = tempfile::tempdir().unwrap();
         let mcp = LiveMcp::start(ToolHost::new(bridge)).await.unwrap();
         write_mcp_config(cwd.path(), Some(&mcp)).unwrap();
-        let (mut cli, initialized) =
-            tokio::time::timeout(STARTUP_TIMEOUT, Cli::spawn(&prefs(), cwd.path()))
-                .await
-                .unwrap()
-                .unwrap();
+        let (mut cli, initialized) = tokio::time::timeout(
+            STARTUP_TIMEOUT,
+            Cli::spawn(&prefs(), cwd.path(), true, None),
+        )
+        .await
+        .unwrap()
+        .unwrap();
         assert!(!initialized["models"].as_array().unwrap().is_empty());
         let status = tokio::time::timeout(
             STARTUP_TIMEOUT,
