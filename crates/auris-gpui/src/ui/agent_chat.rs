@@ -20,6 +20,7 @@ use gpui::{
 
 use crate::app::{AurisApp, Pane};
 use crate::theme::{Metrics, Theme};
+use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::icons::{Icon, icon};
 use crate::ui::scrollbars::ScrollPanel;
 use crate::ui::text_field::TextField;
@@ -3117,14 +3118,13 @@ impl AurisApp {
         let openable = matches!(entry, ChatEntry::Reasoning(_))
             || matches!(entry, ChatEntry::Tool { args, detail, .. } if !args.is_empty() || !detail.is_empty())
             || matches!(entry, ChatEntry::RestoredContext(detail) if !detail.is_empty());
-        let chevron = if opened { "▾" } else { "▸" };
         let (colour, text): (gpui::Hsla, String) = match entry {
             ChatEntry::You(text) => (theme.accent_text, text.clone()),
             ChatEntry::Agent(text) => (theme.text, text.clone()),
             ChatEntry::Reasoning(reasoning) => (
                 theme.text_muted,
                 format!(
-                    "{chevron} ✳ {}{}",
+                    "✳ {}{}",
                     self.t(Key::AgentReasoningLog),
                     match log_preview(reasoning) {
                         preview if preview.is_empty() => String::new(),
@@ -3139,15 +3139,7 @@ impl AurisApp {
             ),
             ChatEntry::Tool { name, ok, line, .. } => {
                 let mark = tool_mark(*ok, line);
-                let disclosure = if openable {
-                    format!("{chevron} ")
-                } else {
-                    String::new()
-                };
-                (
-                    theme.text_muted,
-                    format!("{disclosure}{mark} {name}  {line}"),
-                )
+                (theme.text_muted, format!("{mark} {name}  {line}"))
             }
             ChatEntry::Error(message) => (theme.danger, message.clone()),
             ChatEntry::Note(key) => (note_colour(*key, theme), self.t(*key).to_string()),
@@ -3237,29 +3229,21 @@ impl AurisApp {
                 this.border_l_2().border_color(theme.accent)
             })
             .child(body)
-            .when_some(
-                match entry {
-                    ChatEntry::Agent(text) => Some(text.clone()),
-                    _ => None,
-                },
-                |this, text| {
-                    this.child(
-                        div().flex().justify_end().mt_1().child(
-                            button(
-                                ("agent-copy", index),
-                                self.t(Key::AgentCopyMarkdown),
-                                ButtonStyle::Ghost,
-                                false,
-                                theme.accent,
-                                theme,
-                                cx.listener(move |_, _, _, cx| {
-                                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                                        text.clone(),
-                                    ));
-                                }),
-                            )
-                            .cursor_default(),
-                        ),
+            .when(
+                matches!(entry, ChatEntry::Agent(_) | ChatEntry::You(_)),
+                |this| {
+                    this.on_mouse_down(
+                        MouseButton::Right,
+                        Self::opens_menu(cx, move |this, at| {
+                            let menu = ContextMenu::new(at, this.t(Key::AgentPanel));
+                            match this.agent_chat.entries.get(index) {
+                                Some(ChatEntry::Agent(text) | ChatEntry::You(text)) => menu.item(
+                                    this.t(Key::AgentCopyMarkdown),
+                                    MenuCommand::CopyAgentMarkdown(text.clone()),
+                                ),
+                                _ => menu,
+                            }
+                        }),
                     )
                 },
             )
@@ -4490,10 +4474,24 @@ mod tests {
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();
+            this.agent_chat
+                .push_entry(ChatEntry::Agent("Other answer".into()));
             this.agent_chat.push_entry(ChatEntry::Agent(answer.into()));
         });
         crate::harness::resize(&app, cx, gpui::size(px(900.), px(600.)));
-        crate::harness::click("agent-copy-0", cx);
+        assert!(cx.debug_bounds("agent-copy-1").is_none());
+        let message = cx.debug_bounds("agent-line-1").unwrap();
+        crate::harness::right_press(cx, message.center());
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let menu = this.menu.as_ref().expect("message context menu is open");
+            assert!(matches!(
+                &menu.entries[..],
+                [crate::ui::context_menu::MenuEntry::Item(item)]
+                    if item.label == this.t(Key::AgentCopyMarkdown)
+            ));
+        });
+        crate::harness::click("menu-item-0", cx);
         cx.update(|_, cx| {
             assert_eq!(
                 cx.read_from_clipboard()
@@ -4502,6 +4500,41 @@ mod tests {
                 Some(answer)
             );
         });
+    }
+
+    #[gpui::test]
+    fn message_menu_copies_the_clicked_request_even_after_transcript_changes(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let request = "Play **this** clip.\n\nKeep `120 BPM`.";
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent.model = "test-model".into();
+            this.agent_chat.entries = vec![ChatEntry::You(request.into())];
+        });
+        crate::harness::paint(&app, cx);
+        let message = cx.debug_bounds("agent-line-0").unwrap();
+        crate::harness::right_press(cx, message.center());
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("escape");
+        app.read_with(cx, |this, _| assert!(this.menu.is_none()));
+
+        crate::harness::right_press(cx, message.center());
+        app.update(cx, |this, _| {
+            this.agent_chat.entries = vec![ChatEntry::Agent("Another message".into())];
+        });
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("down enter");
+        cx.update(|_, cx| {
+            assert_eq!(
+                cx.read_from_clipboard()
+                    .and_then(|item| item.text())
+                    .as_deref(),
+                Some(request)
+            );
+        });
+        app.read_with(cx, |this, _| assert!(this.menu.is_none()));
     }
 
     #[gpui::test]

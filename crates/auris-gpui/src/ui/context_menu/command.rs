@@ -20,6 +20,8 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// Copies the Markdown source of the message captured when its menu opened.
+    CopyAgentMarkdown(String),
     /// Changes the piano roll's grid without changing the arrangement or document.
     PianoRollGrid(auris_session::PianoRollGrid),
     /// Selects relative or absolute positioning for note drags.
@@ -845,6 +847,9 @@ impl AurisApp {
             return;
         }
         match command {
+            MenuCommand::CopyAgentMarkdown(text) => {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+            }
             MenuCommand::PianoRollGrid(grid) => {
                 self.settings.piano_roll_grid = grid;
                 self.remember_note_snap();
