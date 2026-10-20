@@ -237,7 +237,12 @@ pub mod architecture {
     //! over stdio and connects it to a per-conversation, authenticated loopback MCP endpoint.
     //! Both backends use one live tool host and the same desktop permission/edit path; this
     //! embedded MCP never opens saved projects independently. Codex owns its ChatGPT login;
-    //! the application never reads or copies its credentials. If
+    //! the application never reads or copies its credentials. The model catalogue probes
+    //! available connections off the UI thread; selecting a model selects its route as one
+    //! decision. API endpoint configuration is retained independently of that selection.
+    //! Reference attachments are bounded and encoded in the transport worker, never on the
+    //! UI or audio thread. Text files are marked as reference data rather than user requests.
+    //! If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than
     //! adding the dependency.

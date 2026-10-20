@@ -846,6 +846,7 @@ mod tests {
             this.agent_chat.models = vec![crate::ui::agent_chat::ModelOption {
                 name: "qwen3.8:27b".to_string(),
                 context_length: Some(262_144),
+                ..Default::default()
             }];
         });
         paint(&app, cx);

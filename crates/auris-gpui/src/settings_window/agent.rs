@@ -3,6 +3,7 @@ use super::*;
 
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
+    selected_connection: auris_agent::ModelConnection,
     pub(super) fields: [TextField; 3],
     pub(super) focus: [FocusHandle; 3],
     pub(super) active: Option<usize>,
@@ -10,7 +11,15 @@ pub(super) struct AgentSettings {
 
 impl AgentSettings {
     pub(super) fn new(prefs: AgentPreferences, cx: &mut Context<SettingsWindow>) -> Self {
+        let selected_connection = auris_agent::ModelConnection::from_preferences(&prefs);
+        let mut prefs = prefs;
+        if let Some(endpoint) = &prefs.discovery_endpoint {
+            prefs.provider.clone_from(&endpoint.provider);
+            prefs.url.clone_from(&endpoint.url);
+            prefs.api_key_env.clone_from(&endpoint.api_key_env);
+        }
         Self {
+            selected_connection,
             fields: [
                 TextField::new(prefs.url.clone()),
                 TextField::new(prefs.api_key_env.clone()),
@@ -43,38 +52,39 @@ impl SettingsWindow {
         self.agent.prefs.api_key_env = self.agent.fields[1].content().trim().to_owned();
         self.agent.prefs.codex_path = self.agent.fields[2].content().trim().to_owned();
         let draft = self.agent.prefs.clone();
+        let selected_connection = self.agent.selected_connection.clone();
         let result = self.app.update(cx, move |app, cx| {
             // Model and live permission controls belong to the panel and may have changed
             // since this settings window opened. Never overwrite them with this draft.
             let mut prefs = app.settings.agent.clone();
-            let previous_backend = if prefs.backend.is_empty() {
-                "rig"
-            } else {
-                &prefs.backend
-            };
-            let next_backend = if draft.backend.is_empty() {
-                "rig"
-            } else {
-                &draft.backend
-            };
-            if previous_backend != next_backend {
-                prefs.model.clear();
-            }
-            prefs.backend = draft.backend;
+            let owns_connection = selected_connection.matches(&prefs);
+            prefs.discovery_endpoint = Some(auris_session::AgentEndpoint {
+                provider: draft.provider.clone(),
+                url: draft.url.clone(),
+                api_key_env: draft.api_key_env.clone(),
+            });
             prefs.codex_path = draft.codex_path;
-            prefs.provider = draft.provider;
-            prefs.url = draft.url;
-            prefs.api_key_env = draft.api_key_env;
+            if owns_connection && prefs.backend != "codex" {
+                prefs.provider = draft.provider;
+                prefs.url = draft.url;
+                prefs.api_key_env = draft.api_key_env;
+            }
             prefs.context_tokens = draft.context_tokens;
             prefs.output_tokens = draft.output_tokens;
-            prefs.thinking = draft.thinking;
-            prefs.effort = draft.effort;
             app.agent_apply_preferences_with(prefs, save)?;
             cx.notify();
-            Ok::<(), E>(())
+            Ok::<_, E>(
+                owns_connection
+                    .then(|| auris_agent::ModelConnection::from_preferences(&app.settings.agent)),
+            )
         });
         self.status = match result {
-            Ok(Ok(())) => self.t(Key::AgentSettingsApplied).to_owned(),
+            Ok(Ok(connection)) => {
+                if let Some(connection) = connection {
+                    self.agent.selected_connection = connection;
+                }
+                self.t(Key::AgentSettingsApplied).to_owned()
+            }
             Ok(Err(error)) => error.to_string(),
             Err(error) => error.to_string(),
         };
@@ -137,26 +147,6 @@ impl SettingsWindow {
 
     pub(super) fn render_agent(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
-        let backend = if self.agent.prefs.backend.is_empty() {
-            "rig"
-        } else {
-            &self.agent.prefs.backend
-        }
-        .to_owned();
-        let backend_control = self.dropdown(
-            "agent-backend",
-            vec![
-                ("rig".to_owned(), "Rig".to_owned(), String::new()),
-                ("codex".to_owned(), "Codex CLI".to_owned(), String::new()),
-            ],
-            &backend,
-            |this, value, cx| {
-                this.agent.prefs.backend = value;
-                this.agent.active = None;
-                cx.notify();
-            },
-            cx,
-        );
         let provider = self.agent.prefs.provider.clone();
         let provider = if provider.is_empty() {
             "ollama".to_owned()
@@ -181,27 +171,18 @@ impl SettingsWindow {
             cx,
         );
         let mut rows = vec![
-            section_title(self.t(Key::AgentBackendLabel), &theme),
-            backend_control,
+            note(self.t(Key::AgentDiscoveryHelp), &theme),
+            section_title(self.t(Key::AgentCodexPathLabel), &theme),
+            self.agent_field(2, cx),
+            note(self.t(Key::AgentCodexHelp), &theme),
+            section_title(self.t(Key::AgentProviderLabel), &theme),
+            provider_control,
+            section_title(self.t(Key::AgentUrlLabel), &theme),
+            self.agent_field(0, cx),
+            section_title(self.t(Key::AgentKeyEnvLabel), &theme),
+            self.agent_field(1, cx),
         ];
-        if backend == "codex" {
-            rows.extend([
-                section_title(self.t(Key::AgentCodexPathLabel), &theme),
-                self.agent_field(2, cx),
-                note(self.t(Key::AgentCodexHelp), &theme),
-            ]);
-        } else {
-            rows.extend([
-                section_title(self.t(Key::AgentProviderLabel), &theme),
-                provider_control,
-                section_title(self.t(Key::AgentUrlLabel), &theme),
-                self.agent_field(0, cx),
-                section_title(self.t(Key::AgentKeyEnvLabel), &theme),
-                self.agent_field(1, cx),
-                note(self.t(Key::AgentModelInPanel), &theme),
-            ]);
-        }
-        if backend == "rig" && provider == "ollama" {
+        if provider == "ollama" {
             let context = self.agent.prefs.context_tokens.unwrap_or(32768);
             let output = self.agent.prefs.output_tokens.unwrap_or(4096);
             rows.push(section_title(self.t(Key::AgentContextTokens), &theme));
@@ -248,39 +229,6 @@ impl SettingsWindow {
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
-        rows.push(section_title(self.t(Key::AgentEffort), &theme));
-        let effort = self.agent.prefs.effort;
-        let choices = [
-            ReasoningEffort::Default,
-            ReasoningEffort::None,
-            ReasoningEffort::Minimal,
-            ReasoningEffort::Low,
-            ReasoningEffort::Medium,
-            ReasoningEffort::High,
-            ReasoningEffort::Xhigh,
-            ReasoningEffort::Max,
-        ]
-        .into_iter()
-        .map(|value| {
-            (
-                value,
-                self.t(crate::ui::agent_chat::controls::effort_key(value))
-                    .to_owned(),
-                String::new(),
-            )
-        })
-        .collect();
-        rows.push(self.dropdown(
-            "agent-effort",
-            choices,
-            &effort,
-            |this, value, cx| {
-                this.agent.prefs.effort = value;
-                this.agent.prefs.thinking = None;
-                cx.notify();
-            },
-            cx,
-        ));
         rows.push(
             button(
                 "agent-apply",
@@ -310,11 +258,12 @@ mod tests {
     use gpui::{TestAppContext, VisualTestContext};
 
     #[gpui::test]
-    fn codex_settings_select_the_runtime_and_preserve_rig_connection(cx: &mut TestAppContext) {
+    fn connection_settings_preserve_the_selected_runtime(cx: &mut TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, cx| {
             this.settings.agent = AgentPreferences {
-                model: "rig-model".into(),
+                backend: "codex".into(),
+                model: "codex-model".into(),
                 provider: "openai".into(),
                 url: "https://example.invalid/v1".into(),
                 api_key_env: "RIG_KEY".into(),
@@ -327,19 +276,8 @@ mod tests {
         cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
-        crate::harness::click("agent-backend", cx);
-        cx.simulate_keystrokes("down enter");
-        assert!(cx.debug_bounds("agent-codex-path").is_some());
-        // GPUI retains debug bounds for removed controls across frames. Check the draft
-        // instead; the newly drawn Codex field above verifies the backend-specific view.
-        handle
-            .update(cx, |this, _, _| {
-                assert_eq!(this.agent.prefs.backend, "codex")
-            })
-            .unwrap();
-        app.read_with(cx, |this, _| {
-            assert_eq!(this.settings.agent.model, "rig-model")
-        });
+        assert!(cx.debug_bounds("agent-backend").is_none());
+        assert!(cx.debug_bounds("agent-provider").is_some());
         crate::harness::click("agent-codex-path", cx);
         cx.simulate_input("C:\\Tools\\codex.exe");
         handle
@@ -353,7 +291,7 @@ mod tests {
             assert_eq!(this.settings.agent.provider, "openai");
             assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
             assert_eq!(this.settings.agent.api_key_env, "RIG_KEY");
-            assert!(this.settings.agent.model.is_empty());
+            assert_eq!(this.settings.agent.model, "codex-model");
             assert_eq!(this.agent_chat.backend, "codex");
             assert_eq!(
                 this.agent_chat.preferences().codex_path,
@@ -433,6 +371,16 @@ mod tests {
                 "applying settings keeps the current turn running"
             );
             assert_eq!(this.agent_chat.chosen_model, "second");
+        });
+        handle
+            .update(cx, |this, _, cx| {
+                this.agent.fields[0] = TextField::new("http://127.0.0.1:3");
+                this.apply_agent_with(cx, |_| Ok::<(), String>(()));
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.url, "http://127.0.0.1:3");
+            assert_eq!(this.settings.agent.model, "second");
         });
         crate::harness::click("settings-search", cx);
         cx.simulate_input("出力トークン");

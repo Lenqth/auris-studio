@@ -17,7 +17,8 @@ use tokio::{
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const FRAME_LIMIT: usize = 8 * 1024 * 1024;
+// Turn notifications may echo the base64 representation of a bounded 25 MiB attachment.
+const FRAME_LIMIT: usize = 40 * 1024 * 1024;
 
 /// Separate process per conversation: settings, MCP connections and cancellation cannot leak.
 struct Rpc {
@@ -317,7 +318,11 @@ pub(crate) async fn list_models(prefs: &auris_session::AgentPreferences) -> Resu
         if let Some(data) = page["data"].as_array() {
             models.extend(
                 data.iter()
-                    .filter_map(|model| model["model"].as_str().map(|name| json!({"name":name}))),
+                    .filter_map(|model| model["model"].as_str().map(|name| json!({
+                        "name":name,
+                        "display_name":model["displayName"],
+                        "efforts":model["supportedReasoningEfforts"].as_array().map(|efforts| efforts.iter().filter_map(|effort| effort["reasoningEffort"].as_str()).collect::<Vec<_>>())
+                    }))),
             );
         }
         cursor = page["nextCursor"].clone();
@@ -411,18 +416,21 @@ async fn conversation(
             bridge.emit(json!({"event":"compacted","ok":false,"manual":true,"message":"Manual compaction is not available for the Codex backend yet"}));
             continue;
         }
-        let (said, audio) = crate::parse_say(&line)?;
-        if !audio.is_empty() {
-            bridge.emit(json!({"event":"error","message":"Codex audio attachments are not supported. Use inspect_audio to inspect the current song"}));
-            continue;
-        }
+        let (said, attachments) = crate::parse_say(&line)?;
         let prompt = format!(
             "{context}\n[Current Auris permission policy: {}]\n{said}",
             wire["policy"]
         );
+        let input = match crate::attachments::codex_input(&prompt, &attachments) {
+            Ok(input) => input,
+            Err(message) => {
+                bridge.emit(json!({"event":"error","message":message}));
+                continue;
+            }
+        };
         context.clear();
         mcp.set_active(true);
-        let turn = rpc.request("turn/start", json!({"threadId":thread_id,"input":[{"type":"text","text":prompt}],"effort":if prefs.effort == auris_session::ReasoningEffort::Default { Value::Null } else { json!(prefs.effort.as_str()) }})).await?;
+        let turn = rpc.request("turn/start", json!({"threadId":thread_id,"input":input,"effort":if prefs.effort == auris_session::ReasoningEffort::Default { Value::Null } else { json!(prefs.effort.as_str()) }})).await?;
         rpc.turn = turn["turn"]["id"].as_str().map(str::to_owned);
         let answer = receive_turn(rpc, bridge, &thread_id).await;
         mcp.set_active(false);

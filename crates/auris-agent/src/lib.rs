@@ -5,6 +5,11 @@
 
 #![warn(missing_docs)]
 
+mod discovery;
+pub use discovery::{ModelConnection, discover_models_background};
+mod attachments;
+pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
+
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -880,7 +885,8 @@ fn parse_say(line: &str) -> Result<(String, Vec<String>), String> {
         .map(str::to_string)
         .ok_or_else(|| "expected {\"say\": \"...\"}".to_string())?;
     let audio = parsed
-        .get("audio")
+        .get("attachments")
+        .or_else(|| parsed.get("audio"))
         .and_then(|audio| audio.as_array())
         .map(|paths| {
             paths
@@ -921,7 +927,7 @@ fn audio_media_type(path: &std::path::Path) -> Result<rig_core::message::AudioMe
     }
 }
 
-/// The largest audio file worth base64-ing into one request, in bytes.
+/// The largest reference file worth encoding into one request, in bytes.
 ///
 /// Twenty-five megabytes — the ceiling the big providers publish for audio uploads, so the
 /// refusal here reads the same as the one the server would have sent, minus the upload. It
@@ -929,16 +935,16 @@ fn audio_media_type(path: &std::path::Path) -> Result<rig_core::message::AudioMe
 /// grown a third again by the encoding before anything could object.
 const ATTACHMENT_CEILING: u64 = 25 * 1024 * 1024;
 
-/// Audio parts retained by one model request. The aggregate byte ceiling below is authoritative;
+/// Reference files retained by one model request. The aggregate byte ceiling below is authoritative;
 /// this count separately rejects a long list of empty files before opening any of them.
-const ATTACHMENT_COUNT_LIMIT: usize = 8;
+pub const ATTACHMENT_COUNT_LIMIT: usize = 8;
 
-/// Largest aggregate of raw audio attached to one user turn.
+/// Largest aggregate of raw reference data attached to one user turn.
 const ATTACHMENT_TOTAL_CEILING: u64 = 25 * 1024 * 1024;
 
 fn attachment_too_large(path: &std::path::Path, observed: u64) -> String {
     format!(
-        "{} is at least {} MB; audio over {} MB is refused before it is encoded — trim or \
+        "{} is at least {} MB; files over {} MB are refused before encoding — trim or \
          convert it first",
         path.display(),
         observed / (1024 * 1024),
@@ -950,15 +956,15 @@ fn aggregate_attachments_too_large(limit: u64) -> String {
     let mib = 1024 * 1024;
     if limit.is_multiple_of(mib) {
         format!(
-            "audio attachments together exceed the {} MiB request limit",
+            "attachments together exceed the {} MiB request limit",
             limit / mib
         )
     } else {
-        format!("audio attachments together exceed the {limit}-byte request limit")
+        format!("attachments together exceed the {limit}-byte request limit")
     }
 }
 
-fn read_audio_attachment(
+fn read_attachment(
     path: &std::path::Path,
     remaining: u64,
     total_ceiling: u64,
@@ -991,7 +997,7 @@ fn read_audio_attachment(
     Ok(bytes)
 }
 
-/// One user turn with instructions followed by base64-encoded, typed audio attachments.
+/// One user turn with instructions followed by typed reference attachments.
 /// This order also matches the Gemma4 audio model's documented input format.
 fn framed_message(text: &str, audio: &[String]) -> Result<Message, String> {
     framed_message_with_limits(
@@ -1008,42 +1014,12 @@ fn framed_message_with_limits(
     total_ceiling: u64,
     count_limit: usize,
 ) -> Result<Message, String> {
-    if audio.len() > count_limit {
-        return Err(format!(
-            "one request accepts at most {count_limit} audio attachments"
-        ));
-    }
-    let mut content = Vec::new();
-    content
-        .try_reserve_exact(audio.len().saturating_add(1))
-        .map_err(|_| "not enough memory to prepare audio attachments".to_string())?;
-    content.push(rig_core::message::UserContent::text(text));
-    let mut total = 0_u64;
-    for path in audio {
-        let path = std::path::Path::new(path);
-        let media_type = audio_media_type(path)?;
-        let remaining = total_ceiling.saturating_sub(total);
-        let bytes = read_audio_attachment(path, remaining, total_ceiling)?;
-        total = total
-            .checked_add(bytes.len() as u64)
-            .filter(|total| *total <= total_ceiling)
-            .ok_or_else(|| aggregate_attachments_too_large(total_ceiling))?;
-        use base64::Engine;
-        let encoded_len = bytes
-            .len()
-            .checked_add(2)
-            .and_then(|length| length.checked_div(3))
-            .and_then(|length| length.checked_mul(4))
-            .ok_or_else(|| "audio attachment is too large to encode".to_string())?;
-        let mut data = String::new();
-        data.try_reserve_exact(encoded_len)
-            .map_err(|_| format!("not enough memory to encode {}", path.display()))?;
-        base64::engine::general_purpose::STANDARD.encode_string(&bytes, &mut data);
-        content.push(rig_core::message::UserContent::audio(
-            data,
-            Some(media_type),
-        ));
-    }
+    let mut content = vec![rig_core::message::UserContent::text(text)];
+    content.extend(
+        attachments::read_references(audio, total_ceiling, count_limit)?
+            .into_iter()
+            .map(attachments::Reference::into_content),
+    );
     Ok(Message::User { content })
 }
 
@@ -1051,14 +1027,20 @@ fn framed_message_with_limits(
 ///
 /// rig's Ollama conversion would refuse too, but only after the whole request is built; this
 /// says it in this program's own words, at the moment the attachment is asked for.
-fn check_audio(provider: Provider, audio: &[String]) -> Result<(), String> {
+fn check_attachments(provider: Provider, audio: &[String]) -> Result<(), String> {
     match provider {
-        Provider::Ollama if !audio.is_empty() => Err(
-            "This agent's rig Ollama adapter cannot send audio attachments. Use listen for \
+        Provider::Ollama
+            if audio.iter().any(|path| {
+                attachment_kind(std::path::Path::new(path)) == Some(AttachmentKind::Audio)
+            }) =>
+        {
+            Err(
+                "This agent's rig Ollama adapter cannot send audio attachments. Use listen for \
              a separate audio critic, or --provider openai against an audio-capable endpoint \
              implementing input_audio (including a compatible Ollama /v1 endpoint)."
-                .to_string(),
-        ),
+                    .to_string(),
+            )
+        }
         _ => Ok(()),
     }
 }
@@ -1342,7 +1324,7 @@ async fn json_conversation(
                 policy.allow
             );
         }
-        let message = match check_audio(options.provider, &audio)
+        let message = match check_attachments(options.provider, &audio)
             .and_then(|()| framed_message(&said, &audio))
         {
             Ok(message) => message,
@@ -1603,10 +1585,10 @@ mod tests {
         assert!(refused.contains("song.mid"), "{refused}");
 
         let audio = vec!["mix.wav".to_string()];
-        let refused = check_audio(Provider::Ollama, &audio).unwrap_err();
+        let refused = check_attachments(Provider::Ollama, &audio).unwrap_err();
         assert!(refused.contains("openai"), "{refused}");
-        check_audio(Provider::Ollama, &[]).unwrap();
-        check_audio(Provider::OpenAi, &audio).unwrap();
+        check_attachments(Provider::Ollama, &[]).unwrap();
+        check_attachments(Provider::OpenAi, &audio).unwrap();
     }
 
     #[test]

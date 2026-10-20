@@ -1324,6 +1324,9 @@ impl AurisApp {
     /// that it is not going to be understood.
     fn render_drop_ring(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let accent = self.theme.accent;
+        let agent_bounds = self.agent_chat.drop_bounds.clone();
+        let agent_visible =
+            self.panels.is_open(Panel::Agent) && !self.panels.is_detached(Panel::Agent);
         div()
             .id("drop-ring")
             .absolute()
@@ -1331,7 +1334,14 @@ impl AurisApp {
             .border_2()
             .border_color(gpui::transparent_black())
             .on_drop(cx.listener(Self::on_files_dropped))
-            .drag_over::<gpui::ExternalPaths>(move |style, paths, _, _| {
+            .drag_over::<gpui::ExternalPaths>(move |style, paths, window, _| {
+                if agent_visible
+                    && agent_bounds
+                        .get()
+                        .is_some_and(|bounds| bounds.contains(&window.mouse_position()))
+                {
+                    return style;
+                }
                 match drop_action(paths.paths()).takes_anything() {
                     true => style.border_color(accent),
                     false => style,
@@ -1351,7 +1361,29 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.route_files_dropped(paths.paths(), window, cx);
+    }
+
+    /// Route a platform file drop at the current pointer to attachments or document import.
+    pub(crate) fn route_files_dropped(
+        &mut self,
+        paths: &[std::path::PathBuf],
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.compose_progress.is_some() {
+            cx.stop_propagation();
+            return;
+        }
+        if self.panels.is_open(Panel::Agent)
+            && !self.panels.is_detached(Panel::Agent)
+            && self
+                .agent_chat
+                .drop_bounds
+                .get()
+                .is_some_and(|bounds| bounds.contains(&window.mouse_position()))
+        {
+            self.agent_attach_files(paths, cx);
             cx.stop_propagation();
             return;
         }
@@ -1359,7 +1391,7 @@ impl AurisApp {
             Some(x) => self.snap(self.timeline.x_to_tick(x)).max_zero(),
             None => self.playhead_ticks(),
         };
-        self.accept_drop(paths.paths().to_vec(), start, cx);
+        self.accept_drop(paths.to_vec(), start, cx);
     }
 
     /// Follows the gesture in progress, wherever the pointer has got to.

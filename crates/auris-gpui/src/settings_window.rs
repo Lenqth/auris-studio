@@ -7,7 +7,7 @@
 use auris_i18n::{Key, Language, messages};
 use auris_session::prelude::*;
 use auris_session::session::AudioStatus;
-use auris_session::{AgentPreferences, ReasoningEffort, ToolbarItem, ToolbarPreferences};
+use auris_session::{AgentPreferences, ToolbarItem, ToolbarPreferences};
 use gpui::{
     AnyElement, App, Context, FocusHandle, Focusable, IntoElement, KeyDownEvent, Render,
     WeakEntity, Window, div, prelude::*, px,

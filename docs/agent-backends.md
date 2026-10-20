@@ -1,9 +1,36 @@
 # Agent backends
 
-The Agent Panel supports rig (Ollama or OpenAI-compatible APIs) and the official
-Codex CLI. Select a backend in Settings > Agent, apply it, then select a model in
-the Agent Panel. Changing backends clears the selected model; the rig endpoint
-and API-key environment-variable preference are retained.
+The Agent panel discovers the signed-in Codex CLI, local Ollama, and the API
+connection configured in Settings > Agent. An `OPENAI_API_KEY` also enables
+discovery at OpenAI's default endpoint. Providers are queried concurrently;
+an unavailable provider does not hide models returned by another.
+
+Choose a model in the command row at the bottom of the message composer. Each option names its connection,
+for example `GPT-6.1 Sol (Codex)`. Custom API connections also show their host.
+Choosing an option switches its backend automatically and preserves the configured
+API connection for future discovery. Refresh in the model menu repeats discovery
+(`Ctrl+R` / `Command+R` while that selector has focus). Reasoning effort sits next
+to the model; Codex's advertised reasoning levels determine its choices. Permission
+rules open from the approval-mode menu on the left. The circular send control
+becomes Stop during a turn.
+
+Consecutive tool calls share a collapsed summary showing their count and any
+running or failed calls. Open the group to inspect each call's arguments and
+result; user messages and assistant replies keep separate groups apart.
+
+## Reference attachments
+
+Drop files onto the Agent panel to attach them to the next message. Dropping audio
+there attaches a reference; dropping audio onto the arrangement imports it into
+the song. Attached filenames remain visible and each file can be removed before
+sending. A message accepts at most eight files and 25 MiB in total.
+
+PNG, JPEG, GIF and WebP are sent as image parts. UTF-8 text, Markdown, lyrics,
+CSV, JSON and source files are sent as delimited reference data, up to 256 KiB
+per text file. Instructions inside an attachment remain reference content.
+The selected model must support the supplied media. Audio files use an
+OpenAI-compatible model implementing `input_audio`; the panel explains this
+requirement before sending and keeps the draft available when it is not met.
 
 ## Codex setup
 
