@@ -821,11 +821,24 @@ mod tests {
                 ),
                 "a complete form is not refused"
             );
-            assert_eq!(
-                this.agent_chat.input.content(),
-                "",
-                "an unsaved document sends directly to the embedded worker"
+        });
+        // Conversation storage is loaded asynchronously even before the first project save.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.read_with(cx, |this, _| !this.agent_chat.input.content().is_empty()) {
+            app.update(cx, |this, cx| this.drain_agent(cx));
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the configured request was not sent after history loaded"
             );
+            std::thread::yield_now();
+        }
+        app.read_with(cx, |this, _| {
+            assert!(
+                this.session.path().is_none(),
+                "sending does not require saving the score"
+            );
+            assert!(this.agent_chat.entries.iter().any(|entry| matches!(entry,
+                crate::ui::agent_chat::ChatEntry::You(text) if text == "make it louder")));
         });
     }
 

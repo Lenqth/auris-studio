@@ -116,6 +116,9 @@ ephemeral; a replacement worker receives the stored text as historical context
 once, then Codex owns the active conversation. The transcript preview and reset
 generation checks remain shared with rig.
 
+The panel's [conversation list](agent-conversations.md) keeps multiple independent
+histories, drafts and readable tool results for each project.
+
 ## Validation
 
 `cargo test -p auris-agent` includes a scripted app-server peer that calls the real

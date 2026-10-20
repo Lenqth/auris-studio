@@ -686,6 +686,9 @@ fn migrate_private_assets_with_cancel(
     to: &Path,
     cancelled: &AtomicBool,
 ) -> Result<bool, SessionError> {
+    if let Err(error) = crate::conversations::ConversationStore::copy_recovery_identity(from, to) {
+        log::warn!("could not copy optional conversation recovery metadata: {error}");
+    }
     let mut copied = std::collections::HashSet::new();
     for path in private_asset_paths(project) {
         if cancelled.load(Ordering::Relaxed) {
@@ -1541,6 +1544,16 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corrupt_conversation_metadata_does_not_block_score_recovery() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        fs::write(source.path().join(".auris-agent-recovery.json"), b"{broken").unwrap();
+        assert!(
+            migrate_private_assets(&Project::default(), source.path(), destination.path()).is_ok()
+        );
+    }
 
     #[test]
     fn autosave_off_uses_an_ordinary_temporary_workspace() {

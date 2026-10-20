@@ -29,6 +29,7 @@ use crate::ui::widgets::{
 };
 
 pub(crate) mod controls;
+mod conversations;
 
 /// Maximum transcript rows retained in the panel.
 const CHAT_CAPACITY: usize = 500;
@@ -594,6 +595,8 @@ impl AgentPanelStatus {
 pub(crate) enum AgentField {
     /// The message being written.
     Chat,
+    /// Title search in the conversation browser.
+    ConversationSearch,
 }
 
 /// One model a provider reported serving.
@@ -820,6 +823,7 @@ impl AgentLink {
 
 /// Everything the agent panel is, apart from its pixels.
 pub(crate) struct AgentChat {
+    conversations: conversations::Conversations,
     controls: controls::Controls,
     policy: auris_session::agent_policy::Policy,
     auto_compact_percent: Option<u8>,
@@ -945,6 +949,7 @@ pub(crate) struct AgentChat {
 impl Default for AgentChat {
     fn default() -> Self {
         Self {
+            conversations: Default::default(),
             controls: controls::Controls::default(),
             policy: Default::default(),
             auto_compact_percent: None,
@@ -1071,7 +1076,7 @@ impl AgentChat {
     /// Appends one transcript row, keeping indexes coherent and following only a nearby tail.
     fn push_entry(&mut self, entry: ChatEntry) -> usize {
         let follow_tail = self.should_follow_tail();
-        if self.entries.len() >= CHAT_CAPACITY {
+        if !self.conversations.managed() && self.entries.len() >= CHAT_CAPACITY {
             self.entries.remove(0);
             self.expanded = self
                 .expanded
@@ -1104,26 +1109,34 @@ impl AgentChat {
 
     /// The message editor's actual focus target, once the panel has been painted.
     pub(crate) fn input_focus(&self) -> Option<&gpui::FocusHandle> {
-        self.input_focus.as_ref()
+        if self.focused == Some(AgentField::ConversationSearch) {
+            self.conversations.focus.as_ref()
+        } else {
+            self.input_focus.as_ref()
+        }
     }
 
     /// The field the keyboard is in, mutably.
     pub(crate) fn field_mut(&mut self) -> Option<&mut TextField> {
-        if self.pending_send.is_some() {
+        if (self.pending_send.is_some() || self.conversations.changing_conversation())
+            && self.focused != Some(AgentField::ConversationSearch)
+        {
             return None;
         }
         Some(match self.focused? {
             AgentField::Chat => &mut self.input,
+            AgentField::ConversationSearch => &mut self.conversations.search,
         })
     }
 
     /// The field the keyboard is in.
     pub(crate) fn field(&self) -> Option<&TextField> {
-        if self.pending_send.is_some() {
+        if self.pending_send.is_some() && self.focused != Some(AgentField::ConversationSearch) {
             return None;
         }
         Some(match self.focused? {
             AgentField::Chat => &self.input,
+            AgentField::ConversationSearch => &self.conversations.search,
         })
     }
 
@@ -1531,12 +1544,15 @@ fn spawn_link(
     fresh_history: bool,
     history: Option<auris_agent::HistorySnapshot>,
 ) -> Result<AgentLink, String> {
-    auris_agent::Worker::spawn(
-        prefs.clone(),
-        folder.map(Path::to_path_buf),
-        fresh_history,
-        history,
-    )
+    match history {
+        Some(history) => auris_agent::Worker::spawn_conversation(prefs.clone(), history),
+        None => auris_agent::Worker::spawn(
+            prefs.clone(),
+            folder.map(Path::to_path_buf),
+            fresh_history,
+            None,
+        ),
+    }
     .map(|worker| AgentLink {
         worker,
         inspection: None,
@@ -1590,6 +1606,26 @@ impl AurisApp {
         if previous == self.session.path() {
             return;
         }
+        if self.agent_chat.conversations.managed() {
+            if self.agent_chat.busy {
+                self.agent_chat.finish_open_tools("stopped", "");
+                self.agent_chat
+                    .push_entry(ChatEntry::Note(Key::AgentStopped));
+            }
+            let navigation = std::mem::take(&mut self.agent_chat.conversations);
+            let entries = std::mem::take(&mut self.agent_chat.entries);
+            let attachments = std::mem::take(&mut self.agent_chat.attachments);
+            self.agent_reset_conversation();
+            self.agent_chat.conversations = navigation;
+            self.agent_chat.entries = entries;
+            self.agent_chat.attachments = attachments;
+            if let Some(folder) = self.session.project_folder() {
+                self.conversation_operation(conversations::Operation::Copy(
+                    auris_session::conversations::ConversationStore::for_project(folder),
+                ));
+            }
+            return;
+        }
         let has_path_scoped_state = self.agent_chat.link.is_some()
             || self.agent_chat.busy
             || self.agent_chat.pending_send.is_some()
@@ -1621,7 +1657,8 @@ impl AurisApp {
 
     /// Whether a model turn or conversation-storage operation owns the panel controls.
     pub(crate) fn agent_operation_busy(&self) -> bool {
-        self.agent_chat.busy
+        self.agent_chat.conversations.unavailable()
+            || self.agent_chat.busy
             || self.agent_chat.pending_send.is_some()
             || self.agent_chat.controls.pending.is_some()
             || self.agent_history_clear_pending()
@@ -1637,6 +1674,28 @@ impl AurisApp {
     /// Starts reading this saved project's transcript before any model provider is contacted.
     fn start_agent_history_load(&mut self) -> bool {
         let token = self.agent_document_token();
+        if self.agent_chat.conversations.managed() {
+            if self.agent_chat.conversations.unavailable() {
+                return false;
+            }
+            if self.agent_chat.conversations.active_id().is_none() {
+                return false;
+            }
+            if self.agent_chat.link.is_some() || self.agent_chat.loaded_history.is_some() {
+                return true;
+            }
+            if self.agent_chat.history_load.is_some() {
+                return false;
+            }
+            let Some(path) = self.agent_chat.conversations.memory_path() else {
+                return false;
+            };
+            self.agent_chat.history_load = Some(PendingHistoryLoad {
+                token,
+                receiver: auris_agent::load_history_background(path, false),
+            });
+            return false;
+        }
         let Some(project) = token.project.as_ref() else {
             return true;
         };
@@ -1692,13 +1751,15 @@ impl AurisApp {
             }
             return;
         }
-        let project = pending.token.project.expect("saved history has a project");
+        let project = pending.token.project;
         match answer {
             Ok(snapshot) => {
                 let summary = snapshot.summary().unwrap_or_default().to_string();
                 let turns = snapshot.turns();
-                self.agent_chat.replace_history(summary, turns);
-                self.agent_chat.history_project = Some(project);
+                if !self.agent_chat.conversations.managed() {
+                    self.agent_chat.replace_history(summary, turns);
+                }
+                self.agent_chat.history_project = project;
                 self.agent_chat.loaded_history = Some(snapshot);
                 self.agent_chat.history_error_project = None;
                 self.agent_chat.fresh_history = false;
@@ -1709,7 +1770,10 @@ impl AurisApp {
             Err(error) => {
                 // A repaint-speed retry loop would only repeat the same disk error. New
                 // Conversation or an explicit Send clears this marker and retries the read.
-                self.agent_chat.history_error_project = Some(project);
+                if self.agent_chat.conversations.managed() {
+                    self.agent_chat.conversations.error = Some(error.clone());
+                }
+                self.agent_chat.history_error_project = project;
                 self.agent_chat.loaded_history = None;
                 self.agent_chat.pending_send = None;
                 self.agent_chat.push_entry(ChatEntry::Error(error));
@@ -1761,6 +1825,8 @@ impl AurisApp {
 
     /// Starts fresh model history and rebinds the next child to the current document.
     pub(crate) fn agent_reset_conversation(&mut self) {
+        let _ = self.flush_conversation_storage();
+        self.agent_chat.conversations = Default::default();
         let had_transcript = !self.agent_chat.entries.is_empty();
         self.agent_chat.controls = Default::default();
         self.agent_chat.restore_pending_focus = false;
@@ -1798,28 +1864,15 @@ impl AurisApp {
         }
     }
 
-    /// Stops the current worker and permanently clears this project's conversation history.
+    /// Starts a new conversation while preserving existing transcripts and drafts.
     pub(crate) fn start_new_agent_conversation(&mut self, cx: &mut gpui::Context<Self>) {
-        if self.agent_history_clear_pending() {
-            return;
+        if !self.agent_chat.conversations.managed() {
+            self.agent_stop(cx);
+            self.agent_chat.history_load = None;
+            self.agent_chat.pending_send = None;
         }
-        self.agent_stop(cx);
-        self.agent_chat.history_load = None;
-        self.agent_chat.history_error_project = None;
-        self.agent_chat.pending_send = None;
-        let project = self.session.path().map(Path::to_path_buf);
-        let history = self
-            .session
-            .project_folder()
-            .map(|folder| folder.join(".auris-conversation.json"));
-        if let (Some(project), Some(history)) = (project, history) {
-            self.agent_chat.history_clear = Some(PendingHistoryClear {
-                project,
-                receiver: auris_agent::clear_history_background(history),
-            });
-        } else {
-            self.finish_new_agent_conversation();
-        }
+        self.initialize_conversations();
+        self.conversation_operation(conversations::Operation::Create);
         cx.notify();
     }
 
@@ -1962,7 +2015,7 @@ impl AurisApp {
             selection_context: self.agent_selection_context().to_string(),
         };
         if !self.start_agent_history_load() {
-            if self.agent_chat.history_load.is_some() {
+            if self.agent_chat.history_load.is_some() || self.agent_chat.conversations.managed() {
                 self.agent_chat.pending_send = Some(message);
             }
             return;
@@ -1989,7 +2042,9 @@ impl AurisApp {
                 .as_deref()
                 .and_then(Path::parent)
                 .map(Path::to_path_buf);
-            let history = if message.token.project.is_some() {
+            let history = if message.token.project.is_some()
+                || self.agent_chat.conversations.managed()
+            {
                 let Some(snapshot) = self.agent_chat.loaded_history.clone() else {
                     self.agent_chat.history_project = None;
                     self.agent_chat.push_entry(ChatEntry::Error(
@@ -2210,6 +2265,7 @@ impl AurisApp {
     /// Called from the repaint tick, beside `Session::poll` — the same shape as everything
     /// else another thread writes and this one reads.
     pub(crate) fn drain_agent(&mut self, cx: &mut gpui::Context<Self>) {
+        self.poll_conversations(cx);
         self.poll_agent_history_load(cx);
         let history_answer = self
             .agent_chat
@@ -2496,6 +2552,9 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if self.conversation_navigation_key(event, cx) {
+            return true;
+        }
         let Some(focused) = self.agent_chat.focused else {
             return false;
         };
@@ -2509,7 +2568,7 @@ impl AurisApp {
             // dispatch the window's focus-navigation binding and strand the candidate session.
             return true;
         }
-        if !composing && self.agent_chat.controls.pending.is_some() {
+        if !composing && focused == AgentField::Chat && self.agent_chat.controls.pending.is_some() {
             if key == "escape" {
                 self.agent_approval(controls::Approval::Deny);
                 return true;
@@ -2638,9 +2697,15 @@ impl AurisApp {
         &mut self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
-    ) -> impl IntoElement + use<> {
+    ) -> AnyElement {
+        self.initialize_conversations();
+        if self.agent_chat.conversations.showing_list || self.agent_chat.conversations.previewing()
+        {
+            return self.render_conversation_browser(window, cx);
+        }
         let theme = self.theme.clone();
-        let composer_locked = self.agent_chat.pending_send.is_some();
+        let composer_locked = self.agent_chat.pending_send.is_some()
+            || self.agent_chat.conversations.changing_conversation();
         let cancelable = self.agent_cancelable();
         let input_focus = self
             .agent_chat
@@ -2698,8 +2763,18 @@ impl AurisApp {
             .header_section_focus
             .get_or_insert_with(|| cx.focus_handle())
             .clone();
-        let rows: Vec<AnyElement> = transcript_runs(&self.agent_chat.entries)
+        if self.agent_chat.conversations.managed() && self.agent_chat.follow_tail {
+            self.agent_chat.conversations.transcript_start =
+                self.agent_chat.entries.len().saturating_sub(CHAT_CAPACITY);
+        }
+        let transcript_start = self
+            .agent_chat
+            .conversations
+            .transcript_start
+            .min(self.agent_chat.entries.len());
+        let rows: Vec<AnyElement> = transcript_runs(&self.agent_chat.entries[transcript_start..])
             .map(|run| {
+                let run = (run.start + transcript_start)..(run.end + transcript_start);
                 if run.len() > 1 {
                     self.chat_tool_group(run, &theme, window, cx)
                 } else {
@@ -2799,6 +2874,19 @@ impl AurisApp {
                             .text_xs()
                             .text_color(theme.text_muted)
                             .child(div().child(self.t(Key::AgentPanel)))
+                            .child(button(
+                                "agent-conversations",
+                                self.t(Key::AgentConversations),
+                                ButtonStyle::Ghost,
+                                false,
+                                theme.accent,
+                                &theme,
+                                cx.listener(|this, _, _, cx| {
+                                    this.agent_chat.conversations.showing_list = true;
+                                    this.focus_agent_field(AgentField::ConversationSearch);
+                                    cx.notify();
+                                }),
+                            ))
                             .when(self.agent_chat.produced_project.is_some(), |this| {
                                 this.child(button(
                                     "agent-open-result",
@@ -2824,14 +2912,11 @@ impl AurisApp {
                                 "agent-new-conversation",
                                 self.t(Key::AgentNewConversation),
                                 ButtonStyle::Normal,
-                                ButtonState::available(false, !operation_busy),
+                                ButtonState::available(false, true),
                                 theme.accent,
                                 &theme,
                                 cx.listener(|this, _, _, cx| {
-                                    this.open_prompt(crate::ui::prompt::Prompt::ask(
-                                        this.t(Key::AgentNewConversationTitle),
-                                        crate::ui::prompt::Question::NewAgentConversation,
-                                    ));
+                                    this.start_new_agent_conversation(cx);
                                     cx.notify();
                                 }),
                             ))
@@ -2867,6 +2952,7 @@ impl AurisApp {
                             )),
                     ),
             )
+            .child(self.render_active_conversation_title(cx))
             .child(
                 self.scrolling(
                     ScrollPanel::Agent,
@@ -2880,6 +2966,25 @@ impl AurisApp {
                         .overflow_y_scroll()
                         .when(self.agent_chat.controls.rules_open, |this| {
                             this.child(self.agent_rules(cx))
+                        })
+                        .when(transcript_start > 0, |this| {
+                            this.child(button(
+                                "agent-earlier-messages",
+                                self.t(Key::AgentEarlierMessages),
+                                ButtonStyle::Ghost,
+                                false,
+                                theme.accent,
+                                &theme,
+                                cx.listener(|this, _, _, cx| {
+                                    this.agent_chat.conversations.transcript_start = this
+                                        .agent_chat
+                                        .conversations
+                                        .transcript_start
+                                        .saturating_sub(CHAT_CAPACITY);
+                                    this.agent_chat.follow_tail = false;
+                                    cx.notify();
+                                }),
+                            ))
                         })
                         .children(rows)
                         .when(operation_busy, |this| {
@@ -2930,6 +3035,7 @@ impl AurisApp {
             )
             .child(self.agent_slash_completions(cx))
             .child(self.agent_input_row(input_focus, stop_focus, cx))
+            .into_any_element()
     }
     /// The context gauge and token counters, over the input the way picocode sets its status
     /// bar: `↑ prompt ↓ written`, a bar filling the chosen model's window, and the percentage.
@@ -3113,7 +3219,14 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let opened = self.agent_chat.expanded.contains(&index);
+        let opened = if self.agent_chat.conversations.previewing() {
+            self.agent_chat
+                .conversations
+                .preview_expanded
+                .contains(&index)
+        } else {
+            self.agent_chat.expanded.contains(&index)
+        };
         let openable = matches!(entry, ChatEntry::Reasoning(_))
             || matches!(entry, ChatEntry::Tool { args, detail, .. } if !args.is_empty() || !detail.is_empty())
             || matches!(entry, ChatEntry::RestoredContext(detail) if !detail.is_empty());
@@ -3188,9 +3301,7 @@ impl AurisApp {
                 opened,
                 theme,
                 cx.listener(move |this, _, _, cx| {
-                    if !this.agent_chat.expanded.remove(&index) {
-                        this.agent_chat.expanded.insert(index);
-                    }
+                    this.agent_chat.toggle_conversation_entry(index);
                     cx.notify();
                 }),
             )
@@ -3201,9 +3312,7 @@ impl AurisApp {
                 opened,
                 theme,
                 cx.listener(move |this, _, _, cx| {
-                    if !this.agent_chat.expanded.remove(&index) {
-                        this.agent_chat.expanded.insert(index);
-                    }
+                    this.agent_chat.toggle_conversation_entry(index);
                     cx.notify();
                 }),
             )
@@ -3214,9 +3323,7 @@ impl AurisApp {
                 opened,
                 theme,
                 cx.listener(move |this, _, _, cx| {
-                    if !this.agent_chat.expanded.remove(&index) {
-                        this.agent_chat.expanded.insert(index);
-                    }
+                    this.agent_chat.toggle_conversation_entry(index);
                     cx.notify();
                 }),
             )
@@ -3991,7 +4098,8 @@ impl AurisApp {
     ) -> AnyElement {
         let theme = self.theme.clone();
         let focused = self.agent_chat.focused == Some(AgentField::Chat);
-        let locked = self.agent_chat.pending_send.is_some();
+        let locked = self.agent_chat.pending_send.is_some()
+            || self.agent_chat.conversations.changing_conversation();
         let empty = self.agent_chat.input.content().is_empty();
         let placeholder = self.t(Key::AgentComposerPlaceholder).to_owned();
         let attachments = self.agent_chat.attachments.clone();
@@ -4220,6 +4328,7 @@ impl AurisApp {
     ) -> AnyElement {
         let value = match field {
             AgentField::Chat => &self.agent_chat.input,
+            AgentField::ConversationSearch => &self.agent_chat.conversations.search,
         };
         let text = value.content().to_string();
         let selection = value.selection();
@@ -4227,8 +4336,15 @@ impl AurisApp {
         let marked = value.marked();
         let view = cx.entity();
         let pointer_focus = focus.clone();
-        let minimum = crate::ui::text_area::area_height("", 2, 6);
-        let maximum = crate::ui::text_area::area_height("a\na\na\na\na\na", 2, 6);
+        let (minimum, maximum) = if field == AgentField::ConversationSearch {
+            let height = crate::ui::text_area::area_height("", 1, 1);
+            (height, height)
+        } else {
+            (
+                crate::ui::text_area::area_height("", 2, 6),
+                crate::ui::text_area::area_height("a\na\na\na\na\na", 2, 6),
+            )
+        };
 
         div()
             .id(id)

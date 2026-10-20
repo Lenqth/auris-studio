@@ -20,6 +20,13 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// A command scoped to the conversation identified when the menu opened.
+    AgentConversation {
+        /// Stable conversation identity.
+        id: String,
+        /// Rename, archive or delete.
+        action: String,
+    },
     /// Changes the piano roll's grid without changing the arrangement or document.
     PianoRollGrid(auris_session::PianoRollGrid),
     /// Selects relative or absolute positioning for note drags.
@@ -845,6 +852,9 @@ impl AurisApp {
             return;
         }
         match command {
+            MenuCommand::AgentConversation { id, action } => {
+                self.conversation_menu_command(id, &action, cx)
+            }
             MenuCommand::PianoRollGrid(grid) => {
                 self.settings.piano_roll_grid = grid;
                 self.remember_note_snap();
