@@ -690,6 +690,124 @@ fn a_note_held_across_a_block_boundary_keeps_sounding() {
 }
 
 #[test]
+fn resetting_an_instrument_releases_notes_even_when_plugin_reset_keeps_them() {
+    // The fixture uses the default no-op reset, like plugins that only reset their clock.
+    let mut plugin = tone();
+    let mut instrument = plugin.activate_instrument(&context()).unwrap();
+    let mut out = empty(16);
+    instrument.process(
+        &[NoteEvent::NoteOn {
+            frame: 0,
+            pitch: 60,
+            velocity: 1.0,
+        }],
+        &mut out,
+        &playing(16),
+    );
+    assert_eq!(out.peak(), 1.0);
+    let stopped = ProcessContext {
+        is_playing: false,
+        ..playing(16)
+    };
+    let allocations = count_allocations(|| {
+        instrument.reset();
+        instrument.process(&[], &mut out, &stopped);
+    });
+    assert_eq!(
+        allocations, 0,
+        "stopping must not allocate on the audio thread"
+    );
+    assert_eq!(out.peak(), 0.0, "reset must release the held note");
+    plugin.deactivate_instrument(instrument);
+}
+
+#[test]
+fn a_pending_reset_precedes_new_notes_and_survives_an_empty_block() {
+    let mut plugin = tone();
+    let mut instrument = plugin.activate_instrument(&context()).unwrap();
+    let mut out = empty(16);
+    instrument.process(&[], &mut out, &playing(16));
+    instrument.reset();
+    instrument.reset(); // The Stop button also seeks back to zero before the next callback.
+    instrument.process(&[], &mut empty(0), &playing(0));
+    instrument.process(
+        &[NoteEvent::NoteOn {
+            frame: 0,
+            pitch: 64,
+            velocity: 0.75,
+        }],
+        &mut out,
+        &playing(16),
+    );
+    assert_eq!(out.peak(), 0.75, "the reset must precede the chased note");
+    instrument.process(&[], &mut out, &playing(16));
+    assert_eq!(out.peak(), 0.75, "the reset must be sent only once");
+    assert!(!instrument.processing_failed());
+    plugin.deactivate_instrument(instrument);
+}
+
+#[test]
+fn a_reset_fits_alongside_the_prepared_notes_and_all_dirty_parameters() {
+    let mut plugin = tone();
+    let mut instrument = plugin.activate_instrument(&context()).unwrap();
+    instrument.prepare(&context().with_max_block_events(512));
+    instrument.process(&[], &mut empty(16), &playing(16));
+    let parameters: Vec<_> = instrument
+        .parameters()
+        .iter()
+        .map(|param| (param.id, instrument.param(param.id)))
+        .collect();
+    for (id, value) in parameters {
+        instrument.set_param(id, value);
+    }
+    let notes = vec![
+        NoteEvent::NoteOn {
+            frame: 0,
+            pitch: 60,
+            velocity: 0.75
+        };
+        512
+    ];
+    let mut out = empty(16);
+    let allocations = count_allocations(|| {
+        instrument.reset();
+        instrument.process(&notes, &mut out, &playing(16));
+    });
+    assert_eq!(allocations, 0);
+    assert_eq!(instrument.dropped_input_event_count(), 0);
+    assert!(!instrument.processing_failed());
+    assert_eq!(out.peak(), 0.75);
+    plugin.deactivate_instrument(instrument);
+}
+
+#[test]
+fn a_reset_at_event_capacity_silences_the_old_voice_without_partial_new_notes() {
+    let mut plugin = tone();
+    let mut instrument = plugin.activate_instrument(&context()).unwrap();
+    let mut out = empty(16);
+    let note = NoteEvent::NoteOn {
+        frame: 0,
+        pitch: 60,
+        velocity: 1.0,
+    };
+    instrument.process(&[note], &mut out, &playing(16));
+    assert_eq!(out.peak(), 1.0);
+    let burst = vec![note; instrument.event_room()];
+    let allocations = count_allocations(|| {
+        instrument.reset();
+        instrument.process(&burst, &mut out, &playing(16));
+    });
+    assert_eq!(allocations, 0);
+    assert_eq!(out.peak(), 0.0);
+    assert!(instrument.processing_failed());
+    assert_eq!(
+        instrument.dropped_input_event_count(),
+        burst.len() as u64 + 1
+    );
+    plugin.deactivate_instrument(instrument);
+}
+
+#[test]
 fn the_plugin_supplies_names_for_its_drum_keys() {
     let mut plugin = tone();
     assert_eq!(
