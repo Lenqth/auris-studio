@@ -166,6 +166,7 @@ struct Channels {
     events: mpsc::Sender<serde_json::Value>,
     commands: Mutex<async_mpsc::UnboundedReceiver<String>>,
     exchange: Mutex<()>,
+    tools: Mutex<()>,
     vision: AtomicBool,
     visual: std::sync::Mutex<Option<Message>>,
 }
@@ -188,6 +189,12 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(super) fn set_vision(&self, vision: bool) {
+        self.0.vision.store(vision, Ordering::Relaxed);
+    }
+    pub(super) async fn tool_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.0.tools.lock().await
+    }
     pub(super) fn clear_visual(&self) {
         *self.0.visual.lock().unwrap() = None;
     }
@@ -265,6 +272,9 @@ impl Bridge {
         request: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let _guard = self.0.exchange.lock().await;
+        if self.0.stopped.load(Ordering::Acquire) {
+            return Err("The agent worker stopped".into());
+        }
         self.0
             .events
             .send(request)
@@ -291,10 +301,7 @@ impl Worker {
         fresh: bool,
         history: Option<HistorySnapshot>,
     ) -> Result<Self, String> {
-        let Command::Run(options) = parse_command(&[], &|name| std::env::var(name).ok(), &prefs)?
-        else {
-            return Err("Expected agent settings".into());
-        };
+        let backend = backends::Backend::from_preferences(&prefs)?;
         let history_path = folder
             .as_ref()
             .map(|folder| folder.join(".auris-conversation.json"));
@@ -311,34 +318,39 @@ impl Worker {
             events: events_out,
             commands: Mutex::new(incoming),
             exchange: Mutex::new(()),
+            tools: Mutex::new(()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
         }));
         let (cancel, cancelled) = oneshot::channel();
-        std::thread::Builder::new().name("auris-agent".into()).spawn(move || {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|error| error.to_string())?;
-                let result = runtime.block_on(async {
-                    tokio::select! {
-                        biased;
-                        _ = cancelled => Ok(()),
-                        result = async {
-                            let agent = build_for_worker(&options, Some(bridge.clone()))?;
-                            let vision = runtime::preflight(&options).await?;
-                            bridge.0.vision.store(vision, Ordering::Relaxed);
-                            json_conversation(&agent, &options, &bridge, history_path, fresh, history).await
-                        } => result,
-                    }
-                });
-                // Read-only reference work already running on blocking threads may finish,
-                // but it has no session access and must not hold up cancellation.
-                runtime.shutdown_timeout(std::time::Duration::from_millis(100));
-                result
-            })).unwrap_or_else(|_| Err("The agent worker panicked".into()));
-            if let Err(message) = result { bridge.emit(serde_json::json!({"event":"error", "message":message})); }
-            bridge.0.stopped.store(true, Ordering::Release);
-            bridge.emit(serde_json::json!({"event":"ended"}));
-        }).map_err(|error| error.to_string())?;
+        std::thread::Builder::new()
+            .name("auris-agent".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|error| error.to_string())?;
+                    let result = runtime.block_on(backend.run(
+                        &bridge,
+                        history_path,
+                        fresh,
+                        history,
+                        cancelled,
+                    ));
+                    // Read-only reference work already running on blocking threads may finish,
+                    // but it has no session access and must not hold up cancellation.
+                    runtime.shutdown_timeout(std::time::Duration::from_millis(100));
+                    result
+                }))
+                .unwrap_or_else(|_| Err("The agent worker panicked".into()));
+                if let Err(message) = result {
+                    bridge.emit(serde_json::json!({"event":"error", "message":message}));
+                }
+                bridge.0.stopped.store(true, Ordering::Release);
+                bridge.emit(serde_json::json!({"event":"ended"}));
+            })
+            .map_err(|error| error.to_string())?;
         Ok(Self {
             stopped,
             commands,
@@ -375,6 +387,29 @@ impl Drop for Worker {
     fn drop(&mut self) {
         self.cancel();
     }
+}
+
+#[cfg(test)]
+pub(crate) fn test_bridge() -> (
+    Bridge,
+    async_mpsc::UnboundedSender<String>,
+    mpsc::Receiver<serde_json::Value>,
+) {
+    let (commands, incoming) = async_mpsc::unbounded_channel();
+    let (events, receiver) = mpsc::channel();
+    (
+        Bridge(Arc::new(Channels {
+            stopped: Arc::new(AtomicBool::new(false)),
+            events,
+            commands: Mutex::new(incoming),
+            exchange: Mutex::new(()),
+            tools: Mutex::new(()),
+            vision: AtomicBool::new(false),
+            visual: std::sync::Mutex::new(None),
+        })),
+        commands,
+        receiver,
+    )
 }
 
 /// Remove one persisted conversation after every older history operation has finished.
@@ -438,6 +473,20 @@ pub fn list_models_background(
         .name("auris-model-list".into())
         .spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if prefs.backend == "codex" {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|error| error.to_string())?;
+                    return runtime.block_on(async {
+                        tokio::time::timeout(
+                            MODEL_LIST_PATIENCE,
+                            backends::codex::list_models(&prefs),
+                        )
+                        .await
+                        .map_err(|_| "Codex model listing timed out".to_string())?
+                    });
+                }
                 let Command::Models(options) =
                     parse_command(&["models".into()], &|name| std::env::var(name).ok(), &prefs)?
                 else {
@@ -752,6 +801,7 @@ mod tests {
             events,
             commands: Mutex::new(incoming),
             exchange: Mutex::new(()),
+            tools: Mutex::new(()),
             vision: AtomicBool::new(true),
             visual: std::sync::Mutex::new(None),
         }));

@@ -1,6 +1,7 @@
 # Live Agent Panel and MCP workflows
 
-The rig Agent Panel edits the open session through small, flat tools. Start with
+The Agent Panel edits the open session through small, flat tools. Both the rig and
+Codex CLI backends use the same live commands, permissions and Undo history. Start with
 `inspect_project`, then use `add_track`, `set_instrument`, `add_clip` and `add_notes`
 to construct the arrangement. Pass arguments directly without a command or action wrapper.
 

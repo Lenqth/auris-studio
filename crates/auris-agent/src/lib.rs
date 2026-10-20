@@ -355,7 +355,10 @@ pub use worker::{
     HistorySnapshot, Worker, clear_history_background, list_models_background,
     load_history_background,
 };
+mod backends;
 mod compaction;
+mod host;
+mod live_mcp;
 mod memory;
 mod permissions;
 mod runtime;
@@ -589,9 +592,6 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
                 let bridge = bridge.clone();
                 let name = tool_name.clone();
                 Box::pin(async move {
-                    let command = toolbox::live_agent::command(&name, &args)
-                        .map_err(ToolExecutionError::other)?
-                        .ok_or_else(|| ToolExecutionError::other("Unknown live operation"))?;
                     if bridge.is_none() && name == "list_instruments" {
                         return tokio::task::spawn_blocking(toolbox::live_agent::instruments)
                             .await
@@ -603,8 +603,8 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
                             "Open the Agent Panel to edit the current document",
                         )
                     })?;
-                    let reply = bridge
-                        .exchange(serde_json::json!({"event":"edit", "command":command}))
+                    let reply = host::ToolHost::new(bridge.clone())
+                        .call(&name, args)
                         .await
                         .map_err(ToolExecutionError::other)?;
                     if name == "inspect_audio" && reply["ok"] == true {
@@ -1103,6 +1103,10 @@ impl AgentHook for Reporter {
         if let Some(bridge) = &self.bridge {
             bridge.emit(serde_json::json!({"event":"phase", "phase":"tool"}));
             bridge.emit(call_event(&event));
+        }
+        // Live calls authorize inside ToolHost so every transport crosses the same gate.
+        if self.bridge.is_some() && host::ToolHost::contains(tool) {
+            return DispatchAction::proceed();
         }
         match permissions::authorize(
             self.bridge.as_ref(),

@@ -1914,6 +1914,9 @@ new のオプション
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }
     AgentProviderLabel { en: "Provider", ja: "プロバイダ" }
+    AgentBackendLabel { en: "Backend", ja: "バックエンド" }
+    AgentCodexPathLabel { en: "Codex executable path (optional)", ja: "Codex実行ファイルのパス（任意）" }
+    AgentCodexHelp { en: "Install Codex CLI and run codex login with your ChatGPT account. Leave the path empty to find the installed CLI. Choose a model in the Agent Panel after applying.", ja: "Codex CLIをインストールし、codex loginでChatGPTアカウントにログインしてください。パスが空欄ならインストール済みのCLIを探します。適用後、エージェントパネルでモデルを選択してください。" }
     AgentReadOnly { en: "Read-only", ja: "読み取り専用" }
     AgentEditMode { en: "Edit", ja: "編集" }
     AgentPlanMode { en: "Plan", ja: "プラン" }

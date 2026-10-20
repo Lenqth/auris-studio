@@ -1,4 +1,5 @@
-//! Permission decisions for the rig agent. MCP does not consult this policy.
+//! Permission decisions for live agents, including embedded MCP. Standalone saved-file MCP
+//! does not consult this policy.
 
 use serde::{Deserialize, Serialize};
 
