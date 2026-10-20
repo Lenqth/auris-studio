@@ -436,27 +436,19 @@ impl AurisApp {
 
     pub(super) fn agent_controls(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
-        let theme = &theme;
-        let operation_busy = self.agent_operation_busy();
         let mode = self.settings.agent.policy.mode;
-        let effort = self.settings.agent.effort;
-        let mut row = div()
-            .flex()
-            .flex_wrap()
-            .gap_1()
-            .p_1()
-            .border_b_1()
-            .border_color(theme.border);
-        row = row
-            .child(div().flex_1().min_w_0().child(self.dropdown(
+        let mut mode_names = [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
+            .map(|choice| self.t(mode_key(choice)).to_owned())
+            .to_vec();
+        mode_names.push(self.t(Key::AgentPermissions).to_owned());
+        div()
+            .w_full()
+            .min_w_0()
+            .child(self.dropdown(
                 "agent-mode-menu",
-                format!(
-                    "{}: {}",
-                    self.t(Key::AgentApprovalMode),
-                    self.t(mode_key(mode))
-                ),
+                self.t(mode_key(mode)).to_owned(),
                 self.agent_chat.controls.mode_menu,
-                theme,
+                &theme,
                 |this, _| {
                     if !this.agent_operation_busy() {
                         this.agent_chat.controls.mode_menu = !this.agent_chat.controls.mode_menu;
@@ -465,54 +457,7 @@ impl AurisApp {
                     }
                 },
                 cx,
-            )))
-            .child(div().flex_1().min_w_0().child(self.dropdown(
-                "agent-effort-menu",
-                format!(
-                    "{}: {}",
-                    self.t(Key::AgentEffort),
-                    self.t(effort_key(effort))
-                ),
-                self.agent_chat.controls.effort_menu,
-                theme,
-                |this, _| {
-                    if !this.agent_operation_busy() {
-                        this.agent_chat.controls.effort_menu =
-                            !this.agent_chat.controls.effort_menu;
-                        this.agent_chat.controls.mode_menu = false;
-                        this.agent_chat.model_menu = false;
-                    }
-                },
-                cx,
-            )));
-        row = row.child(button_enabled(
-            "agent-permissions",
-            self.t(Key::AgentPermissions),
-            ButtonStyle::Normal,
-            ButtonState::available(self.agent_chat.controls.rules_open, !operation_busy),
-            theme.accent,
-            theme,
-            cx.listener(|this, _, _, cx| {
-                if let Some(field) = this.agent_chat.field_mut() {
-                    field.unmark();
-                }
-                this.agent_chat.focused = None;
-                this.set_agent_rules_open(!this.agent_chat.controls.rules_open);
-                cx.notify();
-            }),
-        ));
-        let mode_names = [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
-            .map(|choice| self.t(mode_key(choice)).to_string());
-        let efforts = effort_choices(self.agent_chat.provider_openai);
-        let effort_names: Vec<String> = efforts
-            .iter()
-            .map(|choice| self.t(effort_key(*choice)).to_string())
-            .collect();
-        div()
-            .relative()
-            .flex()
-            .flex_col()
-            .child(row)
+            ))
             .when(self.agent_chat.controls.mode_menu, |this| {
                 this.child(
                     self.option_rows(
@@ -522,7 +467,7 @@ impl AurisApp {
                             .iter()
                             .position(|choice| *choice == mode)
                             .unwrap_or(0),
-                        theme,
+                        &theme,
                         |this, index, _| {
                             if let Some(mode) =
                                 [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::Bypass]
@@ -530,28 +475,9 @@ impl AurisApp {
                                     .copied()
                             {
                                 this.agent_mode(mode);
-                            }
-                        },
-                        cx,
-                    ),
-                )
-            })
-            .when(self.agent_chat.controls.effort_menu, |this| {
-                this.child(
-                    self.option_rows(
-                        "agent-effort-option",
-                        &effort_names,
-                        efforts
-                            .iter()
-                            .position(|choice| *choice == effort)
-                            .unwrap_or(0),
-                        theme,
-                        move |this, index, _| {
-                            if let Some(effort) = effort_choices(this.agent_chat.provider_openai)
-                                .get(index)
-                                .copied()
-                            {
-                                this.agent_effort(effort);
+                            } else {
+                                this.agent_chat.controls.mode_menu = false;
+                                this.set_agent_rules_open(!this.agent_chat.controls.rules_open);
                             }
                         },
                         cx,
@@ -560,7 +486,6 @@ impl AurisApp {
             })
             .into_any_element()
     }
-
     pub(super) fn agent_rules(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let theme = &self.theme;
         let operation_busy = self.agent_operation_busy();
@@ -740,12 +665,6 @@ impl AurisApp {
 mod tests {
     use super::*;
 
-    fn release_key(key: &str, cx: &mut gpui::VisualTestContext) {
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse(key).unwrap(),
-        });
-    }
-
     fn command(track: u64) -> serde_json::Value {
         serde_json::json!({"action":"remove_track","track":track})
     }
@@ -787,9 +706,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn permission_disclosure_reveals_rules_and_answers_enter_and_space(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn permission_menu_reveals_rules_and_returns_to_the_transcript(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
@@ -807,6 +724,8 @@ mod tests {
                 .set_offset(gpui::point(px(0.0), px(-120.0)));
         });
 
+        crate::harness::click("agent-mode-menu", cx);
+        crate::harness::paint(&app, cx);
         crate::harness::click("agent-permissions", cx);
         crate::harness::paint(&app, cx);
         app.read_with(cx, |this, _| {
@@ -815,14 +734,11 @@ mod tests {
         });
         assert!(cx.debug_bounds("agent-rule-*").is_some());
 
-        release_key("enter", cx);
-        app.read_with(cx, |this, _| assert!(!this.agent_chat.controls.rules_open));
-        release_key("space", cx);
+        crate::harness::click("agent-mode-menu", cx);
         crate::harness::paint(&app, cx);
-        app.read_with(cx, |this, _| assert!(this.agent_chat.controls.rules_open));
-        assert!(cx.debug_bounds("agent-rule-*").is_some());
+        crate::harness::click("agent-permissions", cx);
+        app.read_with(cx, |this, _| assert!(!this.agent_chat.controls.rules_open));
     }
-
     #[gpui::test]
     fn shift_tab_moves_focus_without_answering_a_pending_approval(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);

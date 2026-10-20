@@ -341,9 +341,9 @@ async fn conversation(
             bridge.emit(json!({"event":"compacted","ok":false,"manual":true,"message":"Manual compaction is not available for the Claude Code backend yet"}));
             continue;
         }
-        let (said, audio) = crate::parse_say(&line)?;
-        if !audio.is_empty() {
-            bridge.emit(json!({"event":"error","message":"Claude Code audio attachments are not supported. Use inspect_audio to inspect the current song"}));
+        let (said, attachments) = crate::parse_say(&line)?;
+        if !attachments.is_empty() {
+            bridge.emit(json!({"event":"error","message":"Claude Code reference attachments are not supported. Choose another model or remove the attached files before sending"}));
             continue;
         }
         let prompt = format!(

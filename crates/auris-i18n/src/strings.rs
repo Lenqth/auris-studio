@@ -1918,7 +1918,8 @@ new のオプション
     AgentClaudePathLabel { en: "Claude Code executable path (optional)", ja: "Claude Code実行ファイルのパス（任意）" }
     AgentClaudeHelp { en: "Install Claude Code and sign in by running claude. Leave the path empty to find the installed CLI. Choose a model in the Agent Panel after applying.", ja: "Claude Codeをインストールし、claudeを起動してログインしてください。パスが空欄ならインストール済みのCLIを探します。適用後、エージェントパネルでモデルを選択してください。" }
     AgentCodexPathLabel { en: "Codex executable path (optional)", ja: "Codex実行ファイルのパス（任意）" }
-    AgentCodexHelp { en: "Install Codex CLI and run codex login with your ChatGPT account. Leave the path empty to find the installed CLI. Choose a model in the Agent Panel after applying.", ja: "Codex CLIをインストールし、codex loginでChatGPTアカウントにログインしてください。パスが空欄ならインストール済みのCLIを探します。適用後、エージェントパネルでモデルを選択してください。" }
+    AgentCodexHelp { en: "Sign in with codex login. Leave the path empty to detect the installed CLI.", ja: "codex loginでログインしてください。パスが空欄ならインストール済みのCLIを探します。" }
+    AgentDiscoveryHelp { en: "Available Codex, Claude Code, Ollama and configured API models appear together in the Agent panel.", ja: "利用可能なCodex・Claude Code・Ollama・設定済みAPIのモデルを、エージェントパネルにまとめて表示します。" }
     AgentReadOnly { en: "Read-only", ja: "読み取り専用" }
     AgentEditMode { en: "Edit", ja: "編集" }
     AgentPlanMode { en: "Plan", ja: "プラン" }
@@ -1969,6 +1970,9 @@ new のオプション
     AgentReasoningLog { en: "Reasoning", ja: "推論ログ" }
     AgentToolArguments { en: "Arguments", ja: "引数" }
     AgentToolResult { en: "Result", ja: "実行結果" }
+    AgentToolGroup { en: "Tools ({count})", ja: "ツール実行（{count}件）" }
+    AgentToolGroupRunning { en: "{count} running", ja: "{count}件実行中" }
+    AgentToolGroupFailed { en: "{count} failed", ja: "{count}件失敗" }
     AgentSlashMode { en: "Change approval mode", ja: "承認モードを変更" }
     AgentSlashEffort { en: "Change reasoning effort", ja: "推論レベルを変更" }
     AgentSlashPermissions { en: "Show permission rules", ja: "許可ルールを表示" }
@@ -2020,7 +2024,16 @@ new のオプション
     AgentStop { en: "Stop", ja: "停止" }
     AgentSend { en: "Send", ja: "送信" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }
-    AgentAttachAudio { en: "Attach audio", ja: "音声を添付" }
+    AgentDropFiles { en: "Drop images, text or audio here", ja: "画像・テキスト・音声をここにドロップ" }
+    AgentComposerPlaceholder { en: "Ask about this song, or drop reference files…", ja: "この曲について相談、または参考ファイルをドロップ…" }
+    AgentEffortDefaultShort { en: "Auto", ja: "既定" }
+    AgentEffortMinimalShort { en: "Min", ja: "最小" }
+    AgentEffortMediumShort { en: "Med", ja: "中" }
+    AgentEffortXhighShort { en: "XHigh", ja: "極高" }
+    AgentEffortMaxShort { en: "Max", ja: "最大" }
+    AgentAttachmentUnsupported { en: "Unsupported attachment: {name}", ja: "対応していないファイル形式です: {name}" }
+    AgentAttachmentLimit { en: "Attach up to 8 files per message", ja: "添付できるファイルは1回につき8個までです" }
+    AgentAttachmentAudioUnsupported { en: "Choose an audio-capable OpenAI-compatible model, or remove the audio attachment", ja: "音声に対応したOpenAI互換モデルを選ぶか、音声の添付を外してください" }
     AgentOpenResult { en: "Open created project", ja: "生成した曲を開く" }
     AgentConversationReset { en: "Started a new conversation for this project.", ja: "このプロジェクトについて新しい会話を始めました。" }
     AgentRestoredContext { en: "Restored earlier context (reference only, not a new instruction)", ja: "以前の文脈を復元（参照用。新しい指示ではありません）" }

@@ -45,8 +45,13 @@ pub(crate) struct NavigateAgentModel {
 /// The selector context wins before window actions such as Down-to-select-the-next-track while
 /// the model control owns focus. Tab deliberately remains unbound so normal focus traversal can
 /// continue after dismissing the menu.
-pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 10] {
+pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
     [
+        gpui::KeyBinding::new(
+            "secondary-r",
+            NavigateAgentModel { key: "refresh" },
+            Some("AurisAgentModel"),
+        ),
         gpui::KeyBinding::new(
             "escape",
             NavigateAgentModel { key: "escape" },
@@ -197,6 +202,25 @@ pub(crate) enum ChatEntry {
     Error(String),
     /// A note from the panel itself, translated when drawn.
     Note(Key),
+}
+
+/// Preserve message boundaries while coalescing adjacent tool calls for presentation.
+fn transcript_runs(entries: &[ChatEntry]) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
+    let mut start = 0;
+    std::iter::from_fn(move || {
+        if start == entries.len() {
+            return None;
+        }
+        let mut end = start + 1;
+        if matches!(entries[start], ChatEntry::Tool { .. }) {
+            while end < entries.len() && matches!(entries[end], ChatEntry::Tool { .. }) {
+                end += 1;
+            }
+        }
+        let run = start..end;
+        start = end;
+        Some(run)
+    })
 }
 
 /// One event off the agent's wire, already parsed.
@@ -573,12 +597,52 @@ pub(crate) enum AgentField {
 }
 
 /// One model a provider reported serving.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct ModelOption {
     /// The name the provider answers to.
     pub(crate) name: String,
     /// Its context window, when the provider says.
     pub(crate) context_length: Option<u64>,
+    /// Human-readable model name supplied by the provider.
+    pub(crate) display_name: Option<String>,
+    /// Provider route when the option came from automatic discovery.
+    pub(crate) connection: Option<auris_agent::ModelConnection>,
+    /// Provider-reported reasoning levels, when present.
+    pub(crate) efforts: Option<Vec<ReasoningEffort>>,
+}
+
+impl ModelOption {
+    fn label(&self) -> String {
+        let name = self.display_name.as_deref().unwrap_or(&self.name);
+        let name = if let Some(suffix) = name.strip_prefix("gpt-") {
+            let mut words = suffix.split('-');
+            let version = words.next().unwrap_or_default();
+            let rest = words
+                .map(|word| {
+                    let mut chars = word.chars();
+                    chars.next().map_or_else(String::new, |first| {
+                        first.to_uppercase().chain(chars).collect::<String>()
+                    })
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("GPT-{version} {rest}").trim().to_owned()
+        } else {
+            name.to_owned()
+        };
+        match &self.connection {
+            Some(connection) => format!("{name} ({})", connection.label()),
+            None => name,
+        }
+    }
+
+    fn matches(&self, prefs: &AgentPreferences) -> bool {
+        self.name == prefs.model
+            && self
+                .connection
+                .as_ref()
+                .is_none_or(|route| route.matches(prefs))
+    }
 }
 
 /// Reads the one line `auris-agent models` prints into the picker's options.
@@ -601,6 +665,22 @@ pub(crate) fn parse_model_list(line: &str) -> Result<Vec<ModelOption>, String> {
             Some(ModelOption {
                 name: model.get("name")?.as_str()?.to_string(),
                 context_length: model.get("context_length").and_then(|value| value.as_u64()),
+                display_name: model
+                    .get("display_name")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned),
+                connection: model
+                    .get("connection")
+                    .and_then(|value| serde_json::from_value(value.clone()).ok()),
+                efforts: model
+                    .get("efforts")
+                    .and_then(|value| value.as_array())
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(|value| value.as_str().and_then(ReasoningEffort::named))
+                            .collect()
+                    }),
             })
         })
         .collect())
@@ -781,12 +861,8 @@ pub(crate) struct AgentChat {
     model_highlighted: usize,
     /// Keeps the highlighted model visible in a long provider list.
     model_scroll: gpui::ScrollHandle,
-    /// Keeps the compact header, permission controls and model section reachable in a short dock.
-    controls_scroll: gpui::ScrollHandle,
-    /// Non-tab-stop focus ancestors used to reveal each section in `controls_scroll`.
+    /// Stable focus ancestor for the conversation header.
     header_section_focus: Option<gpui::FocusHandle>,
-    controls_section_focus: Option<gpui::FocusHandle>,
-    model_section_focus: Option<gpui::FocusHandle>,
     /// Stable keyboard focus for the model selector, allocated on its first render.
     model_focus: Option<gpui::FocusHandle>,
     /// Stable keyboard focus for the message editor, allocated on its first render.
@@ -807,10 +883,12 @@ pub(crate) struct AgentChat {
     pub(crate) context_window: Option<u64>,
     /// The transcript rows clicked open to their full text.
     pub(crate) expanded: std::collections::BTreeSet<usize>,
+    expanded_tool_groups: std::collections::BTreeSet<usize>,
     /// Running tool rows by unique call id, so parallel calls sharing a name remain distinct.
     open_tools: std::collections::BTreeMap<String, usize>,
     /// The wire a model listing comes back on.
     pub(crate) models_rx: Option<Receiver<Result<String, String>>>,
+    discovery_endpoint: Option<auris_session::AgentEndpoint>,
     /// A serialized deletion waiting behind any final history write by the cancelled worker.
     history_clear: Option<PendingHistoryClear>,
     /// A saved transcript being read independently of model/provider startup.
@@ -844,8 +922,11 @@ pub(crate) struct AgentChat {
     turn_project: Option<PathBuf>,
     /// The document whose folder and model history the running child belongs to.
     bound_project: Option<PathBuf>,
-    /// Audio files selected by the user for the next message.
+    /// Reference files selected by the user for the next message.
     attachments: Vec<PathBuf>,
+    attachment_error: Option<String>,
+    /// Actual painted bounds used by the window's shared file-drop router.
+    pub(crate) drop_bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
     /// A different project produced by the last turn, ready to open explicitly.
     produced_project: Option<PathBuf>,
     /// The next child should replace its persisted text memory with an empty conversation.
@@ -887,10 +968,7 @@ impl Default for AgentChat {
             model_menu: false,
             model_highlighted: 0,
             model_scroll: gpui::ScrollHandle::new(),
-            controls_scroll: gpui::ScrollHandle::new(),
             header_section_focus: None,
-            controls_section_focus: None,
-            model_section_focus: None,
             model_focus: None,
             input_focus: None,
             stop_focus: None,
@@ -901,8 +979,10 @@ impl Default for AgentChat {
             streamed_answer: false,
             context_window: None,
             expanded: std::collections::BTreeSet::new(),
+            expanded_tool_groups: std::collections::BTreeSet::new(),
             open_tools: std::collections::BTreeMap::new(),
             models_rx: None,
+            discovery_endpoint: None,
             history_clear: None,
             history_load: None,
             history_project: None,
@@ -919,6 +999,8 @@ impl Default for AgentChat {
             turn_project: None,
             bound_project: None,
             attachments: Vec::new(),
+            attachment_error: None,
+            drop_bounds: Default::default(),
             produced_project: None,
             fresh_history: false,
             restart_after_turn: false,
@@ -971,6 +1053,7 @@ impl AgentChat {
         self.entries.clear();
         self.open_tools.clear();
         self.expanded.clear();
+        self.expanded_tool_groups.clear();
         // A new document's transcript must not inherit the old document's scroll geometry.
         self.scroll = gpui::ScrollHandle::new();
         self.follow_tail = true;
@@ -992,6 +1075,11 @@ impl AgentChat {
             self.entries.remove(0);
             self.expanded = self
                 .expanded
+                .iter()
+                .filter_map(|index| index.checked_sub(1))
+                .collect();
+            self.expanded_tool_groups = self
+                .expanded_tool_groups
                 .iter()
                 .filter_map(|index| index.checked_sub(1))
                 .collect();
@@ -1048,6 +1136,7 @@ impl AgentChat {
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
         self.provider_openai = prefs.provider.trim() == "openai";
+        self.discovery_endpoint = prefs.discovery_endpoint.clone();
         self.backend = prefs.backend.clone();
         self.codex_path = prefs.codex_path.clone();
         self.claude_path = prefs.claude_path.clone();
@@ -1077,6 +1166,7 @@ impl AgentChat {
     /// The settings section's fields, read back out as preferences.
     pub(crate) fn preferences(&self) -> AgentPreferences {
         AgentPreferences {
+            discovery_endpoint: self.discovery_endpoint.clone(),
             backend: self.backend.clone(),
             codex_path: self.codex_path.clone(),
             claude_path: self.claude_path.clone(),
@@ -1107,12 +1197,37 @@ impl AgentChat {
         !self.models_loaded && !self.fetching_models && self.models_rx.is_none()
     }
 
-    /// Whether the model selector has a catalogue it can truthfully open.
-    fn model_selector_enabled(&self) -> bool {
-        !self.busy
-            && !self.fetching_models
-            && self.models_error.is_none()
-            && !self.models.is_empty()
+    fn effort_choices(&self) -> Vec<ReasoningEffort> {
+        let prefs = self.preferences();
+        if let Some(efforts) = self
+            .models
+            .iter()
+            .find(|option| option.matches(&prefs))
+            .and_then(|option| option.efforts.as_ref())
+        {
+            return std::iter::once(ReasoningEffort::Default)
+                .chain(efforts.iter().copied())
+                .collect();
+        }
+        controls::effort_choices(self.provider_openai || self.backend == "codex").to_vec()
+    }
+
+    fn selected_model_label(&self) -> String {
+        let prefs = self.preferences();
+        self.models
+            .iter()
+            .find(|option| option.matches(&prefs))
+            .map_or_else(
+                || {
+                    ModelOption {
+                        name: self.chosen_model.clone(),
+                        connection: Some(auris_agent::ModelConnection::from_preferences(&prefs)),
+                        ..Default::default()
+                    }
+                    .label()
+                },
+                ModelOption::label,
+            )
     }
 
     /// Applies the one terminal answer from a model-listing worker.
@@ -1126,7 +1241,7 @@ impl AgentChat {
             Ok(models) => {
                 if let Some(chosen) = models
                     .iter()
-                    .find(|option| option.name == self.chosen_model)
+                    .find(|option| option.matches(&self.preferences()))
                 {
                     self.context_window = chosen.context_length;
                 }
@@ -1431,10 +1546,38 @@ fn spawn_link(
 
 /// Fetch provider models off the UI thread.
 fn spawn_model_listing(prefs: &AgentPreferences) -> Receiver<Result<String, String>> {
-    auris_agent::list_models_background(prefs.clone())
+    auris_agent::discover_models_background(prefs.clone())
 }
 
 impl AurisApp {
+    /// Attach dropped reference files without importing them into the song.
+    pub(crate) fn agent_attach_files(&mut self, paths: &[PathBuf], cx: &mut gpui::Context<Self>) {
+        if self.agent_chat.pending_send.is_some() {
+            return;
+        }
+        self.agent_chat.attachment_error = None;
+        for path in paths {
+            if self.agent_chat.attachments.contains(path) {
+                continue;
+            }
+            if auris_agent::attachment_kind(path).is_none() {
+                self.agent_chat.attachment_error =
+                    Some(self.t(Key::AgentAttachmentUnsupported).replace(
+                        "{name}",
+                        &path.file_name().unwrap_or_default().to_string_lossy(),
+                    ));
+                continue;
+            }
+            if self.agent_chat.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
+                self.agent_chat.attachment_error =
+                    Some(self.t(Key::AgentAttachmentLimit).to_owned());
+                break;
+            }
+            self.agent_chat.attachments.push(path.clone());
+        }
+        cx.notify();
+    }
+
     fn agent_document_token(&self) -> AgentDocumentToken {
         AgentDocumentToken {
             project: self.session.path().map(Path::to_path_buf),
@@ -1641,6 +1784,7 @@ impl AurisApp {
         self.agent_chat.attachments.clear();
         self.agent_chat.entries.clear();
         self.agent_chat.expanded.clear();
+        self.agent_chat.expanded_tool_groups.clear();
         self.agent_chat.open_tools.clear();
         self.agent_chat.model_label.clear();
         self.agent_chat.tokens_in = 0;
@@ -1785,6 +1929,21 @@ impl AurisApp {
             }
             return;
         }
+        if let Err(error) =
+            auris_agent::validate_attachments(&self.settings.agent, &self.agent_chat.attachments)
+        {
+            self.agent_chat.attachment_error = Some(
+                if self.agent_chat.attachments.iter().any(|path| {
+                    auris_agent::attachment_kind(path) == Some(auris_agent::AttachmentKind::Audio)
+                }) {
+                    self.t(Key::AgentAttachmentAudioUnsupported).to_owned()
+                } else {
+                    error
+                },
+            );
+            return;
+        }
+        self.agent_chat.attachment_error = None;
         if self.agent_chat.link.is_some()
             && self.agent_chat.bound_project.as_deref() != self.session.path()
         {
@@ -1868,7 +2027,7 @@ impl AurisApp {
         let wire = serde_json::json!({
             "say": framed,
             "display": &message.text,
-            "audio": &message.attachments,
+            "attachments": &message.attachments,
             "policy": message.preferences.policy,
             "auto_compact_percent": message.preferences.auto_compact_percent.unwrap_or(85)
         })
@@ -2530,7 +2689,7 @@ impl AurisApp {
         if self.agent_chat.needs_model_listing() {
             self.agent_refresh_models();
         }
-        if self.agent_operation_busy() || !self.agent_chat.model_selector_enabled() {
+        if self.agent_operation_busy() {
             self.agent_chat.model_menu = false;
         }
 
@@ -2539,55 +2698,27 @@ impl AurisApp {
             .header_section_focus
             .get_or_insert_with(|| cx.focus_handle())
             .clone();
-        let controls_section_focus = self
-            .agent_chat
-            .controls_section_focus
-            .get_or_insert_with(|| cx.focus_handle())
-            .clone();
-        let model_section_focus = self
-            .agent_chat
-            .model_section_focus
-            .get_or_insert_with(|| cx.focus_handle())
-            .clone();
-        for (index, focus) in [
-            &header_section_focus,
-            &controls_section_focus,
-            &model_section_focus,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            if focus.contains_focused(window, cx) {
-                self.agent_chat.controls_scroll.scroll_to_item(index);
-                break;
-            }
-        }
-
-        let entries: Vec<AnyElement> = self
-            .agent_chat
-            .entries
-            .iter()
-            .enumerate()
-            .map(|(index, entry)| self.chat_row(index, entry, &theme, window, cx))
+        let rows: Vec<AnyElement> = transcript_runs(&self.agent_chat.entries)
+            .map(|run| {
+                if run.len() > 1 {
+                    self.chat_tool_group(run, &theme, window, cx)
+                } else {
+                    self.chat_row(
+                        run.start,
+                        &self.agent_chat.entries[run.start],
+                        &theme,
+                        window,
+                        cx,
+                    )
+                }
+            })
             .collect();
-        let rows = entries;
         let operation_busy = self.agent_operation_busy();
         let pending_reload = self.agent_chat.pending_reload.is_some();
-        let model_label = match self.agent_chat.model_label.is_empty() {
-            true => self.settings.agent.model.clone(),
-            false => self.agent_chat.model_label.clone(),
-        };
-        let controls_max_offset = self.agent_chat.controls_scroll.max_offset().height;
-        let controls_offset = self.agent_chat.controls_scroll.offset().y;
-        let controls_overflow = controls_max_offset > px(0.0);
-        let controls_cue = if controls_offset >= px(-1.0) {
-            "↓"
-        } else if -controls_offset >= controls_max_offset - px(1.0) {
-            "↑"
-        } else {
-            "↕"
-        };
-
+        let drop_bounds = self.agent_chat.drop_bounds.clone();
+        let accepts_drop = !composer_locked;
+        let accent = theme.accent;
+        let drop_background = theme.accent_soft;
         div()
             .id("agent-panel")
             .debug_selector(|| "agent-panel".to_string())
@@ -2597,7 +2728,34 @@ impl AurisApp {
             .min_h(px(80.0))
             .min_w_0()
             .overflow_hidden()
+            .relative()
             .bg(theme.surface_sunken)
+            .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
+                this.agent_attach_files(paths.paths(), cx);
+                cx.stop_propagation();
+            }))
+            .drag_over::<gpui::ExternalPaths>(move |style, paths, _, _| {
+                if accepts_drop
+                    && paths
+                        .paths()
+                        .iter()
+                        .any(|path| auris_agent::attachment_kind(path).is_some())
+                {
+                    style.border_color(accent).bg(drop_background)
+                } else {
+                    style
+                }
+            })
+            .child(
+                gpui::canvas(
+                    move |bounds, _, _| {
+                        drop_bounds.set(Some(bounds));
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
             // Dropdown triggers and options stop propagation; other panel clicks dismiss
             // the open menu before carrying on to their own control.
             .on_mouse_down(
@@ -2616,8 +2774,8 @@ impl AurisApp {
             )
             .child(
                 div()
-                    .id("agent-panel-controls")
-                    .debug_selector(|| "agent-panel-controls".to_string())
+                    .id("agent-panel-header")
+                    .debug_selector(|| "agent-panel-header".to_string())
                     .flex()
                     .flex_col()
                     .relative()
@@ -2625,7 +2783,6 @@ impl AurisApp {
                     .min_h_0()
                     .max_h(px(180.0))
                     .overflow_y_scroll()
-                    .track_scroll(&self.agent_chat.controls_scroll)
                     .child(
                         div()
                             .track_focus(&header_section_focus)
@@ -2678,38 +2835,7 @@ impl AurisApp {
                                     cx.notify();
                                 }),
                             ))
-                            .when(cancelable, |this| {
-                                this.child(
-                                    button(
-                                        "agent-stop",
-                                        self.t(Key::AgentStop),
-                                        ButtonStyle::Normal,
-                                        false,
-                                        theme.warning,
-                                        &theme,
-                                        cx.listener(|this, _, window, cx| {
-                                            this.agent_cancel(window, cx)
-                                        }),
-                                    )
-                                    .track_focus(&stop_focus),
-                                )
-                            })
-                            .child(
-                                div()
-                                    .id("agent-header-model")
-                                    .flex_1()
-                                    .min_w_0()
-                                    .h(Metrics::CONTROL_HEIGHT)
-                                    .text_color(theme.text_faint)
-                                    .child(bounded_picker_label(model_label.clone()))
-                                    .when(!model_label.is_empty(), |this| {
-                                        this.tooltip(crate::ui::tooltip::keyed_tip(
-                                            model_label,
-                                            "",
-                                            &theme,
-                                        ))
-                                    }),
-                            )
+                            .child(div().flex_1())
                             .when(pending_reload, |this| {
                                 this.child(button(
                                     "agent-reload",
@@ -2739,43 +2865,7 @@ impl AurisApp {
                                     );
                                 }),
                             )),
-                    )
-                    .child(
-                        div()
-                            .track_focus(&controls_section_focus)
-                            .child(self.agent_controls(cx)),
-                    )
-                    .child(
-                        div()
-                            .track_focus(&model_section_focus)
-                            .child(self.agent_model_picker(cx)),
-                    )
-                    .when(controls_overflow, |this| {
-                        this.child(
-                            div()
-                                .id("agent-controls-scroll-cue")
-                                .debug_selector(|| "agent-controls-scroll-cue".to_string())
-                                .absolute()
-                                .right(px(2.0))
-                                .bottom(px(2.0))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .size(px(16.0))
-                                .rounded_full()
-                                .border_1()
-                                .border_color(theme.border)
-                                .bg(theme.surface_raised)
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(controls_cue)
-                                .tooltip(crate::ui::tooltip::keyed_tip(
-                                    self.t(Key::AgentControlsScroll),
-                                    "",
-                                    &theme,
-                                )),
-                        )
-                    }),
+                    ),
             )
             .child(
                 self.scrolling(
@@ -2834,11 +2924,13 @@ impl AurisApp {
                 )))
             })
             .child(self.agent_approval_view(cx))
-            .child(self.agent_status_row(&theme))
+            .when(
+                operation_busy || self.agent_chat.tokens_in > 0 || self.agent_chat.tokens_out > 0,
+                |this| this.child(self.agent_status_row(&theme)),
+            )
             .child(self.agent_slash_completions(cx))
-            .child(self.agent_input_row(input_focus, cx))
+            .child(self.agent_input_row(input_focus, stop_focus, cx))
     }
-
     /// The context gauge and token counters, over the input the way picocode sets its status
     /// bar: `↑ prompt ↓ written`, a bar filling the chosen model's window, and the percentage.
     ///
@@ -2929,6 +3021,86 @@ impl AurisApp {
             );
         }
         row.into_any_element()
+    }
+
+    /// A compact, keyboard-accessible summary of consecutive tool calls.
+    fn chat_tool_group(
+        &self,
+        run: std::ops::Range<usize>,
+        theme: &Theme,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let start = run.start;
+        let opened = self.agent_chat.expanded_tool_groups.contains(&start);
+        let mut running = 0;
+        let mut failed = 0;
+        for entry in &self.agent_chat.entries[run.clone()] {
+            if let ChatEntry::Tool { ok, line, .. } = entry {
+                if line.is_empty() {
+                    running += 1;
+                } else if !ok {
+                    failed += 1;
+                }
+            }
+        }
+        let mut label = self
+            .t(Key::AgentToolGroup)
+            .replace("{count}", &run.len().to_string());
+        for (count, key) in [
+            (running, Key::AgentToolGroupRunning),
+            (failed, Key::AgentToolGroupFailed),
+        ] {
+            if count > 0 {
+                label.push_str(" · ");
+                label.push_str(&self.t(key).replace("{count}", &count.to_string()));
+            }
+        }
+        div()
+            .id(("agent-tool-group", start))
+            .debug_selector(move || format!("agent-tool-group-{start}"))
+            .w_full()
+            .min_w_0()
+            .flex_shrink_0()
+            .px_1p5()
+            .py_0p5()
+            .text_xs()
+            .text_color(if failed > 0 {
+                theme.danger
+            } else {
+                theme.text_muted
+            })
+            .child(
+                disclosure(
+                    SharedString::from(format!("agent-tool-group-toggle-{start}")),
+                    label,
+                    opened,
+                    theme,
+                    cx.listener(move |this, _, _, cx| {
+                        if !this.agent_chat.expanded_tool_groups.remove(&start) {
+                            this.agent_chat.expanded_tool_groups.insert(start);
+                        }
+                        cx.notify();
+                    }),
+                )
+                .when(failed > 0, |this| this.text_color(theme.danger)),
+            )
+            .when(opened, |this| {
+                this.child(
+                    div()
+                        .id(("agent-tool-group-body", start))
+                        .debug_selector(move || format!("agent-tool-group-body-{start}"))
+                        .flex()
+                        .flex_col()
+                        .mt_1()
+                        .border_l_1()
+                        .border_color(theme.border_subtle)
+                        .children(run.map(|index| {
+                            self.chat_row(index, &self.agent_chat.entries[index], theme, window, cx)
+                        })),
+                )
+            })
+            .into_any_element()
     }
 
     /// One transcript row. A tool row with an answer opens to the whole of it when activated —
@@ -3127,7 +3299,7 @@ impl AurisApp {
 
     /// Opens the model menu at the current choice, ready for arrow-key navigation.
     fn open_agent_model_menu(&mut self) {
-        if self.agent_operation_busy() || !self.agent_chat.model_selector_enabled() {
+        if self.agent_operation_busy() {
             return;
         }
         if let Some(field) = self.agent_chat.field_mut() {
@@ -3139,14 +3311,14 @@ impl AurisApp {
             .agent_chat
             .models
             .iter()
-            .position(|option| option.name == self.agent_chat.chosen_model)
+            .position(|option| option.matches(&self.agent_chat.preferences()))
             .unwrap_or(0);
         self.agent_chat.model_menu = true;
         self.agent_chat.controls.mode_menu = false;
         self.agent_chat.controls.effort_menu = false;
         self.agent_chat
             .model_scroll
-            .scroll_to_item(self.agent_chat.model_highlighted);
+            .scroll_to_item(self.agent_chat.model_highlighted + 1);
     }
 
     /// Applies one model choice immediately, just like a pointer selection.
@@ -3171,6 +3343,29 @@ impl AurisApp {
             return Ok(());
         };
         let previous_context_window = self.agent_chat.context_window;
+        let previous_preferences = self.agent_chat.preferences();
+        if let Some(connection) = &option.connection {
+            let mut prefs = previous_preferences.clone();
+            self.agent_chat.discovery_endpoint.get_or_insert_with(|| {
+                auris_session::AgentEndpoint {
+                    provider: prefs.provider.clone(),
+                    url: prefs.url.clone(),
+                    api_key_env: prefs.api_key_env.clone(),
+                }
+            });
+            connection.apply_to(&mut prefs);
+            self.agent_chat.backend = prefs.backend;
+            self.agent_chat.provider_openai = prefs.provider == "openai";
+            self.agent_chat.url_field = TextField::new(prefs.url);
+            self.agent_chat.key_env_field = TextField::new(prefs.api_key_env);
+        }
+        if option
+            .efforts
+            .as_ref()
+            .is_some_and(|efforts| !efforts.contains(&self.agent_chat.effort))
+        {
+            self.agent_chat.effort = ReasoningEffort::Default;
+        }
         let previous = (
             std::mem::replace(&mut self.agent_chat.chosen_model, option.name),
             previous_context_window,
@@ -3182,6 +3377,12 @@ impl AurisApp {
         self.agent_chat.context_window = option.context_length;
         // The pick counts the moment it is made — no Apply between the menu and the setting.
         if let Err(error) = self.agent_write_through_with(save) {
+            self.agent_chat.backend = previous_preferences.backend;
+            self.agent_chat.provider_openai = previous_preferences.provider == "openai";
+            self.agent_chat.url_field = TextField::new(previous_preferences.url);
+            self.agent_chat.key_env_field = TextField::new(previous_preferences.api_key_env);
+            self.agent_chat.effort = previous_preferences.effort;
+            self.agent_chat.discovery_endpoint = previous_preferences.discovery_endpoint;
             (
                 self.agent_chat.chosen_model,
                 self.agent_chat.context_window,
@@ -3198,9 +3399,13 @@ impl AurisApp {
 
     /// Handles the keys belonging to the focused model selector.
     fn agent_model_menu_key(&mut self, key: &str) -> bool {
-        if self.agent_operation_busy() || !self.agent_chat.model_selector_enabled() {
+        if self.agent_operation_busy() {
             self.agent_chat.model_menu = false;
             return false;
+        }
+        if key == "refresh" {
+            self.agent_refresh_models();
+            return true;
         }
         if !self.agent_chat.model_menu {
             if matches!(key, "enter" | "space" | " " | "up" | "down") {
@@ -3235,19 +3440,17 @@ impl AurisApp {
         if self.agent_chat.model_menu {
             self.agent_chat
                 .model_scroll
-                .scroll_to_item(self.agent_chat.model_highlighted);
+                .scroll_to_item(self.agent_chat.model_highlighted + 1);
         }
         true
     }
 
-    /// The settings section: provider, model, URL, key variable, apply.
+    /// Two quiet selectors sharing the model/effort lane of the composer.
     fn agent_model_picker(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
-        let operation_busy = self.agent_operation_busy();
-        let refresh_enabled = !operation_busy && !self.agent_chat.fetching_models;
-        let model_enabled = !operation_busy && self.agent_chat.model_selector_enabled();
-        let configured_model = !self.agent_chat.chosen_model.is_empty();
-        let model_focus = self
+        let enabled = !self.agent_operation_busy();
+        let configured = !self.agent_chat.chosen_model.is_empty();
+        let focus = self
             .agent_chat
             .model_focus
             .get_or_insert_with(|| {
@@ -3256,104 +3459,98 @@ impl AurisApp {
                     .tab_stop(true)
             })
             .clone()
-            .tab_stop(model_enabled);
-        let labelled = |label: String, control: AnyElement, theme: &Theme| {
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(div().text_xs().text_color(theme.text_muted).child(label))
-                .child(div().flex_1().min_w_0().child(control))
-                .into_any_element()
+            .tab_stop(enabled);
+        let current = if configured {
+            self.agent_chat.selected_model_label()
+        } else if self.agent_chat.fetching_models {
+            self.t(Key::AgentModelsFetching).to_owned()
+        } else {
+            self.t(Key::AgentChooseModel).to_owned()
         };
+        let efforts = self.agent_chat.effort_choices();
+        let effort_names = efforts
+            .iter()
+            .map(|effort| self.t(controls::effort_key(*effort)).to_owned())
+            .collect::<Vec<_>>();
+        let effort = self.agent_chat.effort;
+        let effort_label = self
+            .t(match effort {
+                ReasoningEffort::Default => Key::AgentEffortDefaultShort,
+                ReasoningEffort::Minimal => Key::AgentEffortMinimalShort,
+                ReasoningEffort::Medium => Key::AgentEffortMediumShort,
+                ReasoningEffort::Xhigh => Key::AgentEffortXhighShort,
+                ReasoningEffort::Max => Key::AgentEffortMaxShort,
+                _ => controls::effort_key(effort),
+            })
+            .to_owned();
         div()
-            .relative()
             .flex()
-            .flex_col()
-            .gap_1()
-            .p_2()
-            .border_b_1()
-            .border_color(theme.border)
-            .child(labelled(
-                self.t(Key::AgentModelLabel).to_string(),
+            .items_center()
+            .gap_0p5()
+            .w_full()
+            .min_w_0()
+            .child(div().flex_1().min_w_0().child(self.model_dropdown(
+                current,
+                self.agent_chat.model_menu,
+                enabled,
+                configured,
+                focus,
+                cx,
+            )))
+            .child(
                 div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_1()
-                    .w_full()
+                    .w(px(56.0))
                     .min_w_0()
-                    .child(div().flex_1().min_w_0().child(self.model_dropdown(
-                        match self.agent_chat.chosen_model.is_empty() {
-                            true => self.t(Key::AgentChooseModel).to_string(),
-                            false => self.agent_chat.chosen_model.clone(),
-                        },
-                        self.agent_chat.model_menu,
-                        model_enabled,
-                        configured_model,
-                        model_focus,
-                        cx,
-                    )))
-                    .child(button_enabled(
-                        "agent-models-refresh",
-                        self.t(Key::AgentModelsFetch),
-                        ButtonStyle::Normal,
-                        ButtonState::available(false, refresh_enabled),
-                        theme.accent,
+                    .flex_shrink_0()
+                    .child(self.dropdown(
+                        "agent-effort-menu",
+                        effort_label,
+                        self.agent_chat.controls.effort_menu,
                         &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.agent_refresh_models();
-                            cx.notify();
-                        }),
-                    ))
-                    .into_any_element(),
-                &theme,
-            ))
-            .when(self.agent_chat.fetching_models, |this| {
-                this.child(
-                    div()
-                        .px_1()
-                        .text_xs()
-                        .text_color(theme.text_faint)
-                        .child(self.t(Key::AgentModelsFetching)),
-                )
-            })
-            .when_some(self.agent_chat.models_error.clone(), |this, error| {
-                this.child(div().px_1().text_xs().text_color(theme.danger).child(error))
-            })
-            .when(
-                self.agent_chat.models_loaded
-                    && self.agent_chat.models.is_empty()
-                    && self.agent_chat.models_error.is_none()
-                    && !self.agent_chat.fetching_models,
-                |this| {
-                    this.child(
-                        div()
-                            .id("agent-models-empty")
-                            .debug_selector(|| "agent-models-empty".to_string())
-                            .px_1()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .child(self.t(Key::AgentModelsEmpty)),
-                    )
-                },
+                        |this, _| {
+                            if !this.agent_operation_busy() {
+                                this.agent_chat.controls.effort_menu =
+                                    !this.agent_chat.controls.effort_menu;
+                                this.agent_chat.controls.mode_menu = false;
+                                this.agent_chat.model_menu = false;
+                            }
+                        },
+                        cx,
+                    )),
             )
-            .when(self.agent_chat.model_menu && model_enabled, |this| {
-                let names: Vec<String> = self
+            .when(self.agent_chat.model_menu && enabled, |this| {
+                let names = self
                     .agent_chat
                     .models
                     .iter()
-                    .map(|option| match option.context_length {
-                        Some(window) => format!("{}  ({}k)", option.name, window / 1024),
-                        None => option.name.clone(),
-                    })
-                    .collect();
+                    .map(ModelOption::label)
+                    .collect::<Vec<_>>();
                 this.child(self.model_option_rows(&names, &theme, cx))
+            })
+            .when(self.agent_chat.controls.effort_menu, |this| {
+                this.child(
+                    self.option_rows(
+                        "agent-effort-option",
+                        &effort_names,
+                        efforts
+                            .iter()
+                            .position(|choice| *choice == effort)
+                            .unwrap_or(0),
+                        &theme,
+                        |this, index, _| {
+                            if let Some(effort) =
+                                this.agent_chat.effort_choices().get(index).copied()
+                            {
+                                this.agent_effort(effort);
+                            }
+                        },
+                        cx,
+                    ),
+                )
             })
             .into_any_element()
     }
-
-    /// A focusable model field with the shared dropdown frame and trailing arrow.
+    /// A focusable, quiet model value beside the effort selector's disclosure indicator.
     fn model_dropdown(
         &self,
         current: String,
@@ -3382,12 +3579,12 @@ impl AurisApp {
             .bg(if open {
                 theme.surface_hover
             } else {
-                theme.surface_sunken
+                theme.surface_raised
             })
             .border_1()
             .border_color(match open {
                 true => theme.accent,
-                false => theme.border_subtle,
+                false => gpui::transparent_black(),
             })
             .text_xs()
             .when(enabled, |this| {
@@ -3401,8 +3598,7 @@ impl AurisApp {
                         })
                     })
             })
-            // Keep a configured name readable even when the provider supplied no usable list;
-            // the quiet chevron and absent hover/focus response carry the disabled state.
+            // Running a turn locks the route while keeping its selected name readable.
             .when(!enabled, |this| this.opacity(0.78))
             .child(
                 div()
@@ -3410,33 +3606,13 @@ impl AurisApp {
                     .debug_selector(|| "agent-model-current".to_string())
                     .flex_1()
                     .min_w_0()
+                    .h_full()
                     .text_color(if configured {
                         theme.text
                     } else {
                         theme.text_faint
                     })
                     .child(bounded_picker_label(current)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .w(Metrics::DROPDOWN_INDICATOR_WIDTH)
-                    .flex_shrink_0()
-                    .child(icon(
-                        if open {
-                            Icon::ChevronUp
-                        } else {
-                            Icon::ChevronDown
-                        },
-                        Metrics::DROPDOWN_INDICATOR_SIZE,
-                        if enabled {
-                            theme.text_muted
-                        } else {
-                            theme.text_faint
-                        },
-                    )),
             )
             .when(enabled, |this| {
                 this.on_mouse_down(
@@ -3484,7 +3660,7 @@ impl AurisApp {
             .debug_selector(|| "agent-model-options".into())
             .flex()
             .flex_col()
-            .max_h(px(160.0))
+            .max_h(px(240.0))
             .p_1()
             .overflow_y_scroll()
             .track_scroll(&self.agent_chat.model_scroll)
@@ -3500,6 +3676,67 @@ impl AurisApp {
                 MouseButton::Left,
                 |_: &MouseDownEvent, _, cx: &mut gpui::App| {
                     cx.stop_propagation();
+                },
+            )
+            .child(
+                button_enabled(
+                    "agent-models-refresh",
+                    self.t(Key::AgentModelsFetch),
+                    ButtonStyle::Ghost,
+                    ButtonState::available(false, !self.agent_chat.fetching_models),
+                    theme.accent,
+                    theme,
+                    cx.listener(|this, _, window, cx| {
+                        this.agent_refresh_models();
+                        if let Some(focus) = &this.agent_chat.model_focus {
+                            window.focus(focus);
+                        }
+                        cx.notify();
+                    }),
+                )
+                .w_full()
+                .flex_shrink_0()
+                .tooltip(crate::ui::tooltip::keyed_tip(
+                    self.t(Key::AgentModelsFetch),
+                    &crate::actions::menu_keystroke("secondary-r"),
+                    theme,
+                )),
+            )
+            .when(self.agent_chat.fetching_models, |this| {
+                this.child(
+                    div()
+                        .id("agent-models-fetching")
+                        .debug_selector(|| "agent-models-fetching".to_owned())
+                        .px_1p5()
+                        .text_xs()
+                        .text_color(theme.text_muted)
+                        .child(self.t(Key::AgentModelsFetching)),
+                )
+            })
+            .when_some(self.agent_chat.models_error.clone(), |this, error| {
+                this.child(
+                    div()
+                        .px_1p5()
+                        .text_xs()
+                        .text_color(theme.danger)
+                        .child(error),
+                )
+            })
+            .when(
+                self.agent_chat.models_loaded
+                    && names.is_empty()
+                    && self.agent_chat.models_error.is_none()
+                    && !self.agent_chat.fetching_models,
+                |this| {
+                    this.child(
+                        div()
+                            .id("agent-models-empty")
+                            .debug_selector(|| "agent-models-empty".to_owned())
+                            .px_1p5()
+                            .text_xs()
+                            .text_color(theme.text_muted)
+                            .child(self.t(Key::AgentModelsEmpty)),
+                    )
                 },
             );
         for (index, name) in names.iter().enumerate() {
@@ -3530,7 +3767,7 @@ impl AurisApp {
                         }),
                     )
                     .child(div().w(px(12.0)).flex_shrink_0().when(
-                        self.agent_chat.models[index].name == self.agent_chat.chosen_model,
+                        self.agent_chat.models[index].matches(&self.agent_chat.preferences()),
                         |this| this.child(icon(Icon::Check, px(12.0), theme.accent)),
                     ))
                     .child(
@@ -3551,10 +3788,10 @@ impl AurisApp {
         gpui::deferred(
             div()
                 .absolute()
-                .top_full()
+                .bottom_full()
                 .left_0()
                 .w_full()
-                .pt_1()
+                .pb_1()
                 .child(list),
         )
         .into_any_element()
@@ -3570,13 +3807,22 @@ impl AurisApp {
         toggle: impl Fn(&mut Self, &mut gpui::Context<Self>) + 'static,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        let tooltip = format!(
+            "{}: {current}",
+            self.t(if id == "agent-mode-menu" {
+                Key::AgentApprovalMode
+            } else {
+                Key::AgentEffort
+            })
+        );
         let focus = if id == "agent-mode-menu" {
             &mut self.agent_chat.controls.mode_focus
         } else {
             &mut self.agent_chat.controls.effort_focus
         }
         .get_or_insert_with(|| cx.focus_handle().tab_index(0).tab_stop(true))
-        .clone();
+        .clone()
+        .tab_stop(!self.agent_operation_busy());
         menu_picker(
             id,
             bounded_picker_label(current),
@@ -3587,6 +3833,9 @@ impl AurisApp {
             }),
         )
         .w_full()
+        .when(id == "agent-effort-menu", |this| this.px_1().gap_0p5())
+        .bg(theme.surface_raised)
+        .border_color(gpui::transparent_black())
         .track_focus(&focus)
         .key_context("AurisAgentDropdown")
         .on_action(|_: &crate::ui::widgets::ClaimDisclosureActivation, _, _| {})
@@ -3608,6 +3857,7 @@ impl AurisApp {
             cx.stop_propagation();
             cx.notify();
         }))
+        .tooltip(crate::ui::tooltip::keyed_tip(tooltip, "", theme))
         .into_any_element()
     }
 
@@ -3640,16 +3890,27 @@ impl AurisApp {
             });
         for (index, name) in names.iter().enumerate() {
             let pick = pick.clone();
+            let row_id: gpui::ElementId = if id == "agent-mode-option" && index == 4 {
+                "agent-permissions".into()
+            } else {
+                (id, index).into()
+            };
             list = list.child(
                 button(
-                    (id, index),
+                    row_id,
                     name.clone(),
                     ButtonStyle::Ghost,
                     false,
                     theme.accent,
                     theme,
-                    cx.listener(move |this, _, _, cx| {
+                    cx.listener(move |this, _, window, cx| {
                         pick(this, index, cx);
+                        if id == "agent-mode-option"
+                            && index == 4
+                            && let Some(focus) = &this.agent_chat.controls.mode_focus
+                        {
+                            window.focus(focus);
+                        }
                         cx.notify();
                     }),
                 )
@@ -3721,180 +3982,228 @@ impl AurisApp {
             .into_any_element()
     }
 
-    /// The message field and its border, at the bottom of the panel.
+    /// A single composer surface containing references, prose and a compact command row.
     fn agent_input_row(
         &mut self,
         input_focus: gpui::FocusHandle,
+        stop_focus: gpui::FocusHandle,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
-        let attachments = self.agent_chat.attachments.clone();
         let focused = self.agent_chat.focused == Some(AgentField::Chat);
+        let locked = self.agent_chat.pending_send.is_some();
         let empty = self.agent_chat.input.content().is_empty();
-        let placeholder = self.t(Key::AgentPlaceholder).to_string();
-        let operation_busy = self.agent_operation_busy();
-        let composer_locked = self.agent_chat.pending_send.is_some();
-        let can_send = !operation_busy
+        let placeholder = self.t(Key::AgentComposerPlaceholder).to_owned();
+        let attachments = self.agent_chat.attachments.clone();
+        let can_send = !self.agent_operation_busy()
             && !self.agent_chat.input.content().trim().is_empty()
             && self.agent_chat.input.marked().is_none();
+        let cancelable = self.agent_cancelable();
+        let send_label = self.t(Key::AgentSend).to_owned();
         div()
+            .id("agent-composer")
+            .debug_selector(|| "agent-composer".to_owned())
             .flex()
             .flex_col()
+            .relative()
             .flex_shrink_0()
-            .gap_1()
+            .min_w_0()
+            .m_2()
             .p_1()
-            .border_t_1()
-            .border_color(theme.border)
+            .gap_1()
+            .rounded(Metrics::RADIUS_LG)
+            .bg(theme.surface_raised)
+            .border_1()
+            .border_color(if focused && !locked {
+                theme.accent
+            } else {
+                theme.border_subtle
+            })
+            .when_some(self.agent_chat.attachment_error.clone(), |this, error| {
+                this.child(
+                    div()
+                        .px_1p5()
+                        .text_xs()
+                        .text_color(theme.danger)
+                        .child(error),
+                )
+            })
+            .when(!attachments.is_empty(), |this| {
+                this.child(
+                    div()
+                        .id("agent-attachments")
+                        .flex()
+                        .flex_col()
+                        .max_h(px(96.0))
+                        .overflow_y_scroll()
+                        .gap_1()
+                        .children(attachments.iter().enumerate().map(|(index, path)| {
+                            let name = path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .into_owned();
+                            let label = self.t(Key::AgentRemoveAttachment).replace("{name}", &name);
+                            button_enabled(
+                                ("agent-attachment", index),
+                                "",
+                                ButtonStyle::Ghost,
+                                ButtonState::available(false, !locked),
+                                theme.accent,
+                                &theme,
+                                cx.listener(move |this, _, _, cx| {
+                                    if index < this.agent_chat.attachments.len() {
+                                        this.agent_chat.attachments.remove(index);
+                                        this.agent_chat.attachment_error = None;
+                                    }
+                                    cx.notify();
+                                }),
+                            )
+                            .w_full()
+                            .min_w_0()
+                            .flex_shrink_0()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .w_full()
+                                    .h_full()
+                                    .min_w_0()
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .h_full()
+                                            .child(bounded_picker_label(name)),
+                                    )
+                                    .child(
+                                        div()
+                                            .id(("agent-attachment-remove", index))
+                                            .debug_selector(move || {
+                                                format!("agent-attachment-remove-{index}")
+                                            })
+                                            .flex_shrink_0()
+                                            .child(icon(Icon::Cross, px(12.0), theme.text_muted)),
+                                    ),
+                            )
+                            .tooltip(crate::ui::tooltip::keyed_tip(label, "", &theme))
+                        })),
+                )
+            })
+            .when(locked, |this| {
+                this.child(
+                    div()
+                        .id("agent-send-waiting-history")
+                        .debug_selector(|| "agent-send-waiting-history".to_owned())
+                        .px_1p5()
+                        .text_xs()
+                        .text_color(theme.text_muted)
+                        .child(self.t(Key::AgentSendWaitingHistory)),
+                )
+            })
+            .child(self.panel_field(
+                "agent-input",
+                AgentField::Chat,
+                focused,
+                empty,
+                placeholder,
+                input_focus,
+                !locked,
+                &theme,
+                cx,
+            ))
             .child(
                 div()
+                    .id("agent-panel-controls")
+                    .debug_selector(|| "agent-panel-controls".to_owned())
                     .flex()
                     .flex_wrap()
+                    .items_center()
                     .gap_1()
-                    .w_full()
                     .min_w_0()
-                    .child(button_enabled(
-                        "agent-attach-audio",
-                        self.t(Key::AgentAttachAudio),
-                        ButtonStyle::Normal,
-                        ButtonState::available(false, !operation_busy),
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            let language = this.language();
-                            let token = this.agent_document_token();
-                            cx.spawn(async move |this, cx| {
-                                let files = rfd::AsyncFileDialog::new()
-                                    .set_title(Key::AgentAttachAudio.get(language))
-                                    .add_filter(
-                                        "Audio",
-                                        &["wav", "mp3", "flac", "ogg", "aac", "aiff", "m4a"],
-                                    )
-                                    .pick_files()
-                                    .await;
-                                if let Some(files) = files {
-                                    let _ = this.update(cx, |this, cx| {
-                                        if this.agent_operation_busy()
-                                            || !token.matches(
-                                                this.session.path(),
-                                                this.session.revision(),
-                                            )
-                                        {
-                                            return;
-                                        }
-                                        for file in files {
-                                            let path = file.path().to_path_buf();
-                                            if !this.agent_chat.attachments.contains(&path) {
-                                                this.agent_chat.attachments.push(path);
-                                            }
-                                        }
-                                        cx.notify();
-                                    });
-                                }
-                            })
-                            .detach();
-                        }),
-                    ))
-                    .children(attachments.iter().enumerate().map(|(index, path)| {
-                        let name = path
-                            .file_name()
-                            .map(|name| name.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| path.to_string_lossy().into_owned());
-                        let remove_label =
-                            self.t(Key::AgentRemoveAttachment).replace("{name}", &name);
-                        button_enabled(
-                            ("agent-attachment", index),
-                            "",
-                            ButtonStyle::Normal,
-                            ButtonState::available(false, !operation_busy),
-                            theme.accent,
-                            &theme,
-                            cx.listener(move |this, _, _, cx| {
-                                if index < this.agent_chat.attachments.len() {
-                                    this.agent_chat.attachments.remove(index);
-                                }
-                                cx.notify();
-                            }),
-                        )
-                        .w_full()
-                        .max_w_full()
-                        .min_w_0()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_1()
-                                .w_full()
-                                .min_w_0()
-                                .child(
-                                    div().flex_1().min_w_0().child(
-                                        crate::ui::widgets::bounded_picker_label(name.clone()),
-                                    ),
-                                )
-                                .child(
-                                    div()
-                                        .id(("agent-attachment-remove", index))
-                                        .debug_selector(move || {
-                                            format!("agent-attachment-remove-{index}")
-                                        })
-                                        .flex_shrink_0()
-                                        .child("×"),
-                                ),
-                        )
-                        .tooltip(crate::ui::tooltip::keyed_tip(remove_label, "", &theme))
-                    })),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_end()
-                    .gap_1()
-                    .when(composer_locked, |this| {
-                        this.child(
-                            div()
-                                .id("agent-send-waiting-history")
-                                .debug_selector(|| "agent-send-waiting-history".to_string())
-                                .w_full()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(self.t(Key::AgentSendWaitingHistory)),
-                        )
-                    })
-                    .child(div().w_full().min_w_0().child(self.panel_field(
-                        "agent-input",
-                        AgentField::Chat,
-                        focused,
-                        empty,
-                        placeholder,
-                        input_focus,
-                        !composer_locked,
-                        &theme,
-                        cx,
-                    )))
                     .child(
-                        button_enabled(
-                            "agent-send",
-                            self.t(Key::AgentSend),
-                            if can_send {
-                                ButtonStyle::Primary
-                            } else {
-                                ButtonStyle::Normal
-                            },
-                            ButtonState::available(false, can_send),
-                            theme.accent,
-                            &theme,
-                            cx.listener(|this, _, window, cx| {
-                                this.agent_submit(window, cx);
-                                cx.notify();
-                            }),
-                        )
-                        .flex_shrink_0()
-                        .cursor_default(),
+                        div()
+                            .w(relative(0.26))
+                            .min_w_0()
+                            .child(self.agent_controls(cx)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(80.0))
+                            .child(self.agent_model_picker(cx)),
+                    )
+                    .when_else(
+                        cancelable,
+                        |this| {
+                            this.child(
+                                button(
+                                    "agent-stop",
+                                    "",
+                                    ButtonStyle::Normal,
+                                    false,
+                                    theme.warning,
+                                    &theme,
+                                    cx.listener(|this, _, window, cx| {
+                                        this.agent_cancel(window, cx)
+                                    }),
+                                )
+                                .track_focus(&stop_focus)
+                                .w(Metrics::CONTROL_HEIGHT)
+                                .px_0()
+                                .gap_0()
+                                .justify_center()
+                                .rounded_full()
+                                .child(icon(Icon::Stop, px(12.0), theme.text))
+                                .tooltip(
+                                    crate::ui::tooltip::keyed_tip(
+                                        self.t(Key::AgentStop),
+                                        "",
+                                        &theme,
+                                    ),
+                                ),
+                            )
+                        },
+                        |this| {
+                            this.child(
+                                button_enabled(
+                                    "agent-send",
+                                    "",
+                                    if can_send {
+                                        ButtonStyle::Primary
+                                    } else {
+                                        ButtonStyle::Ghost
+                                    },
+                                    ButtonState::available(false, can_send),
+                                    theme.accent,
+                                    &theme,
+                                    cx.listener(|this, _, window, cx| {
+                                        this.agent_submit(window, cx);
+                                        cx.notify();
+                                    }),
+                                )
+                                .w(Metrics::CONTROL_HEIGHT)
+                                .px_0()
+                                .gap_0()
+                                .justify_center()
+                                .rounded_full()
+                                .child(icon(
+                                    Icon::ChevronUp,
+                                    px(14.0),
+                                    if can_send {
+                                        theme.text_on_accent
+                                    } else {
+                                        theme.text_faint
+                                    },
+                                ))
+                                .tooltip(crate::ui::tooltip::keyed_tip(send_label, "", &theme)),
+                            )
+                        },
                     ),
             )
             .into_any_element()
     }
-
     /// The growing multi-line message composer.
     #[allow(clippy::too_many_arguments)]
     fn panel_field(
@@ -3932,13 +4241,6 @@ impl AurisApp {
             .min_h(minimum)
             .max_h(maximum)
             .overflow_hidden()
-            .rounded(Metrics::RADIUS_SM)
-            .bg(theme.surface_raised)
-            .border_1()
-            .border_color(match focused && enabled {
-                true => theme.accent,
-                false => theme.border_subtle,
-            })
             .when(enabled, |this| this.cursor_text())
             .when(!enabled, |this| this.cursor_default().opacity(0.62))
             .child(
@@ -4203,7 +4505,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn send_button_preserves_drafts_and_opens_configuration(cx: &mut gpui::TestAppContext) {
+    fn composer_actions_preserve_drafts_and_open_configuration(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
@@ -4220,10 +4522,17 @@ mod tests {
             this.agent_chat.busy = true;
         });
         crate::harness::paint(&app, cx);
-        crate::harness::click("agent-send", cx);
-        app.read_with(cx, |this, _| assert!(this.agent_chat.entries.is_empty()));
+        crate::harness::click("agent-stop", cx);
+        app.read_with(cx, |this, _| {
+            assert!(!this.agent_chat.busy);
+            assert_eq!(this.agent_chat.input.content(), "再生してみて。");
+            assert_eq!(
+                this.agent_chat.entries,
+                vec![ChatEntry::Note(Key::AgentStopped)]
+            );
+        });
 
-        app.update(cx, |this, _| this.agent_chat.busy = false);
+        app.update(cx, |this, _| this.agent_chat.entries.clear());
         crate::harness::paint(&app, cx);
         crate::harness::click("agent-send", cx);
         app.read_with(cx, |this, _| {
@@ -4636,7 +4945,7 @@ mod tests {
             this.selected_track = Some(selected);
             this.agent_chat.input = TextField::new("continue the saved conversation");
             this.agent_chat.focused = Some(AgentField::Chat);
-            this.agent_chat.attachments = vec![PathBuf::from("reference.wav")];
+            this.agent_chat.attachments = vec![PathBuf::from("reference.png")];
             let (_sender, receiver) = std::sync::mpsc::channel();
             let token = this.agent_document_token();
             this.agent_chat.history_load = Some(PendingHistoryLoad { token, receiver });
@@ -4660,7 +4969,7 @@ mod tests {
                     .map(|message| (message.text.as_str(), message.attachments.as_slice())),
                 Some((
                     "continue the saved conversation",
-                    [PathBuf::from("reference.wav")].as_slice()
+                    [PathBuf::from("reference.png")].as_slice()
                 ))
             );
 
@@ -4668,7 +4977,7 @@ mod tests {
             // second Send for the immutable submission already waiting on disk history. This
             // also models another Settings window and a canvas click changing live state.
             this.agent_chat.input = TextField::new("later mutation");
-            this.agent_chat.attachments = vec![PathBuf::from("later.wav")];
+            this.agent_chat.attachments = vec![PathBuf::from("later.png")];
             this.settings.agent.model = "changed-in-another-window".into();
             this.settings.agent.output_tokens = Some(8_192);
             this.settings.agent.policy.mode = auris_session::agent_policy::Mode::Bypass;
@@ -4676,7 +4985,7 @@ mod tests {
             this.agent_send();
             let pending = this.agent_chat.pending_send.as_ref().unwrap();
             assert_eq!(pending.text, "continue the saved conversation");
-            assert_eq!(pending.attachments, vec![PathBuf::from("reference.wav")]);
+            assert_eq!(pending.attachments, vec![PathBuf::from("reference.png")]);
             assert_eq!(pending.preferences, click_preferences);
             assert_eq!(pending.selection_context, click_context);
             assert_ne!(pending.preferences, this.settings.agent);
@@ -5110,6 +5419,86 @@ mod tests {
     }
 
     #[test]
+    fn consecutive_tools_group_without_crossing_message_boundaries() {
+        let tool = || ChatEntry::Tool {
+            name: "inspect".into(),
+            args: "{}".into(),
+            ok: true,
+            line: "done".into(),
+            detail: String::new(),
+        };
+        let entries = [
+            tool(),
+            tool(),
+            ChatEntry::Agent("answer".into()),
+            tool(),
+            ChatEntry::You("next request".into()),
+            tool(),
+            tool(),
+            tool(),
+        ];
+        assert_eq!(
+            transcript_runs(&entries).collect::<Vec<_>>(),
+            vec![0..2, 2..3, 3..4, 4..5, 5..8]
+        );
+        assert_eq!(transcript_runs(&[]).count(), 0);
+    }
+
+    #[gpui::test]
+    fn consecutive_tool_logs_collapse_and_keep_individual_results_accessible(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.entries = (0..40)
+                .map(|index| ChatEntry::Tool {
+                    name: format!("inspect_{index}"),
+                    args: "{\"bar\":2}".into(),
+                    ok: index != 1,
+                    line: if index == 39 {
+                        String::new()
+                    } else {
+                        "finished".into()
+                    },
+                    detail: "Full tool result\nsecond line".into(),
+                })
+                .collect();
+            this.agent_chat
+                .entries
+                .push(ChatEntry::Agent("Visible answer".into()));
+        });
+        crate::harness::paint(&app, cx);
+        let group = cx.debug_bounds("agent-tool-group-0").unwrap();
+        assert!(group.size.height < Metrics::CONTROL_HEIGHT * 2.0);
+        assert!(cx.debug_bounds("agent-line-0").is_none());
+        assert!(cx.debug_bounds("agent-line-40").is_some());
+
+        crate::harness::click("agent-tool-group-toggle-0", cx);
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-tool-group-body-0").is_some());
+        let collapsed = cx.debug_bounds("agent-line-0").unwrap().size.height;
+        crate::harness::click("agent-tool-result-0", cx);
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-line-0").unwrap().size.height > collapsed);
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.expanded_tool_groups.contains(&0));
+            assert!(this.agent_chat.expanded.contains(&0));
+        });
+
+        crate::harness::click("agent-tool-group-toggle-0", cx);
+        release_key("space", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.expanded_tool_groups.contains(&0))
+        });
+        release_key("enter", cx);
+        app.read_with(cx, |this, _| {
+            assert!(!this.agent_chat.expanded_tool_groups.contains(&0))
+        });
+    }
+
+    #[test]
     fn speed_uses_a_stable_recent_window() {
         let mut speed = SpeedMeter::default();
         let start = Instant::now();
@@ -5337,6 +5726,7 @@ mod tests {
             models: vec![ModelOption {
                 name: "old-model".to_string(),
                 context_length: Some(8_192),
+                ..Default::default()
             }],
             models_error: Some("old error".to_string()),
             context_window: Some(8_192),
@@ -5388,10 +5778,12 @@ mod tests {
                 ModelOption {
                     name: "first".to_string(),
                     context_length: Some(32_768),
+                    ..Default::default()
                 },
                 ModelOption {
                     name: "second".to_string(),
                     context_length: Some(65_536),
+                    ..Default::default()
                 },
             ];
             this.agent_chat.context_window = Some(32_768);
@@ -5488,6 +5880,161 @@ mod tests {
     }
 
     #[gpui::test]
+    fn discovered_models_switch_the_route_even_when_names_are_identical(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences { model: "shared".into(), provider: "openai".into(), url: "https://example.invalid/v1".into(), ..Default::default() };
+            this.agent_chat.load_preferences(&this.settings.agent.clone());
+            this.agent_chat.accept_model_listing(Ok(r#"{"models":[{"name":"shared","connection":{"backend":"codex","provider":"openai","url":"","api_key_env":""}},{"name":"shared","connection":{"backend":"rig","provider":"ollama","url":"","api_key_env":""}}]}"#.into()));
+            this.choose_agent_model_with(0, |_| Ok::<(), ()>(())).unwrap();
+            assert_eq!(this.settings.agent.backend, "codex");
+            assert_eq!(this.agent_chat.models[0].label(), "shared (Codex)");
+            this.choose_agent_model_with(1, |_| Ok::<(), ()>(())).unwrap();
+            assert_eq!(this.settings.agent.provider, "ollama");
+            assert_eq!(this.settings.agent.discovery_endpoint.as_ref().unwrap().url, "https://example.invalid/v1");
+            assert!(!this.agent_chat.models[0].matches(&this.settings.agent));
+            assert!(this.agent_chat.models[1].matches(&this.settings.agent));
+        });
+    }
+
+    #[gpui::test]
+    fn claude_models_keep_their_route_and_executable_when_selected(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences {
+                claude_path: "C:/Tools/claude.exe".into(),
+                provider: "openai".into(),
+                url: "https://example.invalid/v1".into(),
+                ..Default::default()
+            };
+            this.agent_chat.load_preferences(&this.settings.agent.clone());
+            this.agent_chat.accept_model_listing(Ok(r#"{"models":[{"name":"claude-fixture","connection":{"backend":"claude","provider":"openai","url":"","api_key_env":""}}]}"#.into()));
+            this.choose_agent_model_with(0, |_| Ok::<(), ()>(())).unwrap();
+            assert_eq!(this.settings.agent.backend, "claude");
+            assert_eq!(this.settings.agent.model, "claude-fixture");
+            assert_eq!(this.agent_chat.selected_model_label(), "claude-fixture (Claude Code)");
+            assert!(this.agent_chat.models[0].matches(&this.settings.agent));
+            assert_eq!(this.agent_chat.preferences().claude_path, "C:/Tools/claude.exe");
+            assert_eq!(this.settings.agent.discovery_endpoint.as_ref().unwrap().url, "https://example.invalid/v1");
+        });
+    }
+
+    #[gpui::test]
+    fn agent_file_drops_attach_references_without_importing_audio(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        crate::harness::paint(&app, cx);
+        let panel = cx.debug_bounds("agent-panel").unwrap();
+        cx.simulate_mouse_move(panel.center(), None, gpui::Modifiers::default());
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                let before = this.project().clone();
+                let paths = [
+                    "reference.wav",
+                    "cover.png",
+                    "lyrics.md",
+                    "cover.png",
+                    "unsupported.exe",
+                ]
+                .map(PathBuf::from);
+                this.route_files_dropped(&paths, window, cx);
+                assert_eq!(this.project(), &before);
+                assert_eq!(this.agent_chat.attachments.len(), 3);
+                assert!(this.agent_chat.attachment_error.is_some());
+            })
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-attachment-1", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.agent_chat.attachments,
+                [PathBuf::from("reference.wav"), PathBuf::from("lyrics.md")]
+            )
+        });
+    }
+
+    #[gpui::test]
+    fn model_and_effort_controls_stay_below_the_composer_and_menus_open_upward(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent.model = "gpt-6.1-sol".into();
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models = vec![ModelOption {
+                name: "gpt-6.1-sol".into(),
+                ..Default::default()
+            }];
+        });
+        crate::harness::paint(&app, cx);
+        let composer = cx.debug_bounds("agent-composer").unwrap();
+        let model = cx.debug_bounds("agent-model").unwrap();
+        let effort = cx.debug_bounds("agent-effort-menu").unwrap();
+        assert!(model.top() >= cx.debug_bounds("agent-input").unwrap().bottom());
+        assert_eq!(model.top(), effort.top());
+        assert!(model.bottom() <= composer.bottom());
+        crate::harness::click("agent-model", cx);
+        crate::harness::paint(&app, cx);
+        let menu = cx.debug_bounds("agent-model-options").unwrap();
+        assert!(menu.bottom() <= model.top());
+        cx.simulate_keystrokes("escape");
+        crate::harness::click("agent-effort-menu", cx);
+        crate::harness::paint(&app, cx);
+        let menu = cx.debug_bounds("agent-effort-option-popup").unwrap();
+        assert!(menu.bottom() <= effort.top());
+    }
+
+    #[gpui::test]
+    fn unsupported_audio_preserves_the_message_and_reference_for_another_model(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences {
+                backend: "codex".into(),
+                model: "fixture".into(),
+                ..Default::default()
+            };
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.input = TextField::new("Inspect this mix");
+            this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+            this.agent_send();
+            assert!(this.agent_chat.attachment_error.is_some());
+            assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
+            assert_eq!(this.agent_chat.attachments, [PathBuf::from("mix.wav")]);
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn selected_model_label_has_a_paintable_frame(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.load_preferences(&AgentPreferences {
+                model: "gpt-6.1-sol".into(),
+                ..Default::default()
+            });
+            this.agent_chat.models_loaded = true;
+        });
+        crate::harness::paint(&app, cx);
+        let label = cx.debug_bounds("agent-model-current").unwrap();
+        assert!(
+            label.size.height > px(0.0),
+            "the selected model must have space to paint: {label:?}"
+        );
+    }
+
+    #[gpui::test]
     fn the_model_picker_supports_keys_dismissal_and_busy_disabling(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
@@ -5501,10 +6048,12 @@ mod tests {
                 ModelOption {
                     name: "first".to_string(),
                     context_length: Some(32_768),
+                    ..Default::default()
                 },
                 ModelOption {
                     name: "second".to_string(),
                     context_length: Some(65_536),
+                    ..Default::default()
                 },
             ];
             this.agent_chat.chosen_model = "first".to_string();
@@ -5564,11 +6113,15 @@ mod tests {
             this.agent_chat.fetching_models = false;
         });
         crate::harness::paint(&app, cx);
+        crate::harness::click("agent-model", cx);
+        crate::harness::paint(&app, cx);
         assert!(cx.debug_bounds("agent-models-empty").is_some());
 
         app.update(cx, |this, _| this.agent_chat.fetching_models = true);
         crate::harness::paint(&app, cx);
-        assert!(cx.debug_bounds("agent-models-empty").is_none());
+        app.read_with(cx, |this, _| assert!(this.agent_chat.fetching_models));
+        assert!(cx.debug_bounds("agent-models-fetching").is_some());
+        // GPUI retains debug bounds for removed deferred rows; check the newly painted state.
         // A disabled Refresh remains inert while the outstanding request owns the control.
         // The shared button regressions separately cover pointer and keyboard exclusion.
         crate::harness::click("agent-models-refresh", cx);
@@ -5583,7 +6136,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn empty_or_failed_catalogue_disables_model_choice_but_keeps_refresh_available(
+    fn empty_or_failed_catalogue_keeps_the_model_menu_available_for_recovery(
         cx: &mut gpui::TestAppContext,
     ) {
         let (app, cx) = crate::harness::open(cx);
@@ -5593,50 +6146,20 @@ mod tests {
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.models_loaded = true;
-            this.agent_chat.models.clear();
-            this.agent_chat.models_error = None;
-        });
-        crate::harness::paint(&app, cx);
-        assert!(cx.debug_bounds("agent-model-current").is_some());
-        crate::harness::click("agent-model", cx);
-        app.read_with(cx, |this, _| assert!(!this.agent_chat.model_menu));
-        cx.update(|window, cx| {
-            app.update(cx, |this, _| this.focus_pane(Pane::Agent, window));
-        });
-        cx.simulate_keystrokes("tab");
-        crate::harness::paint(&app, cx);
-        cx.update(|window, cx| {
-            app.read_with(cx, |this, _| {
-                assert!(
-                    this.agent_chat
-                        .input_focus()
-                        .is_some_and(|focus| focus.is_focused(window)),
-                    "Tab skips the disabled model selector"
-                );
-            });
-        });
-
-        app.update(cx, |this, _| {
-            this.agent_chat.models = vec![ModelOption {
-                name: "stale-model".into(),
-                context_length: None,
-            }];
             this.agent_chat.models_error = Some("provider unavailable".into());
-            this.agent_chat.model_menu = true;
         });
         crate::harness::paint(&app, cx);
-        assert!(cx.debug_bounds("agent-model-option-0").is_none());
         crate::harness::click("agent-model", cx);
-        app.read_with(cx, |this, _| assert!(!this.agent_chat.model_menu));
-
-        crate::harness::click("agent-models-refresh", cx);
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.agent_chat.model_menu));
+        assert!(cx.debug_bounds("agent-models-refresh").is_some());
+        cx.simulate_keystrokes("secondary-r");
         app.read_with(cx, |this, _| {
             assert!(this.agent_chat.fetching_models);
-            assert!(this.agent_chat.models.is_empty());
+            assert!(!this.agent_chat.model_menu);
             assert!(this.agent_chat.models_error.is_none());
         });
     }
-
     #[gpui::test]
     fn queued_send_focuses_stop_locks_controls_and_cancels_without_losing_the_draft(
         cx: &mut gpui::TestAppContext,
@@ -5658,9 +6181,10 @@ mod tests {
             this.agent_chat.models = vec![ModelOption {
                 name: "first".into(),
                 context_length: Some(32_768),
+                ..Default::default()
             }];
             this.agent_chat.input = TextField::new("keep this queued draft");
-            this.agent_chat.attachments = vec![PathBuf::from("keep-reference.wav")];
+            this.agent_chat.attachments = vec![PathBuf::from("keep-reference.png")];
             let token = this.agent_document_token();
             this.agent_chat.history_load = Some(PendingHistoryLoad {
                 token,
@@ -5687,7 +6211,6 @@ mod tests {
         });
 
         crate::harness::click("agent-model", cx);
-        crate::harness::click("agent-models-refresh", cx);
         crate::harness::click("agent-configure", cx);
         crate::harness::click("agent-mode-menu", cx);
         app.read_with(cx, |this, _| {
@@ -5710,7 +6233,7 @@ mod tests {
                 assert_eq!(this.agent_chat.input.content(), "keep this queued draft");
                 assert_eq!(
                     this.agent_chat.attachments,
-                    vec![PathBuf::from("keep-reference.wav")]
+                    vec![PathBuf::from("keep-reference.png")]
                 );
                 assert_eq!(
                     this.agent_chat.entries.last(),
@@ -5746,6 +6269,7 @@ mod tests {
             this.agent_chat.models = vec![ModelOption {
                 name: this.settings.agent.model.clone(),
                 context_length: Some(32_768),
+                ..Default::default()
             }];
             // Exercise the tallest settled header as well as Japanese controls. The test text
             // system gives every glyph identical metrics, so ordinary translated copy alone can
@@ -5789,19 +6313,6 @@ mod tests {
             model.top() >= viewport.top() && model.bottom() <= viewport.bottom(),
             "focused model {model:?} is outside controls viewport {viewport:?}"
         );
-        let (offset, max_offset) = app.read_with(cx, |this, _| {
-            (
-                this.agent_chat.controls_scroll.offset().y,
-                this.agent_chat.controls_scroll.max_offset().height,
-            )
-        });
-        if max_offset > px(0.0) {
-            assert!(offset < px(0.0));
-            assert!(
-                cx.debug_bounds("agent-controls-scroll-cue").is_some(),
-                "a clipped controls stack advertises its own scroll region"
-            );
-        }
     }
 
     #[gpui::test]
@@ -5850,6 +6361,7 @@ mod tests {
             this.agent_chat.models = vec![ModelOption {
                 name: this.settings.agent.model.clone(),
                 context_length: Some(32_768),
+                ..Default::default()
             }];
             this.agent_chat.context_window = Some(32_768);
             this.agent_chat.tokens_in = 16_384;
@@ -5867,7 +6379,6 @@ mod tests {
         for selector in [
             "agent-new-conversation",
             "agent-model",
-            "agent-models-refresh",
             "agent-gauge-meter",
             "agent-input",
             "agent-send",
@@ -5887,12 +6398,6 @@ mod tests {
             control.size.width >= panel.size.width * 0.5,
             "new conversation collapsed instead of yielding its label: {control:?} inside {panel:?}"
         );
-        // The minimum dock deliberately scrolls its three header sections. Reproduce a mouse
-        // user following the visible scroll cue before opening the model menu.
-        app.update(cx, |this, _| {
-            this.agent_chat.controls_scroll.scroll_to_item(2);
-        });
-        crate::harness::paint(&app, cx);
         crate::harness::click("agent-model", cx);
         crate::harness::paint(&app, cx);
         let option = cx
@@ -5947,6 +6452,7 @@ mod tests {
             this.agent_chat.models = vec![ModelOption {
                 name: this.settings.agent.model.clone(),
                 context_length: Some(32_768),
+                ..Default::default()
             }];
         });
         crate::harness::paint(&app, cx);

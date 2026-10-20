@@ -344,6 +344,8 @@ impl ReasoningEffort {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPreferences {
+    /// API configuration to rediscover after choosing a model on another backend.
+    pub discovery_endpoint: Option<AgentEndpoint>,
     /// Conversation runtime: empty or "rig", "codex", or "claude" for Claude Code CLI.
     pub backend: String,
     /// Optional native Codex executable path. Empty searches the installed CLI.
@@ -373,6 +375,18 @@ pub struct AgentPreferences {
     /// Base URL override. Empty uses the provider's default.
     pub url: String,
     /// Environment variable holding the API key. Empty means no key.
+    pub api_key_env: String,
+}
+
+/// A configured API connection, independent of the currently selected model's runtime.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentEndpoint {
+    /// API dialect: `ollama` or `openai`.
+    pub provider: String,
+    /// Optional base URL override.
+    pub url: String,
+    /// Environment variable containing the API key, never the key itself.
     pub api_key_env: String,
 }
 
