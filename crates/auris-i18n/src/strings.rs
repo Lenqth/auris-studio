@@ -1915,6 +1915,8 @@ new のオプション
     AgentApply { en: "Apply", ja: "適用" }
     AgentProviderLabel { en: "Provider", ja: "プロバイダ" }
     AgentBackendLabel { en: "Backend", ja: "バックエンド" }
+    AgentClaudePathLabel { en: "Claude Code executable path (optional)", ja: "Claude Code実行ファイルのパス（任意）" }
+    AgentClaudeHelp { en: "Install Claude Code and sign in by running claude. Leave the path empty to find the installed CLI. Choose a model in the Agent Panel after applying.", ja: "Claude Codeをインストールし、claudeを起動してログインしてください。パスが空欄ならインストール済みのCLIを探します。適用後、エージェントパネルでモデルを選択してください。" }
     AgentCodexPathLabel { en: "Codex executable path (optional)", ja: "Codex実行ファイルのパス（任意）" }
     AgentCodexHelp { en: "Install Codex CLI and run codex login with your ChatGPT account. Leave the path empty to find the installed CLI. Choose a model in the Agent Panel after applying.", ja: "Codex CLIをインストールし、codex loginでChatGPTアカウントにログインしてください。パスが空欄ならインストール済みのCLIを探します。適用後、エージェントパネルでモデルを選択してください。" }
     AgentReadOnly { en: "Read-only", ja: "読み取り専用" }

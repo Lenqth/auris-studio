@@ -234,10 +234,11 @@ pub mod architecture {
     //! decisions and live-edit results. The worker never owns or edits the window's session.
     //! Dropping a worker cancels its network/approval waits without joining on the UI thread.
     //! Rig runs in-process. The optional Codex backend launches the official `codex app-server`
-    //! over stdio and connects it to a per-conversation, authenticated loopback MCP endpoint.
-    //! Both backends use one live tool host and the same desktop permission/edit path; this
-    //! embedded MCP never opens saved projects independently. Codex owns its ChatGPT login;
-    //! the application never reads or copies its credentials. If
+    //! over stdio. The Claude Code backend uses the CLI's bidirectional stream-json protocol.
+    //! Both CLI backends connect to a per-conversation, authenticated loopback MCP endpoint.
+    //! All backends use one live tool host and the same desktop permission/edit path; this
+    //! embedded MCP never opens saved projects independently. Each CLI owns its authentication;
+    //! the application never reads or copies its credential files. If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than
     //! adding the dependency.
