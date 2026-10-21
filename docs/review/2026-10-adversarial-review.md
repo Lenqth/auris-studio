@@ -23,7 +23,7 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-08 | Medium | Security | Native CLI file reads are approved automatically, in every mode, anywhere on disk |
+| AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
 | AR-09 | Medium | i18n, macOS | The app launched from Finder ignores the system language |
 | AR-10 | Medium | VST3 | Every class in a multi-class bundle gets the first class's kind |
 | AR-11 | Low-Medium | Security | `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured |
@@ -34,24 +34,16 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 ## Findings
 
-### AR-08 — Native CLI file reads are approved automatically, in every mode, anywhere on disk
+### AR-08 — Codex's native reads are not confined to the project folder
 
-**Where.** `Operation::parse` gives `cli_file_read` `mutating: false, confirm: false`
-(`crates/auris-session/src/agent_policy.rs:178-183`), so `Policy::decide` allows it in every mode,
-Read-only and Plan included (`:212-219`). The Claude backend routes `Read`/`Glob`/`Grep` to that
-gate on purpose, by listing them under `ask` (`crates/auris-agent/src/backends/claude.rs:21-38`,
-`108-111`). The Codex backend runs with `sandbox: "read-only", approvalPolicy: "untrusted"`
-(`backends/codex.rs:452`), where reads never reach the gate at all.
+The Claude Code half of this finding is fixed: its `Read`/`Glob`/`Grep` are approved without asking
+only inside the folder the CLI works in, and ask everywhere else. The Codex backend runs with
+`sandbox: "read-only", approvalPolicy: "untrusted"` (`crates/auris-agent/src/backends/codex.rs`),
+where Codex runs commands it considers safe, reads included, without asking anybody, and its
+read-only sandbox does not restrict *where* it reads. Nothing in Auris sees those reads.
 
-**What happens.** The CLI's working directory is the project folder, but its reads are not confined
-to it: `~/.ssh`, `.env` files and other projects are all readable without a prompt. Claude Code's
-own default asks before reading outside its working directory, so forcing `ask` and then
-answering it automatically is weaker than not routing reads through Auris at all. Combined with AR-02, a
-planted instruction can collect secrets. They then need a way out, such as a track name in a
-project that gets shared, or an approved command.
-
-**Direction.** Approve reads automatically only under the project folder (canonicalised, with
-symlinks resolved), and ask for anything else.
+**Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
+chosen.
 
 ### AR-09 — The app launched from Finder ignores the system language
 

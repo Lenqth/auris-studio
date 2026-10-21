@@ -180,6 +180,9 @@ struct Cli {
     input: Box<dyn AsyncWrite + Unpin + Send>,
     output: FramedRead<Box<dyn AsyncRead + Unpin + Send>, LinesCodec>,
     next_id: u64,
+    /// The folder the CLI works in, with its links resolved: the one place it may read
+    /// without asking. `None` when there is no process behind this transport.
+    root: Option<PathBuf>,
 }
 
 impl Cli {
@@ -196,6 +199,7 @@ impl Cli {
                 LinesCodec::new_with_max_length(FRAME_LIMIT),
             ),
             next_id: 0,
+            root: None,
         }
     }
 
@@ -205,8 +209,9 @@ impl Cli {
         native: bool,
         project: Option<&Path>,
     ) -> Result<(Self, Value), String> {
+        let root = project.unwrap_or(cwd);
         let mut child = command(prefs, cwd, native)?
-            .current_dir(project.unwrap_or(cwd))
+            .current_dir(root)
             .spawn()
             .map_err(|error| format!("Cannot start Claude Code: {error}"))?;
         let input = child
@@ -218,6 +223,7 @@ impl Cli {
             .take()
             .ok_or("Claude Code stdout was not available")?;
         let mut cli = Self::transport(Some(child), input, output);
+        cli.root = std::fs::canonicalize(root).ok();
         let initialized = cli
             .request(json!({"subtype":"initialize","hooks":{},"agents":{},"skills":[]}))
             .await?;
@@ -462,6 +468,33 @@ async fn conversation(
     Ok(())
 }
 
+/// Whether a native `Read`, `Glob` or `Grep` stays inside `root`, the folder the CLI works in.
+///
+/// What it may read without asking. The path it names is resolved against `root` and through
+/// every link; a glob may not climb out with `..` or start somewhere absolute. Anything that
+/// cannot be shown to stay inside — a path that does not exist yet, an unknown tool — is not.
+fn read_stays_inside(root: &Path, tool: &str, input: &Value) -> bool {
+    let inside = |path: Option<&str>| {
+        let path = path.map_or_else(|| root.to_path_buf(), |path| root.join(path));
+        std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(root))
+    };
+    let confined = |pattern: Option<&str>| {
+        pattern.is_none_or(|pattern| {
+            !pattern.starts_with(['/', '\\', '~'])
+                && !Path::new(pattern).is_absolute()
+                && !pattern.split(['/', '\\']).any(|part| part == "..")
+        })
+    };
+    match tool {
+        "Read" => input["file_path"]
+            .as_str()
+            .is_some_and(|path| inside(Some(path))),
+        "Glob" => inside(input["path"].as_str()) && confined(input["pattern"].as_str()),
+        "Grep" => inside(input["path"].as_str()) && confined(input["glob"].as_str()),
+        _ => false,
+    }
+}
+
 fn validate_servers(status: &Value) -> Result<(), String> {
     let servers = status["mcpServers"]
         .as_array()
@@ -505,8 +538,14 @@ async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> 
                 && let Some(operation) = request["tool_name"].as_str().and_then(native_operation)
             {
                 let _guard = bridge.tool_lock().await;
+                let within = cli.root.as_deref().is_some_and(|root| {
+                    request["tool_name"]
+                        .as_str()
+                        .is_some_and(|tool| read_stays_inside(root, tool, &request["input"]))
+                });
                 let result = crate::permissions::authorize(Some(bridge), operation,
-                    &json!({"backend":"claude","tool":request["tool_name"],"input":request["input"]}).to_string()).await;
+                    &json!({"backend":"claude","tool":request["tool_name"],"input":request["input"],
+                        "within_project":within}).to_string()).await;
                 let response = match result {
                     Ok(()) => json!({"behavior":"allow","updatedInput":request["input"]}),
                     Err(reason) => json!({"behavior":"deny","message":reason}),
@@ -634,6 +673,71 @@ mod tests {
             model: "sonnet".into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn only_reads_that_stay_in_the_working_folder_are_free() {
+        let folder = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(folder.path()).unwrap();
+        std::fs::create_dir(root.join("Audio")).unwrap();
+        std::fs::write(root.join("Song.auris"), b"{}").unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+
+        assert!(read_stays_inside(
+            &root,
+            "Read",
+            &json!({"file_path":"Song.auris"})
+        ));
+        assert!(read_stays_inside(
+            &root,
+            "Read",
+            &json!({"file_path": root.join("Song.auris")})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Read",
+            &json!({"file_path": outside.path()})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Read",
+            &json!({"file_path":"Audio/../../elsewhere"})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Read",
+            &json!({"file_path":"missing.txt"})
+        ));
+        assert!(read_stays_inside(
+            &root,
+            "Glob",
+            &json!({"pattern":"**/*.wav"})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Glob",
+            &json!({"pattern":"../**/*.pem"})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Glob",
+            &json!({"pattern":"~/.ssh/*"})
+        ));
+        assert!(read_stays_inside(
+            &root,
+            "Grep",
+            &json!({"pattern":"tempo","path":"Audio"})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Grep",
+            &json!({"pattern":"key","path": outside.path()})
+        ));
+        assert!(!read_stays_inside(
+            &root,
+            "Bash",
+            &json!({"command":"cat Song.auris"})
+        ));
     }
 
     #[test]
