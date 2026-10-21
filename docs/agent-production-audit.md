@@ -69,6 +69,12 @@ Relevant code: [live commands](../crates/auris-session/src/live_agent.rs),
 
 ## High priority: mixed audio transcription is incomplete
 
+Follow-up: confidence-gated attacks, residual recovery and a fallback for nearly cancelling
+stereo improve this audit's independent score. The piano source now has 20 unmatched
+events and no missing notes; reeds/strings have 19 unmatched and 115 missing events at
+50 ms, compared with 60/144 below. The [piano-cover evaluation](piano-transcription-evaluation.md)
+adds frozen composer/audio pairs, separate seeds, per-case regressions and exact source hashes.
+
 Pitch/onset matches use maximum one-to-one bipartite matching, exact MIDI pitch, and the
 stated onset tolerance. An estimated event cannot satisfy several reference notes.
 These are onset metrics; they do not certify accurate releases, dynamics, or playability.

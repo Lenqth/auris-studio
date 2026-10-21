@@ -20,6 +20,10 @@ const STRIDE: usize = FRAMES - 2 * TRIM;
 pub const MODEL_SHA256: &str = "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec";
 const MODEL: &[u8] = include_bytes!("basic-pitch.onnx");
 
+#[path = "basic_pitch_decode.rs"]
+mod decoding;
+use decoding::decode;
+
 /// A polyphonic note draft, independent of document tempo and playback sound.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -64,8 +68,8 @@ fn model_error(error: impl ToString) -> AnalysisError {
 
 /// Transcribes up to ten minutes/eight channels without downloading models or editing a song.
 ///
-/// Run on a cancellable worker. Channels are averaged as in the reference implementation;
-/// anti-phase stereo can cancel. This estimates pitched notes, not instrument separation or
+/// Run on a cancellable worker. Channels are averaged; nearly cancelling windows instead use
+/// their strongest channel. This estimates pitched notes, not instrument separation or
 /// an engraved/playability-constrained arrangement. Piano recordings work best.
 pub fn transcribe(
     audio: &AudioBuffer,
@@ -98,19 +102,7 @@ pub fn transcribe(
     let mut onsets = Vec::with_capacity(expected_frames * KEYS);
     for window in 0..count {
         control.check(window as f32 / count as f32 * 0.85)?;
-        let mut waveform = vec![0.0_f32; WINDOW];
-        for (i, sample) in waveform.iter_mut().enumerate() {
-            let source = (window * HOP + i).checked_sub(TRIM * 256);
-            if let Some(source) = source.filter(|&s| s < audio.frame_count()) {
-                for channel in audio.iter_channels() {
-                    let value = channel[source];
-                    if !value.is_finite() {
-                        return Err(AnalysisError::Invalid("audio contains non-finite samples"));
-                    }
-                    *sample += value / audio.channel_count() as f32;
-                }
-            }
-        }
+        let waveform = mono_window(audio, window)?;
         let input = Tensor::from_array(([1, WINDOW, 1], waveform)).map_err(model_error)?;
         let outputs = session
             .run(ort::inputs!["serving_default_input_2:0" => input])
@@ -152,67 +144,38 @@ fn frame_time(frame: usize) -> f64 {
     (window * HOP) as f64 / SAMPLE_RATE + within as f64 * HOP as f64 / STRIDE as f64 / SAMPLE_RATE
 }
 
-fn decode(
-    frames: &[f32],
-    onsets: &[f32],
-    seconds: f64,
-    control: &AnalysisControl,
-) -> Result<Vec<TranscribedNote>, AnalysisError> {
-    let count = frames.len() / KEYS;
-    let mut notes = Vec::new();
-    for key in 0..KEYS {
-        control.check(0.85 + key as f32 / KEYS as f32 * 0.15)?;
-        let mut start = None;
-        let mut last_active = 0;
-        let mut level = 0.0;
-        for frame in 0..=count {
-            let energy = if frame < count {
-                frames[frame * KEYS + key]
-            } else {
-                0.0
-            };
-            let onset = frame > 0
-                && frame + 1 < count
-                && onsets[frame * KEYS + key] >= 0.5
-                && onsets[frame * KEYS + key] > onsets[(frame - 1) * KEYS + key]
-                && onsets[frame * KEYS + key] >= onsets[(frame + 1) * KEYS + key];
-            let finish = start.is_some()
-                && (onset || frame == count || frame.saturating_sub(last_active) > 11);
-            if finish {
-                let first = start.take().unwrap_or(frame);
-                let end = if onset { frame } else { last_active + 1 };
-                if end.saturating_sub(first) >= 11 {
-                    let from = frame_time(first).min(seconds);
-                    let to = frame_time(end).min(seconds);
-                    if to > from {
-                        notes.push(TranscribedNote {
-                            pitch: key as u8 + 21,
-                            start: from,
-                            end: to,
-                            strength: (level / (end - first) as f32).clamp(0.1, 1.0),
-                        });
-                        if notes.len() > 200_000 {
-                            return Err(AnalysisError::Invalid("too many transcribed notes"));
-                        }
-                    }
+fn mono_window(audio: &AudioBuffer, window: usize) -> Result<Vec<f32>, AnalysisError> {
+    let mut waveform = vec![0.0_f32; WINDOW];
+    let mut power = [0.0_f64; 8];
+    let mut mono_power = 0.0;
+    for (i, sample) in waveform.iter_mut().enumerate() {
+        let source = (window * HOP + i).checked_sub(TRIM * 256);
+        if let Some(source) = source.filter(|&s| s < audio.frame_count()) {
+            for (index, channel) in audio.iter_channels().enumerate() {
+                let value = channel[source];
+                if !value.is_finite() {
+                    return Err(AnalysisError::Invalid("audio contains non-finite samples"));
                 }
-                level = 0.0;
+                *sample += value / audio.channel_count() as f32;
+                power[index] += f64::from(value).powi(2);
             }
-            // Frame activity recovers soft notes whose learned onset is below threshold.
-            if frame < count && (energy >= 0.3 || onset) {
-                if start.is_none() {
-                    start = Some(frame);
-                    level = 0.0;
-                }
-                last_active = frame;
-            }
-            if start.is_some() {
-                level += energy;
-            }
+            mono_power += f64::from(*sample).powi(2);
         }
     }
-    notes.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.pitch.cmp(&b.pitch)));
-    Ok(notes)
+    let strongest = (0..audio.channel_count())
+        .max_by(|&a, &b| power[a].total_cmp(&power[b]))
+        .unwrap_or(0);
+    // Averaging normally preserves the reference preprocessing. Only catastrophic cancellation
+    // (over 20 dB relative to one source channel) selects a channel, without amplifying noise.
+    if mono_power < power[strongest] * 0.01 {
+        for (i, sample) in waveform.iter_mut().enumerate() {
+            let source = (window * HOP + i).checked_sub(TRIM * 256);
+            *sample = source
+                .filter(|&s| s < audio.frame_count())
+                .map_or(0.0, |s| audio.channel(strongest)[s]);
+        }
+    }
+    Ok(waveform)
 }
 
 #[cfg(test)]
@@ -223,6 +186,76 @@ mod tests {
     #[test]
     fn bundled_model_matches_the_pinned_upstream_file() {
         assert_eq!(hex::encode(Sha256::digest(MODEL)), MODEL_SHA256);
+    }
+
+    #[test]
+    fn decoder_rejects_unsupported_activity_but_recovers_confident_soft_attacks() {
+        let mut frames = vec![0.0; 160 * KEYS];
+        let onsets = frames.clone();
+        for frame in 20..100 {
+            frames[frame * KEYS + 39] = 0.35;
+        }
+        assert!(
+            decode(&frames, &onsets, 2.0, &Default::default())
+                .unwrap()
+                .is_empty()
+        );
+        for frame in 20..100 {
+            frames[frame * KEYS + 39] = 0.75;
+        }
+        let notes = decode(&frames, &onsets, 2.0, &Default::default()).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].pitch, 60);
+    }
+
+    #[test]
+    fn decoder_keeps_short_repeated_notes_and_the_first_frame_attack() {
+        let mut frames = vec![0.0; 60 * KEYS];
+        let mut onsets = frames.clone();
+        for start in [0, 10, 20] {
+            for frame in start..start + 8 {
+                frames[frame * KEYS + 39] = 0.8;
+            }
+            onsets[start * KEYS + 39] = 0.9;
+        }
+        let notes = decode(&frames, &onsets, 1.0, &Default::default()).unwrap();
+        assert_eq!(notes.len(), 3);
+        assert_eq!(notes[0].start, 0.0);
+    }
+
+    #[test]
+    fn recovery_does_not_duplicate_the_lead_in_or_release_of_a_confirmed_note() {
+        let mut frames = vec![0.0; 180 * KEYS];
+        let mut onsets = frames.clone();
+        for frame in 20..140 {
+            frames[frame * KEYS + 39] = 0.35;
+        }
+        for frame in 60..120 {
+            frames[frame * KEYS + 39] = 0.8;
+        }
+        onsets[60 * KEYS + 39] = 0.9;
+        let notes = decode(&frames, &onsets, 3.0, &Default::default()).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].start, frame_time(60));
+    }
+
+    #[test]
+    fn stereo_windows_keep_normal_averaging_and_refuse_destructive_cancellation() {
+        let left: Vec<_> = (0..48000).map(|i| (i as f32 * 0.03).sin() * 0.5).collect();
+        let mut audio =
+            AudioBuffer::from_planar(vec![left.clone(), left.clone()], SAMPLE_RATE).unwrap();
+        let coherent = mono_window(&audio, 0).unwrap();
+        assert_eq!(&coherent[TRIM * 256..TRIM * 256 + 1000], &left[..1000]);
+        for sample in audio.channel_mut(1) {
+            *sample = -*sample;
+        }
+        let opposite = mono_window(&audio, 0).unwrap();
+        assert_eq!(
+            coherent.iter().map(|v| v.abs()).collect::<Vec<_>>(),
+            opposite.iter().map(|v| v.abs()).collect::<Vec<_>>()
+        );
+        audio.channel_mut(1)[100] = f32::NAN;
+        assert!(mono_window(&audio, 0).is_err());
     }
 
     #[test]
@@ -268,6 +301,19 @@ mod tests {
                     .any(|n| n.pitch == pitch && n.start < 0.5 && n.end > 1.0),
                 "missing {pitch}: {:?}",
                 report.notes
+            );
+        }
+        let left = audio.channel(0).to_vec();
+        let opposite = AudioBuffer::from_planar(
+            vec![left.clone(), left.iter().map(|v| -v).collect()],
+            SAMPLE_RATE,
+        )
+        .unwrap();
+        let antiphase = transcribe(&opposite, &Default::default()).unwrap();
+        for pitch in [60, 64, 67] {
+            assert!(
+                antiphase.notes.iter().any(|n| n.pitch == pitch),
+                "anti-phase cancellation lost {pitch}"
             );
         }
         audio.channel_mut(0).fill(0.0);

@@ -282,6 +282,12 @@ pub mod architecture {
     //! maps source seconds through the current tempo map and adds a physical-piano track/clip
     //! as one undo transaction. No source file path, model download or saved-project edit is
     //! exposed to the model. Notes remain estimates; this is transcription, not listening.
+    //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
+    //! residual activity outside their attack/release guards. Weak sustained predictions alone
+    //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo
+    //! windows use the strongest channel instead of erasing the recording. The composer-pair
+    //! evaluation freezes performed notes and PCM before tuning; separate seeds and an independent
+    //! existing score check false positives, missing notes and timing through this same backend.
     //! Native audio API turns retain the same exact sources. Above 25 MiB, the session prepares
     //! a full-length 16 kHz PCM16 WAV for upload, preserving mono/stereo channels; the original
     //! remains available for transcription. Decoding has the importer's 512 MiB sample budget,
