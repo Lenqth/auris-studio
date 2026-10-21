@@ -87,7 +87,7 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::setup_tracks::run(&args)).await
     }
-    /// Read scan and acoustic measurement failures after search_instruments or similar_instruments. Does not rescan. Messages are bounded; follow next_offset.
+    /// Read searched plugin roots, detected files, load outcomes and scan/acoustic failures after searching. Uses configured plugin paths. Does not rescan; follow next_offset.
     #[tool(input_schema = tool_schema("instrument_diagnostics"))]
     async fn instrument_diagnostics(
         &self,

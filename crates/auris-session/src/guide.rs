@@ -319,7 +319,11 @@ pub mod architecture {
     //! project), startup task groups, concise schemas and full on-demand help. Discovery handles
     //! have a random process scope and are checked against the owning library snapshot; refresh,
     //! library changes and bounded handle eviction invalidate them. Search filters apply before paging or neighbor selection,
-    //! and diagnostics are read separately. [`Session::setup_tracks`](crate::Session::setup_tracks)
+    //! and diagnostics are read separately. Saved-file tools share the desktop's configured
+    //! plugin paths for searching and selecting sounds. Diagnostics page the searched roots,
+    //! detected files and load outcomes alongside scan and acoustic measurement failures;
+    //! reading them uses the existing snapshot without rescanning or loading plugins.
+    //! [`Session::setup_tracks`](crate::Session::setup_tracks)
     //! creates a bounded batch
     //! as one transaction; the saved-project adapter saves once and retains bounded retry receipts.
     //! Conversation compaction is presentation work in `auris-agent`: a tool-less model

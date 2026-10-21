@@ -1949,7 +1949,11 @@ pub mod add_track {
                         .map_err(|error| error.to_string())?,
                 };
                 if let Some(sound_id) = &args.sound_id {
-                    session.use_library_sound(id, sound_id, &[])?;
+                    session.use_library_sound(
+                        id,
+                        sound_id,
+                        &sound_search::configured_plugin_paths(),
+                    )?;
                     sound_id.clone()
                 } else {
                     voice(
@@ -2183,7 +2187,7 @@ pub mod set_instrument {
         let mut session = opened(&args.project)?;
         let track = track_by_name(session.project(), &args.track)?.id;
         if let Some(sound_id) = &args.sound_id {
-            session.use_library_sound(track, sound_id, &[])?;
+            session.use_library_sound(track, sound_id, &sound_search::configured_plugin_paths())?;
             session.save_with_checkpoint().map_err(|e| e.to_string())?;
             return Ok(format!(
                 "{} — now {sound_id}. Saved. Mixer settings stayed the same; run analyze before export because the new sound may be much louder or quieter.",

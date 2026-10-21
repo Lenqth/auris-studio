@@ -64,7 +64,7 @@ pub fn run(args: &Args) -> Result<String, String> {
         return Ok(receipt.response.clone());
     }
     let mut session = opened(path.to_str().ok_or("Project path is not Unicode")?)?;
-    let response = session.setup_tracks(&args.tracks, &[])?;
+    let response = session.setup_tracks(&args.tracks, &sound_search::configured_plugin_paths())?;
     session.save_with_checkpoint().map_err(|e| e.to_string())?;
     if receipts.len() == 32 {
         receipts.remove(0);
