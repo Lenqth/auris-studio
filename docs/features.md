@@ -1089,6 +1089,13 @@ recorded size, so a different one wearing the same name is not quietly adopted. 
 written back into the document, so the search happens once rather than on every open. Anything
 genuinely gone is reported, and the project still opens with that one track silent.
 
+CLAP and VST3 plugins are named by path too, but a path in a document is never enough to run one.
+A plugin is loaded only from a **plugin folder**: the standard CLAP and VST3 folders for your
+platform, and the folders and files you added in the plugin browser. A project that names a plugin
+anywhere else — beside itself, on the disk image it arrived on — opens with that slot silent, and
+the status line names the file. Add its folder to load it. Opening a project is opening a document,
+and a document from somebody else must not be able to run code they put next to it.
+
 ## Key bindings
 
 Every command is rebindable, and the settings window is where. Press a key onto a row and it takes

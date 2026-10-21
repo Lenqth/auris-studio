@@ -23,7 +23,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-01 | High | Security | Opening a project loads and runs any local CLAP/VST3 binary the document names |
 | AR-02 | High | Security | A project's stored agent conversations count as the user's consent in auto-review |
 | AR-03 | High | Cross-platform | A Windows-saved project opens on macOS with its SoundFont tracks silent |
 | AR-04 | High | macOS release | `Auris Studio.app` has no microphone usage description, so recording fails |
@@ -42,39 +41,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
-
-### AR-01 — Opening a project loads and runs any local CLAP/VST3 binary the document names
-
-**Where.** `Session::open` rebuilds the graph immediately
-(`crates/auris-session/src/session/files.rs:713`), and `rebuild_graph` places hosted plugins
-unconditionally (`session/mod.rs:1351-1354`). CLAP: `hosted_slots`/`hosted_instruments` take the
-path straight from the document (`session/hosted.rs:830-834`, `859`) and `library_path` calls
-`ClapLibrary::load` on it (`hosted.rs:540-556`). Its `SAFETY` comment reads "the file is named by
-the document, which named it because the user chose it", which assumes the document was written on
-this machine. VST3: `effect_requests`/`instrument_requests` (`session/vst3.rs:567-610`) feed
-`fit`, which calls `Vst3Plugin::load` (`vst3.rs:515`).
-
-**What happens.** A project file is data a user can receive from anyone, but an `effect_id` of
-`clap:…`/`vst3:…` with `"file": {"external": "<path>"}` makes Auris `LoadLibrary`/`dlopen` that
-path the moment the project opens. Running `DllMain` or a static constructor is enough; the binary
-does not have to be a working plugin. `AssetPath::resolve_for_automatic_access`
-(`crates/auris-core/src/asset.rs:149-157`) refuses only UNC and device spellings. In particular:
-
-* It does not require the path to be absolute. `External("evil.clap")` resolves against the
-  process's working directory.
-* Nothing checks the path against the plugins discovery found under the configured plugin roots.
-* There is no prompt.
-
-Realistic carriers are a disk image (a DMG mounts at a predictable `/Volumes/<name>/`), a path on
-removable media, and the headless frontends. `auris-mcp`'s `open_project`
-(`crates/auris-toolbox/src/project_handles.rs:52-56`) and every CLI command that opens a project go
-through the same `Session::open`, so a model asked to inspect a downloaded project loads its
-plugins too.
-
-**Direction.** Treat the stored path as a hint, not an instruction. Resolve hosted plugins by
-plugin ID against the discovered install set, or require the file to lie under a configured plugin
-root, and require `is_absolute()`. A plugin the document names that is not found that way should
-load only after the user says yes, and stay silent until then, as a missing plugin already does.
 
 ### AR-02 — A project's stored agent conversations count as the user's consent in auto-review
 

@@ -68,6 +68,7 @@ mod output_preview;
 mod perform;
 mod physical_sounds;
 pub(crate) mod plugin_discovery;
+mod plugin_trust;
 mod punch;
 mod readiness;
 mod recognition;
@@ -208,6 +209,11 @@ pub struct SessionOptions {
     /// handed to [`Session::set_japanese_dictionary`](crate::Session::set_japanese_dictionary)
     /// always wins over the shipped one.
     pub shipped_dictionary: bool,
+    /// The user's own plugin folders and files, beside the standard ones for this platform.
+    ///
+    /// A document's CLAP or VST3 plugin is loaded only from a plugin folder; anything else stays
+    /// silent until its folder is listed here. See [`Session::set_plugin_paths`].
+    pub plugin_paths: Vec<PathBuf>,
 }
 
 impl Default for SessionOptions {
@@ -221,6 +227,7 @@ impl Default for SessionOptions {
             balance_composed: true,
             autosave: true,
             shipped_dictionary: true,
+            plugin_paths: Vec::new(),
         }
     }
 }
@@ -250,6 +257,12 @@ impl SessionOptions {
     /// Whether to load the Japanese dictionary the application ships with.
     pub fn with_shipped_dictionary(mut self, shipped_dictionary: bool) -> Self {
         self.shipped_dictionary = shipped_dictionary;
+        self
+    }
+
+    /// The user's own plugin folders, beside the standard ones. See [`Self::plugin_paths`].
+    pub fn with_plugin_paths(mut self, plugin_paths: Vec<PathBuf>) -> Self {
+        self.plugin_paths = plugin_paths;
         self
     }
 
@@ -495,6 +508,8 @@ pub struct Session {
     hosted: hosted::HostedPlugins,
     /// Third-party VST3 instances, parallel to the CLAP host above.
     vst3: vst3::Vst3Plugins,
+    /// Where a document's plugins may be loaded from. See [`plugin_trust`].
+    plugin_trust: plugin_trust::PluginTrust,
 }
 
 /// What a Save As produced.
@@ -677,6 +692,7 @@ impl Session {
             sound_scope: crate::transient_id::transient_id("session"),
             hosted: hosted::HostedPlugins::default(),
             vst3: vst3::Vst3Plugins::default(),
+            plugin_trust: plugin_trust::PluginTrust::new(&options.plugin_paths),
         };
         session.install_shipped_fonts();
         session.install_shipped_dictionary();
@@ -1052,10 +1068,11 @@ impl Session {
             self.engine.max_block(),
             auris_engine::RENDER_CHANNELS,
         );
-        let mut placed = self.hosted.place(&project, &prepare);
-        placed.extend(self.vst3.place(&project, &prepare));
-        let mut instruments = self.hosted.place_instruments(&project, &prepare);
-        instruments.extend(self.vst3.place_instruments(&project, &prepare));
+        let trust = &mut self.plugin_trust;
+        let mut placed = self.hosted.place(&project, &prepare, trust);
+        placed.extend(self.vst3.place(&project, &prepare, trust));
+        let mut instruments = self.hosted.place_instruments(&project, &prepare, trust);
+        instruments.extend(self.vst3.place_instruments(&project, &prepare, trust));
         RenderJob::new(
             project,
             self.bank.clone(),
@@ -1348,10 +1365,13 @@ impl Session {
             self.engine.max_block(),
             auris_engine::RENDER_CHANNELS,
         );
-        let mut placed = self.hosted.place(&self.project, &prepare);
-        placed.extend(self.vst3.place(&self.project, &prepare));
-        let mut instruments = self.hosted.place_instruments(&self.project, &prepare);
-        instruments.extend(self.vst3.place_instruments(&self.project, &prepare));
+        let trust = &mut self.plugin_trust;
+        let mut placed = self.hosted.place(&self.project, &prepare, trust);
+        placed.extend(self.vst3.place(&self.project, &prepare, trust));
+        let mut instruments = self
+            .hosted
+            .place_instruments(&self.project, &prepare, trust);
+        instruments.extend(self.vst3.place_instruments(&self.project, &prepare, trust));
 
         let mut graph = RenderGraph::build_with(
             &self.project,

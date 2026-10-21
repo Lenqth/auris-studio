@@ -150,6 +150,11 @@ impl Session {
                         path.display()
                     )));
                 }
+                // A specification is text a model or another person can write, and loading a
+                // plugin runs it: the same plugin-folder rule a document's plugins obey.
+                if !self.plugin_file_allowed(&path) {
+                    return Err(SessionError::UntrustedPlugin(path));
+                }
                 let known = self
                     .hosted_plugins_in(&path)?
                     .into_iter()
@@ -178,6 +183,9 @@ impl Session {
                         "VST3 bundle {} is unavailable",
                         path.display()
                     )));
+                }
+                if !self.plugin_file_allowed(&path) {
+                    return Err(SessionError::UntrustedPlugin(path));
                 }
                 let known = self
                     .vst3_plugins_in(&path)?
