@@ -73,6 +73,92 @@ fn strings_are_tuned_across_their_playing_registers() {
 }
 
 #[test]
+fn piano_bass_overtones_do_not_have_tenor_register_stretch() {
+    for (pitch, maximum_cents) in [(24, 20), (36, 12)] {
+        let mut piano = rig(Model::Piano, 48_000.0);
+        let audio = piano.render(48_000, &[on(pitch, 0.8)]);
+        let harmonic = f64::from(pitch_to_hz(f32::from(pitch))) * 8.0;
+        let strongest = (0..=70)
+            .max_by(|a, b| {
+                let strength = |cents| {
+                    goertzel(
+                        &audio,
+                        48_000.0,
+                        harmonic * (f64::from(cents) / 1200.0).exp2(),
+                    )
+                };
+                strength(*a).total_cmp(&strength(*b))
+            })
+            .unwrap();
+        assert!(
+            strongest <= maximum_cents,
+            "MIDI {pitch}: eighth partial stretched {strongest} cents"
+        );
+    }
+}
+
+#[test]
+fn bowed_bass_attacks_settle_into_the_played_period() {
+    for rate in [24_000.0, 44_100.0, 48_000.0, 96_000.0] {
+        for pitch in [24, 36] {
+            let mut violin = Rig::new(Box::new(Physical::new(Model::Violin)), rate, 256, 2);
+            let audio = violin.render(rate as usize, &[on(pitch, 0.8)]);
+            let window = &audio[(rate * 0.3) as usize..(rate * 0.8) as usize];
+            let period = rate / f64::from(pitch_to_hz(f32::from(pitch)));
+            let best = ((period * 0.995) as usize..=(period * 1.005).ceil() as usize)
+                .map(|lag| {
+                    let left = &window[..window.len() - lag];
+                    let right = &window[lag..];
+                    let mean = |samples: &[f32]| {
+                        samples.iter().map(|s| f64::from(*s)).sum::<f64>() / samples.len() as f64
+                    };
+                    let left_mean = mean(left);
+                    let right_mean = mean(right);
+                    let mut product = 0.0;
+                    let mut left_power = 0.0;
+                    let mut right_power = 0.0;
+                    for (a, b) in left.iter().zip(right) {
+                        let a = f64::from(*a) - left_mean;
+                        let b = f64::from(*b) - right_mean;
+                        product += a * b;
+                        left_power += a * a;
+                        right_power += b * b;
+                    }
+                    product / (left_power * right_power).sqrt()
+                })
+                .fold(f64::NEG_INFINITY, f64::max);
+            assert!(
+                best > 0.965,
+                "MIDI {pitch} at {rate}: attack correlation {best}"
+            );
+        }
+    }
+}
+
+#[test]
+fn continuous_bow_scattering_keeps_the_upper_register_tuned() {
+    for rate in [44_100.0, 48_000.0, 96_000.0] {
+        for pitch in [69, 85, 88] {
+            let mut violin = rig(Model::Violin, rate);
+            let audio = violin.render(rate as usize, &[on(pitch, 0.8)]);
+            let steady = &audio[(rate * 0.2) as usize..(rate * 0.8) as usize];
+            let hz = f64::from(pitch_to_hz(f32::from(pitch)));
+            let strongest = (-15_i32..=15)
+                .max_by(|a, b| {
+                    let strength =
+                        |cents| goertzel(steady, rate, hz * (f64::from(cents) / 1200.0).exp2());
+                    strength(*a).total_cmp(&strength(*b))
+                })
+                .unwrap();
+            assert!(
+                strongest.abs() <= 4,
+                "MIDI {pitch} at {rate}: {strongest} cents"
+            );
+        }
+    }
+}
+
+#[test]
 fn damping_automation_changes_an_existing_resonance_without_retriggering() {
     for model in [Model::Piano, Model::Guitar, Model::Bell, Model::Mallet] {
         let mut instrument = rig(model, 48_000.0);
@@ -467,11 +553,16 @@ fn violin_defaults_to_polyphony_and_bow_controls_are_independent() {
     violin.set_param("position", 0.3);
     let repositioned = violin.render(24_000, &[]);
     assert!(repositioned.iter().all(|sample| sample.is_finite()));
+    // Bowing near one third of the string suppresses its third harmonic. The second
+    // harmonic need not change appreciably in stable Helmholtz motion.
     let original_ratio =
-        goertzel(&moving[8000..], 48_000.0, 880.0) / goertzel(&moving[8000..], 48_000.0, 440.0);
-    let changed_ratio = goertzel(&repositioned[8000..], 48_000.0, 880.0)
+        goertzel(&moving[8000..], 48_000.0, 1320.0) / goertzel(&moving[8000..], 48_000.0, 440.0);
+    let changed_ratio = goertzel(&repositioned[8000..], 48_000.0, 1320.0)
         / goertzel(&repositioned[8000..], 48_000.0, 440.0);
-    assert!((original_ratio - changed_ratio).abs() > 0.05);
+    assert!(
+        (original_ratio - changed_ratio).abs() > 0.05,
+        "bow position ratios: {original_ratio}, {changed_ratio}"
+    );
     violin.set_param("bow_speed", 0.0);
     let stopped = violin.render(48_000, &[]);
     assert!(rms(&stopped[40_000..]) < rms(&moving[8000..]) * 0.2);

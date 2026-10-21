@@ -3,6 +3,17 @@
 use super::{Model, Settings};
 
 pub(super) fn register(model: Model, pitch: u8, mut settings: Settings) -> Settings {
+    if model == Model::Piano && pitch < 48 {
+        // Wound bass strings cannot inherit the tenor fit's inharmonicity unchanged.
+        // Iowa mf C1/C2 partials give B ~= 0.00026/0.00014, against the factory
+        // tenor anchor 0.00075. Join those ratios smoothly back to the C3 calibration.
+        let register = ((f32::from(pitch) - 36.0) / 12.0).clamp(-1.0, 1.0);
+        let distance = register.abs();
+        let blend = distance * distance * (3.0 - 2.0 * distance);
+        let rise = if register < 0.0 { 0.15 } else { 0.8 };
+        settings.stiffness *= 0.2 + rise * blend;
+        return settings;
+    }
     if model == Model::ElectricGuitar {
         // Highest playable string, in standard tuning. Pick/pickup distances are specified
         // relative to its open length; fretting shortens that length without moving either.

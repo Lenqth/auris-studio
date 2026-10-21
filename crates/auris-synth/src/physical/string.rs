@@ -10,6 +10,11 @@ use pluck::Pluck;
 mod bow;
 use bow::Bow;
 
+// A bowed return is a broadband corner, rather than a sinusoid at DC. Calibrate its
+// effective bridge delay across 24/48/96 kHz; DC compensation alone sharpens the
+// continuous-scattering model by about 10 cents in the upper playing register.
+const BOW_PHASE: f32 = 0.82;
+
 #[derive(Clone, Debug, Default)]
 struct Delay {
     samples: Vec<f32>,
@@ -137,7 +142,8 @@ impl StringModel {
         self.position_target = self.position;
         self.bow.excite(velocity, rate, settings);
         // Compensate the low-frequency phase delay of the bridge's one-pole loss filter.
-        self.period = (rate / frequency - self.pole / (1.0 - self.pole)).max(6.0);
+        let phase = self.pole / (1.0 - self.pole) * if self.bowed { BOW_PHASE } else { 1.0 };
+        self.period = (rate / frequency - phase).max(6.0);
         self.period_target = self.period;
         self.loss = (-6.907_755 / (settings.decay * frequency)).exp();
         if !self.bowed {
@@ -166,7 +172,7 @@ impl StringModel {
             return;
         }
         if self.bowed {
-            let phase = self.pole / (1.0 - self.pole);
+            let phase = BOW_PHASE * self.pole / (1.0 - self.pole);
             self.period_target =
                 ((self.period_target + phase) / ratio - phase).clamp(6.0, self.rate / 8.0 - phase);
         } else {
@@ -179,14 +185,15 @@ impl StringModel {
             self.pluck.update(settings);
             return;
         }
-        let old_phase = self.pole / (1.0 - self.pole);
+        let phase_scale = if self.bowed { BOW_PHASE } else { 1.0 };
+        let old_phase = phase_scale * self.pole / (1.0 - self.pole);
         self.pole = if self.bowed {
             (0.35 + 0.55 * settings.damping).powf(48_000.0 / self.rate)
         } else {
             (0.8 - 0.65 * settings.hardness * (0.4 + 0.6 * self.velocity) + settings.damping * 0.15)
                 .clamp(0.05, 0.92)
         };
-        let new_phase = self.pole / (1.0 - self.pole);
+        let new_phase = phase_scale * self.pole / (1.0 - self.pole);
         self.period = (self.period + old_phase - new_phase).max(6.0);
         self.period_target = (self.period_target + old_phase - new_phase).max(6.0);
         self.position_target = settings.position;
@@ -222,7 +229,7 @@ impl StringModel {
     }
 
     pub(super) fn glide_to(&mut self, frequency: f32) {
-        let phase = self.pole / (1.0 - self.pole);
+        let phase = BOW_PHASE * self.pole / (1.0 - self.pole);
         self.period_target = (self.rate / frequency.clamp(8.0, self.rate * 0.2) - phase).max(6.0);
     }
 }
