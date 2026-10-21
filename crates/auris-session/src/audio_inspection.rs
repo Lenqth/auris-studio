@@ -45,6 +45,28 @@ pub struct InspectionJob {
     bars: u32,
 }
 
+pub(crate) fn bar_range(
+    project: &Project,
+    start_bar: u32,
+    bars: u32,
+) -> Result<(Ticks, Ticks), String> {
+    if start_bar == 0 || !(1..=8).contains(&bars) {
+        return Err("Use start_bar >= 1 and bars 1..8".into());
+    }
+    let end_bar = start_bar.checked_add(bars).ok_or("Bar range overflow")?;
+    let start = project.signatures.bar_start(start_bar);
+    let end = project.signatures.bar_start(end_bar);
+    let duration =
+        project.tempo_map.ticks_to_seconds(end).0 - project.tempo_map.ticks_to_seconds(start).0;
+    if !duration.is_finite() || duration <= 0.0 || duration > 30.0 {
+        return Err("Audio range must fit in 30 seconds; request fewer bars".into());
+    }
+    if start >= project.end_tick() {
+        return Err("The requested range starts after the arrangement".into());
+    }
+    Ok((start, end))
+}
+
 impl Session {
     /// Prepare an inspection of 1..8 bars, at most 30 seconds, without altering the document.
     pub fn audio_inspection_job(
@@ -53,24 +75,11 @@ impl Session {
         bars: u32,
         track: Option<u64>,
     ) -> Result<InspectionJob, String> {
-        if start_bar == 0 || !(1..=8).contains(&bars) {
-            return Err("Use start_bar >= 1 and bars 1..8".into());
-        }
-        let end_bar = start_bar.checked_add(bars).ok_or("Bar range overflow")?;
         let project = self.project();
         if track.is_some_and(|id| project.track(TrackId(id)).is_none()) {
             return Err("Unknown track ID".into());
         }
-        let start = project.signatures.bar_start(start_bar);
-        let end = project.signatures.bar_start(end_bar);
-        let duration =
-            project.tempo_map.ticks_to_seconds(end).0 - project.tempo_map.ticks_to_seconds(start).0;
-        if !duration.is_finite() || duration <= 0.0 || duration > 30.0 {
-            return Err("Inspection must fit in 30 seconds; request fewer bars".into());
-        }
-        if start >= project.end_tick() {
-            return Err("The requested range starts after the arrangement".into());
-        }
+        let (start, end) = bar_range(project, start_bar, bars)?;
         Ok(InspectionJob {
             revision: self.revision(),
             render: self.render_job(),

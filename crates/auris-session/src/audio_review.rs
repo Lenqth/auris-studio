@@ -6,6 +6,7 @@
 
 use std::io::Read;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use base64::Engine;
@@ -117,6 +118,25 @@ pub fn review_audio(
     prompt: &str,
     options: &AudioReviewOptions,
 ) -> Result<AudioReview, String> {
+    review_audio_cancellable(audio, prompt, options, &AtomicBool::new(false))
+}
+
+/// Submits audio with cancellation checks before and after network stages.
+/// An already running HTTP request is bounded by the normal request timeout.
+pub fn review_audio_cancellable(
+    audio: &[(&str, &Path)],
+    prompt: &str,
+    options: &AudioReviewOptions,
+    cancel: &AtomicBool,
+) -> Result<AudioReview, String> {
+    let check = || {
+        if cancel.load(Ordering::Relaxed) {
+            Err("Audio review cancelled".to_string())
+        } else {
+            Ok(())
+        }
+    };
+    check()?;
     options.validate()?;
     let content = audio_content(audio, prompt)?;
     let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -126,12 +146,14 @@ pub fn review_audio(
         .build()
         .into();
     if let Some(root) = &options.ollama_url {
+        check()?;
         let shown = post_json(
             &agent,
             &format!("{}/api/show", root.trim_end_matches('/')),
             &json!({"model":options.model}),
             options.api_key.as_deref(),
         )?;
+        check()?;
         if !shown
             .get("capabilities")
             .and_then(Value::as_array)
@@ -156,12 +178,14 @@ pub fn review_audio(
     if options.ollama_url.is_some() {
         request["reasoning_effort"] = "none".into();
     }
+    check()?;
     let response = post_json(
         &agent,
         &format!("{}/chat/completions", options.url.trim_end_matches('/')),
         &request,
         options.api_key.as_deref(),
     )?;
+    check()?;
     let review = review_text(&response)?;
     Ok(AudioReview {
         model: options.model.clone(),
@@ -339,13 +363,13 @@ fn review_text(response: &Value) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::{BufRead, Write};
 
     type Requests = std::thread::JoinHandle<Vec<(String, Value)>>;
 
-    fn server(responses: Vec<(u16, Value)>) -> (String, Requests) {
+    pub(crate) fn server(responses: Vec<(u16, Value)>) -> (String, Requests) {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let worker = std::thread::spawn(move || {
@@ -398,7 +422,7 @@ mod tests {
         bytes
     }
 
-    fn response(text: &str) -> Value {
+    pub(crate) fn response(text: &str) -> Value {
         json!({"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":text}}]})
     }
 

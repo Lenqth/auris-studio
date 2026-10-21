@@ -56,7 +56,8 @@ pub fn tool_group(name: &str) -> &'static str {
         | "analyze_chords"
         | "analyze_instruments"
         | "transcribe_audio"
-        | "transcribe_mixture" => "transcription",
+        | "transcribe_mixture"
+        | "import_transcription" => "transcription",
         "write_lyrics" | "sing" => "vocals",
         "mixer_graph"
         | "effects"

@@ -1,0 +1,1131 @@
+{
+  "date": "2026-10-21",
+  "revision": "05bef66e",
+  "question": "Does the in-app composing agent listen to actual rendered audio, revise, and listen again?",
+  "result": "Measurement-based revision works; auditory feedback is not exposed in the live catalog.",
+  "scope": {
+    "controller": "Installed Codex CLI 0.163.0 through the actual GPUI app test harness",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "policy": "AutoReview, no approval bypass",
+    "host_actions": "Host saves final projects after controller completion; saved critic probe is separately host-invoked.",
+    "limitations": [
+      "No display, audio device or speaker playback in the harness.",
+      "Two controller observations do not establish model-wide behavior.",
+      "Audio delivery does not establish music understanding or improvement."
+    ],
+    "reused_runner": "app-test-final.exe from preceding audit; built before final equivalent Clippy-only conditional collapse",
+    "reused_runner_sha256": "4c486863313a89b7061090a8b04260e9b345f0df4c172be13062983aa024d8da"
+  },
+  "trials": [
+    {
+      "id": "ordinary_composition",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "elapsed_seconds": 58.2094219,
+      "failure": null,
+      "prompt": "16小節の明るいポップ曲を新しく作ってください。メロディーと伴奏を付けてください。\n",
+      "tracks": 4,
+      "notes": 540,
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 128.0
+          }
+        ]
+      },
+      "sections": {
+        "points": [
+          {
+            "tick": 0,
+            "label": "Aメロ"
+          },
+          {
+            "tick": 30720,
+            "label": "サビ"
+          },
+          {
+            "tick": 53760,
+            "label": "エンディング"
+          },
+          {
+            "tick": 61440,
+            "label": null
+          }
+        ]
+      },
+      "tool_counts": {
+        "inspect_audio": 3,
+        "normalize_mix": 1,
+        "listen": 0
+      },
+      "tool_sequence": [
+        {
+          "entry": 1,
+          "name": "inspect_project",
+          "ok": true
+        },
+        {
+          "entry": 3,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 4,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 5,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 6,
+          "name": "set_tempo",
+          "ok": true
+        },
+        {
+          "entry": 7,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 8,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 9,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 10,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 11,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 12,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 13,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 14,
+          "name": "add_track",
+          "ok": true
+        },
+        {
+          "entry": 15,
+          "name": "add_track",
+          "ok": true
+        },
+        {
+          "entry": 16,
+          "name": "add_track",
+          "ok": true
+        },
+        {
+          "entry": 17,
+          "name": "inspect_audio",
+          "ok": true
+        },
+        {
+          "entry": 18,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 19,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 20,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 21,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 22,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 23,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 24,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 25,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 26,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 27,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 28,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 29,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 30,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 31,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 32,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 33,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 34,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 35,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 36,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 37,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 38,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 39,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 40,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 41,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 42,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 43,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 44,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 45,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 46,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 47,
+          "name": "inspect_audio",
+          "ok": true
+        },
+        {
+          "entry": 48,
+          "name": "normalize_mix",
+          "ok": true
+        },
+        {
+          "entry": 49,
+          "name": "inspect_project",
+          "ok": true
+        },
+        {
+          "entry": 50,
+          "name": "inspect_audio",
+          "ok": true
+        }
+      ],
+      "inspections": [
+        {
+          "entry": 17,
+          "args": {
+            "start_bar": 9,
+            "bars": 4
+          },
+          "revision_line": "Rendered audio inspection, document revision 38.",
+          "measurements": {
+            "start_bar": 9,
+            "bars": 4,
+            "start_seconds": 15.0,
+            "seconds": 7.5,
+            "sample_rate": 48000.0,
+            "peak_dbfs": null,
+            "rms_dbfs": null,
+            "samples_at_or_above_full_scale": 0,
+            "silent": true,
+            "track": null,
+            "tracks": [
+              {
+                "id": 1,
+                "name": "Track 1",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 3,
+                "name": "コード伴奏",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 4,
+                "name": "ベース",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 5,
+                "name": "ポップ・ドラム",
+                "mute": false,
+                "solo": false
+              }
+            ],
+            "harmony_at_bar_starts": [
+              {
+                "bar": 9,
+                "key": "D major",
+                "chord": "G"
+              },
+              {
+                "bar": 10,
+                "key": "D major",
+                "chord": "A"
+              },
+              {
+                "bar": 11,
+                "key": "D major",
+                "chord": "F#m"
+              },
+              {
+                "bar": 12,
+                "key": "D major",
+                "chord": "Bm"
+              }
+            ],
+            "score_note_count": 0,
+            "score_truncated": false,
+            "score_representation": "authored notes before performance transforms; includes muted score parts",
+            "render_representation": "actual mix with mute/solo, or requested track solo routing; no appended tail",
+            "mel_representation": "2048-frame Hann FFT; 64 triangular HTK mel filters; average channel power; fixed power reference 1; display -90 to 0 dB"
+          }
+        },
+        {
+          "entry": 47,
+          "args": {
+            "start_bar": 9,
+            "bars": 4
+          },
+          "revision_line": "Rendered audio inspection, document revision 592.",
+          "measurements": {
+            "start_bar": 9,
+            "bars": 4,
+            "start_seconds": 15.0,
+            "seconds": 7.5,
+            "sample_rate": 48000.0,
+            "peak_dbfs": -11.29941492106324,
+            "rms_dbfs": -30.226279208550167,
+            "samples_at_or_above_full_scale": 0,
+            "silent": false,
+            "track": null,
+            "tracks": [
+              {
+                "id": 1,
+                "name": "Track 1",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 3,
+                "name": "コード伴奏",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 4,
+                "name": "ベース",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 5,
+                "name": "ポップ・ドラム",
+                "mute": false,
+                "solo": false
+              }
+            ],
+            "harmony_at_bar_starts": [
+              {
+                "bar": 9,
+                "key": "D major",
+                "chord": "G"
+              },
+              {
+                "bar": 10,
+                "key": "D major",
+                "chord": "A"
+              },
+              {
+                "bar": 11,
+                "key": "D major",
+                "chord": "F#m"
+              },
+              {
+                "bar": 12,
+                "key": "D major",
+                "chord": "Bm"
+              }
+            ],
+            "score_note_count": 150,
+            "score_truncated": false,
+            "score_representation": "authored notes before performance transforms; includes muted score parts",
+            "render_representation": "actual mix with mute/solo, or requested track solo routing; no appended tail",
+            "mel_representation": "2048-frame Hann FFT; 64 triangular HTK mel filters; average channel power; fixed power reference 1; display -90 to 0 dB"
+          }
+        },
+        {
+          "entry": 50,
+          "args": {
+            "start_bar": 9,
+            "bars": 4
+          },
+          "revision_line": "Rendered audio inspection, document revision 596.",
+          "measurements": {
+            "start_bar": 9,
+            "bars": 4,
+            "start_seconds": 15.0,
+            "seconds": 7.5,
+            "sample_rate": 48000.0,
+            "peak_dbfs": -1.015180021942229,
+            "rms_dbfs": -19.942044628888716,
+            "samples_at_or_above_full_scale": 0,
+            "silent": false,
+            "track": null,
+            "tracks": [
+              {
+                "id": 1,
+                "name": "Track 1",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 3,
+                "name": "コード伴奏",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 4,
+                "name": "ベース",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 5,
+                "name": "ポップ・ドラム",
+                "mute": false,
+                "solo": false
+              }
+            ],
+            "harmony_at_bar_starts": [
+              {
+                "bar": 9,
+                "key": "D major",
+                "chord": "G"
+              },
+              {
+                "bar": 10,
+                "key": "D major",
+                "chord": "A"
+              },
+              {
+                "bar": 11,
+                "key": "D major",
+                "chord": "F#m"
+              },
+              {
+                "bar": 12,
+                "key": "D major",
+                "chord": "Bm"
+              }
+            ],
+            "score_note_count": 150,
+            "score_truncated": false,
+            "score_representation": "authored notes before performance transforms; includes muted score parts",
+            "render_representation": "actual mix with mute/solo, or requested track solo routing; no appended tail",
+            "mel_representation": "2048-frame Hann FFT; 64 triangular HTK mel filters; average channel power; fixed power reference 1; display -90 to 0 dB"
+          }
+        }
+      ],
+      "model_messages": [
+        "Dメジャー、128 BPMの明るいポップ曲にします。前半8小節、サビ6小節、締め2小節の構成で、メロディーにコード伴奏・ベース・ドラムを付けます。\n",
+        "16小節の明るいポップ曲を作成しました。\n\n- Dメジャー／128 BPM、約30秒\n- Aメロ8小節 → サビ6小節 → エンディング2小節\n- ピアノのメロディー＋ギター伴奏・ベース・ドラム\n\n構成と音量を確認済みです。変更は未保存で、Undoできます。"
+      ],
+      "normalization_results": [
+        "Moved source faders +10.28 dB. Mix -27.7 -> -17.4 LUFS; true peak -11.3 -> -1.0 dBTP. Target -16.0 LUFS, ceiling -1.0 dBTP. Changes are unsaved; inspect_audio again before judging the sound."
+      ],
+      "evidence": {
+        "result": ".local-evaluations/codex-autonomous-2026-10-21/composition-result/result.json",
+        "result_sha256": "3f9fa0ed87e729f75e357fed6813a3d5b386d707ddf0a8f8276347b8c0c08173",
+        "project_after_sha256": "feb69d450f476e1d89325033873dc91ccd1832a4184de6229beb12f1fc839521",
+        "saved_project_sha256": "feb69d450f476e1d89325033873dc91ccd1832a4184de6229beb12f1fc839521",
+        "log_sha256": "e82774e9294f00f949a1d1c87c736a1cf2ce57b4b2efe1593b5619a98ffb44e4"
+      }
+    },
+    {
+      "id": "explicit_listen_revise_listen",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "elapsed_seconds": 82.8729616,
+      "failure": null,
+      "prompt": "16小節の明るいポップ曲を新しく作ってください。メロディーと伴奏を付け、イントロやサビなどのセクションも設定してください。レンダリングした音声を実際に聴いて、気になる点があれば修正し、同じ箇所をもう一度聴いて仕上げてください。",
+      "tracks": 4,
+      "notes": 482,
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 124.0
+          }
+        ]
+      },
+      "sections": {
+        "points": [
+          {
+            "tick": 0,
+            "label": "イントロ"
+          },
+          {
+            "tick": 7680,
+            "label": "Aメロ"
+          },
+          {
+            "tick": 23040,
+            "label": "サビ前"
+          },
+          {
+            "tick": 30720,
+            "label": "サビ"
+          },
+          {
+            "tick": 53760,
+            "label": "アウトロ"
+          },
+          {
+            "tick": 61440,
+            "label": null
+          }
+        ]
+      },
+      "tool_counts": {
+        "inspect_audio": 3,
+        "normalize_mix": 1,
+        "listen": 0
+      },
+      "tool_sequence": [
+        {
+          "entry": 1,
+          "name": "inspect_project",
+          "ok": true
+        },
+        {
+          "entry": 3,
+          "name": "set_tempo",
+          "ok": true
+        },
+        {
+          "entry": 4,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 5,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 6,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 7,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 8,
+          "name": "edit_harmony",
+          "ok": true
+        },
+        {
+          "entry": 9,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 10,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 11,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 12,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 13,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 14,
+          "name": "search_instruments",
+          "ok": true
+        },
+        {
+          "entry": 15,
+          "name": "rename_track",
+          "ok": true
+        },
+        {
+          "entry": 16,
+          "name": "add_track",
+          "ok": true
+        },
+        {
+          "entry": 17,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 18,
+          "name": "add_track",
+          "ok": true
+        },
+        {
+          "entry": 19,
+          "name": "add_track",
+          "ok": true
+        },
+        {
+          "entry": 20,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 21,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 22,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 23,
+          "name": "set_instrument",
+          "ok": true
+        },
+        {
+          "entry": 24,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 25,
+          "name": "add_clip",
+          "ok": true
+        },
+        {
+          "entry": 26,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 27,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 28,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 29,
+          "name": "set_level",
+          "ok": true
+        },
+        {
+          "entry": 30,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 31,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 32,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 33,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 34,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 35,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 36,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 37,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 38,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 39,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 40,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 41,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 42,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 43,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 44,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 45,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 46,
+          "name": "add_notes",
+          "ok": true
+        },
+        {
+          "entry": 47,
+          "name": "inspect_project",
+          "ok": true
+        },
+        {
+          "entry": 48,
+          "name": "inspect_audio",
+          "ok": true
+        },
+        {
+          "entry": 49,
+          "name": "read_mixer_graph",
+          "ok": true
+        },
+        {
+          "entry": 50,
+          "name": "normalize_mix",
+          "ok": true
+        },
+        {
+          "entry": 52,
+          "name": "inspect_audio",
+          "ok": true
+        },
+        {
+          "entry": 53,
+          "name": "inspect_audio",
+          "ok": true
+        },
+        {
+          "entry": 54,
+          "name": "inspect_project",
+          "ok": true
+        }
+      ],
+      "inspections": [
+        {
+          "entry": 48,
+          "args": {
+            "start_bar": 9,
+            "bars": 4
+          },
+          "revision_line": "Rendered audio inspection, document revision 537.",
+          "measurements": {
+            "start_bar": 9,
+            "bars": 4,
+            "start_seconds": 15.483870967741936,
+            "seconds": 7.741935483870968,
+            "sample_rate": 48000.0,
+            "peak_dbfs": -17.0797776218184,
+            "rms_dbfs": -33.905108011299475,
+            "samples_at_or_above_full_scale": 0,
+            "silent": false,
+            "track": null,
+            "tracks": [
+              {
+                "id": 1,
+                "name": "ピアノ伴奏",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 2,
+                "name": "メロディー",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 3,
+                "name": "ベース",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 4,
+                "name": "ドラム",
+                "mute": false,
+                "solo": false
+              }
+            ],
+            "harmony_at_bar_starts": [
+              {
+                "bar": 9,
+                "key": "C major",
+                "chord": "C"
+              },
+              {
+                "bar": 10,
+                "key": "C major",
+                "chord": "G"
+              },
+              {
+                "bar": 11,
+                "key": "C major",
+                "chord": "Am"
+              },
+              {
+                "bar": 12,
+                "key": "C major",
+                "chord": "F"
+              }
+            ],
+            "score_note_count": 145,
+            "score_truncated": false,
+            "score_representation": "authored notes before performance transforms; includes muted score parts",
+            "render_representation": "actual mix with mute/solo, or requested track solo routing; no appended tail",
+            "mel_representation": "2048-frame Hann FFT; 64 triangular HTK mel filters; average channel power; fixed power reference 1; display -90 to 0 dB"
+          }
+        },
+        {
+          "entry": 52,
+          "args": {
+            "start_bar": 9,
+            "bars": 4
+          },
+          "revision_line": "Rendered audio inspection, document revision 541.",
+          "measurements": {
+            "start_bar": 9,
+            "bars": 4,
+            "start_seconds": 15.483870967741936,
+            "seconds": 7.741935483870968,
+            "sample_rate": 48000.0,
+            "peak_dbfs": -1.4348503663719216,
+            "rms_dbfs": -18.260180425918684,
+            "samples_at_or_above_full_scale": 0,
+            "silent": false,
+            "track": null,
+            "tracks": [
+              {
+                "id": 1,
+                "name": "ピアノ伴奏",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 2,
+                "name": "メロディー",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 3,
+                "name": "ベース",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 4,
+                "name": "ドラム",
+                "mute": false,
+                "solo": false
+              }
+            ],
+            "harmony_at_bar_starts": [
+              {
+                "bar": 9,
+                "key": "C major",
+                "chord": "C"
+              },
+              {
+                "bar": 10,
+                "key": "C major",
+                "chord": "G"
+              },
+              {
+                "bar": 11,
+                "key": "C major",
+                "chord": "Am"
+              },
+              {
+                "bar": 12,
+                "key": "C major",
+                "chord": "F"
+              }
+            ],
+            "score_note_count": 145,
+            "score_truncated": false,
+            "score_representation": "authored notes before performance transforms; includes muted score parts",
+            "render_representation": "actual mix with mute/solo, or requested track solo routing; no appended tail",
+            "mel_representation": "2048-frame Hann FFT; 64 triangular HTK mel filters; average channel power; fixed power reference 1; display -90 to 0 dB"
+          }
+        },
+        {
+          "entry": 53,
+          "args": {
+            "start_bar": 15,
+            "bars": 2
+          },
+          "revision_line": "Rendered audio inspection, document revision 541.",
+          "measurements": {
+            "start_bar": 15,
+            "bars": 2,
+            "start_seconds": 27.096774193548388,
+            "seconds": 3.870967741935484,
+            "sample_rate": 48000.0,
+            "peak_dbfs": -2.074191729609053,
+            "rms_dbfs": -20.756585812697516,
+            "samples_at_or_above_full_scale": 0,
+            "silent": false,
+            "track": null,
+            "tracks": [
+              {
+                "id": 1,
+                "name": "ピアノ伴奏",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 2,
+                "name": "メロディー",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 3,
+                "name": "ベース",
+                "mute": false,
+                "solo": false
+              },
+              {
+                "id": 4,
+                "name": "ドラム",
+                "mute": false,
+                "solo": false
+              }
+            ],
+            "harmony_at_bar_starts": [
+              {
+                "bar": 15,
+                "key": "C major",
+                "chord": "F"
+              },
+              {
+                "bar": 16,
+                "key": "C major",
+                "chord": "C"
+              }
+            ],
+            "score_note_count": 36,
+            "score_truncated": false,
+            "score_representation": "authored notes before performance transforms; includes muted score parts",
+            "render_representation": "actual mix with mute/solo, or requested track solo routing; no appended tail",
+            "mel_representation": "2048-frame Hann FFT; 64 triangular HTK mel filters; average channel power; fixed power reference 1; display -90 to 0 dB"
+          }
+        }
+      ],
+      "model_messages": [
+        "16小節で、イントロ→Aメロ→サビ前→サビ→アウトロの構成にします。\nなお、この環境には音声を実際に聴く手段がありません。レンダリングの音量・ピークなどを確認し、調整後に同じ箇所を再検査しますが、聴感確認はできません。",
+        "メロディー、ピアノ伴奏、ベース、ドラムと、5つのセクションを設定しました。サビの初回レンダリングはピークが約−17.1 dBFSだったため、全体の音量を調整しました。目標の−18 LUFS／最大−1 dBTPに到達しており、同じサビ区間を再検査します。",
+        "16小節の明るいポップ曲を作成しました。Cメジャー、124 BPM。ギターのメロディーにピアノ、ベース、ドラムを付けています。\n\n- 1〜2小節：イントロ\n- 3〜6小節：Aメロ\n- 7〜8小節：サビ前\n- 9〜14小節：サビ\n- 15〜16小節：アウトロ\n\n音量を調整し、同じサビ区間を再レンダリングして測定確認しました。全体は−18 LUFS、最大−1 dBTPです。\n\n**実際の試聴は、この環境ではできていません。** 変更は未保存で、Undoできます。"
+      ],
+      "normalization_results": [
+        "Moved source faders +15.64 dB. Mix -33.6 -> -18.0 LUFS; true peak -16.7 -> -1.0 dBTP. Target -18.0 LUFS, ceiling -1.0 dBTP. Changes are unsaved; inspect_audio again before judging the sound."
+      ],
+      "evidence": {
+        "result": ".local-evaluations/agent-listening-audit-2026-10-21/explicit-result/result.json",
+        "result_sha256": "3d7cbb59a1189ff190779904d516c6433c922aa37454d93ab0c991a2e1a49414",
+        "project_after_sha256": "8ab761cecdb9864143db7213faa785dbaf8e5ae6debe1e04df50e5dc6e01db72",
+        "saved_project_sha256": "8ab761cecdb9864143db7213faa785dbaf8e5ae6debe1e04df50e5dc6e01db72",
+        "log_sha256": "b75e14bfcb35ba2dd4bc379f4d5c5c62c87c00bc80dbe89992e0330a97db60fb"
+      }
+    }
+  ],
+  "separate_saved_mcp_probe": {
+    "elapsed_seconds": 18.13920710000093,
+    "model": "gemma4:e2b",
+    "audio_sent": true,
+    "range": {
+      "start_bar": 9,
+      "bars": 4
+    },
+    "review": "Okay, I will review the first audio excerpt.\n\n**Audible Musical Details:**\n\nThe excerpt appears to contain some form of instrumental music. I can hear what sounds like a melodic element, possibly played by a string instrument or a synth, and some rhythmic elements. The overall sound is somewhat indistinct, making it difficult to pinpoint specific instruments with certainty.\n\n**Uncertainty:**\n\nThere is a significant lack of clear musical information in this short excerpt. I cannot definitively identify the instruments present, their relative balance, or the overall musical style.\n\n**Mix Correction:**\n\nBased on this short excerpt, I cannot provide any specific mix corrections. There is not enough information to make any informed decisions about how the audio should be adjusted.\n\n**Concrete Local Change:**\n\nI cannot suggest any concrete local changes based on this excerpt.",
+    "measurements": "Wrote [retained preview WAV] — 00:07.500, 2 ch, 16-bit, peak 0.1 dBFS.\nWarning: the rendered signal exceeds 0 dBFS. Integer WAV output clips; reduce gain before using this export.\n",
+    "project_unchanged": true,
+    "source_project_sha256": "feb69d450f476e1d89325033873dc91ccd1832a4184de6229beb12f1fc839521",
+    "audio": {
+      "sha256": "4329e41ac065972274cc26096c2b36488e35e980d6ba32b24fbe1ad80f7370fd",
+      "bytes": 720044,
+      "seconds": 7.5,
+      "sample_rate": 24000,
+      "channels": 2,
+      "bit_depth": 16,
+      "signed_int16_endpoint_samples": 1
+    },
+    "response_sha256": "32ea37214c2a7ee134a13362e02bfa87570ae940ec3ce57e00094eb2a9227f7e",
+    "no_edit_reason": "Critic declined to suggest any concrete local correction.",
+    "environment": {
+      "overrides_set": false,
+      "credential_setting_present": false,
+      "default_ollama_available": true,
+      "default_model_advertises_audio": true,
+      "optional_bridge_11435_available": false
+    }
+  },
+  "open_findings": [
+    "Live tool catalog has no listen operation; inspection returns text and PNG rather than audio.",
+    "Saved-project listen cannot capture unsaved edits in the active session.",
+    "Default critic returned uncertain descriptions and no supported correction in this probe.",
+    "Actual 24 kHz critic preview warned of integer clipping despite earlier clean 48 kHz live inspection; render difference not isolated."
+  ],
+  "checks": {
+    "real_controller_composition": "passed",
+    "live_catalog_test": "passed (1)",
+    "saved_listening_tests": "passed (3); scripted critic, transport assertions only",
+    "cargo_fmt_all": "passed; no Rust changes",
+    "cargo_clippy_workspace_all_targets": "passed; existing proc-macro-error2 future-incompatibility warning",
+    "evidence_validation": "raw result hashes, tool counts, passing test logs and report links verified"
+  }
+}

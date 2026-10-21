@@ -249,6 +249,18 @@ impl Bridge {
         auris_session::AnalysisControl::cancelled_by(self.0.stopped.clone())
     }
 
+    pub(super) fn retain_audio_export(
+        &self,
+        id: &str,
+        copy: auris_session::AudioAttachmentCopy,
+    ) -> Result<Arc<auris_session::AudioAttachmentCopy>, String> {
+        self.0
+            .audio_references
+            .lock()
+            .map_err(|_| "Audio reference storage failed")?
+            .retain_export(id, copy)
+    }
+
     pub(super) fn set_vision(&self, vision: bool) {
         self.0.vision.store(vision, Ordering::Relaxed);
     }

@@ -1,6 +1,9 @@
 //! File-free commands for the agent attached to an open session.
 
 use crate::{Session, prelude::*};
+mod harmony;
+mod vocals;
+pub use vocals::{VocalJob, VocalResult, VocalStep};
 fn sound_search_limit() -> usize {
     10
 }
@@ -19,6 +22,64 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Write the document's key, Roman-numeral chord progression and/or section label across a bounded bar range. For a new song, write its harmony and named form (intro, verse, chorus, bridge, outro as appropriate) before adding notes. Changes metadata only; existing notes and mix are preserved. One Undo reverts the edit; changes remain unsaved.
+    EditHarmony {
+        /// First bar, 1-based.
+        #[schemars(range(min = 1))]
+        start_bar: u32,
+        /// Duration in bars, 1..4096. Charts repeat to fill this range.
+        #[schemars(range(min = 1, max = 4096))]
+        bars: u32,
+        /// Optional key such as D major or A minor; restored to the prior key after the range.
+        key: Option<String>,
+        /// Roman chart, e.g. | I | vi | IV | V |; interpreted in the supplied or current key.
+        chords: Option<String>,
+        /// Optional section name for this range, e.g. Intro or Chorus. Replaces internal section changes and restores the previous section after the range. Supply section alone to write structure without changing harmony.
+        section: Option<String>,
+        /// Clear this range instead of supplying chords.
+        #[serde(default)]
+        clear_chords: bool,
+    },
+    /// Discover installed singing voices in pages of 16 without loading their models. Copy a returned voice path into set_singer_voice. Discovery is not validation; no models are downloaded.
+    ListVoices {
+        /// Zero-based page offset; follow next_offset.
+        #[serde(default)]
+        offset: usize,
+    },
+    /// Read one singer's selected voice, available speakers, and whether its take is missing, current or stale. Does not load a model. Call after voice selection, lyrics, and singing to verify the result.
+    InspectSinger {
+        /// Stable singer track ID.
+        track: u64,
+        /// Zero-based speaker offset; follow next_offset for voices with more than 128 speakers.
+        #[serde(default)]
+        offset: usize,
+    },
+    /// Choose a local installed singing voice and optional speaker for a singer track. Use list_voices for paths, then inspect_singer for speaker names. To change speaker, repeat the selected voice path with a speaker. Validates before editing; failure leaves the track unchanged. One Undo; unsaved. Remote network/device model paths and remote VOICEVOX servers are refused; local loopback VOICEVOX is supported.
+    SetSingerVoice {
+        /// Stable singer track ID.
+        track: u64,
+        /// Absolute local voice entry path returned by list_voices or explicitly supplied by the user.
+        voice: String,
+        /// Exact speaker name; omit for the voice's default. Unknown names are refused with available names.
+        speaker: Option<String>,
+    },
+    /// Write lyrics across a singer clip's notes in time order. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Later unfilled notes keep their words. Returns filled count and available notes; one Undo, unsaved. Use read_notes to verify before sing.
+    WriteLyrics {
+        /// Stable singer clip ID.
+        clip: u64,
+        /// Nonempty phrase, e.g. さくらさいた.
+        #[schemars(length(min = 1, max = 16384))]
+        text: String,
+        /// Zero-based storage index from read_notes; notes from this position in time order receive lyrics.
+        from: Option<usize>,
+    },
+    /// Synthesize the selected singer's notes and lyrics into an actual playback take on a cancellable worker. Select a voice with set_singer_voice and write_lyrics first. Publishes only if the document is unchanged; one Undo restores the prior take. Does not save the project. Inspect_singer confirms the resulting take; a guide voice is not a completed vocal render.
+    Sing {
+        /// Stable singer track ID.
+        track: u64,
+        /// Optional take seed; preserves the previous seed, or uses 0 for a first take.
+        seed: Option<u64>,
+    },
     /// Apply an already computed polyphonic draft as a new editable piano track.
     CreatePianoCover {
         /// Validated local transcription; supplied by the attachment host, never a file path.
@@ -26,6 +87,15 @@ pub enum Command {
         /// New track and clip name.
         name: String,
         /// Insertion position in zero-based quarter-note beats.
+        at_beat: f64,
+    },
+    /// Import an externally computed note draft as a new piano track. Source seconds and overlapping notes are preserved. Provenance is caller-declared, not a claim of faithful recognition. One Undo, unsaved; review with read_notes/inspect_audio.
+    ImportTranscription {
+        /// Recognizer-independent validated events, method provenance and limitations.
+        transcription: crate::NoteTranscription,
+        /// Nonempty new track and clip name, at most 256 bytes.
+        name: String,
+        /// Insertion beat, finite and within 0..1000000.
         at_beat: f64,
     },
     /// Read or edit the live mixer DAG through stable node identities.
@@ -55,6 +125,19 @@ pub enum Command {
         bars: u32,
         /// Optional track ID for solo routing; omit for the mix.
         track: Option<u64>,
+    },
+    /// Render the current unsaved mix and send actual WAV audio to the configured audio critic (AURIS_AUDIO_URL/MODEL). Returns fallible observations, exact WAV measurements, document revision and audition_id. Start inside the arrangement; 1..8 bars, at most 30 seconds. For composition, review a completed phrase, make a supported local edit, read back its state, then listen to the same bars with compare_to set to the earlier audition_id. No edit is required when the critic cannot judge. The latest four IDs are retained in this open document. No save or Undo; network permission applies. This is a separate model's review, not proof that you heard the music.
+    Listen {
+        /// First bar, starting at 1.
+        #[schemars(range(min = 1))]
+        start_bar: u32,
+        /// Number of bars, 1..8, fitting at most thirty seconds.
+        #[schemars(range(min = 1, max = 8))]
+        bars: u32,
+        /// Short question about audible instrumentation, balance or phrasing, up to 4000 bytes.
+        focus: Option<String>,
+        /// Opaque audition_id from this open document, with the same bars and timing.
+        compare_to: Option<String>,
     },
     /// List available built-in instruments, loaded SoundFont sounds, and installed CLAP/VST3 instruments. Copy a returned id into set_instrument. Results are paged; keep the same query when following next_offset.
     ListInstruments {
@@ -335,6 +418,76 @@ impl Session {
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::EditHarmony {
+                start_bar,
+                bars,
+                key,
+                chords,
+                section,
+                clear_chords,
+            } => self.agent_edit_harmony(
+                start_bar,
+                bars,
+                key.as_deref(),
+                chords.as_deref(),
+                clear_chords,
+                section.as_deref(),
+            ),
+            Command::WriteLyrics { clip, text, from } => {
+                if text.trim().is_empty() || text.len() > 16384 {
+                    return Err("text must contain lyrics within 16384 UTF-8 bytes".into());
+                }
+                let (track, target) = self
+                    .project()
+                    .midi_clip(ClipId(clip))
+                    .ok_or("Unknown MIDI clip ID")?;
+                if !self
+                    .project()
+                    .track(track)
+                    .is_some_and(|t| t.kind.is_singer())
+                {
+                    return Err("write_lyrics requires a singer clip".into());
+                }
+                if target.notes.is_empty() || from.is_some_and(|from| from >= target.notes.len()) {
+                    return Err(
+                        "from must be a current zero-based note index from read_notes".into(),
+                    );
+                }
+                let mut indices: Vec<_> = (0..target.notes.len()).collect();
+                indices.sort_by_key(|i| (target.notes[*i].start, *i));
+                let first = from
+                    .map(|from| {
+                        indices
+                            .iter()
+                            .position(|i| *i == from)
+                            .ok_or("Unknown note index")
+                    })
+                    .transpose()?
+                    .unwrap_or(0);
+                let indices = &indices[first..];
+                let filled = self
+                    .write_lyrics(ClipId(clip), indices, &text)
+                    .map_err(error)?;
+                Ok(
+                    serde_json::json!({"filled":filled,"available":indices.len(),"unsaved":true})
+                        .to_string(),
+                )
+            }
+            Command::InspectSinger { track, offset } => {
+                self.agent_inspect_singer(TrackId(track), offset)
+            }
+            command @ (Command::ListVoices { .. }
+            | Command::SetSingerVoice { .. }
+            | Command::Sing { .. }) => {
+                let cancelled = std::sync::atomic::AtomicBool::new(false);
+                let mut job = self.begin_agent_vocal(command, crate::Settings::load())?;
+                loop {
+                    match self.continue_agent_vocal(job.run(&cancelled)?)? {
+                        VocalStep::Work(next) => job = *next,
+                        VocalStep::Done(text) => return Ok(text),
+                    }
+                }
+            }
             Command::CreatePianoCover {
                 transcription,
                 name,
@@ -350,6 +503,22 @@ impl Session {
                 Ok(serde_json::json!({"track":track.0,"clip":clip.0,"notes":count,
                     "model_sha256":transcription.model_sha256,"source_seconds":transcription.seconds,
                     "status":"Added an editable piano transcription draft. Review missed/extra notes and timing. Changes are unsaved and undoable; use inspect_audio/read_notes to review."}).to_string())
+            }
+            Command::ImportTranscription {
+                transcription,
+                name,
+                at_beat,
+            } => {
+                if !at_beat.is_finite() || !(0.0..=1_000_000.0).contains(&at_beat) {
+                    return Err("at_beat must be finite and within 0..1000000".into());
+                }
+                let (track, clip) = self
+                    .import_transcription(&transcription, Ticks::from_beats(at_beat), &name)
+                    .map_err(error)?;
+                Ok(serde_json::json!({"track":track.0,"clip":clip.0,"notes":transcription.notes.len(),
+                    "source":transcription.source,"source_seconds":transcription.seconds,
+                    "limitations":transcription.limitations,"provenance_verified":false,
+                    "unsaved":true,"status":"Added an editable piano note draft. Review extra/missing notes and timing; one Undo removes it."}).to_string())
             }
             Command::MixerGraph { operation } => self
                 .apply_mixer_graph(&operation)
@@ -417,6 +586,17 @@ impl Session {
                     .audio_inspection_job(start_bar, bars, track)?
                     .run(&std::sync::atomic::AtomicBool::new(false))?;
                 serde_json::to_string(&report).map_err(|e| e.to_string())
+            }
+            Command::Listen {
+                start_bar,
+                bars,
+                focus,
+                compare_to,
+            } => {
+                let job =
+                    self.begin_listening(start_bar, bars, focus.as_deref(), compare_to.as_deref())?;
+                let result = job.run(&std::sync::atomic::AtomicBool::new(false))?;
+                self.continue_listening(result)
             }
             Command::ReadNotes { clip, offset } => {
                 let (_, clip) = self

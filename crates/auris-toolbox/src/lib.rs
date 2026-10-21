@@ -62,6 +62,7 @@ pub mod mixer_graph;
 mod project_files;
 mod recognition;
 mod reports;
+mod transcription;
 pub use reports::read_report;
 pub mod plugin_paths;
 pub mod replace_notes;
@@ -87,6 +88,7 @@ pub use recognition::{
     analyze_audio, analyze_chords, analyze_instruments, transcribe_audio, transcribe_mixture,
 };
 pub use track_editing::{convert_track_to_audio, routing, set_instrument_param, set_track_state};
+pub use transcription::import_transcription;
 
 /// What a model is told before it has called anything.
 ///
@@ -116,6 +118,10 @@ For manual work, create_project starts empty; import_audio adds an audio track a
 import_midi creates a new project from MIDI. export_midi writes the instrumental score.
 For a new composition: spec_reference teaches the TOML .asong format; list_presets and
 list_progressions provide vocabulary. check_spec validates; compose saves the new project.
+Write a named form with section definitions and the form list, using Intro, Verse, Chorus,
+Bridge and Outro where appropriate. Section lengths must cover the intended arrangement;
+clip names and prose outlines do not create section metadata. Verify saved sections with
+inspect_composition before claiming completion. Keep deliberately simple loops simple.
 For a local change: edit_harmony changes harmony without rewriting notes; edit_recipe changes
 recipe controls. regenerate_clips regenerates selected clips with take kind same, next or seed.
 Regeneration requires explicit replace_hand_edits for manually edited generated notes.
@@ -396,6 +402,7 @@ pub const WRITES_PROJECTS: &[&str] = &[
     create_project::NAME,
     import_audio::NAME,
     import_midi::NAME,
+    import_transcription::NAME,
     routing::NAME,
     set_track_state::NAME,
     convert_track_to_audio::NAME,

@@ -32,6 +32,42 @@ pub mod piano_cover {
     }
 }
 
+/// Access to an isolated original-audio copy for local analysis tools.
+pub mod audio_attachment {
+    /// Stable live tool name.
+    pub const NAME: &str = "export_audio_attachment";
+    /// Guidance shared by all live transports.
+    pub const DESCRIPTION: &str = "Get a separate local analysis copy of an attached original audio file. Supply attachment_id, never a source path. Returns an absolute audio_path, original byte SHA-256 and size without resampling or changing channels. Use local analysis code/tools when the model cannot hear audio. No project edit, automatic model download or audio upload. One current copy per attachment; re-export replaces the previous path, and conversation expiry removes it. Do not modify the returned copy or claim listening from file delivery alone. Use import_transcription for the resulting note JSON; create_piano_cover remains the bundled local recognizer shortcut.";
+    /// An existing conversation-local source identity.
+    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+    #[serde(deny_unknown_fields)]
+    pub struct Args {
+        /// Exact attachment_id from this conversation's audio metadata.
+        pub attachment: String,
+    }
+}
+
+/// Import an external recognizer's events without impersonating a bundled model.
+pub mod transcription_import {
+    /// Stable live tool name.
+    pub const NAME: &str = "import_transcription";
+    /// Tool instructions shared by native APIs, Codex and Claude Code.
+    pub const DESCRIPTION: &str = "Import an already computed piano note draft from any recognizer, as one new editable physical-piano track. Supply exactly one of transcription (inline) or path (absolute local JSON file, at most 32 MiB). JSON has source:{method, optional model/artifact_sha256/audio_sha256}, seconds, notes:[{pitch,start,end,strength}], optional limitations. Times are original source seconds; pitch 21..108, strength 0..1, finite positive duration up to ten minutes, 1..200000 notes. Preserve overlapping pitches. Declare uniform dynamics/simplifications in limitations when uncertain; do not invent a transcription from filenames, tempo or chords. Provenance is a caller claim, not verification. export_audio_attachment provides actual source bytes for local analysis. Keeps existing music and tempo; one Undo, unsaved. Review with read_notes/inspect_audio.";
+    /// Inline or file input and insertion options.
+    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+    #[serde(deny_unknown_fields)]
+    pub struct Args {
+        /// Inline draft; omit when path is provided.
+        pub transcription: Option<auris_session::NoteTranscription>,
+        /// Absolute local JSON path; omit when transcription is provided.
+        pub path: Option<String>,
+        /// New track/clip name; defaults to Transcription.
+        pub name: Option<String>,
+        /// Insertion beat, defaults to zero; source-relative timing is preserved.
+        pub at_beat: Option<f64>,
+    }
+}
+
 /// List exact live instrument identifiers without saved-project-only arguments.
 pub fn instruments() -> String {
     match super::headless() {
@@ -69,6 +105,14 @@ pub fn definitions() -> Vec<Definition> {
                     name: piano_cover::NAME.into(),
                     description: piano_cover::DESCRIPTION.into(),
                     parameters: super::parameter_schema::<piano_cover::Args>(),
+                });
+                continue;
+            }
+            if action == transcription_import::NAME {
+                tools.push(Definition {
+                    name: transcription_import::NAME.into(),
+                    description: transcription_import::DESCRIPTION.into(),
+                    parameters: super::parameter_schema::<transcription_import::Args>(),
                 });
                 continue;
             }
@@ -128,6 +172,11 @@ pub fn definitions() -> Vec<Definition> {
             });
         }
     }
+    tools.push(Definition {
+        name: audio_attachment::NAME.into(),
+        description: audio_attachment::DESCRIPTION.into(),
+        parameters: super::parameter_schema::<audio_attachment::Args>(),
+    });
     tools
 }
 
@@ -160,6 +209,7 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         | "search_instruments"
         | "similar_instruments"
         | "inspect_audio"
+        | "listen"
         | "read_notes"
         | "add_track"
         | "rename_track"
@@ -174,7 +224,13 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         | "add_clip"
         | "add_note"
         | "remove_notes"
-        | "replace_notes" => tool,
+        | "replace_notes"
+        | "edit_harmony"
+        | "list_voices"
+        | "inspect_singer"
+        | "set_singer_voice"
+        | "write_lyrics"
+        | "sing" => tool,
         _ => return Ok(None),
     };
     let mut object = args
@@ -286,6 +342,38 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_composition_and_vocal_workflows_are_callable_without_saved_project_arguments() {
+        for (name, args) in [
+            (
+                "edit_harmony",
+                serde_json::json!({"start_bar":1,"bars":4,"key":"D major","chords":"| I | IV | V | I |"}),
+            ),
+            (
+                "edit_harmony",
+                serde_json::json!({"start_bar":5,"bars":8,"section":"Chorus"}),
+            ),
+            ("list_voices", serde_json::json!({})),
+            ("inspect_singer", serde_json::json!({"track":1})),
+            (
+                "set_singer_voice",
+                serde_json::json!({"track":1,"voice":"/voices/test.voicevox.json","speaker":"First"}),
+            ),
+            (
+                "write_lyrics",
+                serde_json::json!({"clip":2,"text":"さくら"}),
+            ),
+            ("sing", serde_json::json!({"track":1,"seed":42})),
+        ] {
+            let definitions = definitions();
+            assert!(
+                definitions.iter().any(|tool| tool.name == name),
+                "missing {name}"
+            );
+            assert!(command(name, &args).unwrap().is_some(), "unresolved {name}");
+        }
+    }
 
     #[test]
     fn piano_cover_schema_accepts_only_a_scoped_attachment_and_insertion_options() {
@@ -470,6 +558,21 @@ mod tests {
     fn every_live_operation_has_a_round_tripping_flat_contract() {
         let fixtures = [
             (
+                "edit_harmony",
+                serde_json::json!({"start_bar":1,"bars":4,"key":null,"chords":"| I | IV | V | I |","section":"Chorus","clear_chords":false}),
+            ),
+            ("list_voices", serde_json::json!({"offset":0})),
+            ("inspect_singer", serde_json::json!({"track":1,"offset":0})),
+            (
+                "set_singer_voice",
+                serde_json::json!({"track":1,"voice":"/voice/test.voicevox.json","speaker":null}),
+            ),
+            (
+                "write_lyrics",
+                serde_json::json!({"clip":1,"text":"あ","from":null}),
+            ),
+            ("sing", serde_json::json!({"track":1,"seed":null})),
+            (
                 "search_instruments",
                 serde_json::json!({"query":"piano","limit":10,"offset":0,"refresh":false,"source":null,"library":null}),
             ),
@@ -485,6 +588,10 @@ mod tests {
             (
                 "inspect_audio",
                 serde_json::json!({"start_bar":1,"bars":1,"track":null}),
+            ),
+            (
+                "listen",
+                serde_json::json!({"start_bar":1,"bars":1,"focus":null,"compare_to":null}),
             ),
             (
                 "list_instruments",
@@ -533,7 +640,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            fixtures.len() + 1 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            fixtures.len() + 3 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (name, args) in fixtures {
             let tool = tools.iter().find(|tool| tool.name == name).unwrap();
@@ -590,7 +697,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            22 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            31 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))
@@ -603,7 +710,9 @@ mod tests {
             assert!(tool.parameters["properties"].get("action").is_none());
             assert!(tool.parameters["properties"].get("command").is_none());
             assert!(tool.parameters["properties"].get("spec").is_none());
-            assert!(tool.parameters["properties"].get("path").is_none());
+            if tool.name != transcription_import::NAME {
+                assert!(tool.parameters["properties"].get("path").is_none());
+            }
         }
     }
 }

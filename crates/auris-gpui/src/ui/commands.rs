@@ -1768,6 +1768,7 @@ impl AurisApp {
     pub(crate) fn sing_track(&mut self, cx: &mut Context<Self>) {
         if self.auto_sing.is_some()
             || self.choosing_export
+            || self.agent_vocal_busy()
             || self.export.as_ref().is_some_and(|e| e.result.is_none())
         {
             self.set_status(self.t(Key::ExportAlreadyRunning));
@@ -2188,6 +2189,7 @@ impl AurisApp {
         if self.auto_sing.is_some()
             || self.choosing_export
             || self.export.as_ref().is_some_and(|e| e.result.is_none())
+            || self.agent_vocal_busy()
         {
             return;
         }

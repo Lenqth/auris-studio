@@ -5,6 +5,62 @@ Codex CLI backends use the same live commands, permissions and Undo history. Sta
 `inspect_project`, then use `add_track`, `set_instrument`, `add_clip` and `add_notes`
 to construct the arrangement. Pass arguments directly without a command or action wrapper.
 
+## Live harmony and vocals
+
+For a new song, write its musical decisions into the document with `edit_harmony`, for example
+`{"start_bar":1,"bars":16,"key":"D major","chords":"| I | vi | IV | V |"}`.
+The chart repeats over the requested bars. The previous key resumes after the range;
+existing interior key points remain. The operation edits the key/chord map, preserves notes
+and mix, and is one Undo step. Audible chord notes alone do not populate this map.
+`clear_chords:true` clears the selected range; omit `chords` when clearing.
+
+Write the form into the section lane too. For example,
+`{"start_bar":1,"bars":4,"section":"Intro"}` and
+`{"start_bar":5,"bars":8,"section":"Chorus"}` are valid `edit_harmony` calls without
+key or chord changes. A label covers its requested range, replaces interior section
+changes and restores the previous label after the range. Labels must be nonempty,
+at most 256 UTF-8 bytes and contain no control characters. Notes and mix are preserved;
+one Undo reverts the range edit. Plan sections appropriate to the music when composing
+a new song and verify their positions with `inspect_project`. Clip names and a prose
+outline do not create section metadata. A short loop can remain one section.
+
+### Live vocal production
+
+Create a `singer` track and a note clip, then add its melody with `add_notes`.
+`list_voices` discovers installed voice entries in pages of 16; follow `next_offset`.
+Discovery does not validate or download a model. Use a returned absolute `voice` path in
+`set_singer_voice` with the numeric `track` ID. An optional `speaker` selects a named style.
+`inspect_singer` reads back the chosen voice, available speaker names, and take state.
+Speaker lists page at 128 names; follow `next_offset` as `offset` to read more.
+To change speaker, repeat the selected voice path with the desired name; invalid names or
+models leave the prior selection unchanged. Loading and inference use the existing local
+automatic-access policy: network/device model paths and remote VOICEVOX URLs are refused;
+local loopback VOICEVOX is supported and its Engine must already be running.
+
+`write_lyrics` takes `clip` and `text`, for example `{"clip":2,"text":"さくらさいた"}`.
+Kana is split into moras and phonemes; non-kana text requires the installed Japanese dictionary.
+Omit `from` to begin at the earliest note, or copy a zero-based storage index from `read_notes`
+to begin there in time order. This differs from the saved-file MCP tool's 1-based note number.
+Unfilled later notes retain their words. Check the returned `filled` count and `available`
+capacity and read back the notes before claiming the whole phrase was entered.
+
+Call `sing` with the singer's `track` and optional `seed` to create the actual playback take.
+The previous take seed is retained when omitted, or zero is used for the first take.
+`inspect_singer` returns `take_state:"current"` on completion, `"missing"` before synthesis,
+and `"stale"` when the score or voice has changed. A temporary guide voice is not a completed
+vocal take. Voice discovery, loading, synthesis and WAV staging run off the UI thread.
+Stopping the conversation cancels pending work; changed documents, superseded voice loads
+and revoked permissions cannot accept its results. Explicit agent work pauses automatic
+singer rendering until it finishes. Selection, lyrics and completed takes are separate
+Undo steps and remain unsaved; synthesis stages its audio in the session's working folder.
+
+All these live operations use the same permission gate for rig, Codex and Claude Code.
+Read-only/plan mode can list voices and inspect singers but cannot edit harmony, choose a
+voice, write lyrics, or apply a sung take. Errors are returned to the model, not reported as
+successful song production.
+
+### Track and note editing
+
 `add_track` takes a name and one string kind, for example
 `{"name":"Drums","kind":"drum"}`. Kinds are `instrument`, `drum`, `singer`, `audio`
 and `bus`. Copy the returned numeric track ID into `set_instrument` and `add_clip`;
@@ -60,6 +116,43 @@ results when the document revision changes during the render. No preview files a
 Permissions map these flat tools to the existing `edit_project.<action>` rules, so saved
 allow/deny rules and exact-command approvals continue to apply.
 
+### Listen to the unsaved document
+
+The in-app Codex, Claude Code and rig controllers expose `listen` for the open document. It renders
+the current unsaved mix and uploads actual WAV bytes to the configured audio critic,
+independently of whether the controller accepts audio input. No project path or save is
+needed. Configure `AURIS_AUDIO_URL` and `AURIS_AUDIO_MODEL` in the application environment
+as described below; the server and model must already be available.
+
+Call `listen` with `{"start_bar":9,"bars":4,"focus":"Describe the melody and accompaniment balance."}`.
+It returns `audition_id`, the captured document revision/range, `audio_sent`, the critic's
+review and measurements of both the source render and the actual encoded WAV. After a
+supported local edit, read back the affected notes or mixer and call `listen` on the same
+bars with `compare_to` set to the earlier `audition_id`. A tempo or meter change requires
+a new baseline. The last four raw excerpts are retained in the open session; replacing
+the document or closing the session expires them. IDs are opaque, not file paths.
+
+Each request covers 1–8 bars and at most 30 seconds, rendered at 48 kHz without effect
+tails. Both comparison excerpts use one common protective attenuation when needed for
+the -1 dB estimated true-peak ceiling. Quiet audio is never increased. The source mix
+stays unchanged, and source overloads remain visible in the measurements. Temporary
+16-bit WAVs are decoded and measured before submission, then removed after the request.
+The true-peak estimate uses 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+
+Listening uses the `edit_project.listen` network permission. Existing exact approvals,
+allow/deny rules and automatic review apply. It adds no Undo checkpoint. Rendering,
+encoding and inference run on a worker; changed documents and stopped conversations
+discard results. Cancellation prevents subsequent stages; an HTTP request already in
+flight can run until its bounded timeout.
+
+The controller receives a separate model's fallible observations. A successful upload
+is not proof of musical understanding. When the critic cannot judge or its service is
+unavailable, report that limitation and avoid unsupported edits. Only a supported
+correction should lead to a second review; measurements remain separate evidence.
+
+See the [backend validation](agent-listening-loop-validation.md) for the completed
+Codex trial and the Claude Code trials blocked by the account session limit.
+
 MCP retains the full saved-file tool catalog. The file-based composition, rendering and
 listening workflows below describe MCP.
 
@@ -82,6 +175,10 @@ OpenAI-compatible endpoint.
 
 ## Listen, revise, listen again
 
+The initial [live composition audit](agent-listening-loop-audit.md) found a missing
+live audio path. The live operation above addresses that integration; this section
+describes the separate saved-project MCP workflow, whose `compare_to` is a WAV path.
+
 The controller and the listener can be different models. Qwen/Ornith can choose
 editing tools while `listen` sends the rendered WAV to an audio-capable critic.
 The critic returns observations and has no tools that can modify the project.
@@ -95,6 +192,9 @@ The critic returns observations and has no tools that can modify the project.
    instrument, routing, effect or gain edits.
 4. After editing, read back the affected state, then call `listen` on the same bars. Pass the earlier
    `audio_path` as `compare_to` for an A/B review. Both actual audio files are attached.
+   Saved-file previews can have different protective attenuation; inspect their
+   measurements before interpreting absolute level differences. Live comparisons
+   above instead share one attenuation for both immutable excerpts.
 5. Keep, refine or restore the change according to the evidence. Stop when the
    requested result is met or the remaining uncertainty needs human judgment.
 
@@ -426,6 +526,11 @@ approval, and late results cannot approve another request. Review never creates 
 Always allow rule and never overrides a deny rule. It adds a model request for each
 review; it is a fallible recommendation, not an operating-system sandbox. Bypass
 continues to skip both human confirmation and automatic review.
+
+The reviewer also receives bounded current project-script snapshots and recent
+completed native calls. Long repeated command text is encoded without losing its
+contents. See [automatic approval evidence](agent-review-evidence.md) for the
+collection limits, integrity checks and remaining file-change race boundary.
 
 Compact context or `/compact` summarizes older exchanges with the configured model,
 without granting that model tools. The latest two completed exchanges are kept

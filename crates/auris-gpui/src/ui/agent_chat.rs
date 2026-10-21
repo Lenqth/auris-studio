@@ -31,6 +31,8 @@ use crate::ui::widgets::{
 
 pub(crate) mod controls;
 mod conversations;
+#[cfg(test)]
+mod transcription_eval;
 
 /// Maximum transcript rows retained in the panel.
 const CHAT_CAPACITY: usize = 500;
@@ -694,7 +696,9 @@ pub(crate) fn parse_model_list(line: &str) -> Result<Vec<ModelOption>, String> {
 struct AgentLink {
     worker: auris_agent::Worker,
     inspection: Option<PendingInspection>,
+    listening: Option<PendingListening>,
     sound_search: Option<PendingSoundSearch>,
+    vocal: Option<PendingVocal>,
 }
 
 /// Identity of the document for which an asynchronous panel operation was started.
@@ -716,10 +720,120 @@ struct PendingInspection {
     receiver: Receiver<Result<auris_session::audio_inspection::Inspection, String>>,
 }
 
+struct PendingListening {
+    revision: u64,
+    operation: auris_session::agent_policy::Operation,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    receiver: Receiver<Result<auris_session::audio_audition::ListeningResult, String>>,
+}
+
+impl PendingListening {
+    fn poll(
+        &self,
+        revision: u64,
+        same_document: bool,
+        policy: &auris_session::agent_policy::Policy,
+    ) -> Option<Result<auris_session::audio_audition::ListeningResult, String>> {
+        if self.revision != revision || !same_document {
+            self.cancel
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            return Some(Err(
+                "The document changed during listening; request a fresh audition".into(),
+            ));
+        }
+        if let auris_session::agent_policy::Decision::Deny(reason) = policy.decide(&self.operation)
+        {
+            self.cancel
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            return Some(Err(reason));
+        }
+        match self.receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(_) => Some(Err("Audio listening worker stopped".into())),
+        }
+    }
+}
+
+impl Drop for PendingListening {
+    fn drop(&mut self) {
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 struct PendingSoundSearch {
     revision: u64,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     receiver: Receiver<Result<String, String>>,
+}
+
+struct PendingVocal {
+    revision: u64,
+    operation: auris_session::agent_policy::Operation,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    receiver: Receiver<Result<auris_session::live_agent::VocalResult, String>>,
+}
+
+impl PendingVocal {
+    fn poll(
+        &self,
+        revision: u64,
+        same_document: bool,
+        policy: &auris_session::agent_policy::Policy,
+    ) -> Option<Result<auris_session::live_agent::VocalResult, String>> {
+        let error = if self.revision != revision || !same_document {
+            Some("The document changed during the vocal operation; retry it".to_string())
+        } else if let auris_session::agent_policy::Decision::Deny(reason) =
+            policy.decide(&self.operation)
+        {
+            Some(reason)
+        } else {
+            None
+        };
+        if let Some(error) = error {
+            self.cancel
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            return Some(Err(error));
+        }
+        match self.receiver.try_recv() {
+            Ok(result) => Some(result),
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(_) => Some(Err("Vocal worker stopped unexpectedly".into())),
+        }
+    }
+}
+
+impl Drop for PendingVocal {
+    fn drop(&mut self) {
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn spawn_agent_vocal(
+    job: auris_session::live_agent::VocalJob,
+    revision: u64,
+    operation: auris_session::agent_policy::Operation,
+) -> Result<PendingVocal, String> {
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let worker_cancel = cancel.clone();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("auris-agent-vocal".into())
+        .spawn(move || {
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.run(&worker_cancel)))
+                    .unwrap_or_else(|_| Err("Vocal worker stopped unexpectedly".into()));
+            let _ = sender.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(PendingVocal {
+        revision,
+        operation,
+        cancel,
+        receiver,
+    })
 }
 
 struct PendingHistoryClear {
@@ -1557,7 +1671,9 @@ fn spawn_link(
     .map(|worker| AgentLink {
         worker,
         inspection: None,
+        listening: None,
         sound_search: None,
+        vocal: None,
     })
 }
 
@@ -1567,6 +1683,14 @@ fn spawn_model_listing(prefs: &AgentPreferences) -> Receiver<Result<String, Stri
 }
 
 impl AurisApp {
+    /// Explicit agent vocal work owns the singer worker slot until its result is delivered.
+    pub(crate) fn agent_vocal_busy(&self) -> bool {
+        self.agent_chat
+            .link
+            .as_ref()
+            .is_some_and(|link| link.vocal.is_some())
+    }
+
     /// Attach dropped reference files without importing them into the song.
     pub(crate) fn agent_attach_files(&mut self, paths: &[PathBuf], cx: &mut gpui::Context<Self>) {
         if self.agent_chat.pending_send.is_some() {
@@ -2169,6 +2293,135 @@ impl AurisApp {
         Ok(())
     }
 
+    fn start_agent_listening(&mut self, command: &serde_json::Value) -> Result<(), String> {
+        if self.agent_chat.bound_project.as_deref() != self.session.path() {
+            return Err("The open document changed; start a new conversation".into());
+        }
+        self.check_agent_edit(command)?;
+        let auris_session::live_agent::Command::Listen {
+            start_bar,
+            bars,
+            focus,
+            compare_to,
+        } = serde_json::from_value(command.clone()).map_err(|error| error.to_string())?
+        else {
+            return Err("Expected listen".into());
+        };
+        let operation = auris_session::agent_policy::Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":command}),
+        )?;
+        let job = self.session.begin_listening(
+            start_bar,
+            bars,
+            focus.as_deref(),
+            compare_to.as_deref(),
+        )?;
+        let link = self.agent_chat.link.as_mut().ok_or("The agent stopped")?;
+        if link.listening.is_some() {
+            return Err("A listening operation is already running".into());
+        }
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let worker_cancel = cancel.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("auris-audio-listening".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    job.run(&worker_cancel)
+                }))
+                .unwrap_or_else(|_| Err("Audio listening worker stopped unexpectedly".into()));
+                let _ = sender.send(result);
+            })
+            .map_err(|error| error.to_string())?;
+        link.listening = Some(PendingListening {
+            revision: self.session.revision(),
+            operation,
+            cancel,
+            receiver,
+        });
+        Ok(())
+    }
+
+    fn start_agent_vocal(&mut self, command: &serde_json::Value) -> Result<(), String> {
+        if self.agent_chat.bound_project.as_deref() != self.session.path() {
+            return Err("The open document changed; start a new conversation".into());
+        }
+        self.check_agent_edit(command)?;
+        if self
+            .agent_chat
+            .link
+            .as_ref()
+            .ok_or("The agent stopped")?
+            .vocal
+            .is_some()
+        {
+            return Err("A vocal operation is already running".into());
+        }
+        let operation = auris_session::agent_policy::Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":command}),
+        )?;
+        let command = serde_json::from_value(command.clone()).map_err(|e| e.to_string())?;
+        if operation.mutating {
+            self.cancel_auto_sing();
+        }
+        let job = self
+            .session
+            .begin_agent_vocal(command, self.settings.clone())?;
+        let pending = spawn_agent_vocal(job, self.session.revision(), operation)?;
+        self.agent_chat
+            .link
+            .as_mut()
+            .ok_or("The agent stopped")?
+            .vocal = Some(pending);
+        Ok(())
+    }
+
+    fn poll_agent_vocal(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(link) = self.agent_chat.link.as_mut() else {
+            return;
+        };
+        let Some(pending) = link.vocal.take() else {
+            return;
+        };
+        let Some(result) = pending.poll(
+            self.session.revision(),
+            self.agent_chat.bound_project.as_deref() == self.session.path(),
+            &self.settings.agent.policy,
+        ) else {
+            link.vocal = Some(pending);
+            return;
+        };
+        let revision = self.session.revision();
+        let result = result.and_then(|result| self.session.continue_agent_vocal(result));
+        let response = match result {
+            Ok(auris_session::live_agent::VocalStep::Work(job)) => {
+                match spawn_agent_vocal(*job, revision, pending.operation.clone()) {
+                    Ok(next) => {
+                        if let Some(link) = self.agent_chat.link.as_mut() {
+                            link.vocal = Some(next);
+                        }
+                        return;
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+            Ok(auris_session::live_agent::VocalStep::Done(text)) => Ok(text),
+            Err(error) => Err(error),
+        };
+        if let Some(link) = self.agent_chat.link.as_mut() {
+            let _ = link.send(&serde_json::json!({"event":"edit_result","ok":response.is_ok(),"text":response.unwrap_or_else(|e|e)}).to_string());
+        }
+        if self.session.revision() != revision {
+            self.resync_selection();
+            self.cancel_auto_sing();
+            self.invalidate_sung_previews();
+            self.reset_drum_analysis();
+        }
+        cx.notify();
+    }
+
     fn start_agent_sound_search(&mut self, command: &serde_json::Value) -> Result<(), String> {
         use auris_session::{SoundSearch, live_agent::Command};
         if self.agent_chat.bound_project.as_deref() != self.session.path() {
@@ -2262,6 +2515,26 @@ impl AurisApp {
         let _ = link.send(&wire.to_string());
     }
 
+    fn poll_agent_listening(&mut self) {
+        let Some(link) = self.agent_chat.link.as_mut() else {
+            return;
+        };
+        let Some(pending) = link.listening.as_ref() else {
+            return;
+        };
+        let Some(result) = pending.poll(
+            self.session.revision(),
+            self.agent_chat.bound_project.as_deref() == self.session.path(),
+            &self.settings.agent.policy,
+        ) else {
+            return;
+        };
+        link.listening = None;
+        let result = result.and_then(|result| self.session.continue_listening(result));
+        let wire = serde_json::json!({"event":"edit_result","ok":result.is_ok(),"text":result.unwrap_or_else(|error|error)});
+        let _ = link.send(&wire.to_string());
+    }
+
     /// Drains the agent's channel, obeying what each event asks for.
     ///
     /// Called from the repaint tick, beside `Session::poll` — the same shape as everything
@@ -2316,7 +2589,9 @@ impl AurisApp {
             return;
         }
         self.poll_agent_inspection();
+        self.poll_agent_listening();
         self.poll_agent_sound_search();
+        self.poll_agent_vocal(cx);
         if self.poll_agent_review() {
             cx.notify();
         }
@@ -2338,9 +2613,34 @@ impl AurisApp {
             if let AgentEvent::Edit { command } = event {
                 if matches!(
                     command["action"].as_str(),
+                    Some("list_voices" | "set_singer_voice" | "sing")
+                ) {
+                    if let Err(error) = self.start_agent_vocal(&command)
+                        && let Some(link) = &self.agent_chat.link
+                    {
+                        let _ = link.send(
+                            &serde_json::json!({"event":"edit_result","ok":false,"text":error})
+                                .to_string(),
+                        );
+                    }
+                    continue;
+                }
+                if matches!(
+                    command["action"].as_str(),
                     Some("search_instruments" | "similar_instruments")
                 ) {
                     if let Err(error) = self.start_agent_sound_search(&command)
+                        && let Some(link) = &self.agent_chat.link
+                    {
+                        let _ = link.send(
+                            &serde_json::json!({"event":"edit_result","ok":false,"text":error})
+                                .to_string(),
+                        );
+                    }
+                    continue;
+                }
+                if command["action"] == "listen" {
+                    if let Err(error) = self.start_agent_listening(&command)
                         && let Some(link) = &self.agent_chat.link
                     {
                         let _ = link.send(
@@ -4438,6 +4738,85 @@ mod tests {
     use auris_session::agent_policy::Mode;
     use auris_session::prelude::{Note, Ticks};
 
+    #[test]
+    fn pending_vocals_cancel_on_document_switch_policy_revocation_and_drop() {
+        for (revision, same_document, mode) in [
+            (2, true, Mode::Edit),
+            (1, false, Mode::Edit),
+            (1, true, Mode::ReadOnly),
+        ] {
+            let (_sender, receiver) = std::sync::mpsc::channel();
+            let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let operation = auris_session::agent_policy::Operation::parse(
+                "edit_project",
+                &serde_json::json!({"command":{"action":"sing","track":1}}),
+            )
+            .unwrap();
+            let pending = PendingVocal {
+                revision: 1,
+                operation,
+                cancel: cancel.clone(),
+                receiver,
+            };
+            assert!(
+                pending
+                    .poll(
+                        revision,
+                        same_document,
+                        &auris_session::agent_policy::Policy {
+                            mode,
+                            ..Default::default()
+                        }
+                    )
+                    .unwrap()
+                    .is_err()
+            );
+            assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
+        }
+        let (_sender, receiver) = std::sync::mpsc::channel();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let operation = auris_session::agent_policy::Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{"action":"sing","track":1}}),
+        )
+        .unwrap();
+        let pending = PendingVocal {
+            revision: 1,
+            operation,
+            cancel: cancel.clone(),
+            receiver,
+        };
+        assert!(pending.poll(1, true, &Default::default()).is_none());
+        drop(pending);
+        assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[gpui::test]
+    fn live_harmony_and_lyrics_edit_the_open_window_and_undo_independently(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this,_| {
+            this.settings.agent.policy.mode = Mode::Edit;
+            let track = this.session.add_singer_track("Vocal");
+            let clip = this.session.add_midi_clip(track,"Phrase",Ticks::ZERO,Ticks::QUARTER * 4).unwrap();
+            this.session.add_note(clip,Note::new(62,Ticks::ZERO,Ticks::QUARTER)).unwrap();
+            let before = this.project().clone();
+            this.agent_edit(serde_json::json!({"action":"edit_harmony","start_bar":1,"bars":1,"key":"D major","chords":"| I |"})).unwrap();
+            assert_eq!(this.project().harmony.chord_at(Ticks::ZERO).unwrap().to_string(),"D");
+            let harmony = this.project().clone();
+            this.agent_edit(serde_json::json!({"action":"write_lyrics","clip":clip.0,"text":"あ"})).unwrap();
+            assert_eq!(this.project().midi_clip(clip).unwrap().1.notes[0].lyric,"あ");
+            this.session.undo();
+            assert_eq!(this.project(),&harmony);
+            this.session.undo();
+            assert_eq!(this.project(),&before);
+            this.settings.agent.policy.mode = Mode::ReadOnly;
+            assert!(this.agent_edit(serde_json::json!({"action":"write_lyrics","clip":clip.0,"text":"い"})).is_err());
+            assert_eq!(this.project(),&before);
+        });
+    }
+
     fn release_key(key: &str, cx: &mut gpui::VisualTestContext) {
         cx.simulate_event(gpui::KeyUpEvent {
             keystroke: gpui::Keystroke::parse(key).unwrap(),
@@ -5012,6 +5391,36 @@ mod tests {
                 Some(&ChatEntry::Note(Key::AgentResolveFirst))
             );
         });
+    }
+
+    #[test]
+    fn listening_cancels_on_document_change_stop_or_denied_policy() {
+        let (_sender, receiver) = std::sync::mpsc::channel();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let operation = auris_session::agent_policy::Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{
+                "action":"listen","start_bar":1,"bars":1
+            }}),
+        )
+        .unwrap();
+        let pending = PendingListening {
+            revision: 7,
+            operation,
+            cancel: cancel.clone(),
+            receiver,
+        };
+        let mut policy = auris_session::agent_policy::Policy::default();
+        assert!(pending.poll(7, true, &policy).is_none());
+        policy.set_rule("edit_project.listen", Some(false)).unwrap();
+        assert!(pending.poll(7, true, &policy).unwrap().is_err());
+        assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
+        policy.set_rule("edit_project.listen", None).unwrap();
+        assert!(pending.poll(8, true, &policy).unwrap().is_err());
+        assert!(pending.poll(7, false, &policy).unwrap().is_err());
+        cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+        drop(pending);
+        assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[test]
@@ -6480,6 +6889,9 @@ mod tests {
             });
         });
         assert!(history_sender.send(Err("stale".into())).is_err());
+        if let Some(complete) = app.update(cx, |this, _| this.flush_conversation_storage()) {
+            complete.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 

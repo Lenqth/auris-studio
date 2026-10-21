@@ -379,6 +379,7 @@ impl Session {
 
     /// Drops everything decoded: both audio banks, the waveform cache and the fonts.
     pub(super) fn clear_sources(&mut self) {
+        self.listening = Default::default();
         self.bank = AudioSourceBank::new();
         self.render_bank = AudioSourceBank::new();
         self.waveforms.clear();

@@ -23,7 +23,9 @@ result; user messages and assistant replies keep separate groups apart.
 Drop files onto the Agent panel to attach them to the next message. Dropping audio
 there attaches a reference; dropping audio onto the arrangement imports it into
 the song. Attached filenames remain visible and each file can be removed before
-sending. A message accepts at most eight files and 25 MiB in total.
+sending. A message accepts at most eight files. Audio sources may be up to 512 MiB each
+and 1 GiB combined; they are copied to private local snapshots with bounded memory and
+cancellation. Images remain limited to 25 MiB each.
 
 Rig, Codex and Claude Code accept reference attachments. PNG, JPEG, GIF and WebP are sent as
 image parts. UTF-8 text, Markdown, lyrics, CSV, JSON and source files are sent as
@@ -50,12 +52,25 @@ not separated. This is a note draft, not guaranteed faithful sheet music or a
 two-hand playable arrangement. See [music analysis](music-analysis.md).
 
 Audio references are immutable snapshots scoped to the conversation, retained
-within eight files/25 MiB in aggregate. Attaching more files can expire older
+within eight files/1 GiB on disk in aggregate. Attaching more files can expire older
 references; reattach a file if the agent reports that its reference expired.
 
 For native audio input, use an OpenAI-compatible model implementing `input_audio`.
 The panel keeps the draft available when the selected rig provider cannot send audio.
 Native API turns can use the same attachment-to-piano tool.
+
+Native API requests have a separate 128 MiB budget for the actual prepared payloads
+before base64 encoding. Audio sources larger than 25 MiB are automatically converted
+to full-length 16 kHz, 16-bit PCM WAV, preserving mono/stereo channels and timing.
+This accepts up to thirty minutes of mono/stereo audio within the ordinary decoder's
+512 MiB decoded-sample budget. No excerpt is silently selected. The original snapshot
+is retained unchanged for local transcription, and the model receives metadata describing
+the upload conversion. Smaller sources are sent in their original format. Preparation
+runs on a cancellable worker; decoder/resampler calls finish before observing cancellation.
+The selected endpoint/model can impose additional format, duration or request limits;
+128 MiB is an Auris resource budget, not a promise about a provider's capabilities.
+Reduce the attachments or use a CLI local-reference route if the native request cannot fit.
+CLI image/text payloads retain their separate 25 MiB combined budget, excluding local audio.
 
 ## Codex setup
 

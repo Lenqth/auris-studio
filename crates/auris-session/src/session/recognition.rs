@@ -728,13 +728,43 @@ impl Session {
         name: &str,
     ) -> Result<(TrackId, ClipId), SessionError> {
         draft.validate().map_err(failure)?;
+        self.import_transcribed_notes(&draft.notes, start, name, 0.1)
+    }
+
+    /// Adds a recognizer-independent draft as one new physical-piano track and undo step.
+    /// Validates all events before editing; preserves existing music, tempo and source timing.
+    pub fn import_transcription(
+        &mut self,
+        draft: &crate::NoteTranscription,
+        start: Ticks,
+        name: &str,
+    ) -> Result<(TrackId, ClipId), SessionError> {
+        draft.validate().map_err(failure)?;
+        self.import_transcribed_notes(&draft.notes, start, name, 0.0)
+    }
+
+    fn import_transcribed_notes(
+        &mut self,
+        source: &[TranscribedNote],
+        start: Ticks,
+        name: &str,
+        minimum_strength: f32,
+    ) -> Result<(TrackId, ClipId), SessionError> {
         if name.trim().is_empty() || name.len() > 256 || start.raw() < 0 {
             return Err(failure(
                 "use a nonempty name up to 256 bytes and a nonnegative start",
             ));
         }
         let origin = self.project.tempo_map.ticks_to_seconds(start).0;
-        let notes = self.map_transcription(&draft.notes, origin, 1.0, start, Ticks(i64::MAX));
+        let mut notes = self.map_transcription(source, origin, 1.0, start, Ticks(i64::MAX));
+        if notes.len() != source.len() {
+            return Err(failure(
+                "some note intervals collapse at the project's tick resolution; lengthen or remove them explicitly before importing",
+            ));
+        }
+        for (note, event) in notes.iter_mut().zip(source) {
+            note.velocity = event.strength.max(minimum_strength);
+        }
         self.create_analysis_track(
             notes,
             start,
@@ -909,6 +939,86 @@ mod tests {
     use auris_core::theory::key::Key;
     fn session() -> Session {
         Session::new(SessionOptions::headless()).unwrap()
+    }
+
+    #[test]
+    fn external_transcription_is_not_bound_to_basic_pitch_and_is_one_undo() {
+        let mut s = session();
+        s.add_default_instrument_track("Existing").unwrap();
+        s.set_bpm(90.0);
+        let before = s.project().clone();
+        let command = serde_json::from_value(serde_json::json!({
+            "action":"import_transcription", "name":"External draft", "at_beat":4.0,
+            "transcription":{
+                "source":{"method":"codex.harmonic-fit","model":"gpt-6.1-sol",
+                    "artifact_sha256":"1ad425dd3758b046d23c3e3a11bee0ce2815402fda64fc69f77a9cdd873c08b5"},
+                "seconds":2.0, "limitations":"Uniform dynamics; review missing notes.",
+                "notes":[
+                    {"pitch":60,"start":0.25,"end":1.5,"strength":0.7},
+                    {"pitch":64,"start":0.25,"end":1.5,"strength":0.7},
+                    {"pitch":67,"start":0.25,"end":1.5,"strength":0.7}]
+            }
+        })).unwrap();
+        let result: serde_json::Value =
+            serde_json::from_str(&s.agent_command(command).unwrap()).unwrap();
+        assert_eq!(result["notes"], 3);
+        assert_eq!(result["source"]["method"], "codex.harmonic-fit");
+        assert_eq!(s.project().tempo_map, before.tempo_map);
+        assert_eq!(s.project().tracks[0], before.tracks[0]);
+        let (_, clip) = s
+            .project()
+            .midi_clip(ClipId(result["clip"].as_u64().unwrap()))
+            .unwrap();
+        assert_eq!(clip.start, Ticks::from_beats(4.0));
+        assert_eq!(clip.notes.len(), 3);
+        let origin = s.project().tempo_map.ticks_to_seconds(clip.start).0;
+        for note in &clip.notes {
+            assert!(
+                (s.project()
+                    .tempo_map
+                    .ticks_to_seconds(clip.start + note.start)
+                    .0
+                    - origin
+                    - 0.25)
+                    .abs()
+                    < 0.002
+            );
+        }
+        s.undo();
+        assert_eq!(s.project(), &before);
+    }
+
+    #[test]
+    fn external_drafts_keep_weak_dynamics_and_refuse_silent_sub_tick_omissions() {
+        let mut s = session();
+        let mut draft: crate::NoteTranscription = serde_json::from_value(serde_json::json!({
+            "source":{"method":"external"},"seconds":1,
+            "notes":[{"pitch":60,"start":0,"end":0.5,"strength":0.01}]
+        }))
+        .unwrap();
+        let before = s.project().clone();
+        let (_, clip) = s
+            .import_transcription(&draft, Ticks::ZERO, "Quiet")
+            .unwrap();
+        assert_eq!(
+            s.project().midi_clip(clip).unwrap().1.notes[0].velocity,
+            0.01
+        );
+        s.undo();
+        assert_eq!(s.project(), &before);
+        draft.notes.push(TranscribedNote {
+            pitch: 64,
+            start: 0.0,
+            end: 0.000001,
+            strength: 0.7,
+        });
+        assert!(
+            s.import_transcription(&draft, Ticks::ZERO, "Too short")
+                .unwrap_err()
+                .to_string()
+                .contains("tick resolution")
+        );
+        assert_eq!(s.project(), &before);
     }
 
     #[test]

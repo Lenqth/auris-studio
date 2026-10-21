@@ -130,6 +130,30 @@
 //! measures the actual mix or a selected track's solo routing. A fixed colour scale preserves
 //! gain differences. These representations intentionally answer different questions.
 //!
+//! # Auditory feedback on unsaved music
+//!
+//! The live `listen` operation captures the open document through
+//! [`crate::Session::begin_listening`]. The desktop authorizes the network operation,
+//! renders and submits actual WAV bytes on a worker, then accepts the result through
+//! [`crate::Session::continue_listening`] only while the document revision still matches.
+//! Neither saving nor an audio output device is required; reviewing adds no Undo step.
+//! The critic has no editing tools. Its observations are untrusted, fallible evidence for
+//! the controller, which chooses a supported local edit, reads back the result and requests
+//! another audition of the same bars. Failed or uncertain reviews must remain explicit.
+//!
+//! The session retains at most four immutable raw excerpts behind opaque IDs. A comparison
+//! requires identical bars and timing; replacing the document clears the IDs. Both excerpts
+//! receive one common attenuation when needed for the -1 dB estimated true-peak ceiling.
+//! Measurements describe both the source and the exact decoded 16-bit WAV; audition
+//! protection never changes project faders or conceals a source overload. Temporary files
+//! live only for the request, and encoded bytes are hashed. The true-peak estimate uses
+//! 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+//!
+//! Cancellation is checked around render, encode and network stages. An HTTP request already
+//! in flight can finish up to its bounded timeout; stopped or stale work is never adopted.
+//! Saved-project MCP keeps its file-based `listen` workflow, using the same protected WAV
+//! encoder for previews. Its saved document is independent of the live unsaved snapshot.
+//!
 //!
 //! # Offline music recognition
 //!
@@ -266,11 +290,13 @@ pub mod architecture {
     //! directly, while file writes and command escalations require a decision. Claude routes
     //! its explicit native tool catalog through ask rules and the stdio approval callback.
     //! Native tools operate on external files; the open song is still edited through live MCP.
-    //! Reference attachments are bounded and encoded in the transport worker, never on the
-    //! UI or audio thread. Text files are marked as reference data rather than user requests.
+    //! Reference attachments are prepared in the transport worker, never on the UI or audio
+    //! thread. Original audio snapshots have separate disk budgets (512 MiB per file, 1 GiB per
+    //! turn/cache) from model payloads. Copying is streamed and cancellable. Text files are
+    //! marked as reference data rather than user requests.
     //! Codex and Claude Code receive audio references as local CPU tempo/chord measurements,
     //! using the session's existing file analysis service on a temporary snapshot of the
-    //! bounded attachment bytes. This is explicitly not listening or note transcription.
+    //! original attachment. This is explicitly not listening or note transcription.
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
@@ -278,9 +304,37 @@ pub mod architecture {
     //! using the bundled Apache-2.0 Basic Pitch ONNX model, and asks the same live permission
     //! gate to apply the exact note draft. [`Session::create_piano_cover`](crate::Session::create_piano_cover)
     //! maps source seconds through the current tempo map and adds a physical-piano track/clip
-    //! as one undo transaction. No source file path, model download or saved-project edit is
-    //! exposed to the model. Notes remain estimates; this is transcription, not listening.
-    //! Native audio API turns retain the same scoped references alongside their audio content.
+    //! as one undo transaction. Notes remain estimates; this is transcription, not listening.
+    //! An alternative recognizer uses [`Session::import_transcription`](crate::Session::import_transcription)
+    //! with a backend-independent note draft: bounded source seconds, pitches, relative strength,
+    //! claimed method/model/artifact provenance and limitations. Validation does not pretend that
+    //! caller-provided provenance verifies musical accuracy. The legacy Basic Pitch draft still
+    //! verifies its own model hash. Both paths share the note-to-document mapping and transaction.
+    //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
+    //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
+    //! exposes the internal snapshot. One current copy per attachment is retained; re-export
+    //! replaces the previous path, and attachment expiry removes it.
+    //! `import_transcription` accepts an inline draft or a bounded local JSON file; file reading
+    //! is authorized before I/O, then the exact validated draft crosses the canonical edit/revision
+    //! gate. No worker mutates the session. Saved-project MCP offers the same session import command.
+    //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
+    //! residual activity outside their attack/release guards. Weak sustained predictions alone
+    //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo
+    //! windows use the strongest channel instead of erasing the recording. The composer-pair
+    //! evaluation freezes performed notes and PCM before tuning; separate seeds and an independent
+    //! existing score check false positives, missing notes and timing through this same backend.
+    //! Native audio API turns retain the same exact sources. Above 25 MiB, the session prepares
+    //! a full-length 16 kHz PCM16 WAV for upload, preserving mono/stereo channels; the original
+    //! remains available for transcription. Decoding has the importer's 512 MiB sample budget,
+    //! and preparation accepts at most thirty minutes. The transport bounds actual payloads
+    //! at 128 MiB per turn; this is an Auris budget, not a provider capability guarantee.
+    //! Live agents write bounded harmony with `edit_harmony` and singer lyrics with
+    //! `write_lyrics`; both are undoable document edits and never regenerate notes.
+    //! `list_voices`, `inspect_singer`, `set_singer_voice` and `sing` complete the vocal workflow.
+    //! Voice discovery, local-access model loading, synthesis and WAV staging run on cancellable
+    //! workers through `live_agent::VocalJob`. Only the UI continues a job against the original
+    //! document revision, applies a validated voice/speaker or publishes its staged take, and
+    //! records Undo. The same live policy gate covers these operations on every model transport.
     //! If
     //! `auris-gpui` ever needs `auris-engine`, `auris-core` or `auris-io` directly, something
     //! that belongs in the session layer has leaked into the UI. Move it down rather than
@@ -311,10 +365,19 @@ pub mod architecture {
     //! Auto-review mode delegates operations needing confirmation to a separate conversation
     //! with the selected backend/model and no execution tools. It receives human requests and
     //! exact operation evidence, never authority from the executing model. Deny rules run first;
+    //! repeated long strings use a lossless shared-text encoding within a 256 KiB request.
+    //! Background evidence collection supplies recent completed native calls and bounded current
+    //! project-local script snapshots, with contents and SHA-256. Hidden/external paths and
+    //! oversized scripts are not silently treated as inspected. Script hashes and resolved paths
+    //! are checked again after an approving review; changed evidence cannot grant a permit.
     //! review approval grants only a one-time permit after the desktop checks the document and
     //! policy again. A refusal blocks the operation; uncertainty, malformed output, unavailable
     //! models and timeout leave manual confirmation available. Cancelling the pending approval
     //! also cancels the review. Bypass skips this review as well as user confirmation.
+    //! New manually written agent compositions use bounded `edit_harmony` section labels as well
+    //! as key/chord metadata. A section-only edit preserves harmony and notes, restores the prior
+    //! section after its range and is one undo step. Song-spec compositions already carry their
+    //! form into the document; clip names and assistant prose are not section metadata.
     //! The MCP presentation supports explicit short project handles (never an implicit current
     //! project), startup task groups, concise schemas and full on-demand help. Discovery handles
     //! have a random process scope and are checked against the owning library snapshot; refresh,

@@ -1,0 +1,3257 @@
+{
+  "schema": 1,
+  "date": "2026-10-21",
+  "baseline_revision": "e0d97d06",
+  "platform": "Windows x86_64; dev profile; ONNX Runtime CPU provider, two intra-op threads",
+  "model_sha256": "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec",
+  "matching": "Maximum one-to-one exact MIDI pitch; 50/100 ms onset; offset tolerance max(50 ms, 20% duration). Coincident same-pitch references unioned within 12 ms.",
+  "source_note": "Original deterministic composer pairs and controlled synthesis of Mutopia Ode to Joy SATB; no commercial/acoustic-recording accuracy claim; no benchmark audio redistributed in the repository.",
+  "composer": {
+    "suite": "composer-piano-cover-v1",
+    "manifest_sha256": "284fc67b4833d738025e59430bd755f499d682e416612e22c6812e55bd695e35",
+    "groups": {
+      "development/all": {
+        "before": {
+          "cases": 12,
+          "onset_50ms": {
+            "matches": 588,
+            "false_positives": 486,
+            "false_negatives": 248,
+            "precision": 0.547486033519553,
+            "recall": 0.7033492822966507,
+            "f1": 0.6157068062827225
+          },
+          "onset_100ms": {
+            "matches": 612,
+            "false_positives": 462,
+            "false_negatives": 224,
+            "precision": 0.5698324022346368,
+            "recall": 0.7320574162679426,
+            "f1": 0.6408376963350785
+          },
+          "onset_offset": {
+            "matches": 328,
+            "false_positives": 746,
+            "false_negatives": 508,
+            "precision": 0.3054003724394786,
+            "recall": 0.3923444976076555,
+            "f1": 0.343455497382199
+          }
+        },
+        "after": {
+          "cases": 12,
+          "onset_50ms": {
+            "matches": 604,
+            "false_positives": 266,
+            "false_negatives": 232,
+            "precision": 0.6942528735632184,
+            "recall": 0.722488038277512,
+            "f1": 0.7080890973036342
+          },
+          "onset_100ms": {
+            "matches": 618,
+            "false_positives": 252,
+            "false_negatives": 218,
+            "precision": 0.7103448275862069,
+            "recall": 0.7392344497607656,
+            "f1": 0.7245017584994139
+          },
+          "onset_offset": {
+            "matches": 320,
+            "false_positives": 550,
+            "false_negatives": 516,
+            "precision": 0.367816091954023,
+            "recall": 0.3827751196172249,
+            "f1": 0.37514654161781946
+          }
+        }
+      },
+      "development/mixture": {
+        "before": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 240,
+            "false_positives": 152,
+            "false_negatives": 178,
+            "precision": 0.6122448979591837,
+            "recall": 0.5741626794258373,
+            "f1": 0.5925925925925926
+          },
+          "onset_100ms": {
+            "matches": 261,
+            "false_positives": 131,
+            "false_negatives": 157,
+            "precision": 0.6658163265306123,
+            "recall": 0.6244019138755981,
+            "f1": 0.6444444444444445
+          },
+          "onset_offset": {
+            "matches": 123,
+            "false_positives": 269,
+            "false_negatives": 295,
+            "precision": 0.3137755102040816,
+            "recall": 0.2942583732057416,
+            "f1": 0.3037037037037037
+          }
+        },
+        "after": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 239,
+            "false_positives": 79,
+            "false_negatives": 179,
+            "precision": 0.7515723270440252,
+            "recall": 0.5717703349282297,
+            "f1": 0.6494565217391304
+          },
+          "onset_100ms": {
+            "matches": 252,
+            "false_positives": 66,
+            "false_negatives": 166,
+            "precision": 0.7924528301886793,
+            "recall": 0.6028708133971292,
+            "f1": 0.6847826086956522
+          },
+          "onset_offset": {
+            "matches": 111,
+            "false_positives": 207,
+            "false_negatives": 307,
+            "precision": 0.3490566037735849,
+            "recall": 0.26555023923444976,
+            "f1": 0.30163043478260865
+          }
+        }
+      },
+      "development/piano": {
+        "before": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 348,
+            "false_positives": 334,
+            "false_negatives": 70,
+            "precision": 0.5102639296187683,
+            "recall": 0.8325358851674641,
+            "f1": 0.6327272727272726
+          },
+          "onset_100ms": {
+            "matches": 351,
+            "false_positives": 331,
+            "false_negatives": 67,
+            "precision": 0.5146627565982405,
+            "recall": 0.8397129186602871,
+            "f1": 0.6381818181818182
+          },
+          "onset_offset": {
+            "matches": 205,
+            "false_positives": 477,
+            "false_negatives": 213,
+            "precision": 0.30058651026392963,
+            "recall": 0.4904306220095694,
+            "f1": 0.37272727272727274
+          }
+        },
+        "after": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 365,
+            "false_positives": 187,
+            "false_negatives": 53,
+            "precision": 0.6612318840579711,
+            "recall": 0.8732057416267942,
+            "f1": 0.7525773195876287
+          },
+          "onset_100ms": {
+            "matches": 366,
+            "false_positives": 186,
+            "false_negatives": 52,
+            "precision": 0.6630434782608695,
+            "recall": 0.8755980861244019,
+            "f1": 0.7546391752577318
+          },
+          "onset_offset": {
+            "matches": 209,
+            "false_positives": 343,
+            "false_negatives": 209,
+            "precision": 0.3786231884057971,
+            "recall": 0.5,
+            "f1": 0.4309278350515464
+          }
+        }
+      },
+      "held_out/all": {
+        "before": {
+          "cases": 12,
+          "onset_50ms": {
+            "matches": 632,
+            "false_positives": 568,
+            "false_negatives": 292,
+            "precision": 0.5266666666666666,
+            "recall": 0.683982683982684,
+            "f1": 0.5951035781544257
+          },
+          "onset_100ms": {
+            "matches": 667,
+            "false_positives": 533,
+            "false_negatives": 257,
+            "precision": 0.5558333333333333,
+            "recall": 0.7218614718614719,
+            "f1": 0.628060263653484
+          },
+          "onset_offset": {
+            "matches": 358,
+            "false_positives": 842,
+            "false_negatives": 566,
+            "precision": 0.29833333333333334,
+            "recall": 0.3874458874458874,
+            "f1": 0.33709981167608283
+          }
+        },
+        "after": {
+          "cases": 12,
+          "onset_50ms": {
+            "matches": 637,
+            "false_positives": 327,
+            "false_negatives": 287,
+            "precision": 0.6607883817427386,
+            "recall": 0.6893939393939394,
+            "f1": 0.6747881355932204
+          },
+          "onset_100ms": {
+            "matches": 656,
+            "false_positives": 308,
+            "false_negatives": 268,
+            "precision": 0.6804979253112033,
+            "recall": 0.70995670995671,
+            "f1": 0.6949152542372882
+          },
+          "onset_offset": {
+            "matches": 359,
+            "false_positives": 605,
+            "false_negatives": 565,
+            "precision": 0.3724066390041494,
+            "recall": 0.38852813852813856,
+            "f1": 0.38029661016949157
+          }
+        }
+      },
+      "held_out/mixture": {
+        "before": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 260,
+            "false_positives": 189,
+            "false_negatives": 202,
+            "precision": 0.579064587973274,
+            "recall": 0.5627705627705628,
+            "f1": 0.570801317233809
+          },
+          "onset_100ms": {
+            "matches": 292,
+            "false_positives": 157,
+            "false_negatives": 170,
+            "precision": 0.6503340757238307,
+            "recall": 0.6320346320346321,
+            "f1": 0.6410537870472008
+          },
+          "onset_offset": {
+            "matches": 126,
+            "false_positives": 323,
+            "false_negatives": 336,
+            "precision": 0.2806236080178174,
+            "recall": 0.2727272727272727,
+            "f1": 0.27661909989023054
+          }
+        },
+        "after": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 259,
+            "false_positives": 105,
+            "false_negatives": 203,
+            "precision": 0.7115384615384616,
+            "recall": 0.5606060606060606,
+            "f1": 0.6271186440677966
+          },
+          "onset_100ms": {
+            "matches": 278,
+            "false_positives": 86,
+            "false_negatives": 184,
+            "precision": 0.7637362637362637,
+            "recall": 0.6017316017316018,
+            "f1": 0.6731234866828086
+          },
+          "onset_offset": {
+            "matches": 122,
+            "false_positives": 242,
+            "false_negatives": 340,
+            "precision": 0.33516483516483514,
+            "recall": 0.26406926406926406,
+            "f1": 0.29539951573849876
+          }
+        }
+      },
+      "held_out/piano": {
+        "before": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 372,
+            "false_positives": 379,
+            "false_negatives": 90,
+            "precision": 0.49533954727030627,
+            "recall": 0.8051948051948052,
+            "f1": 0.6133553173948887
+          },
+          "onset_100ms": {
+            "matches": 375,
+            "false_positives": 376,
+            "false_negatives": 87,
+            "precision": 0.4993342210386152,
+            "recall": 0.8116883116883117,
+            "f1": 0.6183017312448476
+          },
+          "onset_offset": {
+            "matches": 232,
+            "false_positives": 519,
+            "false_negatives": 230,
+            "precision": 0.30892143808255657,
+            "recall": 0.5021645021645021,
+            "f1": 0.3825226710634789
+          }
+        },
+        "after": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 378,
+            "false_positives": 222,
+            "false_negatives": 84,
+            "precision": 0.63,
+            "recall": 0.8181818181818182,
+            "f1": 0.711864406779661
+          },
+          "onset_100ms": {
+            "matches": 378,
+            "false_positives": 222,
+            "false_negatives": 84,
+            "precision": 0.63,
+            "recall": 0.8181818181818182,
+            "f1": 0.711864406779661
+          },
+          "onset_offset": {
+            "matches": 237,
+            "false_positives": 363,
+            "false_negatives": 225,
+            "precision": 0.395,
+            "recall": 0.512987012987013,
+            "f1": 0.4463276836158192
+          }
+        }
+      },
+      "validation/all": {
+        "before": {
+          "cases": 12,
+          "onset_50ms": {
+            "matches": 599,
+            "false_positives": 460,
+            "false_negatives": 277,
+            "precision": 0.5656279508970727,
+            "recall": 0.6837899543378996,
+            "f1": 0.6191214470284238
+          },
+          "onset_100ms": {
+            "matches": 632,
+            "false_positives": 427,
+            "false_negatives": 244,
+            "precision": 0.5967894239848914,
+            "recall": 0.7214611872146118,
+            "f1": 0.6532299741602067
+          },
+          "onset_offset": {
+            "matches": 334,
+            "false_positives": 725,
+            "false_negatives": 542,
+            "precision": 0.3153918791312559,
+            "recall": 0.3812785388127854,
+            "f1": 0.34521963824289403
+          }
+        },
+        "after": {
+          "cases": 12,
+          "onset_50ms": {
+            "matches": 606,
+            "false_positives": 267,
+            "false_negatives": 270,
+            "precision": 0.6941580756013745,
+            "recall": 0.6917808219178082,
+            "f1": 0.692967409948542
+          },
+          "onset_100ms": {
+            "matches": 629,
+            "false_positives": 244,
+            "false_negatives": 247,
+            "precision": 0.720504009163803,
+            "recall": 0.7180365296803652,
+            "f1": 0.7192681532304174
+          },
+          "onset_offset": {
+            "matches": 343,
+            "false_positives": 530,
+            "false_negatives": 533,
+            "precision": 0.3928980526918671,
+            "recall": 0.3915525114155251,
+            "f1": 0.3922241280731847
+          }
+        }
+      },
+      "validation/mixture": {
+        "before": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 233,
+            "false_positives": 152,
+            "false_negatives": 205,
+            "precision": 0.6051948051948052,
+            "recall": 0.5319634703196348,
+            "f1": 0.5662211421628189
+          },
+          "onset_100ms": {
+            "matches": 262,
+            "false_positives": 123,
+            "false_negatives": 176,
+            "precision": 0.6805194805194805,
+            "recall": 0.5981735159817352,
+            "f1": 0.6366950182260025
+          },
+          "onset_offset": {
+            "matches": 111,
+            "false_positives": 274,
+            "false_negatives": 327,
+            "precision": 0.2883116883116883,
+            "recall": 0.2534246575342466,
+            "f1": 0.2697448359659781
+          }
+        },
+        "after": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 235,
+            "false_positives": 92,
+            "false_negatives": 203,
+            "precision": 0.7186544342507645,
+            "recall": 0.5365296803652968,
+            "f1": 0.6143790849673202
+          },
+          "onset_100ms": {
+            "matches": 256,
+            "false_positives": 71,
+            "false_negatives": 182,
+            "precision": 0.7828746177370031,
+            "recall": 0.5844748858447488,
+            "f1": 0.669281045751634
+          },
+          "onset_offset": {
+            "matches": 115,
+            "false_positives": 212,
+            "false_negatives": 323,
+            "precision": 0.3516819571865443,
+            "recall": 0.2625570776255708,
+            "f1": 0.3006535947712418
+          }
+        }
+      },
+      "validation/piano": {
+        "before": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 366,
+            "false_positives": 308,
+            "false_negatives": 72,
+            "precision": 0.543026706231454,
+            "recall": 0.8356164383561644,
+            "f1": 0.658273381294964
+          },
+          "onset_100ms": {
+            "matches": 370,
+            "false_positives": 304,
+            "false_negatives": 68,
+            "precision": 0.5489614243323442,
+            "recall": 0.8447488584474886,
+            "f1": 0.6654676258992805
+          },
+          "onset_offset": {
+            "matches": 223,
+            "false_positives": 451,
+            "false_negatives": 215,
+            "precision": 0.33086053412462907,
+            "recall": 0.5091324200913242,
+            "f1": 0.4010791366906475
+          }
+        },
+        "after": {
+          "cases": 6,
+          "onset_50ms": {
+            "matches": 371,
+            "false_positives": 175,
+            "false_negatives": 67,
+            "precision": 0.6794871794871795,
+            "recall": 0.8470319634703196,
+            "f1": 0.7540650406504065
+          },
+          "onset_100ms": {
+            "matches": 373,
+            "false_positives": 173,
+            "false_negatives": 65,
+            "precision": 0.6831501831501832,
+            "recall": 0.8515981735159818,
+            "f1": 0.7581300813008129
+          },
+          "onset_offset": {
+            "matches": 228,
+            "false_positives": 318,
+            "false_negatives": 210,
+            "precision": 0.4175824175824176,
+            "recall": 0.5205479452054794,
+            "f1": 0.4634146341463415
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "id": "city-pop-101-piano",
+        "split": "development",
+        "variant": "piano",
+        "reference_notes": 90,
+        "audio_sha256": "16b0d9be71b787c936559b0ece6a790737ff7d332d3c47bf4f1f7d8a770679ba",
+        "reference_sha256": "5d4bc25879747db7f01a4ff55cd8193662e541423d0c4a58742be98b7d996b77",
+        "frozen_project_sha256": "42b610d6eeaf64dae1a496b56294761ca3b238de80bb9300683752f776a72ad0",
+        "before": {
+          "estimated_notes": 105,
+          "onset_50ms": {
+            "matches": 66,
+            "false_positives": 39,
+            "false_negatives": 24,
+            "precision": 0.6285714285714286,
+            "recall": 0.7333333333333333,
+            "f1": 0.6769230769230768
+          },
+          "onset_100ms": {
+            "matches": 67,
+            "false_positives": 38,
+            "false_negatives": 23,
+            "precision": 0.638095238095238,
+            "recall": 0.7444444444444445,
+            "f1": 0.6871794871794872
+          },
+          "onset_offset": {
+            "matches": 39,
+            "false_positives": 66,
+            "false_negatives": 51,
+            "precision": 0.37142857142857144,
+            "recall": 0.43333333333333335,
+            "f1": 0.4
+          },
+          "elapsed_seconds": 0.2700677
+        },
+        "after": {
+          "estimated_notes": 98,
+          "onset_50ms": {
+            "matches": 71,
+            "false_positives": 27,
+            "false_negatives": 19,
+            "precision": 0.7244897959183674,
+            "recall": 0.7888888888888889,
+            "f1": 0.7553191489361704
+          },
+          "onset_100ms": {
+            "matches": 72,
+            "false_positives": 26,
+            "false_negatives": 18,
+            "precision": 0.7346938775510204,
+            "recall": 0.8,
+            "f1": 0.7659574468085106
+          },
+          "onset_offset": {
+            "matches": 40,
+            "false_positives": 58,
+            "false_negatives": 50,
+            "precision": 0.40816326530612246,
+            "recall": 0.4444444444444444,
+            "f1": 0.425531914893617
+          },
+          "elapsed_seconds": 0.4159
+        }
+      },
+      {
+        "id": "city-pop-101-mixture",
+        "split": "development",
+        "variant": "mixture",
+        "reference_notes": 90,
+        "audio_sha256": "64c1634760429ce63d5a2de7321527e9455c210b47623f365cbdc3e2524209b6",
+        "reference_sha256": "5d4bc25879747db7f01a4ff55cd8193662e541423d0c4a58742be98b7d996b77",
+        "frozen_project_sha256": "bd0706b749215bef2b1076a5ca4e9ceb5aaf51a366f59bfd10c3325c54c3e487",
+        "before": {
+          "estimated_notes": 71,
+          "onset_50ms": {
+            "matches": 47,
+            "false_positives": 24,
+            "false_negatives": 43,
+            "precision": 0.6619718309859155,
+            "recall": 0.5222222222222223,
+            "f1": 0.5838509316770187
+          },
+          "onset_100ms": {
+            "matches": 53,
+            "false_positives": 18,
+            "false_negatives": 37,
+            "precision": 0.7464788732394366,
+            "recall": 0.5888888888888889,
+            "f1": 0.6583850931677019
+          },
+          "onset_offset": {
+            "matches": 20,
+            "false_positives": 51,
+            "false_negatives": 70,
+            "precision": 0.28169014084507044,
+            "recall": 0.2222222222222222,
+            "f1": 0.24844720496894412
+          },
+          "elapsed_seconds": 0.2748945
+        },
+        "after": {
+          "estimated_notes": 55,
+          "onset_50ms": {
+            "matches": 49,
+            "false_positives": 6,
+            "false_negatives": 41,
+            "precision": 0.8909090909090909,
+            "recall": 0.5444444444444444,
+            "f1": 0.6758620689655171
+          },
+          "onset_100ms": {
+            "matches": 49,
+            "false_positives": 6,
+            "false_negatives": 41,
+            "precision": 0.8909090909090909,
+            "recall": 0.5444444444444444,
+            "f1": 0.6758620689655171
+          },
+          "onset_offset": {
+            "matches": 20,
+            "false_positives": 35,
+            "false_negatives": 70,
+            "precision": 0.36363636363636365,
+            "recall": 0.2222222222222222,
+            "f1": 0.27586206896551724
+          },
+          "elapsed_seconds": 0.1737078
+        }
+      },
+      {
+        "id": "city-pop-102-piano",
+        "split": "development",
+        "variant": "piano",
+        "reference_notes": 93,
+        "audio_sha256": "70938861348cb2c56b310b7f8e4189ff6086c2ac8fe6179e1ebabed63f72540f",
+        "reference_sha256": "542a8777a32e6e38679da24dd4e7b4e7efdf34d4f3ccb4bb4e173b7b438e109a",
+        "frozen_project_sha256": "7d4d320feaa1960831473963c0cb12de22aab45b37a9d2995f6fd133765fd62b",
+        "before": {
+          "estimated_notes": 138,
+          "onset_50ms": {
+            "matches": 69,
+            "false_positives": 69,
+            "false_negatives": 24,
+            "precision": 0.5,
+            "recall": 0.7419354838709677,
+            "f1": 0.5974025974025974
+          },
+          "onset_100ms": {
+            "matches": 69,
+            "false_positives": 69,
+            "false_negatives": 24,
+            "precision": 0.5,
+            "recall": 0.7419354838709677,
+            "f1": 0.5974025974025974
+          },
+          "onset_offset": {
+            "matches": 46,
+            "false_positives": 92,
+            "false_negatives": 47,
+            "precision": 0.3333333333333333,
+            "recall": 0.4946236559139785,
+            "f1": 0.3982683982683983
+          },
+          "elapsed_seconds": 0.2387195
+        },
+        "after": {
+          "estimated_notes": 108,
+          "onset_50ms": {
+            "matches": 76,
+            "false_positives": 32,
+            "false_negatives": 17,
+            "precision": 0.7037037037037037,
+            "recall": 0.8172043010752689,
+            "f1": 0.7562189054726368
+          },
+          "onset_100ms": {
+            "matches": 76,
+            "false_positives": 32,
+            "false_negatives": 17,
+            "precision": 0.7037037037037037,
+            "recall": 0.8172043010752689,
+            "f1": 0.7562189054726368
+          },
+          "onset_offset": {
+            "matches": 48,
+            "false_positives": 60,
+            "false_negatives": 45,
+            "precision": 0.4444444444444444,
+            "recall": 0.5161290322580645,
+            "f1": 0.4776119402985074
+          },
+          "elapsed_seconds": 0.1994011
+        }
+      },
+      {
+        "id": "city-pop-102-mixture",
+        "split": "development",
+        "variant": "mixture",
+        "reference_notes": 93,
+        "audio_sha256": "ba7281cd88e97092b5a7db30929e0891591499983edb1cbeab3890f092627e36",
+        "reference_sha256": "542a8777a32e6e38679da24dd4e7b4e7efdf34d4f3ccb4bb4e173b7b438e109a",
+        "frozen_project_sha256": "d45fcb67a56225f6824931217465640bb213388a84c62272a06114120cba6f91",
+        "before": {
+          "estimated_notes": 81,
+          "onset_50ms": {
+            "matches": 55,
+            "false_positives": 26,
+            "false_negatives": 38,
+            "precision": 0.6790123456790124,
+            "recall": 0.5913978494623656,
+            "f1": 0.6321839080459771
+          },
+          "onset_100ms": {
+            "matches": 58,
+            "false_positives": 23,
+            "false_negatives": 35,
+            "precision": 0.7160493827160493,
+            "recall": 0.6236559139784946,
+            "f1": 0.6666666666666666
+          },
+          "onset_offset": {
+            "matches": 26,
+            "false_positives": 55,
+            "false_negatives": 67,
+            "precision": 0.32098765432098764,
+            "recall": 0.27956989247311825,
+            "f1": 0.29885057471264365
+          },
+          "elapsed_seconds": 0.2381482
+        },
+        "after": {
+          "estimated_notes": 63,
+          "onset_50ms": {
+            "matches": 54,
+            "false_positives": 9,
+            "false_negatives": 39,
+            "precision": 0.8571428571428571,
+            "recall": 0.5806451612903226,
+            "f1": 0.6923076923076923
+          },
+          "onset_100ms": {
+            "matches": 55,
+            "false_positives": 8,
+            "false_negatives": 38,
+            "precision": 0.873015873015873,
+            "recall": 0.5913978494623656,
+            "f1": 0.7051282051282052
+          },
+          "onset_offset": {
+            "matches": 21,
+            "false_positives": 42,
+            "false_negatives": 72,
+            "precision": 0.3333333333333333,
+            "recall": 0.22580645161290322,
+            "f1": 0.2692307692307692
+          },
+          "elapsed_seconds": 0.1860071
+        }
+      },
+      {
+        "id": "jazz-trio-101-piano",
+        "split": "development",
+        "variant": "piano",
+        "reference_notes": 45,
+        "audio_sha256": "4f1e93c2c1a8d143dae5d9db27075df2f8eec8ae73118b3231fac7bee15b6316",
+        "reference_sha256": "ab3a8ce6f0dd18d57951e3259f2716446fe9e77ef79b2302ae788a9e61a94b79",
+        "frozen_project_sha256": "845768cdf866e3862fd4d8f8551a9b1ac95d3e25cd93c606eb6168d58458eb8a",
+        "before": {
+          "estimated_notes": 72,
+          "onset_50ms": {
+            "matches": 42,
+            "false_positives": 30,
+            "false_negatives": 3,
+            "precision": 0.5833333333333334,
+            "recall": 0.9333333333333333,
+            "f1": 0.7179487179487181
+          },
+          "onset_100ms": {
+            "matches": 42,
+            "false_positives": 30,
+            "false_negatives": 3,
+            "precision": 0.5833333333333334,
+            "recall": 0.9333333333333333,
+            "f1": 0.7179487179487181
+          },
+          "onset_offset": {
+            "matches": 22,
+            "false_positives": 50,
+            "false_negatives": 23,
+            "precision": 0.3055555555555556,
+            "recall": 0.4888888888888889,
+            "f1": 0.37606837606837606
+          },
+          "elapsed_seconds": 0.2996528
+        },
+        "after": {
+          "estimated_notes": 61,
+          "onset_50ms": {
+            "matches": 44,
+            "false_positives": 17,
+            "false_negatives": 1,
+            "precision": 0.7213114754098361,
+            "recall": 0.9777777777777777,
+            "f1": 0.8301886792452831
+          },
+          "onset_100ms": {
+            "matches": 44,
+            "false_positives": 17,
+            "false_negatives": 1,
+            "precision": 0.7213114754098361,
+            "recall": 0.9777777777777777,
+            "f1": 0.8301886792452831
+          },
+          "onset_offset": {
+            "matches": 24,
+            "false_positives": 37,
+            "false_negatives": 21,
+            "precision": 0.39344262295081966,
+            "recall": 0.5333333333333333,
+            "f1": 0.4528301886792453
+          },
+          "elapsed_seconds": 0.1759721
+        }
+      },
+      {
+        "id": "jazz-trio-101-mixture",
+        "split": "development",
+        "variant": "mixture",
+        "reference_notes": 45,
+        "audio_sha256": "f402254230a548cc381cb8a97ce63641c5af1c87588e671245affe605f46c306",
+        "reference_sha256": "ab3a8ce6f0dd18d57951e3259f2716446fe9e77ef79b2302ae788a9e61a94b79",
+        "frozen_project_sha256": "d0ff08d0f4714bf883c4660da54824e5432cc3d673294c4647bde1d95e51c9b1",
+        "before": {
+          "estimated_notes": 56,
+          "onset_50ms": {
+            "matches": 40,
+            "false_positives": 16,
+            "false_negatives": 5,
+            "precision": 0.7142857142857143,
+            "recall": 0.8888888888888888,
+            "f1": 0.792079207920792
+          },
+          "onset_100ms": {
+            "matches": 40,
+            "false_positives": 16,
+            "false_negatives": 5,
+            "precision": 0.7142857142857143,
+            "recall": 0.8888888888888888,
+            "f1": 0.792079207920792
+          },
+          "onset_offset": {
+            "matches": 22,
+            "false_positives": 34,
+            "false_negatives": 23,
+            "precision": 0.39285714285714285,
+            "recall": 0.4888888888888889,
+            "f1": 0.43564356435643564
+          },
+          "elapsed_seconds": 0.2880769
+        },
+        "after": {
+          "estimated_notes": 55,
+          "onset_50ms": {
+            "matches": 42,
+            "false_positives": 13,
+            "false_negatives": 3,
+            "precision": 0.7636363636363637,
+            "recall": 0.9333333333333333,
+            "f1": 0.84
+          },
+          "onset_100ms": {
+            "matches": 42,
+            "false_positives": 13,
+            "false_negatives": 3,
+            "precision": 0.7636363636363637,
+            "recall": 0.9333333333333333,
+            "f1": 0.84
+          },
+          "onset_offset": {
+            "matches": 19,
+            "false_positives": 36,
+            "false_negatives": 26,
+            "precision": 0.34545454545454546,
+            "recall": 0.4222222222222222,
+            "f1": 0.37999999999999995
+          },
+          "elapsed_seconds": 0.1526409
+        }
+      },
+      {
+        "id": "jazz-trio-102-piano",
+        "split": "development",
+        "variant": "piano",
+        "reference_notes": 73,
+        "audio_sha256": "5f808106c35d06f8828a1af3e20cc75b79ff1e0eeac5f9d20c6644931f6c49d4",
+        "reference_sha256": "a6c197b743edfcd3e86c7b09e87dcf745d3934932f9ee2d8b936ce64122b2760",
+        "frozen_project_sha256": "e585f3fdd351f1f737ff315e9dd46637d124f3672895c6c3328ab6f3c05a665c",
+        "before": {
+          "estimated_notes": 140,
+          "onset_50ms": {
+            "matches": 68,
+            "false_positives": 72,
+            "false_negatives": 5,
+            "precision": 0.4857142857142857,
+            "recall": 0.9315068493150684,
+            "f1": 0.6384976525821596
+          },
+          "onset_100ms": {
+            "matches": 70,
+            "false_positives": 70,
+            "false_negatives": 3,
+            "precision": 0.5,
+            "recall": 0.958904109589041,
+            "f1": 0.6572769953051644
+          },
+          "onset_offset": {
+            "matches": 45,
+            "false_positives": 95,
+            "false_negatives": 28,
+            "precision": 0.32142857142857145,
+            "recall": 0.6164383561643836,
+            "f1": 0.4225352112676057
+          },
+          "elapsed_seconds": 0.3593736
+        },
+        "after": {
+          "estimated_notes": 107,
+          "onset_50ms": {
+            "matches": 69,
+            "false_positives": 38,
+            "false_negatives": 4,
+            "precision": 0.6448598130841121,
+            "recall": 0.9452054794520548,
+            "f1": 0.7666666666666666
+          },
+          "onset_100ms": {
+            "matches": 69,
+            "false_positives": 38,
+            "false_negatives": 4,
+            "precision": 0.6448598130841121,
+            "recall": 0.9452054794520548,
+            "f1": 0.7666666666666666
+          },
+          "onset_offset": {
+            "matches": 43,
+            "false_positives": 64,
+            "false_negatives": 30,
+            "precision": 0.40186915887850466,
+            "recall": 0.589041095890411,
+            "f1": 0.4777777777777778
+          },
+          "elapsed_seconds": 0.2041151
+        }
+      },
+      {
+        "id": "jazz-trio-102-mixture",
+        "split": "development",
+        "variant": "mixture",
+        "reference_notes": 73,
+        "audio_sha256": "841da46be087012a1ae148552a4ff7b8a990f431c9d251e91e1918186cbbbb5e",
+        "reference_sha256": "a6c197b743edfcd3e86c7b09e87dcf745d3934932f9ee2d8b936ce64122b2760",
+        "frozen_project_sha256": "21149979c84cd47bf568a93e9ecaa952f2ebde57786c9a0867cb225fcc591ada",
+        "before": {
+          "estimated_notes": 110,
+          "onset_50ms": {
+            "matches": 67,
+            "false_positives": 43,
+            "false_negatives": 6,
+            "precision": 0.6090909090909091,
+            "recall": 0.9178082191780822,
+            "f1": 0.7322404371584701
+          },
+          "onset_100ms": {
+            "matches": 67,
+            "false_positives": 43,
+            "false_negatives": 6,
+            "precision": 0.6090909090909091,
+            "recall": 0.9178082191780822,
+            "f1": 0.7322404371584701
+          },
+          "onset_offset": {
+            "matches": 40,
+            "false_positives": 70,
+            "false_negatives": 33,
+            "precision": 0.36363636363636365,
+            "recall": 0.547945205479452,
+            "f1": 0.4371584699453552
+          },
+          "elapsed_seconds": 0.5183401
+        },
+        "after": {
+          "estimated_notes": 92,
+          "onset_50ms": {
+            "matches": 63,
+            "false_positives": 29,
+            "false_negatives": 10,
+            "precision": 0.6847826086956522,
+            "recall": 0.863013698630137,
+            "f1": 0.7636363636363637
+          },
+          "onset_100ms": {
+            "matches": 63,
+            "false_positives": 29,
+            "false_negatives": 10,
+            "precision": 0.6847826086956522,
+            "recall": 0.863013698630137,
+            "f1": 0.7636363636363637
+          },
+          "onset_offset": {
+            "matches": 35,
+            "false_positives": 57,
+            "false_negatives": 38,
+            "precision": 0.3804347826086957,
+            "recall": 0.4794520547945205,
+            "f1": 0.42424242424242425
+          },
+          "elapsed_seconds": 0.2042846
+        }
+      },
+      {
+        "id": "orchestral-101-piano",
+        "split": "development",
+        "variant": "piano",
+        "reference_notes": 49,
+        "audio_sha256": "2b458dd9e774d8df7351f200da6151e88a355a2fcaa5baed5a713336daa804b5",
+        "reference_sha256": "fce65a3d2a7086cb9defe99deb8faf26bc98e7971142e8e62b3278a845cd86d3",
+        "frozen_project_sha256": "14d5167145f1c2c4142783a537423d9079164e35678e495c404a266a4b94eb6b",
+        "before": {
+          "estimated_notes": 116,
+          "onset_50ms": {
+            "matches": 47,
+            "false_positives": 69,
+            "false_negatives": 2,
+            "precision": 0.4051724137931034,
+            "recall": 0.9591836734693877,
+            "f1": 0.5696969696969696
+          },
+          "onset_100ms": {
+            "matches": 47,
+            "false_positives": 69,
+            "false_negatives": 2,
+            "precision": 0.4051724137931034,
+            "recall": 0.9591836734693877,
+            "f1": 0.5696969696969696
+          },
+          "onset_offset": {
+            "matches": 29,
+            "false_positives": 87,
+            "false_negatives": 20,
+            "precision": 0.25,
+            "recall": 0.5918367346938775,
+            "f1": 0.3515151515151515
+          },
+          "elapsed_seconds": 0.3283189
+        },
+        "after": {
+          "estimated_notes": 92,
+          "onset_50ms": {
+            "matches": 47,
+            "false_positives": 45,
+            "false_negatives": 2,
+            "precision": 0.5108695652173914,
+            "recall": 0.9591836734693877,
+            "f1": 0.6666666666666666
+          },
+          "onset_100ms": {
+            "matches": 47,
+            "false_positives": 45,
+            "false_negatives": 2,
+            "precision": 0.5108695652173914,
+            "recall": 0.9591836734693877,
+            "f1": 0.6666666666666666
+          },
+          "onset_offset": {
+            "matches": 29,
+            "false_positives": 63,
+            "false_negatives": 20,
+            "precision": 0.31521739130434784,
+            "recall": 0.5918367346938775,
+            "f1": 0.41134751773049644
+          },
+          "elapsed_seconds": 0.2249594
+        }
+      },
+      {
+        "id": "orchestral-101-mixture",
+        "split": "development",
+        "variant": "mixture",
+        "reference_notes": 49,
+        "audio_sha256": "cf3346c4fe72584cdb54fdd984b9af97a0090f6d3a7cb492ffa5d44a8dde4875",
+        "reference_sha256": "fce65a3d2a7086cb9defe99deb8faf26bc98e7971142e8e62b3278a845cd86d3",
+        "frozen_project_sha256": "33898c245ca6695da2dcd8890f4d11b2f6e20917ba50346ec29ec6bdc28c484c",
+        "before": {
+          "estimated_notes": 35,
+          "onset_50ms": {
+            "matches": 14,
+            "false_positives": 21,
+            "false_negatives": 35,
+            "precision": 0.4,
+            "recall": 0.2857142857142857,
+            "f1": 0.3333333333333333
+          },
+          "onset_100ms": {
+            "matches": 20,
+            "false_positives": 15,
+            "false_negatives": 29,
+            "precision": 0.5714285714285714,
+            "recall": 0.40816326530612246,
+            "f1": 0.47619047619047616
+          },
+          "onset_offset": {
+            "matches": 6,
+            "false_positives": 29,
+            "false_negatives": 43,
+            "precision": 0.17142857142857143,
+            "recall": 0.12244897959183673,
+            "f1": 0.14285714285714288
+          },
+          "elapsed_seconds": 0.3308664
+        },
+        "after": {
+          "estimated_notes": 27,
+          "onset_50ms": {
+            "matches": 15,
+            "false_positives": 12,
+            "false_negatives": 34,
+            "precision": 0.5555555555555556,
+            "recall": 0.30612244897959184,
+            "f1": 0.3947368421052632
+          },
+          "onset_100ms": {
+            "matches": 21,
+            "false_positives": 6,
+            "false_negatives": 28,
+            "precision": 0.7777777777777778,
+            "recall": 0.42857142857142855,
+            "f1": 0.5526315789473685
+          },
+          "onset_offset": {
+            "matches": 7,
+            "false_positives": 20,
+            "false_negatives": 42,
+            "precision": 0.25925925925925924,
+            "recall": 0.14285714285714285,
+            "f1": 0.18421052631578946
+          },
+          "elapsed_seconds": 0.2001974
+        }
+      },
+      {
+        "id": "orchestral-102-piano",
+        "split": "development",
+        "variant": "piano",
+        "reference_notes": 68,
+        "audio_sha256": "db2a9d18a27dfc5833368202d47895905cc8d6e5538bdedd74f79b2f9bc9b4f1",
+        "reference_sha256": "15d13d44665b94c0be82fb42b438124c63e81e20253c00e5c7366c682b8a87d2",
+        "frozen_project_sha256": "8c4d1935ae5c918a2d147947b88ce690fd7d662ddc94a4ebf6ba797579e84e8a",
+        "before": {
+          "estimated_notes": 111,
+          "onset_50ms": {
+            "matches": 56,
+            "false_positives": 55,
+            "false_negatives": 12,
+            "precision": 0.5045045045045045,
+            "recall": 0.8235294117647058,
+            "f1": 0.6256983240223463
+          },
+          "onset_100ms": {
+            "matches": 56,
+            "false_positives": 55,
+            "false_negatives": 12,
+            "precision": 0.5045045045045045,
+            "recall": 0.8235294117647058,
+            "f1": 0.6256983240223463
+          },
+          "onset_offset": {
+            "matches": 24,
+            "false_positives": 87,
+            "false_negatives": 44,
+            "precision": 0.21621621621621623,
+            "recall": 0.35294117647058826,
+            "f1": 0.2681564245810056
+          },
+          "elapsed_seconds": 0.4236813
+        },
+        "after": {
+          "estimated_notes": 86,
+          "onset_50ms": {
+            "matches": 58,
+            "false_positives": 28,
+            "false_negatives": 10,
+            "precision": 0.6744186046511628,
+            "recall": 0.8529411764705882,
+            "f1": 0.7532467532467532
+          },
+          "onset_100ms": {
+            "matches": 58,
+            "false_positives": 28,
+            "false_negatives": 10,
+            "precision": 0.6744186046511628,
+            "recall": 0.8529411764705882,
+            "f1": 0.7532467532467532
+          },
+          "onset_offset": {
+            "matches": 25,
+            "false_positives": 61,
+            "false_negatives": 43,
+            "precision": 0.29069767441860467,
+            "recall": 0.36764705882352944,
+            "f1": 0.3246753246753247
+          },
+          "elapsed_seconds": 0.2634937
+        }
+      },
+      {
+        "id": "orchestral-102-mixture",
+        "split": "development",
+        "variant": "mixture",
+        "reference_notes": 68,
+        "audio_sha256": "1bc12060d5c923193cd758a2e93aded7bf99ab5350846f69e24f36d9d8f4874c",
+        "reference_sha256": "15d13d44665b94c0be82fb42b438124c63e81e20253c00e5c7366c682b8a87d2",
+        "frozen_project_sha256": "3642ed04cfcd4347276c750a92493722dc18715a8ec9a46fe074cd41724ceb8b",
+        "before": {
+          "estimated_notes": 39,
+          "onset_50ms": {
+            "matches": 17,
+            "false_positives": 22,
+            "false_negatives": 51,
+            "precision": 0.4358974358974359,
+            "recall": 0.25,
+            "f1": 0.3177570093457944
+          },
+          "onset_100ms": {
+            "matches": 23,
+            "false_positives": 16,
+            "false_negatives": 45,
+            "precision": 0.5897435897435898,
+            "recall": 0.3382352941176471,
+            "f1": 0.42990654205607476
+          },
+          "onset_offset": {
+            "matches": 9,
+            "false_positives": 30,
+            "false_negatives": 59,
+            "precision": 0.23076923076923078,
+            "recall": 0.1323529411764706,
+            "f1": 0.16822429906542055
+          },
+          "elapsed_seconds": 0.4941976
+        },
+        "after": {
+          "estimated_notes": 26,
+          "onset_50ms": {
+            "matches": 16,
+            "false_positives": 10,
+            "false_negatives": 52,
+            "precision": 0.6153846153846154,
+            "recall": 0.23529411764705882,
+            "f1": 0.3404255319148936
+          },
+          "onset_100ms": {
+            "matches": 22,
+            "false_positives": 4,
+            "false_negatives": 46,
+            "precision": 0.8461538461538461,
+            "recall": 0.3235294117647059,
+            "f1": 0.46808510638297873
+          },
+          "onset_offset": {
+            "matches": 9,
+            "false_positives": 17,
+            "false_negatives": 59,
+            "precision": 0.34615384615384615,
+            "recall": 0.1323529411764706,
+            "f1": 0.19148936170212766
+          },
+          "elapsed_seconds": 0.2804464
+        }
+      },
+      {
+        "id": "city-pop-301-piano",
+        "split": "validation",
+        "variant": "piano",
+        "reference_notes": 111,
+        "audio_sha256": "a32287fb35daabb7eb412bd0e7447585e1c81219f640cdf34eb9b1b982b9317d",
+        "reference_sha256": "9caac8eecdbc00b354188a072a36a901c72ce606251f5f1ecd6a0887e02d47c6",
+        "frozen_project_sha256": "beaedda83beef59a8d139dc7372c28a2f38d69cf9368beb953315ca29bd2e5a9",
+        "before": {
+          "estimated_notes": 119,
+          "onset_50ms": {
+            "matches": 74,
+            "false_positives": 45,
+            "false_negatives": 37,
+            "precision": 0.6218487394957983,
+            "recall": 0.6666666666666666,
+            "f1": 0.6434782608695653
+          },
+          "onset_100ms": {
+            "matches": 75,
+            "false_positives": 44,
+            "false_negatives": 36,
+            "precision": 0.6302521008403361,
+            "recall": 0.6756756756756757,
+            "f1": 0.6521739130434783
+          },
+          "onset_offset": {
+            "matches": 51,
+            "false_positives": 68,
+            "false_negatives": 60,
+            "precision": 0.42857142857142855,
+            "recall": 0.4594594594594595,
+            "f1": 0.4434782608695652
+          },
+          "elapsed_seconds": 0.47417
+        },
+        "after": {
+          "estimated_notes": 101,
+          "onset_50ms": {
+            "matches": 74,
+            "false_positives": 27,
+            "false_negatives": 37,
+            "precision": 0.7326732673267327,
+            "recall": 0.6666666666666666,
+            "f1": 0.6981132075471698
+          },
+          "onset_100ms": {
+            "matches": 74,
+            "false_positives": 27,
+            "false_negatives": 37,
+            "precision": 0.7326732673267327,
+            "recall": 0.6666666666666666,
+            "f1": 0.6981132075471698
+          },
+          "onset_offset": {
+            "matches": 56,
+            "false_positives": 45,
+            "false_negatives": 55,
+            "precision": 0.5544554455445545,
+            "recall": 0.5045045045045045,
+            "f1": 0.5283018867924528
+          },
+          "elapsed_seconds": 0.1943476
+        }
+      },
+      {
+        "id": "city-pop-301-mixture",
+        "split": "validation",
+        "variant": "mixture",
+        "reference_notes": 111,
+        "audio_sha256": "59dacc4e5fbcd83d022d381f9edeaf547741c354709d415f5d0b63af1e3e8def",
+        "reference_sha256": "9caac8eecdbc00b354188a072a36a901c72ce606251f5f1ecd6a0887e02d47c6",
+        "frozen_project_sha256": "c2b9647cd1b6d282500a6d88ae1e0cdc959c672802f54f5490004a5b659130a4",
+        "before": {
+          "estimated_notes": 72,
+          "onset_50ms": {
+            "matches": 53,
+            "false_positives": 19,
+            "false_negatives": 58,
+            "precision": 0.7361111111111112,
+            "recall": 0.4774774774774775,
+            "f1": 0.5792349726775956
+          },
+          "onset_100ms": {
+            "matches": 55,
+            "false_positives": 17,
+            "false_negatives": 56,
+            "precision": 0.7638888888888888,
+            "recall": 0.4954954954954955,
+            "f1": 0.6010928961748634
+          },
+          "onset_offset": {
+            "matches": 27,
+            "false_positives": 45,
+            "false_negatives": 84,
+            "precision": 0.375,
+            "recall": 0.24324324324324326,
+            "f1": 0.2950819672131148
+          },
+          "elapsed_seconds": 0.3931285
+        },
+        "after": {
+          "estimated_notes": 62,
+          "onset_50ms": {
+            "matches": 49,
+            "false_positives": 13,
+            "false_negatives": 62,
+            "precision": 0.7903225806451613,
+            "recall": 0.44144144144144143,
+            "f1": 0.5664739884393064
+          },
+          "onset_100ms": {
+            "matches": 50,
+            "false_positives": 12,
+            "false_negatives": 61,
+            "precision": 0.8064516129032258,
+            "recall": 0.45045045045045046,
+            "f1": 0.5780346820809248
+          },
+          "onset_offset": {
+            "matches": 26,
+            "false_positives": 36,
+            "false_negatives": 85,
+            "precision": 0.41935483870967744,
+            "recall": 0.23423423423423423,
+            "f1": 0.30057803468208094
+          },
+          "elapsed_seconds": 0.3837997
+        }
+      },
+      {
+        "id": "city-pop-302-piano",
+        "split": "validation",
+        "variant": "piano",
+        "reference_notes": 89,
+        "audio_sha256": "9fc2c77bc8ebfab757d5d533036d4b3e46c050c270c00b2cf48b4f8fe0753055",
+        "reference_sha256": "d98ee34d90e2ae0d843680ff7aaf5182ea26d9f54834c68a3f5df4e3f68c98dc",
+        "frozen_project_sha256": "a9fb80fa005feb3e1338b375605f9ae051cf2b1f8b4c6b9b64aaa87d209b94b9",
+        "before": {
+          "estimated_notes": 116,
+          "onset_50ms": {
+            "matches": 69,
+            "false_positives": 47,
+            "false_negatives": 20,
+            "precision": 0.5948275862068966,
+            "recall": 0.7752808988764045,
+            "f1": 0.673170731707317
+          },
+          "onset_100ms": {
+            "matches": 70,
+            "false_positives": 46,
+            "false_negatives": 19,
+            "precision": 0.603448275862069,
+            "recall": 0.7865168539325843,
+            "f1": 0.6829268292682926
+          },
+          "onset_offset": {
+            "matches": 44,
+            "false_positives": 72,
+            "false_negatives": 45,
+            "precision": 0.3793103448275862,
+            "recall": 0.4943820224719101,
+            "f1": 0.42926829268292677
+          },
+          "elapsed_seconds": 0.3406185
+        },
+        "after": {
+          "estimated_notes": 98,
+          "onset_50ms": {
+            "matches": 70,
+            "false_positives": 28,
+            "false_negatives": 19,
+            "precision": 0.7142857142857143,
+            "recall": 0.7865168539325843,
+            "f1": 0.7486631016042781
+          },
+          "onset_100ms": {
+            "matches": 71,
+            "false_positives": 27,
+            "false_negatives": 18,
+            "precision": 0.7244897959183674,
+            "recall": 0.797752808988764,
+            "f1": 0.7593582887700534
+          },
+          "onset_offset": {
+            "matches": 45,
+            "false_positives": 53,
+            "false_negatives": 44,
+            "precision": 0.45918367346938777,
+            "recall": 0.5056179775280899,
+            "f1": 0.48128342245989303
+          },
+          "elapsed_seconds": 0.2348272
+        }
+      },
+      {
+        "id": "city-pop-302-mixture",
+        "split": "validation",
+        "variant": "mixture",
+        "reference_notes": 89,
+        "audio_sha256": "b6039cf440af4227ecb38e33f0df97b339122783b798e57c535823e95efe88f2",
+        "reference_sha256": "d98ee34d90e2ae0d843680ff7aaf5182ea26d9f54834c68a3f5df4e3f68c98dc",
+        "frozen_project_sha256": "c4a5479c7140ff26eaf0116a799cbf0acaddee4153cf8405e74ba9f0b40745d6",
+        "before": {
+          "estimated_notes": 70,
+          "onset_50ms": {
+            "matches": 52,
+            "false_positives": 18,
+            "false_negatives": 37,
+            "precision": 0.7428571428571429,
+            "recall": 0.5842696629213483,
+            "f1": 0.6540880503144654
+          },
+          "onset_100ms": {
+            "matches": 55,
+            "false_positives": 15,
+            "false_negatives": 34,
+            "precision": 0.7857142857142857,
+            "recall": 0.6179775280898876,
+            "f1": 0.6918238993710691
+          },
+          "onset_offset": {
+            "matches": 21,
+            "false_positives": 49,
+            "false_negatives": 68,
+            "precision": 0.3,
+            "recall": 0.23595505617977527,
+            "f1": 0.26415094339622647
+          },
+          "elapsed_seconds": 0.4108858
+        },
+        "after": {
+          "estimated_notes": 60,
+          "onset_50ms": {
+            "matches": 48,
+            "false_positives": 12,
+            "false_negatives": 41,
+            "precision": 0.8,
+            "recall": 0.5393258426966292,
+            "f1": 0.6442953020134228
+          },
+          "onset_100ms": {
+            "matches": 49,
+            "false_positives": 11,
+            "false_negatives": 40,
+            "precision": 0.8166666666666667,
+            "recall": 0.550561797752809,
+            "f1": 0.6577181208053691
+          },
+          "onset_offset": {
+            "matches": 23,
+            "false_positives": 37,
+            "false_negatives": 66,
+            "precision": 0.38333333333333336,
+            "recall": 0.25842696629213485,
+            "f1": 0.30872483221476515
+          },
+          "elapsed_seconds": 0.3791908
+        }
+      },
+      {
+        "id": "jazz-trio-301-piano",
+        "split": "validation",
+        "variant": "piano",
+        "reference_notes": 63,
+        "audio_sha256": "a800179053ed54341b05c047ea8060d345c57b460cc58add7f4fbfa9632891aa",
+        "reference_sha256": "5eb44aa7891c94f7ba67627fe5632d7e40e1f9108966bf2b5fe0553a8d805720",
+        "frozen_project_sha256": "1df87da1639a2b25c3cfa5e18970b601d9c1ba2c76217c232f0e8e64b99c6520",
+        "before": {
+          "estimated_notes": 122,
+          "onset_50ms": {
+            "matches": 59,
+            "false_positives": 63,
+            "false_negatives": 4,
+            "precision": 0.48360655737704916,
+            "recall": 0.9365079365079365,
+            "f1": 0.6378378378378378
+          },
+          "onset_100ms": {
+            "matches": 61,
+            "false_positives": 61,
+            "false_negatives": 2,
+            "precision": 0.5,
+            "recall": 0.9682539682539683,
+            "f1": 0.6594594594594594
+          },
+          "onset_offset": {
+            "matches": 41,
+            "false_positives": 81,
+            "false_negatives": 22,
+            "precision": 0.3360655737704918,
+            "recall": 0.6507936507936508,
+            "f1": 0.4432432432432432
+          },
+          "elapsed_seconds": 0.3144146
+        },
+        "after": {
+          "estimated_notes": 90,
+          "onset_50ms": {
+            "matches": 60,
+            "false_positives": 30,
+            "false_negatives": 3,
+            "precision": 0.6666666666666666,
+            "recall": 0.9523809523809523,
+            "f1": 0.7843137254901961
+          },
+          "onset_100ms": {
+            "matches": 61,
+            "false_positives": 29,
+            "false_negatives": 2,
+            "precision": 0.6777777777777778,
+            "recall": 0.9682539682539683,
+            "f1": 0.7973856209150327
+          },
+          "onset_offset": {
+            "matches": 41,
+            "false_positives": 49,
+            "false_negatives": 22,
+            "precision": 0.45555555555555555,
+            "recall": 0.6507936507936508,
+            "f1": 0.5359477124183006
+          },
+          "elapsed_seconds": 0.2945199
+        }
+      },
+      {
+        "id": "jazz-trio-301-mixture",
+        "split": "validation",
+        "variant": "mixture",
+        "reference_notes": 63,
+        "audio_sha256": "101cf12c320cbf23767e39ae2ac60cd27ba91c430c35958e5c0e01f1ce891359",
+        "reference_sha256": "5eb44aa7891c94f7ba67627fe5632d7e40e1f9108966bf2b5fe0553a8d805720",
+        "frozen_project_sha256": "28e412caefc4a1c75f18f8beb72e210974db122981edecff2ceaa344ed82e7ea",
+        "before": {
+          "estimated_notes": 98,
+          "onset_50ms": {
+            "matches": 55,
+            "false_positives": 43,
+            "false_negatives": 8,
+            "precision": 0.5612244897959183,
+            "recall": 0.873015873015873,
+            "f1": 0.6832298136645963
+          },
+          "onset_100ms": {
+            "matches": 58,
+            "false_positives": 40,
+            "false_negatives": 5,
+            "precision": 0.5918367346938775,
+            "recall": 0.9206349206349206,
+            "f1": 0.7204968944099379
+          },
+          "onset_offset": {
+            "matches": 29,
+            "false_positives": 69,
+            "false_negatives": 34,
+            "precision": 0.29591836734693877,
+            "recall": 0.4603174603174603,
+            "f1": 0.36024844720496896
+          },
+          "elapsed_seconds": 0.3234732
+        },
+        "after": {
+          "estimated_notes": 83,
+          "onset_50ms": {
+            "matches": 61,
+            "false_positives": 22,
+            "false_negatives": 2,
+            "precision": 0.7349397590361446,
+            "recall": 0.9682539682539683,
+            "f1": 0.8356164383561644
+          },
+          "onset_100ms": {
+            "matches": 62,
+            "false_positives": 21,
+            "false_negatives": 1,
+            "precision": 0.7469879518072289,
+            "recall": 0.9841269841269841,
+            "f1": 0.8493150684931506
+          },
+          "onset_offset": {
+            "matches": 31,
+            "false_positives": 52,
+            "false_negatives": 32,
+            "precision": 0.37349397590361444,
+            "recall": 0.49206349206349204,
+            "f1": 0.4246575342465753
+          },
+          "elapsed_seconds": 0.2025764
+        }
+      },
+      {
+        "id": "jazz-trio-302-piano",
+        "split": "validation",
+        "variant": "piano",
+        "reference_notes": 52,
+        "audio_sha256": "a51217bff2291b4f6524c28fb467c8ff02a291911b73e77ef12d2e445a699887",
+        "reference_sha256": "1c1b18dabe319373f38c78733d90f7d5258c824ee1f6e6837012b86e5e8a1a6e",
+        "frozen_project_sha256": "6fcc9f9da56422ece75d2380856f911d29ddfac52b862f0c27901beeddd7a379",
+        "before": {
+          "estimated_notes": 82,
+          "onset_50ms": {
+            "matches": 50,
+            "false_positives": 32,
+            "false_negatives": 2,
+            "precision": 0.6097560975609756,
+            "recall": 0.9615384615384616,
+            "f1": 0.7462686567164178
+          },
+          "onset_100ms": {
+            "matches": 50,
+            "false_positives": 32,
+            "false_negatives": 2,
+            "precision": 0.6097560975609756,
+            "recall": 0.9615384615384616,
+            "f1": 0.7462686567164178
+          },
+          "onset_offset": {
+            "matches": 31,
+            "false_positives": 51,
+            "false_negatives": 21,
+            "precision": 0.3780487804878049,
+            "recall": 0.5961538461538461,
+            "f1": 0.4626865671641791
+          },
+          "elapsed_seconds": 0.255278
+        },
+        "after": {
+          "estimated_notes": 69,
+          "onset_50ms": {
+            "matches": 52,
+            "false_positives": 17,
+            "false_negatives": 0,
+            "precision": 0.7536231884057971,
+            "recall": 1,
+            "f1": 0.859504132231405
+          },
+          "onset_100ms": {
+            "matches": 52,
+            "false_positives": 17,
+            "false_negatives": 0,
+            "precision": 0.7536231884057971,
+            "recall": 1,
+            "f1": 0.859504132231405
+          },
+          "onset_offset": {
+            "matches": 30,
+            "false_positives": 39,
+            "false_negatives": 22,
+            "precision": 0.43478260869565216,
+            "recall": 0.5769230769230769,
+            "f1": 0.4958677685950413
+          },
+          "elapsed_seconds": 0.1981571
+        }
+      },
+      {
+        "id": "jazz-trio-302-mixture",
+        "split": "validation",
+        "variant": "mixture",
+        "reference_notes": 52,
+        "audio_sha256": "e1b44c7a9b7767ac5e98b412a5691c00e16d56cd1d91637fed233c9e8cb99e06",
+        "reference_sha256": "1c1b18dabe319373f38c78733d90f7d5258c824ee1f6e6837012b86e5e8a1a6e",
+        "frozen_project_sha256": "14d1efb5e4dda383948ccd3838d79149866f4871ebfe45d9deb1034f98e2e566",
+        "before": {
+          "estimated_notes": 68,
+          "onset_50ms": {
+            "matches": 46,
+            "false_positives": 22,
+            "false_negatives": 6,
+            "precision": 0.6764705882352942,
+            "recall": 0.8846153846153846,
+            "f1": 0.7666666666666666
+          },
+          "onset_100ms": {
+            "matches": 50,
+            "false_positives": 18,
+            "false_negatives": 2,
+            "precision": 0.7352941176470589,
+            "recall": 0.9615384615384616,
+            "f1": 0.8333333333333333
+          },
+          "onset_offset": {
+            "matches": 19,
+            "false_positives": 49,
+            "false_negatives": 33,
+            "precision": 0.27941176470588236,
+            "recall": 0.36538461538461536,
+            "f1": 0.3166666666666667
+          },
+          "elapsed_seconds": 0.3521767
+        },
+        "after": {
+          "estimated_notes": 65,
+          "onset_50ms": {
+            "matches": 49,
+            "false_positives": 16,
+            "false_negatives": 3,
+            "precision": 0.7538461538461538,
+            "recall": 0.9423076923076923,
+            "f1": 0.8376068376068375
+          },
+          "onset_100ms": {
+            "matches": 51,
+            "false_positives": 14,
+            "false_negatives": 1,
+            "precision": 0.7846153846153846,
+            "recall": 0.9807692307692307,
+            "f1": 0.8717948717948717
+          },
+          "onset_offset": {
+            "matches": 21,
+            "false_positives": 44,
+            "false_negatives": 31,
+            "precision": 0.3230769230769231,
+            "recall": 0.40384615384615385,
+            "f1": 0.358974358974359
+          },
+          "elapsed_seconds": 0.272778
+        }
+      },
+      {
+        "id": "orchestral-301-piano",
+        "split": "validation",
+        "variant": "piano",
+        "reference_notes": 63,
+        "audio_sha256": "f6dd6203eadb4e2cc9b0a709fa46166df612a98b4efdfd6ddeaaa2f40573f620",
+        "reference_sha256": "81a43e07220b1ff27495460ff087b2f659bb3ae3bfe92e4a85d6e3f69ebdb057",
+        "frozen_project_sha256": "f93e75968d88807289d7028bef14085c72ff90756d1218414a8e1e7d8ac36a36",
+        "before": {
+          "estimated_notes": 124,
+          "onset_50ms": {
+            "matches": 57,
+            "false_positives": 67,
+            "false_negatives": 6,
+            "precision": 0.4596774193548387,
+            "recall": 0.9047619047619048,
+            "f1": 0.6096256684491979
+          },
+          "onset_100ms": {
+            "matches": 57,
+            "false_positives": 67,
+            "false_negatives": 6,
+            "precision": 0.4596774193548387,
+            "recall": 0.9047619047619048,
+            "f1": 0.6096256684491979
+          },
+          "onset_offset": {
+            "matches": 14,
+            "false_positives": 110,
+            "false_negatives": 49,
+            "precision": 0.11290322580645161,
+            "recall": 0.2222222222222222,
+            "f1": 0.1497326203208556
+          },
+          "elapsed_seconds": 0.3240371
+        },
+        "after": {
+          "estimated_notes": 98,
+          "onset_50ms": {
+            "matches": 58,
+            "false_positives": 40,
+            "false_negatives": 5,
+            "precision": 0.5918367346938775,
+            "recall": 0.9206349206349206,
+            "f1": 0.7204968944099379
+          },
+          "onset_100ms": {
+            "matches": 58,
+            "false_positives": 40,
+            "false_negatives": 5,
+            "precision": 0.5918367346938775,
+            "recall": 0.9206349206349206,
+            "f1": 0.7204968944099379
+          },
+          "onset_offset": {
+            "matches": 15,
+            "false_positives": 83,
+            "false_negatives": 48,
+            "precision": 0.15306122448979592,
+            "recall": 0.23809523809523808,
+            "f1": 0.1863354037267081
+          },
+          "elapsed_seconds": 0.5342978
+        }
+      },
+      {
+        "id": "orchestral-301-mixture",
+        "split": "validation",
+        "variant": "mixture",
+        "reference_notes": 63,
+        "audio_sha256": "ed85e23c6db83ed398e2aab5fd5e53f48ddb7438a6f644db7e629877fcb95ab0",
+        "reference_sha256": "81a43e07220b1ff27495460ff087b2f659bb3ae3bfe92e4a85d6e3f69ebdb057",
+        "frozen_project_sha256": "bcb783586d4184b09a2c3347cf4e01f9da81fe70e80982d7db7903d62e3c468f",
+        "before": {
+          "estimated_notes": 34,
+          "onset_50ms": {
+            "matches": 12,
+            "false_positives": 22,
+            "false_negatives": 51,
+            "precision": 0.35294117647058826,
+            "recall": 0.19047619047619047,
+            "f1": 0.2474226804123711
+          },
+          "onset_100ms": {
+            "matches": 19,
+            "false_positives": 15,
+            "false_negatives": 44,
+            "precision": 0.5588235294117647,
+            "recall": 0.30158730158730157,
+            "f1": 0.39175257731958757
+          },
+          "onset_offset": {
+            "matches": 8,
+            "false_positives": 26,
+            "false_negatives": 55,
+            "precision": 0.23529411764705882,
+            "recall": 0.12698412698412698,
+            "f1": 0.16494845360824742
+          },
+          "elapsed_seconds": 0.4579318
+        },
+        "after": {
+          "estimated_notes": 21,
+          "onset_50ms": {
+            "matches": 12,
+            "false_positives": 9,
+            "false_negatives": 51,
+            "precision": 0.5714285714285714,
+            "recall": 0.19047619047619047,
+            "f1": 0.2857142857142857
+          },
+          "onset_100ms": {
+            "matches": 17,
+            "false_positives": 4,
+            "false_negatives": 46,
+            "precision": 0.8095238095238095,
+            "recall": 0.2698412698412698,
+            "f1": 0.40476190476190477
+          },
+          "onset_offset": {
+            "matches": 8,
+            "false_positives": 13,
+            "false_negatives": 55,
+            "precision": 0.38095238095238093,
+            "recall": 0.12698412698412698,
+            "f1": 0.19047619047619047
+          },
+          "elapsed_seconds": 0.2203012
+        }
+      },
+      {
+        "id": "orchestral-302-piano",
+        "split": "validation",
+        "variant": "piano",
+        "reference_notes": 60,
+        "audio_sha256": "c786c9f67cc3eb75f8ce7e17b9f5875bf82e92108d739c2f3a25de83a649b432",
+        "reference_sha256": "f902381dc30dcb2abaeaad70ae15e940ee4273112ba6366179845f3c1c29a337",
+        "frozen_project_sha256": "9570b9daa6cfe7bb5d601490f133d5a0b1b66b684dfc318721cde0ec5ccfaa1c",
+        "before": {
+          "estimated_notes": 111,
+          "onset_50ms": {
+            "matches": 57,
+            "false_positives": 54,
+            "false_negatives": 3,
+            "precision": 0.5135135135135135,
+            "recall": 0.95,
+            "f1": 0.6666666666666667
+          },
+          "onset_100ms": {
+            "matches": 57,
+            "false_positives": 54,
+            "false_negatives": 3,
+            "precision": 0.5135135135135135,
+            "recall": 0.95,
+            "f1": 0.6666666666666667
+          },
+          "onset_offset": {
+            "matches": 42,
+            "false_positives": 69,
+            "false_negatives": 18,
+            "precision": 0.3783783783783784,
+            "recall": 0.7,
+            "f1": 0.4912280701754387
+          },
+          "elapsed_seconds": 0.2341521
+        },
+        "after": {
+          "estimated_notes": 90,
+          "onset_50ms": {
+            "matches": 57,
+            "false_positives": 33,
+            "false_negatives": 3,
+            "precision": 0.6333333333333333,
+            "recall": 0.95,
+            "f1": 0.7599999999999999
+          },
+          "onset_100ms": {
+            "matches": 57,
+            "false_positives": 33,
+            "false_negatives": 3,
+            "precision": 0.6333333333333333,
+            "recall": 0.95,
+            "f1": 0.7599999999999999
+          },
+          "onset_offset": {
+            "matches": 41,
+            "false_positives": 49,
+            "false_negatives": 19,
+            "precision": 0.45555555555555555,
+            "recall": 0.6833333333333333,
+            "f1": 0.5466666666666666
+          },
+          "elapsed_seconds": 0.3916468
+        }
+      },
+      {
+        "id": "orchestral-302-mixture",
+        "split": "validation",
+        "variant": "mixture",
+        "reference_notes": 60,
+        "audio_sha256": "312b00a01de511b0684b8918e8ec349daaf2d431d82ff7dadcf820beea1af0ac",
+        "reference_sha256": "f902381dc30dcb2abaeaad70ae15e940ee4273112ba6366179845f3c1c29a337",
+        "frozen_project_sha256": "6b47f1f3d49b267a67cfe8a25d490161459da3d6d22fba52e1bb444ca4c9e4d5",
+        "before": {
+          "estimated_notes": 43,
+          "onset_50ms": {
+            "matches": 15,
+            "false_positives": 28,
+            "false_negatives": 45,
+            "precision": 0.3488372093023256,
+            "recall": 0.25,
+            "f1": 0.29126213592233013
+          },
+          "onset_100ms": {
+            "matches": 25,
+            "false_positives": 18,
+            "false_negatives": 35,
+            "precision": 0.5813953488372093,
+            "recall": 0.4166666666666667,
+            "f1": 0.4854368932038835
+          },
+          "onset_offset": {
+            "matches": 7,
+            "false_positives": 36,
+            "false_negatives": 53,
+            "precision": 0.16279069767441862,
+            "recall": 0.11666666666666667,
+            "f1": 0.1359223300970874
+          },
+          "elapsed_seconds": 0.431434
+        },
+        "after": {
+          "estimated_notes": 36,
+          "onset_50ms": {
+            "matches": 16,
+            "false_positives": 20,
+            "false_negatives": 44,
+            "precision": 0.4444444444444444,
+            "recall": 0.26666666666666666,
+            "f1": 0.33333333333333337
+          },
+          "onset_100ms": {
+            "matches": 27,
+            "false_positives": 9,
+            "false_negatives": 33,
+            "precision": 0.75,
+            "recall": 0.45,
+            "f1": 0.5625000000000001
+          },
+          "onset_offset": {
+            "matches": 6,
+            "false_positives": 30,
+            "false_negatives": 54,
+            "precision": 0.16666666666666666,
+            "recall": 0.1,
+            "f1": 0.125
+          },
+          "elapsed_seconds": 0.319855
+        }
+      },
+      {
+        "id": "city-pop-901-piano",
+        "split": "held_out",
+        "variant": "piano",
+        "reference_notes": 86,
+        "audio_sha256": "33365b7006a9b6d4a81a991d70ef295d5fe9335c504d3e9ef725fd820cea3b26",
+        "reference_sha256": "b83b7e42192d872bed2e0a7bb068b06acb4f712b9dc77eb3c3eb1956269bfe0e",
+        "frozen_project_sha256": "69afa80a7299cd70a1175f3e8536c5d58a458297178263d2bfed580c0e493dce",
+        "before": {
+          "estimated_notes": 154,
+          "onset_50ms": {
+            "matches": 64,
+            "false_positives": 90,
+            "false_negatives": 22,
+            "precision": 0.4155844155844156,
+            "recall": 0.7441860465116279,
+            "f1": 0.5333333333333332
+          },
+          "onset_100ms": {
+            "matches": 65,
+            "false_positives": 89,
+            "false_negatives": 21,
+            "precision": 0.42207792207792205,
+            "recall": 0.7558139534883721,
+            "f1": 0.5416666666666666
+          },
+          "onset_offset": {
+            "matches": 41,
+            "false_positives": 113,
+            "false_negatives": 45,
+            "precision": 0.2662337662337662,
+            "recall": 0.47674418604651164,
+            "f1": 0.3416666666666666
+          },
+          "elapsed_seconds": 0.2640191
+        },
+        "after": {
+          "estimated_notes": 111,
+          "onset_50ms": {
+            "matches": 65,
+            "false_positives": 46,
+            "false_negatives": 21,
+            "precision": 0.5855855855855856,
+            "recall": 0.7558139534883721,
+            "f1": 0.6598984771573604
+          },
+          "onset_100ms": {
+            "matches": 65,
+            "false_positives": 46,
+            "false_negatives": 21,
+            "precision": 0.5855855855855856,
+            "recall": 0.7558139534883721,
+            "f1": 0.6598984771573604
+          },
+          "onset_offset": {
+            "matches": 41,
+            "false_positives": 70,
+            "false_negatives": 45,
+            "precision": 0.36936936936936937,
+            "recall": 0.47674418604651164,
+            "f1": 0.41624365482233505
+          },
+          "elapsed_seconds": 0.2366994
+        }
+      },
+      {
+        "id": "city-pop-901-mixture",
+        "split": "held_out",
+        "variant": "mixture",
+        "reference_notes": 86,
+        "audio_sha256": "fe7fa221e0a1ccd21bc292e765c70bc7b4528bdb237f7b317f63de8fdd031a86",
+        "reference_sha256": "b83b7e42192d872bed2e0a7bb068b06acb4f712b9dc77eb3c3eb1956269bfe0e",
+        "frozen_project_sha256": "597c954a86b3f2e3ee15fd8e3643c7e5f190783dbc609276866f756a9acbb32b",
+        "before": {
+          "estimated_notes": 83,
+          "onset_50ms": {
+            "matches": 42,
+            "false_positives": 41,
+            "false_negatives": 44,
+            "precision": 0.5060240963855421,
+            "recall": 0.4883720930232558,
+            "f1": 0.4970414201183432
+          },
+          "onset_100ms": {
+            "matches": 45,
+            "false_positives": 38,
+            "false_negatives": 41,
+            "precision": 0.5421686746987951,
+            "recall": 0.5232558139534884,
+            "f1": 0.5325443786982248
+          },
+          "onset_offset": {
+            "matches": 15,
+            "false_positives": 68,
+            "false_negatives": 71,
+            "precision": 0.18072289156626506,
+            "recall": 0.1744186046511628,
+            "f1": 0.17751479289940827
+          },
+          "elapsed_seconds": 0.4546286
+        },
+        "after": {
+          "estimated_notes": 53,
+          "onset_50ms": {
+            "matches": 40,
+            "false_positives": 13,
+            "false_negatives": 46,
+            "precision": 0.7547169811320755,
+            "recall": 0.46511627906976744,
+            "f1": 0.5755395683453238
+          },
+          "onset_100ms": {
+            "matches": 43,
+            "false_positives": 10,
+            "false_negatives": 43,
+            "precision": 0.8113207547169812,
+            "recall": 0.5,
+            "f1": 0.6187050359712231
+          },
+          "onset_offset": {
+            "matches": 13,
+            "false_positives": 40,
+            "false_negatives": 73,
+            "precision": 0.24528301886792453,
+            "recall": 0.1511627906976744,
+            "f1": 0.1870503597122302
+          },
+          "elapsed_seconds": 0.1891177
+        }
+      },
+      {
+        "id": "city-pop-902-piano",
+        "split": "held_out",
+        "variant": "piano",
+        "reference_notes": 104,
+        "audio_sha256": "cf554ad12e54e84e626d65f671ac69957c27990ce88bd6cff307f86fda2e9cbe",
+        "reference_sha256": "a5f591cc9db623aef177cbc77e3513478fd630e57e078a364a8676259f9583c3",
+        "frozen_project_sha256": "dac2c3714438ed5c9c03480d373e5ced1a144feb3fcb8596214d728f3b220be9",
+        "before": {
+          "estimated_notes": 135,
+          "onset_50ms": {
+            "matches": 69,
+            "false_positives": 66,
+            "false_negatives": 35,
+            "precision": 0.5111111111111111,
+            "recall": 0.6634615384615384,
+            "f1": 0.5774058577405858
+          },
+          "onset_100ms": {
+            "matches": 69,
+            "false_positives": 66,
+            "false_negatives": 35,
+            "precision": 0.5111111111111111,
+            "recall": 0.6634615384615384,
+            "f1": 0.5774058577405858
+          },
+          "onset_offset": {
+            "matches": 42,
+            "false_positives": 93,
+            "false_negatives": 62,
+            "precision": 0.3111111111111111,
+            "recall": 0.40384615384615385,
+            "f1": 0.3514644351464435
+          },
+          "elapsed_seconds": 0.4134821
+        },
+        "after": {
+          "estimated_notes": 103,
+          "onset_50ms": {
+            "matches": 66,
+            "false_positives": 37,
+            "false_negatives": 38,
+            "precision": 0.6407766990291263,
+            "recall": 0.6346153846153846,
+            "f1": 0.6376811594202898
+          },
+          "onset_100ms": {
+            "matches": 66,
+            "false_positives": 37,
+            "false_negatives": 38,
+            "precision": 0.6407766990291263,
+            "recall": 0.6346153846153846,
+            "f1": 0.6376811594202898
+          },
+          "onset_offset": {
+            "matches": 42,
+            "false_positives": 61,
+            "false_negatives": 62,
+            "precision": 0.4077669902912621,
+            "recall": 0.40384615384615385,
+            "f1": 0.4057971014492754
+          },
+          "elapsed_seconds": 0.2653575
+        }
+      },
+      {
+        "id": "city-pop-902-mixture",
+        "split": "held_out",
+        "variant": "mixture",
+        "reference_notes": 104,
+        "audio_sha256": "111ca9dfa8d7bf21dfd865f533ad09182b99cd6cc50f6a6223ae47706a329ac4",
+        "reference_sha256": "a5f591cc9db623aef177cbc77e3513478fd630e57e078a364a8676259f9583c3",
+        "frozen_project_sha256": "52f79960c557bca6153867b9dd613396c09fec583e39506be348a3cc4526a2e7",
+        "before": {
+          "estimated_notes": 77,
+          "onset_50ms": {
+            "matches": 51,
+            "false_positives": 26,
+            "false_negatives": 53,
+            "precision": 0.6623376623376623,
+            "recall": 0.49038461538461536,
+            "f1": 0.56353591160221
+          },
+          "onset_100ms": {
+            "matches": 56,
+            "false_positives": 21,
+            "false_negatives": 48,
+            "precision": 0.7272727272727273,
+            "recall": 0.5384615384615384,
+            "f1": 0.6187845303867403
+          },
+          "onset_offset": {
+            "matches": 16,
+            "false_positives": 61,
+            "false_negatives": 88,
+            "precision": 0.2077922077922078,
+            "recall": 0.15384615384615385,
+            "f1": 0.17679558011049726
+          },
+          "elapsed_seconds": 0.220978
+        },
+        "after": {
+          "estimated_notes": 62,
+          "onset_50ms": {
+            "matches": 48,
+            "false_positives": 14,
+            "false_negatives": 56,
+            "precision": 0.7741935483870968,
+            "recall": 0.46153846153846156,
+            "f1": 0.5783132530120482
+          },
+          "onset_100ms": {
+            "matches": 50,
+            "false_positives": 12,
+            "false_negatives": 54,
+            "precision": 0.8064516129032258,
+            "recall": 0.4807692307692308,
+            "f1": 0.6024096385542168
+          },
+          "onset_offset": {
+            "matches": 14,
+            "false_positives": 48,
+            "false_negatives": 90,
+            "precision": 0.22580645161290322,
+            "recall": 0.1346153846153846,
+            "f1": 0.1686746987951807
+          },
+          "elapsed_seconds": 0.3517765
+        }
+      },
+      {
+        "id": "jazz-trio-901-piano",
+        "split": "held_out",
+        "variant": "piano",
+        "reference_notes": 70,
+        "audio_sha256": "f369e10397c89935bc8cb1e99c3d876067851020931f3d5532a946b3916e3dd3",
+        "reference_sha256": "8a65a58881f6b9b45cf8dc9211746f80d83b6e7671bf64aad1179b20e88e5b88",
+        "frozen_project_sha256": "5163f39a17ca4c7b53dc1804b94f7637f81727964e78cea11b78a1b0bd7b783b",
+        "before": {
+          "estimated_notes": 124,
+          "onset_50ms": {
+            "matches": 64,
+            "false_positives": 60,
+            "false_negatives": 6,
+            "precision": 0.5161290322580645,
+            "recall": 0.9142857142857143,
+            "f1": 0.6597938144329898
+          },
+          "onset_100ms": {
+            "matches": 66,
+            "false_positives": 58,
+            "false_negatives": 4,
+            "precision": 0.532258064516129,
+            "recall": 0.9428571428571428,
+            "f1": 0.6804123711340205
+          },
+          "onset_offset": {
+            "matches": 34,
+            "false_positives": 90,
+            "false_negatives": 36,
+            "precision": 0.27419354838709675,
+            "recall": 0.4857142857142857,
+            "f1": 0.35051546391752575
+          },
+          "elapsed_seconds": 0.2252271
+        },
+        "after": {
+          "estimated_notes": 109,
+          "onset_50ms": {
+            "matches": 69,
+            "false_positives": 40,
+            "false_negatives": 1,
+            "precision": 0.6330275229357798,
+            "recall": 0.9857142857142858,
+            "f1": 0.770949720670391
+          },
+          "onset_100ms": {
+            "matches": 69,
+            "false_positives": 40,
+            "false_negatives": 1,
+            "precision": 0.6330275229357798,
+            "recall": 0.9857142857142858,
+            "f1": 0.770949720670391
+          },
+          "onset_offset": {
+            "matches": 38,
+            "false_positives": 71,
+            "false_negatives": 32,
+            "precision": 0.3486238532110092,
+            "recall": 0.5428571428571428,
+            "f1": 0.4245810055865922
+          },
+          "elapsed_seconds": 0.2142853
+        }
+      },
+      {
+        "id": "jazz-trio-901-mixture",
+        "split": "held_out",
+        "variant": "mixture",
+        "reference_notes": 70,
+        "audio_sha256": "96982c5a1a832f89dc76c37153f6d046ae1a15e885a2ce270eb9a01520155f2d",
+        "reference_sha256": "8a65a58881f6b9b45cf8dc9211746f80d83b6e7671bf64aad1179b20e88e5b88",
+        "frozen_project_sha256": "0e8f17ab452edb2fde470e28e0199e23b7dae928440e9cc6c77526136bd5db46",
+        "before": {
+          "estimated_notes": 99,
+          "onset_50ms": {
+            "matches": 60,
+            "false_positives": 39,
+            "false_negatives": 10,
+            "precision": 0.6060606060606061,
+            "recall": 0.8571428571428571,
+            "f1": 0.7100591715976331
+          },
+          "onset_100ms": {
+            "matches": 61,
+            "false_positives": 38,
+            "false_negatives": 9,
+            "precision": 0.6161616161616161,
+            "recall": 0.8714285714285714,
+            "f1": 0.7218934911242604
+          },
+          "onset_offset": {
+            "matches": 31,
+            "false_positives": 68,
+            "false_negatives": 39,
+            "precision": 0.31313131313131315,
+            "recall": 0.44285714285714284,
+            "f1": 0.3668639053254438
+          },
+          "elapsed_seconds": 0.3348344
+        },
+        "after": {
+          "estimated_notes": 90,
+          "onset_50ms": {
+            "matches": 58,
+            "false_positives": 32,
+            "false_negatives": 12,
+            "precision": 0.6444444444444445,
+            "recall": 0.8285714285714286,
+            "f1": 0.7250000000000001
+          },
+          "onset_100ms": {
+            "matches": 58,
+            "false_positives": 32,
+            "false_negatives": 12,
+            "precision": 0.6444444444444445,
+            "recall": 0.8285714285714286,
+            "f1": 0.7250000000000001
+          },
+          "onset_offset": {
+            "matches": 28,
+            "false_positives": 62,
+            "false_negatives": 42,
+            "precision": 0.3111111111111111,
+            "recall": 0.4,
+            "f1": 0.35000000000000003
+          },
+          "elapsed_seconds": 0.1705722
+        }
+      },
+      {
+        "id": "jazz-trio-902-piano",
+        "split": "held_out",
+        "variant": "piano",
+        "reference_notes": 73,
+        "audio_sha256": "88a5f6eb8c36a26dacce701f9f675143cb601d1fc5af84592584445ccdf10fd2",
+        "reference_sha256": "60bed0c359cec46ed6d537ae24bae02a1545ca823facdd7fd3b136effa350035",
+        "frozen_project_sha256": "a70ddeff19c1c99c614c2f76f77e4ac282d06bb6577ac7c26475e56ad0b169a5",
+        "before": {
+          "estimated_notes": 116,
+          "onset_50ms": {
+            "matches": 71,
+            "false_positives": 45,
+            "false_negatives": 2,
+            "precision": 0.6120689655172413,
+            "recall": 0.9726027397260274,
+            "f1": 0.7513227513227513
+          },
+          "onset_100ms": {
+            "matches": 71,
+            "false_positives": 45,
+            "false_negatives": 2,
+            "precision": 0.6120689655172413,
+            "recall": 0.9726027397260274,
+            "f1": 0.7513227513227513
+          },
+          "onset_offset": {
+            "matches": 53,
+            "false_positives": 63,
+            "false_negatives": 20,
+            "precision": 0.45689655172413796,
+            "recall": 0.726027397260274,
+            "f1": 0.5608465608465609
+          },
+          "elapsed_seconds": 0.2287149
+        },
+        "after": {
+          "estimated_notes": 101,
+          "onset_50ms": {
+            "matches": 73,
+            "false_positives": 28,
+            "false_negatives": 0,
+            "precision": 0.7227722772277227,
+            "recall": 1,
+            "f1": 0.8390804597701149
+          },
+          "onset_100ms": {
+            "matches": 73,
+            "false_positives": 28,
+            "false_negatives": 0,
+            "precision": 0.7227722772277227,
+            "recall": 1,
+            "f1": 0.8390804597701149
+          },
+          "onset_offset": {
+            "matches": 53,
+            "false_positives": 48,
+            "false_negatives": 20,
+            "precision": 0.5247524752475248,
+            "recall": 0.726027397260274,
+            "f1": 0.6091954022988506
+          },
+          "elapsed_seconds": 0.2700793
+        }
+      },
+      {
+        "id": "jazz-trio-902-mixture",
+        "split": "held_out",
+        "variant": "mixture",
+        "reference_notes": 73,
+        "audio_sha256": "8c39124e48d7fd6286a02cea038cb66aa9cee3cc921ebc56c415c3cf0a2c2eb6",
+        "reference_sha256": "60bed0c359cec46ed6d537ae24bae02a1545ca823facdd7fd3b136effa350035",
+        "frozen_project_sha256": "8775bd4f335b2dc87a6f0538d86bb0587776aa5ad3d0cc80f50d0f8f634bf3cd",
+        "before": {
+          "estimated_notes": 105,
+          "onset_50ms": {
+            "matches": 68,
+            "false_positives": 37,
+            "false_negatives": 5,
+            "precision": 0.6476190476190476,
+            "recall": 0.9315068493150684,
+            "f1": 0.7640449438202247
+          },
+          "onset_100ms": {
+            "matches": 69,
+            "false_positives": 36,
+            "false_negatives": 4,
+            "precision": 0.6571428571428571,
+            "recall": 0.9452054794520548,
+            "f1": 0.7752808988764044
+          },
+          "onset_offset": {
+            "matches": 44,
+            "false_positives": 61,
+            "false_negatives": 29,
+            "precision": 0.41904761904761906,
+            "recall": 0.6027397260273972,
+            "f1": 0.49438202247191004
+          },
+          "elapsed_seconds": 0.2723147
+        },
+        "after": {
+          "estimated_notes": 94,
+          "onset_50ms": {
+            "matches": 72,
+            "false_positives": 22,
+            "false_negatives": 1,
+            "precision": 0.7659574468085106,
+            "recall": 0.9863013698630136,
+            "f1": 0.8622754491017964
+          },
+          "onset_100ms": {
+            "matches": 72,
+            "false_positives": 22,
+            "false_negatives": 1,
+            "precision": 0.7659574468085106,
+            "recall": 0.9863013698630136,
+            "f1": 0.8622754491017964
+          },
+          "onset_offset": {
+            "matches": 43,
+            "false_positives": 51,
+            "false_negatives": 30,
+            "precision": 0.4574468085106383,
+            "recall": 0.589041095890411,
+            "f1": 0.5149700598802395
+          },
+          "elapsed_seconds": 0.2147096
+        }
+      },
+      {
+        "id": "orchestral-901-piano",
+        "split": "held_out",
+        "variant": "piano",
+        "reference_notes": 77,
+        "audio_sha256": "784e8fb3410f1c4a93f955b6bf0d1f5cf9697400a0e9f93f1021b5b8acdb3d88",
+        "reference_sha256": "9a3fd0614a1ea4dfc53d4f761ae80cbd3411778fc9a18b07fa34ca0e7917f5f0",
+        "frozen_project_sha256": "342d10eb9229d57cbe053b70248e39409dfcd69c5a8555e4409e2983e4262a78",
+        "before": {
+          "estimated_notes": 134,
+          "onset_50ms": {
+            "matches": 58,
+            "false_positives": 76,
+            "false_negatives": 19,
+            "precision": 0.43283582089552236,
+            "recall": 0.7532467532467533,
+            "f1": 0.5497630331753555
+          },
+          "onset_100ms": {
+            "matches": 58,
+            "false_positives": 76,
+            "false_negatives": 19,
+            "precision": 0.43283582089552236,
+            "recall": 0.7532467532467533,
+            "f1": 0.5497630331753555
+          },
+          "onset_offset": {
+            "matches": 38,
+            "false_positives": 96,
+            "false_negatives": 39,
+            "precision": 0.2835820895522388,
+            "recall": 0.4935064935064935,
+            "f1": 0.36018957345971564
+          },
+          "elapsed_seconds": 0.2935304
+        },
+        "after": {
+          "estimated_notes": 107,
+          "onset_50ms": {
+            "matches": 59,
+            "false_positives": 48,
+            "false_negatives": 18,
+            "precision": 0.5514018691588785,
+            "recall": 0.7662337662337663,
+            "f1": 0.6413043478260869
+          },
+          "onset_100ms": {
+            "matches": 59,
+            "false_positives": 48,
+            "false_negatives": 18,
+            "precision": 0.5514018691588785,
+            "recall": 0.7662337662337663,
+            "f1": 0.6413043478260869
+          },
+          "onset_offset": {
+            "matches": 39,
+            "false_positives": 68,
+            "false_negatives": 38,
+            "precision": 0.3644859813084112,
+            "recall": 0.5064935064935064,
+            "f1": 0.4239130434782608
+          },
+          "elapsed_seconds": 0.3595614
+        }
+      },
+      {
+        "id": "orchestral-901-mixture",
+        "split": "held_out",
+        "variant": "mixture",
+        "reference_notes": 77,
+        "audio_sha256": "60cd872360f30e8aee2f3c17e524ae93527998ea68e74a64f2e14d17b6f2706d",
+        "reference_sha256": "9a3fd0614a1ea4dfc53d4f761ae80cbd3411778fc9a18b07fa34ca0e7917f5f0",
+        "frozen_project_sha256": "071d221970d5de82816f7662dc4fdfcd2a79773fefe197db441376bb822cb70e",
+        "before": {
+          "estimated_notes": 49,
+          "onset_50ms": {
+            "matches": 23,
+            "false_positives": 26,
+            "false_negatives": 54,
+            "precision": 0.46938775510204084,
+            "recall": 0.2987012987012987,
+            "f1": 0.365079365079365
+          },
+          "onset_100ms": {
+            "matches": 37,
+            "false_positives": 12,
+            "false_negatives": 40,
+            "precision": 0.7551020408163265,
+            "recall": 0.4805194805194805,
+            "f1": 0.5873015873015873
+          },
+          "onset_offset": {
+            "matches": 13,
+            "false_positives": 36,
+            "false_negatives": 64,
+            "precision": 0.2653061224489796,
+            "recall": 0.16883116883116883,
+            "f1": 0.20634920634920634
+          },
+          "elapsed_seconds": 0.283254
+        },
+        "after": {
+          "estimated_notes": 41,
+          "onset_50ms": {
+            "matches": 24,
+            "false_positives": 17,
+            "false_negatives": 53,
+            "precision": 0.5853658536585366,
+            "recall": 0.3116883116883117,
+            "f1": 0.4067796610169491
+          },
+          "onset_100ms": {
+            "matches": 34,
+            "false_positives": 7,
+            "false_negatives": 43,
+            "precision": 0.8292682926829268,
+            "recall": 0.44155844155844154,
+            "f1": 0.576271186440678
+          },
+          "onset_offset": {
+            "matches": 14,
+            "false_positives": 27,
+            "false_negatives": 63,
+            "precision": 0.34146341463414637,
+            "recall": 0.18181818181818182,
+            "f1": 0.23728813559322035
+          },
+          "elapsed_seconds": 0.2830782
+        }
+      },
+      {
+        "id": "orchestral-902-piano",
+        "split": "held_out",
+        "variant": "piano",
+        "reference_notes": 52,
+        "audio_sha256": "2da7f91b89cf682d72c6139bc0073c84d7ebc598ee2d18e9d0ddca742c3af3af",
+        "reference_sha256": "416f309144684f331031c15ba7b0565d7db350de5bdec3d530ff4b726fa96608",
+        "frozen_project_sha256": "d09043885d1ea3bdd7dcf2ebb5bb4cc7d34c5226b514d7b94b7b990c5d7522a8",
+        "before": {
+          "estimated_notes": 88,
+          "onset_50ms": {
+            "matches": 46,
+            "false_positives": 42,
+            "false_negatives": 6,
+            "precision": 0.5227272727272727,
+            "recall": 0.8846153846153846,
+            "f1": 0.6571428571428571
+          },
+          "onset_100ms": {
+            "matches": 46,
+            "false_positives": 42,
+            "false_negatives": 6,
+            "precision": 0.5227272727272727,
+            "recall": 0.8846153846153846,
+            "f1": 0.6571428571428571
+          },
+          "onset_offset": {
+            "matches": 24,
+            "false_positives": 64,
+            "false_negatives": 28,
+            "precision": 0.2727272727272727,
+            "recall": 0.46153846153846156,
+            "f1": 0.3428571428571428
+          },
+          "elapsed_seconds": 0.3057024
+        },
+        "after": {
+          "estimated_notes": 69,
+          "onset_50ms": {
+            "matches": 46,
+            "false_positives": 23,
+            "false_negatives": 6,
+            "precision": 0.6666666666666666,
+            "recall": 0.8846153846153846,
+            "f1": 0.7603305785123966
+          },
+          "onset_100ms": {
+            "matches": 46,
+            "false_positives": 23,
+            "false_negatives": 6,
+            "precision": 0.6666666666666666,
+            "recall": 0.8846153846153846,
+            "f1": 0.7603305785123966
+          },
+          "onset_offset": {
+            "matches": 24,
+            "false_positives": 45,
+            "false_negatives": 28,
+            "precision": 0.34782608695652173,
+            "recall": 0.46153846153846156,
+            "f1": 0.39669421487603307
+          },
+          "elapsed_seconds": 0.3168976
+        }
+      },
+      {
+        "id": "orchestral-902-mixture",
+        "split": "held_out",
+        "variant": "mixture",
+        "reference_notes": 52,
+        "audio_sha256": "cbba2682e08fabd512b27c37a44dd10a76f561377ed9e2042d74691cff9df9d3",
+        "reference_sha256": "416f309144684f331031c15ba7b0565d7db350de5bdec3d530ff4b726fa96608",
+        "frozen_project_sha256": "e5bfe210dbd72cac086a8b623d78d96d98b90e04d08d264ab0d07002440d499f",
+        "before": {
+          "estimated_notes": 36,
+          "onset_50ms": {
+            "matches": 16,
+            "false_positives": 20,
+            "false_negatives": 36,
+            "precision": 0.4444444444444444,
+            "recall": 0.3076923076923077,
+            "f1": 0.3636363636363637
+          },
+          "onset_100ms": {
+            "matches": 24,
+            "false_positives": 12,
+            "false_negatives": 28,
+            "precision": 0.6666666666666666,
+            "recall": 0.46153846153846156,
+            "f1": 0.5454545454545455
+          },
+          "onset_offset": {
+            "matches": 7,
+            "false_positives": 29,
+            "false_negatives": 45,
+            "precision": 0.19444444444444445,
+            "recall": 0.1346153846153846,
+            "f1": 0.1590909090909091
+          },
+          "elapsed_seconds": 0.2083669
+        },
+        "after": {
+          "estimated_notes": 24,
+          "onset_50ms": {
+            "matches": 17,
+            "false_positives": 7,
+            "false_negatives": 35,
+            "precision": 0.7083333333333334,
+            "recall": 0.3269230769230769,
+            "f1": 0.4473684210526316
+          },
+          "onset_100ms": {
+            "matches": 21,
+            "false_positives": 3,
+            "false_negatives": 31,
+            "precision": 0.875,
+            "recall": 0.40384615384615385,
+            "f1": 0.5526315789473685
+          },
+          "onset_offset": {
+            "matches": 10,
+            "false_positives": 14,
+            "false_negatives": 42,
+            "precision": 0.4166666666666667,
+            "recall": 0.19230769230769232,
+            "f1": 0.2631578947368421
+          },
+          "elapsed_seconds": 0.3239653
+        }
+      }
+    ]
+  },
+  "independent_existing_score": {
+    "suite": "independent-ode-satb",
+    "manifest_sha256": "db05cfc8aa9259b0a8093f201af8d6eaaa6977bda2a75c39f4a2dba6831e2c7e",
+    "groups": {
+      "existing_score/all": {
+        "before": {
+          "cases": 2,
+          "onset_50ms": {
+            "matches": 332,
+            "false_positives": 95,
+            "false_negatives": 144,
+            "precision": 0.7775175644028103,
+            "recall": 0.6974789915966386,
+            "f1": 0.7353266888150609
+          },
+          "onset_100ms": {
+            "matches": 370,
+            "false_positives": 57,
+            "false_negatives": 106,
+            "precision": 0.8665105386416861,
+            "recall": 0.7773109243697479,
+            "f1": 0.8194905869324474
+          },
+          "onset_offset": {
+            "matches": 291,
+            "false_positives": 136,
+            "false_negatives": 185,
+            "precision": 0.6814988290398126,
+            "recall": 0.6113445378151261,
+            "f1": 0.6445182724252491
+          }
+        },
+        "after": {
+          "cases": 2,
+          "onset_50ms": {
+            "matches": 361,
+            "false_positives": 39,
+            "false_negatives": 115,
+            "precision": 0.9025,
+            "recall": 0.7584033613445378,
+            "f1": 0.8242009132420091
+          },
+          "onset_100ms": {
+            "matches": 373,
+            "false_positives": 27,
+            "false_negatives": 103,
+            "precision": 0.9325,
+            "recall": 0.7836134453781513,
+            "f1": 0.8515981735159817
+          },
+          "onset_offset": {
+            "matches": 316,
+            "false_positives": 84,
+            "false_negatives": 160,
+            "precision": 0.79,
+            "recall": 0.6638655462184874,
+            "f1": 0.7214611872146119
+          }
+        }
+      },
+      "existing_score/mixture": {
+        "before": {
+          "cases": 1,
+          "onset_50ms": {
+            "matches": 94,
+            "false_positives": 60,
+            "false_negatives": 144,
+            "precision": 0.6103896103896104,
+            "recall": 0.3949579831932773,
+            "f1": 0.4795918367346938
+          },
+          "onset_100ms": {
+            "matches": 132,
+            "false_positives": 22,
+            "false_negatives": 106,
+            "precision": 0.8571428571428571,
+            "recall": 0.5546218487394958,
+            "f1": 0.6734693877551021
+          },
+          "onset_offset": {
+            "matches": 61,
+            "false_positives": 93,
+            "false_negatives": 177,
+            "precision": 0.3961038961038961,
+            "recall": 0.25630252100840334,
+            "f1": 0.3112244897959184
+          }
+        },
+        "after": {
+          "cases": 1,
+          "onset_50ms": {
+            "matches": 123,
+            "false_positives": 19,
+            "false_negatives": 115,
+            "precision": 0.8661971830985915,
+            "recall": 0.5168067226890757,
+            "f1": 0.6473684210526317
+          },
+          "onset_100ms": {
+            "matches": 135,
+            "false_positives": 7,
+            "false_negatives": 103,
+            "precision": 0.9507042253521126,
+            "recall": 0.5672268907563025,
+            "f1": 0.7105263157894736
+          },
+          "onset_offset": {
+            "matches": 86,
+            "false_positives": 56,
+            "false_negatives": 152,
+            "precision": 0.6056338028169014,
+            "recall": 0.36134453781512604,
+            "f1": 0.4526315789473684
+          }
+        }
+      },
+      "existing_score/piano": {
+        "before": {
+          "cases": 1,
+          "onset_50ms": {
+            "matches": 238,
+            "false_positives": 35,
+            "false_negatives": 0,
+            "precision": 0.8717948717948718,
+            "recall": 1,
+            "f1": 0.9315068493150686
+          },
+          "onset_100ms": {
+            "matches": 238,
+            "false_positives": 35,
+            "false_negatives": 0,
+            "precision": 0.8717948717948718,
+            "recall": 1,
+            "f1": 0.9315068493150686
+          },
+          "onset_offset": {
+            "matches": 230,
+            "false_positives": 43,
+            "false_negatives": 8,
+            "precision": 0.8424908424908425,
+            "recall": 0.9663865546218487,
+            "f1": 0.9001956947162427
+          }
+        },
+        "after": {
+          "cases": 1,
+          "onset_50ms": {
+            "matches": 238,
+            "false_positives": 20,
+            "false_negatives": 0,
+            "precision": 0.9224806201550387,
+            "recall": 1,
+            "f1": 0.9596774193548387
+          },
+          "onset_100ms": {
+            "matches": 238,
+            "false_positives": 20,
+            "false_negatives": 0,
+            "precision": 0.9224806201550387,
+            "recall": 1,
+            "f1": 0.9596774193548387
+          },
+          "onset_offset": {
+            "matches": 230,
+            "false_positives": 28,
+            "false_negatives": 8,
+            "precision": 0.8914728682170543,
+            "recall": 0.9663865546218487,
+            "f1": 0.9274193548387097
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "id": "ode-piano",
+        "split": "existing_score",
+        "variant": "piano",
+        "reference_notes": 238,
+        "audio_sha256": "049e881f2939744ad9643c69d1d20cdb790b95654ac716080678d820b2e81410",
+        "reference_sha256": "cc99fa2d851702c5cd65126be00d94bde843cdfbb8c264e85c814d0ab9b86c26",
+        "frozen_project_sha256": null,
+        "before": {
+          "estimated_notes": 273,
+          "onset_50ms": {
+            "matches": 238,
+            "false_positives": 35,
+            "false_negatives": 0,
+            "precision": 0.8717948717948718,
+            "recall": 1,
+            "f1": 0.9315068493150686
+          },
+          "onset_100ms": {
+            "matches": 238,
+            "false_positives": 35,
+            "false_negatives": 0,
+            "precision": 0.8717948717948718,
+            "recall": 1,
+            "f1": 0.9315068493150686
+          },
+          "onset_offset": {
+            "matches": 230,
+            "false_positives": 43,
+            "false_negatives": 8,
+            "precision": 0.8424908424908425,
+            "recall": 0.9663865546218487,
+            "f1": 0.9001956947162427
+          },
+          "elapsed_seconds": 1.1634758
+        },
+        "after": {
+          "estimated_notes": 258,
+          "onset_50ms": {
+            "matches": 238,
+            "false_positives": 20,
+            "false_negatives": 0,
+            "precision": 0.9224806201550387,
+            "recall": 1,
+            "f1": 0.9596774193548387
+          },
+          "onset_100ms": {
+            "matches": 238,
+            "false_positives": 20,
+            "false_negatives": 0,
+            "precision": 0.9224806201550387,
+            "recall": 1,
+            "f1": 0.9596774193548387
+          },
+          "onset_offset": {
+            "matches": 230,
+            "false_positives": 28,
+            "false_negatives": 8,
+            "precision": 0.8914728682170543,
+            "recall": 0.9663865546218487,
+            "f1": 0.9274193548387097
+          },
+          "elapsed_seconds": 0.6000237
+        }
+      },
+      {
+        "id": "ode-mixture",
+        "split": "existing_score",
+        "variant": "mixture",
+        "reference_notes": 238,
+        "audio_sha256": "7625d7fedbe07ebc09ad4c0474b9874bc5fdb54b77af9f79ef42672a2ec46f32",
+        "reference_sha256": "cc99fa2d851702c5cd65126be00d94bde843cdfbb8c264e85c814d0ab9b86c26",
+        "frozen_project_sha256": null,
+        "before": {
+          "estimated_notes": 154,
+          "onset_50ms": {
+            "matches": 94,
+            "false_positives": 60,
+            "false_negatives": 144,
+            "precision": 0.6103896103896104,
+            "recall": 0.3949579831932773,
+            "f1": 0.4795918367346938
+          },
+          "onset_100ms": {
+            "matches": 132,
+            "false_positives": 22,
+            "false_negatives": 106,
+            "precision": 0.8571428571428571,
+            "recall": 0.5546218487394958,
+            "f1": 0.6734693877551021
+          },
+          "onset_offset": {
+            "matches": 61,
+            "false_positives": 93,
+            "false_negatives": 177,
+            "precision": 0.3961038961038961,
+            "recall": 0.25630252100840334,
+            "f1": 0.3112244897959184
+          },
+          "elapsed_seconds": 0.7268006
+        },
+        "after": {
+          "estimated_notes": 142,
+          "onset_50ms": {
+            "matches": 123,
+            "false_positives": 19,
+            "false_negatives": 115,
+            "precision": 0.8661971830985915,
+            "recall": 0.5168067226890757,
+            "f1": 0.6473684210526317
+          },
+          "onset_100ms": {
+            "matches": 135,
+            "false_positives": 7,
+            "false_negatives": 103,
+            "precision": 0.9507042253521126,
+            "recall": 0.5672268907563025,
+            "f1": 0.7105263157894736
+          },
+          "onset_offset": {
+            "matches": 86,
+            "false_positives": 56,
+            "false_negatives": 152,
+            "precision": 0.6056338028169014,
+            "recall": 0.36134453781512604,
+            "f1": 0.4526315789473684
+          },
+          "elapsed_seconds": 0.5765752
+        }
+      }
+    ]
+  },
+  "selection": {
+    "development_candidates": 414,
+    "rule": "Select parameters on development and validation; keep held-out seeds and existing score out of selection. Reduce FP and FN on validation rather than maximize F1 alone.",
+    "primary": {
+      "onset": 0.5,
+      "frame": 0.3,
+      "gap_frames": 4,
+      "min_frames": 6,
+      "min_mean": 0.4
+    },
+    "recovery": {
+      "frame": 0.3,
+      "peak": 0.5,
+      "mean": 0.45,
+      "min_frames": 8,
+      "backtrack_frames": 4,
+      "guard_before_frames": 8,
+      "guard_after_frames": 4
+    },
+    "stereo_fallback_mono_power_ratio": 0.01,
+    "rejected_validation": [
+      {
+        "primary_onset": 0.6,
+        "recovery_mean": 0.45,
+        "fp": 180,
+        "fn": 280,
+        "baseline_fn": 277,
+        "reason": "More missing notes despite higher F1."
+      },
+      {
+        "primary_onset": 0.6,
+        "recovery_mean": 0.35,
+        "fp": 225,
+        "fn": 277,
+        "mixture_fn": 206,
+        "baseline_mixture_fn": 205,
+        "reason": "No overall omission improvement and one more mixture omission."
+      }
+    ]
+  },
+  "limitations": [
+    "Held-out mixtures: FN 202 -> 203, despite FP 189 -> 105. Gains are not uniform.",
+    "Two validation city-pop mixture cases have lower onset F1; full per-case results are retained.",
+    "Mixed existing-score input still misses 115 of 238 reference events at 50 ms.",
+    "No independent acoustic/commercial recordings, singer separation or piano playability evaluation."
+  ],
+  "acceptance": {
+    "before": {
+      "notes": 154,
+      "one_undo_restored": true,
+      "project": "target/piano-transcription/listening-before\\cover\\cover.auris",
+      "redo_restored": true
+    },
+    "after": {
+      "notes": 142,
+      "one_undo_restored": true,
+      "project": "target/piano-transcription/listening-after\\cover\\cover.auris",
+      "redo_restored": true
+    }
+  },
+  "listening": {
+    "sample_rate": 48000,
+    "seconds": 39.4,
+    "common_gain": 2.7081475708006053,
+    "files": {
+      "before": {
+        "path": "target\\piano-transcription\\comparison-before.wav",
+        "sha256": "9d4cd42a4941636b4c91f9f3df96b5196f095ee2a419f5a0a57820808506af79",
+        "original_peak": 0.2584792673587799
+      },
+      "after": {
+        "path": "target\\piano-transcription\\comparison-after.wav",
+        "sha256": "6d0af2f634ba0c4f081a0bc4018fbbec8460246795bf045d9b6d21fbfb7d98ff",
+        "original_peak": 0.24822676181793213
+      }
+    }
+  },
+  "binaries": {
+    "baseline_sha256": "be52a536672defd5cdec1fb7092e335f019764197873f87c8729e1106fe212b9",
+    "candidate_sha256": "a6e74bb5c11fa8449d386f7cd3bf48a8af431aaf29d3038ea3b0b0dbe1464786"
+  },
+  "implementation_sha256": {
+    "basic_pitch": "3428d7e60ce2eaeefffebb8814124621ffb73ec6660bd57c6034484f56699cbf",
+    "decoder": "ce7386d4877765b4904b50048ff660fa55784461bbcb1f7270f36f73e31998a2"
+  },
+  "calibration_artifacts": [
+    "target/piano-transcription/search.json",
+    "target/piano-transcription/search-v2.json",
+    "target/piano-transcription/search-v3.json"
+  ]
+}

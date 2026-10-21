@@ -184,6 +184,15 @@ impl AurisMcp {
         blocking(move || toolbox::import_midi::run(&args)).await
     }
 
+    /// Import a local recognizer-independent piano transcription JSON into an existing project as a new track, preserving source timing and overlaps. path is an absolute local JSON file at most 32 MiB with source:{method, optional model/artifact_sha256/audio_sha256}, seconds, notes:[{pitch,start,end,strength}], optional limitations. Pitch 21..108, strength 0..1; finite source duration up to ten minutes and 1..200000 notes. Provenance is caller-declared, not recognition verification. Keeps existing music and tempo; saves with a checkpoint. Do not invent notes from names, BPM or chord estimates.
+    #[tool(input_schema = tool_schema("import_transcription"))]
+    async fn import_transcription(
+        &self,
+        Parameters(args): Parameters<toolbox::import_transcription::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::import_transcription::run(&args)).await
+    }
+
     /// Exports instrument-track notes, tempo, meter, pitch bends and MIDI controllers to a new .mid or .midi file. Supply absolute project and output paths. Existing files are never overwritten and the project is unchanged. MIDI does not preserve audio, singer tracks, instruments or the mix; use render for an audio export.
     #[tool(input_schema = tool_schema("export_midi"))]
     async fn export_midi(

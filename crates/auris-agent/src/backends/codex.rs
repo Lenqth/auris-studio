@@ -17,7 +17,7 @@ use tokio::{
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-// Turn notifications may echo the base64 representation of a bounded 25 MiB attachment.
+// Turn notifications may echo base64 images from a bounded 25 MiB image/text turn.
 const FRAME_LIMIT: usize = 40 * 1024 * 1024;
 
 /// Separate process per conversation: settings, MCP connections and cancellation cannot leak.

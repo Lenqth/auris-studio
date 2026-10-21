@@ -37,6 +37,33 @@ pub(super) struct Pending {
     revision: u64,
 }
 
+fn completed_review_operations(entries: &[ChatEntry]) -> Vec<serde_json::Value> {
+    let mut completed = entries
+        .iter()
+        .rev()
+        .filter_map(|entry| {
+            if let ChatEntry::Tool {
+                name,
+                args,
+                ok: true,
+                detail,
+                ..
+            } = entry
+                && matches!(name.as_str(), "cli_command" | "cli_file_change")
+                && !detail.is_empty()
+            {
+                serde_json::from_str::<serde_json::Value>(args).ok().map(|arguments|
+                serde_json::json!({"operation":name,"arguments":arguments,"result":detail}))
+            } else {
+                None
+            }
+        })
+        .take(8)
+        .collect::<Vec<_>>();
+    completed.reverse();
+    completed
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum Approval {
     Once,
@@ -293,7 +320,8 @@ impl AurisApp {
                         })
                         .collect();
                     let pending = self.agent_chat.controls.pending.as_ref().unwrap();
-                    let result = auris_agent::approval_review::start(
+                    let completed = completed_review_operations(&self.agent_chat.entries);
+                    let result = auris_agent::approval_review::start_with_evidence(
                         self.agent_chat.preferences(),
                         requests,
                         pending.operation.name.clone(),
@@ -302,6 +330,7 @@ impl AurisApp {
                             .path()
                             .and_then(Path::parent)
                             .map(Path::to_path_buf),
+                        completed,
                     );
                     match result {
                         Ok(job) => self.agent_chat.controls.review = Some((id, job)),
@@ -776,6 +805,29 @@ impl AurisApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_history_excludes_pending_failed_and_non_native_tool_calls() {
+        let entry = |name: &str, ok, detail: &str| ChatEntry::Tool {
+            name: name.into(),
+            args: "{\"command\":\"hash analysis.py\"}".into(),
+            ok,
+            line: String::new(),
+            detail: detail.into(),
+        };
+        let entries = vec![
+            entry("cli_command", true, "hash result"),
+            entry("cli_command", true, ""),
+            entry("cli_command", false, "failure"),
+            entry("inspect_project", true, "project"),
+            entry("cli_file_change", true, "changed script"),
+        ];
+        let history = completed_review_operations(&entries);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0]["result"], "hash result");
+        assert_eq!(history[1]["result"], "changed script");
+        assert_eq!(history[0]["arguments"]["command"], "hash analysis.py");
+    }
 
     #[gpui::test]
     fn auto_review_is_an_explicit_mode_and_permissions_keep_their_own_menu_row(

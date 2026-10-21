@@ -5,6 +5,8 @@
 
 #![warn(missing_docs)]
 
+pub mod transcription;
+
 pub mod audio;
 pub mod basic_pitch;
 pub mod chords;

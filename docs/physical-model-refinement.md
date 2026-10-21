@@ -123,13 +123,13 @@ still level-matches it. The release-profile 24-voice benchmark averages 0.827 ms
 
 ## Violin
 
-The bow junction now distinguishes static and sliding friction with hysteresis. Bow pressure
-sets the static force limit; sliding friction is weaker and falls with slip velocity. Friction
+The bow junction uses a continuous bow-table scattering coefficient. Bow pressure
+sets the sticking range; sliding friction is weaker and falls with slip velocity. Friction
 is bounded by the relative velocity, so it cannot reverse the direction of relative slip or
 inject energy independently of the moving bow. The force law is a bounded reduced approximation,
 not a full contact solver. Contact hardness adjusts sliding friction separately from string loss.
 
-Bow speed is a separate parameter, scaled by velocity and CC11, with a 12 ms motion ramp.
+Bow speed is a separate parameter, scaled by velocity and CC11, with an adjustable motion ramp.
 The bow junction position moves over 15 ms without resetting the wave buffers; loss depends on
 damping at a sample-rate-scaled cutoff. Pitch transitions approach their target over 5 ms.
 
@@ -142,12 +142,14 @@ The general voice allocator's retarget operation only changes bookkeeping and re
 voice's measured level. Default violin remains polyphonic; the session starts melody roles
 with legato and pads with slower bow motion and polyphony, preserving explicit controls.
 
-Tests assert friction passivity/hysteresis, exact waveform continuity for same-pitch legato,
+Tests assert friction passivity/continuity, exact waveform continuity for same-pitch legato,
 correct return pitch and stale-off handling, polyphonic defaults, independent motion/position
 controls, bow stopping, and zero allocations under legato and live bow automation.
 
 The junction follows the travelling-wave geometry in Smith's
 [bow/string scattering junction](https://www.dsprelated.com/freebooks/pasp/Bow_String_Scattering_Junction.html).
+The [low-register correction](physical-low-register.md) records the continuous force law,
+bass piano dispersion and paired measurements.
 
 The violin checkpoint passes 4,009 workspace tests, workspace clippy, six Python measurement
 tests and ruff. Symbolic output remains byte-identical. Mean CE/PQ is 5.94/7.74; relative to the
