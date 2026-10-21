@@ -23,7 +23,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-04 | High | macOS release | `Auris Studio.app` has no microphone usage description, so recording fails |
 | AR-05 | Medium-High | Recording | Takes are not compensated for round-trip latency and land late |
 | AR-06 | Medium | Denial of service | A MIDI file of meter changes takes quadratic time to import (verified) |
 | AR-07 | Medium | DSP | Ping-pong delay does nothing on a centred source (verified) |
@@ -35,24 +34,9 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-13 | Low | Performance | Every tempo conversion walks the whole tempo map, including on the audio thread |
 | AR-14 | Low | DSP | `loudness_quantile` panics on a NaN block; one infinite block reads as silence |
 | AR-15 | Low | Agent | The Codex path check is case-sensitive about `.exe` |
-| AR-16 | Low | Docs, platform | Stale CLAUDE.md layout; "double-click a `.auris`" is not wired up on macOS |
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
-
-### AR-04 — `Auris Studio.app` has no microphone usage description, so recording fails
-
-**Where.** `crates/auris-gpui/macos/Info.plist`. The bundle is assembled from it in
-`.github/workflows/release.yml:110-117`.
-
-**What happens.** The plist declares no `NSMicrophoneUsageDescription`. On macOS 10.14 and later,
-a process that opens an input device without that key is either terminated by TCC or given
-silence, depending on the OS version and hardening. Either way, recording and input monitoring do
-not work from the released `.app`. The developer never sees this: `cargo run` from Terminal runs
-under Terminal's own microphone grant.
-
-**Direction.** Add `NSMicrophoneUsageDescription` (and `CFBundleDocumentTypes`; see AR-16), and
-make one manual check of a release bundle launched from Finder part of the release checklist.
 
 ### AR-05 — Takes are not compensated for round-trip latency and land late
 
@@ -206,16 +190,6 @@ every block is gated out and a loud mix measures as "silent".
 
 `crates/auris-agent/src/backends/codex.rs:37` compares the extension with `!=`, so `CODEX.EXE`
 is refused. The Claude path accepts it with `eq_ignore_ascii_case` (`claude.rs:51-54`).
-
-### AR-16 — Stale CLAUDE.md layout; "double-click a `.auris`" is not wired up on macOS
-
-* `CLAUDE.md` describes `auris-agent` as a binary frontend, but it is now a library that the
-  desktop links (`crates/auris-gpui/Cargo.toml`). The layout also omits `auris-analysis` and
-  `auris-vst3`, which `docs/development.md` already lists.
-* `crates/auris-gpui/src/main.rs:128-136` says the shell hands over a double-clicked `.auris` as an
-  argument. On macOS the plist declares no `CFBundleDocumentTypes`, and Finder delivers documents
-  as an open-URLs event, which nothing handles (no `on_open_urls`). The Windows zip registers no
-  association either.
 
 ### AR-17 — Two transactions can be left open by an early `?`
 

@@ -37,5 +37,51 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <!--
+      Recording and input monitoring open an input device. Without this sentence macOS refuses
+      the bundle the microphone - it terminates the process or hands it silence - and nobody
+      running from Terminal sees it, because there the request is Terminal's.
+    -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Auris Studio records and monitors audio from the input you choose for an armed track.</string>
+    <!--
+      What makes Finder offer a .auris file to this application. Finder hands the file over as
+      an open-document event rather than an argument; the window listens for both.
+    -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Auris Studio Project</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>io.github.uthree.auris-studio.project</string>
+            </array>
+        </dict>
+    </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>io.github.uthree.auris-studio.project</string>
+            <key>UTTypeDescription</key>
+            <string>Auris Studio Project</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.json</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>auris</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
 </dict>
 </plist>
