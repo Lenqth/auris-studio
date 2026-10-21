@@ -133,6 +133,10 @@ fn block_powers(buffer: &AudioBuffer) -> Vec<f64> {
         for (hop, samples) in channel.chunks_exact(hop_frames).take(hops).enumerate() {
             let mut sum = 0.0;
             for &sample in samples {
+                // A NaN or an infinity — a plugin that blew up — would poison both filters for
+                // the rest of the channel and every block after it. It is counted as silence:
+                // one bad sample must not decide whether a whole mix measures at all.
+                let sample = if sample.is_finite() { sample } else { 0.0 };
                 let filtered = sections
                     .iter_mut()
                     .fold(sample, |signal, section| section.process_sample(signal));
@@ -193,7 +197,7 @@ pub fn loudness_quantile(buffer: &AudioBuffer, quantile: f64) -> Option<f32> {
     if blocks.is_empty() {
         return None;
     }
-    blocks.sort_by(|a, b| a.partial_cmp(b).expect("a power is never NaN"));
+    blocks.sort_by(f64::total_cmp);
     let at = ((blocks.len() - 1) as f64 * quantile.clamp(0.0, 1.0)).round() as usize;
     Some(block_lufs(blocks[at]) as f32)
 }
@@ -212,6 +216,24 @@ mod tests {
             }
         }
         buffer
+    }
+
+    #[test]
+    fn a_few_non_finite_samples_neither_silence_the_measure_nor_panic_it() {
+        let clean = sine(1_000.0, 0.5, 3.0, 48_000.0, 2);
+        let mut broken = clean.clone();
+        broken.channel_mut(0)[10_000] = f32::NAN;
+        broken.channel_mut(1)[50_000] = f32::INFINITY;
+        broken.channel_mut(0)[90_000] = f32::NEG_INFINITY;
+
+        let expected = integrated_lufs(&clean).unwrap();
+        let measured = integrated_lufs(&broken).expect("a loud mix still measures");
+        assert!(
+            (measured - expected).abs() < 0.1,
+            "{measured} vs {expected}"
+        );
+        let quantile = loudness_quantile(&broken, 0.9).expect("and does not panic");
+        assert!(quantile.is_finite());
     }
 
     #[test]

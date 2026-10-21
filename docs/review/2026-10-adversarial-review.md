@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-14 | Low | DSP | `loudness_quantile` panics on a NaN block; one infinite block reads as silence |
 | AR-15 | Low | Agent | The Codex path check is case-sensitive about `.exe` |
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
@@ -40,18 +39,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-14 — `loudness_quantile` panics on a NaN block; one infinite block reads as silence
-
-**Where.** `crates/auris-dsp/src/loudness.rs:191-199`, and `block_powers`/`gated_mean`
-(`:114-176`).
-
-**What happens.** `block_powers` does not sanitise samples, so `loudness_quantile` panics on the
-`expect("a power is never NaN")` comparison. It has no callers today, which makes this a trap
-rather than a crash. In `integrated_lufs`, one `+inf` block makes the relative gate infinite, so
-every block is gated out and a loud mix measures as "silent".
-
-**Direction.** Skip non-finite samples in `block_powers`.
 
 ### AR-15 — The Codex path check is case-sensitive about `.exe`
 
