@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
 
@@ -38,16 +37,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-17 — Two transactions can be left open by an early `?`
-
-`set_drum_lane_note` (`crates/auris-session/src/session/drum_assignments.rs:233-234`) and the
-send branch of `apply_mixer_graph` (`crates/auris-session/src/mixer_graph/commands.rs:481-487`)
-return through `?` between `begin_transaction` and `end_transaction`. Both errors are unreachable
-today because of validation further up, but if either is ever reached, the open transaction
-disables Undo (`session/mod.rs:1220`), autosave and checkpoints until the next gesture. That
-gesture's undo step would also absorb everything in between. The closure-and-revert form used by
-`setup_tracks` and `recognition` avoids this.
 
 ## Covered without findings
 
