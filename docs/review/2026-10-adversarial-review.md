@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-15 | Low | Agent | The Codex path check is case-sensitive about `.exe` |
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
@@ -39,11 +38,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-15 — The Codex path check is case-sensitive about `.exe`
-
-`crates/auris-agent/src/backends/codex.rs:37` compares the extension with `!=`, so `CODEX.EXE`
-is refused. The Claude path accepts it with `eq_ignore_ascii_case` (`claude.rs:51-54`).
 
 ### AR-17 — Two transactions can be left open by an early `?`
 

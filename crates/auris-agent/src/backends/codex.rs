@@ -34,7 +34,11 @@ struct Rpc {
 fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.codex_path.trim().is_empty() {
         let path = PathBuf::from(prefs.codex_path.trim());
-        if cfg!(windows) && path.extension().is_none_or(|extension| extension != "exe") {
+        if cfg!(windows)
+            && path
+                .extension()
+                .is_none_or(|extension| !extension.eq_ignore_ascii_case("exe"))
+        {
             return Err(
                 "Choose the native codex.exe executable, not a .cmd or .ps1 launcher".into(),
             );
