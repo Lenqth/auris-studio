@@ -39,6 +39,8 @@ use auris_session::{Session, SessionError, SessionOptions};
 
 mod audio_quality;
 mod audition;
+mod batch_editing;
+pub use batch_editing::{replace_notes_batch, set_instrument_params};
 #[path = "capabilities.rs"]
 mod availability;
 mod cancellation;
@@ -91,6 +93,7 @@ pub const INSTRUCTIONS: &str = "You control Auris Studio projects through saved 
 Use project_id from create_project/open_project in later project arguments; absolute paths also work.
 Search replies use zero-based library indices into libraries. instrument_diagnostics pages scan/measurement failures.
 Use setup_tracks for atomic track/sound/clip setup. discover_tools finds names without fetching schemas.
+Use set_instrument_params or replace_notes_batch for bounded atomic edits across several targets; identical retries do not save again.
 Large reports return report_id: use read_report with report_path and next_offset to inspect the immutable snapshot without re-running a write.\nMake dependent edits one at a time: wait for each result before using its IDs or paths.
 
 Use search_instruments with a focused query to choose sounds; never fetch the full library by default.
@@ -391,6 +394,7 @@ pub const WRITES_PROJECTS: &[&str] = &[
     set_track_state::NAME,
     convert_track_to_audio::NAME,
     set_instrument_param::NAME,
+    set_instrument_params::NAME,
     analyze_chords::NAME,
     transcribe_audio::NAME,
     transcribe_mixture::NAME,
@@ -416,6 +420,7 @@ pub const WRITES_PROJECTS: &[&str] = &[
     add_clip::NAME,
     edit_notes::NAME,
     replace_notes::NAME,
+    replace_notes_batch::NAME,
     accompany::NAME,
     write_lyrics::NAME,
     sing::NAME,

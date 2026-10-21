@@ -261,6 +261,14 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             set_instrument_param::NAME,
             set_instrument_param::DESCRIPTION,
         ),
+        definition::<set_instrument_params::Args>(
+            set_instrument_params::NAME,
+            set_instrument_params::DESCRIPTION,
+        ),
+        definition::<replace_notes_batch::Args>(
+            replace_notes_batch::NAME,
+            replace_notes_batch::DESCRIPTION,
+        ),
     ]
 }
 

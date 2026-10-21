@@ -2882,7 +2882,12 @@ mod tests {
         let last = 1 + catalog.inventory.len();
         assert!(job.diagnostics(last, 1).is_ok());
         assert!(job.diagnostics(last + 1, 1).is_err());
-        CATALOGS.get().unwrap().lock().unwrap().retain(|cached| !Arc::ptr_eq(cached, &catalog));
+        CATALOGS
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .retain(|cached| !Arc::ptr_eq(cached, &catalog));
         let mut inventory = Vec::new();
         for _ in 0..CATALOG_ERROR_LIMIT + 2 {
             record_inventory(&mut inventory, serde_json::json!({"kind":"plugin"}));

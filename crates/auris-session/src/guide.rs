@@ -326,6 +326,10 @@ pub mod architecture {
     //! [`Session::setup_tracks`](crate::Session::setup_tracks)
     //! creates a bounded batch
     //! as one transaction; the saved-project adapter saves once and retains bounded retry receipts.
+    //! [`Session::set_instrument_params`](crate::Session::set_instrument_params) and
+    //! [`Session::replace_notes_batch`](crate::Session::replace_notes_batch) group bounded
+    //! control or score edits into one undo step. Failed batches leave the document intact;
+    //! unchanged retries create no history. Their saved-file tools checkpoint and save once.
     //! Conversation compaction is presentation work in `auris-agent`: a tool-less model
     //! summarizes older exchanges while the latest two completed exchanges remain verbatim.
     //! Summary failures leave history intact, and summaries never grant tool permissions.

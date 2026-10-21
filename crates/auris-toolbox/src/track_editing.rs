@@ -358,43 +358,22 @@ pub mod set_instrument_param {
     /// Validates the exact parameter and value before changing the saved document.
     pub fn run(args: &Args) -> Result<String, String> {
         let mut session = opened(&args.project)?;
-        let track = track_by_name(session.project(), &args.track)?;
-        if track.kind.as_instrument().is_none() {
-            return Err("set_instrument_param requires an instrument track".into());
+        let id = track_by_name(session.project(), &args.track)?.id;
+        let change = session
+            .set_instrument_params(&[auris_session::InstrumentParamEdit {
+                track: id,
+                param: args.param.clone(),
+                value: args.value,
+            }])?
+            .remove(0);
+        if change.previous != change.value {
+            save_checkpointed(&mut session)?;
         }
-        let id = track.id;
-        let descriptors = session.instrument_descriptors(id);
-        let descriptor = descriptors
-            .iter()
-            .find(|descriptor| descriptor.key.as_ref() == args.param)
-            .ok_or_else(|| "Unknown instrument parameter. Use automation with target {kind:instrument}, operation {action:read} to discover paged keys; copy an exact key.".to_string())?;
-        if !(descriptor.min..=descriptor.max).contains(&args.value) {
-            return Err(format!(
-                "{} must be between {} and {} ({:?})",
-                descriptor.key, descriptor.min, descriptor.max, descriptor.unit
-            ));
-        }
-        let clamped = descriptor.clamp(args.value);
-        let tolerance = f32::EPSILON * args.value.abs().max(clamped.abs()).max(1.0) * 4.0;
-        if (clamped - args.value).abs() > tolerance {
-            return Err(format!(
-                "{} requires a discrete step; the nearest valid value is {}",
-                descriptor.key, clamped
-            ));
-        }
-        let target = ParamTarget::Instrument {
-            track: id,
-            param: descriptor.id,
-        };
-        let previous = session.param_value(target, descriptor);
-        session.set_param(target, args.value);
-        save_checkpointed(&mut session)?;
-        let automated = session.is_automated(target);
         Ok(serde_json::json!({
-            "track":format!("id:{}",id.0),"param":descriptor.key,"previous":previous,
-            "value":session.param_value(target, descriptor),"unit":format!("{:?}",descriptor.unit),
-            "automated":automated,
-            "warning":automated.then_some("The existing automation lane overrides this static value during playback; use automation to edit or clear it.")
+            "track":format!("id:{}",id.0),"param":change.param,"previous":change.previous,
+            "value":change.value,"unit":change.unit,
+            "automated":change.automated,
+            "warning":change.automated.then_some("The existing automation lane overrides this static value during playback; use automation to edit or clear it.")
         }).to_string())
     }
 }

@@ -31,6 +31,8 @@
 //! now share.
 
 mod accompany;
+mod batch_editing;
+pub use batch_editing::{InstrumentParamChange, InstrumentParamEdit};
 mod agent_instruments;
 mod setup_tracks;
 mod sound_search;

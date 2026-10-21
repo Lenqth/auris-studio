@@ -72,7 +72,7 @@ fn parse_notes(value: serde_json::Value) -> Result<Vec<edit_notes::NoteSpec>, St
         .collect()
 }
 
-fn read_notes(source: &str) -> Result<Vec<edit_notes::NoteSpec>, String> {
+pub(crate) fn read_notes(source: &str) -> Result<Vec<edit_notes::NoteSpec>, String> {
     let path = std::path::Path::new(source);
     if !path.is_absolute() {
         return Err("source must be an absolute path on the MCP server".into());

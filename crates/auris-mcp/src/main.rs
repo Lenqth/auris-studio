@@ -95,6 +95,24 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::instrument_diagnostics::run(&args)).await
     }
+
+    /// Set 1..256 instrument controls atomically in native units; validate all, save once, and report before/after values.
+    #[tool(input_schema = tool_schema("set_instrument_params"))]
+    async fn set_instrument_params(
+        &self,
+        Parameters(args): Parameters<toolbox::set_instrument_params::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::set_instrument_params::run(&args)).await
+    }
+
+    /// Replace authored notes across 1..16 clips atomically; validate all and save once with one checkpoint.
+    #[tool(input_schema = tool_schema("replace_notes_batch"))]
+    async fn replace_notes_batch(
+        &self,
+        Parameters(args): Parameters<toolbox::replace_notes_batch::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::replace_notes_batch::run(&args)).await
+    }
     /// Find tool names by text and optional task group, without full schemas. Fetch tool_help for one result. Startup AURIS_MCP_TOOL_GROUPS controls which groups are callable.
     #[tool(input_schema = tool_schema("discover_tools"))]
     async fn discover_tools(
