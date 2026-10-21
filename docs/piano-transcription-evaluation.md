@@ -126,3 +126,6 @@ Original composer pairs make inexpensive controlled regressions possible. Their 
 instruments and dry mixes are a limited domain: these results do not establish accuracy
 on vocals, dense mastered/commercial mixes, or independent acoustic piano recordings.
 Broader reviewed recording/annotation pairs remain necessary for that claim.
+
+The [direct audio-LLM experiment](direct-audio-transcription-experiment.md) uses the
+same held-out recordings to test replacing recognition with local model-generated notes.
