@@ -130,6 +130,30 @@
 //! measures the actual mix or a selected track's solo routing. A fixed colour scale preserves
 //! gain differences. These representations intentionally answer different questions.
 //!
+//! # Auditory feedback on unsaved music
+//!
+//! The live `listen` operation captures the open document through
+//! [`crate::Session::begin_listening`]. The desktop authorizes the network operation,
+//! renders and submits actual WAV bytes on a worker, then accepts the result through
+//! [`crate::Session::continue_listening`] only while the document revision still matches.
+//! Neither saving nor an audio output device is required; reviewing adds no Undo step.
+//! The critic has no editing tools. Its observations are untrusted, fallible evidence for
+//! the controller, which chooses a supported local edit, reads back the result and requests
+//! another audition of the same bars. Failed or uncertain reviews must remain explicit.
+//!
+//! The session retains at most four immutable raw excerpts behind opaque IDs. A comparison
+//! requires identical bars and timing; replacing the document clears the IDs. Both excerpts
+//! receive one common attenuation when needed for the -1 dB estimated true-peak ceiling.
+//! Measurements describe both the source and the exact decoded 16-bit WAV; audition
+//! protection never changes project faders or conceals a source overload. Temporary files
+//! live only for the request, and encoded bytes are hashed. The true-peak estimate uses
+//! 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+//!
+//! Cancellation is checked around render, encode and network stages. An HTTP request already
+//! in flight can finish up to its bounded timeout; stopped or stale work is never adopted.
+//! Saved-project MCP keeps its file-based `listen` workflow, using the same protected WAV
+//! encoder for previews. Its saved document is independent of the live unsaved snapshot.
+//!
 //!
 //! # Offline music recognition
 //!

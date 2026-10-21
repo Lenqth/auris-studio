@@ -319,6 +319,7 @@ pub struct Session {
     agent_instruments: agent_instruments::PluginCatalog,
     /// Separates discovery handles belonging to different unsaved sessions.
     sound_scope: String,
+    pub(crate) listening: crate::audio_audition::ListeningHistory,
     /// Decoded fonts, kept by the path they were read from as well as their document ids.
     ///
     /// [`Self::fonts`] is emptied whenever the document is replaced, because it is keyed by ids
@@ -638,6 +639,7 @@ impl Session {
             history: History::default(),
             transaction: None,
             revision: 0,
+            listening: Default::default(),
             needs_rebuild: false,
             meter_is_stale: false,
             last_record: None,

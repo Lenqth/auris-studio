@@ -44,6 +44,7 @@
 
 pub mod agent_policy;
 mod audio_attachment;
+pub mod audio_audition;
 pub mod audio_inspection;
 pub use audio_attachment::{AudioAttachmentCopy, copy_audio_attachment, prepare_audio_attachment};
 pub mod audio_review;

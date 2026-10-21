@@ -202,6 +202,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn listening_authorization_precedes_live_snapshot_exchange() {
+        for allowed in [false, true] {
+            let (bridge, commands, events) = crate::worker::test_bridge();
+            let host = ToolHost::new(bridge);
+            let args = json!({"start_bar":1,"bars":2,"focus":"balance","compare_to":null});
+            let call = host.call("listen", args);
+            let owner = async {
+                let request = next_event(&events).await;
+                assert_eq!(request["event"], "permission");
+                let operation = auris_session::agent_policy::Operation::parse(
+                    request["tool"].as_str().unwrap(),
+                    &request["args"],
+                )
+                .unwrap();
+                assert_eq!(operation.name, "edit_project.listen");
+                assert!(!operation.mutating && operation.confirm);
+                commands
+                    .send(
+                        json!({"event":"permission_result","id":request["id"],"ok":allowed})
+                            .to_string(),
+                    )
+                    .unwrap();
+                if allowed {
+                    let request = next_event(&events).await;
+                    assert_eq!(request["event"], "edit");
+                    assert_eq!(request["command"]["action"], "listen");
+                    assert!(request["command"].get("project").is_none());
+                    commands.send(json!({"event":"edit_result","ok":true,"text":"scripted host response"}).to_string()).unwrap();
+                }
+            };
+            let (result, ()) = tokio::join!(call, owner);
+            assert_eq!(result.is_ok(), allowed);
+            assert!(events.try_recv().is_err());
+        }
+    }
+
+    #[tokio::test]
     async fn audio_export_is_authorized_isolated_and_replaced_on_reexport() {
         let (bridge, commands, events) = crate::worker::test_bridge();
         let source = tempfile::Builder::new().suffix(".wav").tempfile().unwrap();

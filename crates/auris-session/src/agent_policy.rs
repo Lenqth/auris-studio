@@ -102,6 +102,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.set_mixer_track",
     "edit_project.inspect",
     "edit_project.inspect_audio",
+    "edit_project.listen",
     "edit_project.read_notes",
     "edit_project.compose",
     "edit_project.add_track",
@@ -157,6 +158,7 @@ impl Operation {
                     | crate::live_agent::Command::ListVoices { .. }
                     | crate::live_agent::Command::InspectSinger { .. }
                     | crate::live_agent::Command::InspectAudio { .. }
+                    | crate::live_agent::Command::Listen { .. }
                     | crate::live_agent::Command::ReadNotes { .. }
                     | crate::live_agent::Command::ListInstruments { .. }
                     | crate::live_agent::Command::SearchInstruments { .. }
@@ -165,7 +167,8 @@ impl Operation {
             );
             let confirm = matches!(
                 parsed,
-                crate::live_agent::Command::RemoveTrack { .. }
+                crate::live_agent::Command::Listen { .. }
+                    | crate::live_agent::Command::RemoveTrack { .. }
                     | crate::live_agent::Command::RemoveNotes { .. }
                     | crate::live_agent::Command::ReplaceNotes { .. }
                     | crate::live_agent::Command::Compose { replace: true, .. }
@@ -253,6 +256,29 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listening_is_a_read_with_network_confirmation_and_deny_rules() {
+        let operation = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{
+                "action":"listen","start_bar":1,"bars":4,"focus":"balance","compare_to":null
+            }}),
+        )
+        .unwrap();
+        assert!(!operation.mutating);
+        assert!(operation.confirm);
+        let mut policy = Policy::default();
+        assert_eq!(policy.decide(&operation), Decision::Ask);
+        policy.mode = Mode::AutoReview;
+        assert_eq!(policy.decide(&operation), Decision::Review);
+        policy.set_rule("edit_project.listen", Some(false)).unwrap();
+        policy.mode = Mode::Bypass;
+        assert!(matches!(policy.decide(&operation), Decision::Deny(_)));
+        policy.set_rule("edit_project.listen", Some(true)).unwrap();
+        policy.mode = Mode::ReadOnly;
+        assert_eq!(policy.decide(&operation), Decision::Allow);
+    }
 
     #[test]
     fn harmony_and_vocals_respect_edit_read_only_plan_and_deny_rules() {

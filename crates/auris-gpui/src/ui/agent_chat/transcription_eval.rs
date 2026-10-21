@@ -14,12 +14,16 @@ struct Evaluation {
     audio: Option<PathBuf>,
     prompt: PathBuf,
     model: String,
+    #[serde(default)]
+    backend: Option<String>,
     effort: ReasoningEffort,
     timeout_seconds: u64,
     #[serde(default)]
     bundled_allowed: bool,
     #[serde(default)]
     natural_workflow: bool,
+    #[serde(default)]
+    listening_required: bool,
 }
 
 fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
@@ -57,10 +61,18 @@ fn installed_codex_composes_named_sections_in_the_window(cx: &mut gpui::TestAppC
     run(cx, false);
 }
 
+#[gpui::test]
+#[ignore = "real installed Codex/Claude inference and audio critic; requires explicit evaluation config"]
+fn installed_cli_composes_and_relistens_in_the_window(cx: &mut gpui::TestAppContext) {
+    run(cx, false);
+}
+
 fn run(cx: &mut gpui::TestAppContext, cover: bool) {
     let config =
         std::env::var_os("AURIS_CODEX_TRANSCRIPTION_EVAL").expect("explicit evaluation config");
     let config: Evaluation = serde_json::from_slice(&fs::read(config).unwrap()).unwrap();
+    let backend = config.backend.as_deref().unwrap_or("codex");
+    assert!(matches!(backend, "codex" | "claude"));
     assert!(
         config.workspace.is_absolute()
             && config.output.is_absolute()
@@ -78,7 +90,7 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
             .save_as(&config.workspace.join("Cover.auris"))
             .unwrap();
         this.settings.agent = AgentPreferences {
-            backend: "codex".into(),
+            backend: backend.into(),
             model: config.model.clone(),
             effort: config.effort,
             policy: Policy {
@@ -192,7 +204,7 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
         if cover && cover_added {this.session.redo();}
         let redo_restored=this.session.project()==&after;
         if cover_added || !cover && failure.is_none() {this.session.save_in_place().unwrap();}
-        json!({"elapsed_seconds":started.elapsed().as_secs_f64(),"model":config.model,"effort":config.effort,
+        json!({"elapsed_seconds":started.elapsed().as_secs_f64(),"backend":backend,"model":config.model,"effort":config.effort,
             "policy":"isolated in-memory AutoReview; actual app reviewer handles native commands",
             "failure":failure,"exported":exported,"imported":imported,"used_basic_pitch":used_basic_pitch,"cover_added":cover_added,"readback_after_import":readback,"inspected_after_import":inspected,
             "dirty_before_host_save":dirty,"one_undo_restored":undo_restored,"redo_restored":redo_restored,
@@ -241,5 +253,54 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
             "named form required: {report}"
         );
         assert!(report["tracks"].as_u64().unwrap() > before.tracks.len() as u64);
+        if config.listening_required {
+            let entries = report["entries"].as_array().unwrap();
+            let listens: Vec<_> = entries
+                .iter()
+                .enumerate()
+                .filter_map(|(index, entry)| {
+                    if entry["name"] != "listen" || entry["ok"] != true {
+                        return None;
+                    }
+                    let detail = entry["detail"].as_str()?;
+                    serde_json::from_str::<Value>(detail)
+                        .ok()
+                        .map(|result| (index, result))
+                })
+                .collect();
+            assert!(listens.len() >= 2, "actual successful auditions required");
+            assert!(
+                listens
+                    .iter()
+                    .all(|(_, result)| result["audio_sent"] == true)
+            );
+            let comparison = listens
+                .iter()
+                .find(|(_, result)| result["compare_to"].is_string())
+                .expect("actual A/B audition required");
+            let baseline = listens
+                .iter()
+                .find(|(_, result)| result["audition_id"] == comparison.1["compare_to"])
+                .expect("baseline must come from this trial");
+            assert_eq!(baseline.1["range"], comparison.1["range"]);
+            assert!(
+                comparison.1["revision"].as_u64().unwrap()
+                    > baseline.1["revision"].as_u64().unwrap(),
+                "a real edit must separate auditions"
+            );
+            assert!(
+                entries[baseline.0 + 1..comparison.0]
+                    .iter()
+                    .any(|entry| entry["ok"] == true
+                        && matches!(
+                            entry["name"].as_str(),
+                            Some("read_notes" | "read_mixer_graph" | "inspect_project")
+                        ))
+            );
+            assert_eq!(
+                comparison.1["audio"]["attenuation_db"],
+                comparison.1["before"]["audio"]["attenuation_db"]
+            );
+        }
     }
 }

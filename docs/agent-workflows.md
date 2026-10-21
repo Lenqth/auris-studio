@@ -116,6 +116,43 @@ results when the document revision changes during the render. No preview files a
 Permissions map these flat tools to the existing `edit_project.<action>` rules, so saved
 allow/deny rules and exact-command approvals continue to apply.
 
+### Listen to the unsaved document
+
+The in-app Codex, Claude Code and rig controllers expose `listen` for the open document. It renders
+the current unsaved mix and uploads actual WAV bytes to the configured audio critic,
+independently of whether the controller accepts audio input. No project path or save is
+needed. Configure `AURIS_AUDIO_URL` and `AURIS_AUDIO_MODEL` in the application environment
+as described below; the server and model must already be available.
+
+Call `listen` with `{"start_bar":9,"bars":4,"focus":"Describe the melody and accompaniment balance."}`.
+It returns `audition_id`, the captured document revision/range, `audio_sent`, the critic's
+review and measurements of both the source render and the actual encoded WAV. After a
+supported local edit, read back the affected notes or mixer and call `listen` on the same
+bars with `compare_to` set to the earlier `audition_id`. A tempo or meter change requires
+a new baseline. The last four raw excerpts are retained in the open session; replacing
+the document or closing the session expires them. IDs are opaque, not file paths.
+
+Each request covers 1–8 bars and at most 30 seconds, rendered at 48 kHz without effect
+tails. Both comparison excerpts use one common protective attenuation when needed for
+the -1 dB estimated true-peak ceiling. Quiet audio is never increased. The source mix
+stays unchanged, and source overloads remain visible in the measurements. Temporary
+16-bit WAVs are decoded and measured before submission, then removed after the request.
+The true-peak estimate uses 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+
+Listening uses the `edit_project.listen` network permission. Existing exact approvals,
+allow/deny rules and automatic review apply. It adds no Undo checkpoint. Rendering,
+encoding and inference run on a worker; changed documents and stopped conversations
+discard results. Cancellation prevents subsequent stages; an HTTP request already in
+flight can run until its bounded timeout.
+
+The controller receives a separate model's fallible observations. A successful upload
+is not proof of musical understanding. When the critic cannot judge or its service is
+unavailable, report that limitation and avoid unsupported edits. Only a supported
+correction should lead to a second review; measurements remain separate evidence.
+
+See the [backend validation](agent-listening-loop-validation.md) for the completed
+Codex trial and the Claude Code trials blocked by the account session limit.
+
 MCP retains the full saved-file tool catalog. The file-based composition, rendering and
 listening workflows below describe MCP.
 
@@ -138,9 +175,9 @@ OpenAI-compatible endpoint.
 
 ## Listen, revise, listen again
 
-The [live composition audit](agent-listening-loop-audit.md) found that the in-app
-Codex controller currently uses measurement-based inspection, with no live `listen`
-operation. The saved-project MCP workflow in this section is a separate path.
+The initial [live composition audit](agent-listening-loop-audit.md) found a missing
+live audio path. The live operation above addresses that integration; this section
+describes the separate saved-project MCP workflow, whose `compare_to` is a WAV path.
 
 The controller and the listener can be different models. Qwen/Ornith can choose
 editing tools while `listen` sends the rendered WAV to an audio-capable critic.
@@ -155,6 +192,9 @@ The critic returns observations and has no tools that can modify the project.
    instrument, routing, effect or gain edits.
 4. After editing, read back the affected state, then call `listen` on the same bars. Pass the earlier
    `audio_path` as `compare_to` for an A/B review. Both actual audio files are attached.
+   Saved-file previews can have different protective attenuation; inspect their
+   measurements before interpreting absolute level differences. Live comparisons
+   above instead share one attenuation for both immutable excerpts.
 5. Keep, refine or restore the change according to the evidence. Stop when the
    requested result is met or the remaining uncertainty needs human judgment.
 

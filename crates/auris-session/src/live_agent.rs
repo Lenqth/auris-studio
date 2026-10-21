@@ -126,6 +126,19 @@ pub enum Command {
         /// Optional track ID for solo routing; omit for the mix.
         track: Option<u64>,
     },
+    /// Render the current unsaved mix and send actual WAV audio to the configured audio critic (AURIS_AUDIO_URL/MODEL). Returns fallible observations, exact WAV measurements, document revision and audition_id. Start inside the arrangement; 1..8 bars, at most 30 seconds. For composition, review a completed phrase, make a supported local edit, read back its state, then listen to the same bars with compare_to set to the earlier audition_id. No edit is required when the critic cannot judge. The latest four IDs are retained in this open document. No save or Undo; network permission applies. This is a separate model's review, not proof that you heard the music.
+    Listen {
+        /// First bar, starting at 1.
+        #[schemars(range(min = 1))]
+        start_bar: u32,
+        /// Number of bars, 1..8, fitting at most thirty seconds.
+        #[schemars(range(min = 1, max = 8))]
+        bars: u32,
+        /// Short question about audible instrumentation, balance or phrasing, up to 4000 bytes.
+        focus: Option<String>,
+        /// Opaque audition_id from this open document, with the same bars and timing.
+        compare_to: Option<String>,
+    },
     /// List available built-in instruments, loaded SoundFont sounds, and installed CLAP/VST3 instruments. Copy a returned id into set_instrument. Results are paged; keep the same query when following next_offset.
     ListInstruments {
         /// Case-insensitive name, library, or vendor search; omit for all sounds.
@@ -573,6 +586,17 @@ impl Session {
                     .audio_inspection_job(start_bar, bars, track)?
                     .run(&std::sync::atomic::AtomicBool::new(false))?;
                 serde_json::to_string(&report).map_err(|e| e.to_string())
+            }
+            Command::Listen {
+                start_bar,
+                bars,
+                focus,
+                compare_to,
+            } => {
+                let job =
+                    self.begin_listening(start_bar, bars, focus.as_deref(), compare_to.as_deref())?;
+                let result = job.run(&std::sync::atomic::AtomicBool::new(false))?;
+                self.continue_listening(result)
             }
             Command::ReadNotes { clip, offset } => {
                 let (_, clip) = self

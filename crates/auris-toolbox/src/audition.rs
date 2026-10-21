@@ -131,29 +131,64 @@ pub mod preview {
             std::process::id(),
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
-        let settings = WavExportSettings {
-            bit_depth: WavBitDepth::Int16,
-            sample_rate: 24_000,
-            ..Default::default()
-        };
         let cancellation = cancellation::current();
-        let commit = || cancellation.begin_commit().is_ok();
-        let mut progress = RenderProgress::default()
-            .cancelled_by(cancellation.flag())
-            .committing_with(&commit);
-        let summary = session
+        let mut progress = RenderProgress::default().cancelled_by(cancellation.flag());
+        let audio = session
             .render_job()
-            .render_to_wav(&path, &settings, &options, &mut progress)
+            .render(&options, &mut progress)
             .map_err(|e| e.to_string())?;
+        let measured =
+            auris_session::audio_audition::write_audition_wav(&path, &audio, cancellation.flag())?;
         let text = format!(
-            "{}{}",
+            "{}Wrote {} — {:.3} seconds, {} channels. Audition-only protection; project unchanged.\n{}\n",
             playback_warnings(&session),
-            wrote_line(&path, &summary, &settings)
+            path.display(),
+            audio.duration_seconds(),
+            audio.channel_count(),
+            serde_json::to_string(&measured).map_err(|e| e.to_string())?
         );
         Ok(Preview { path, text })
     }
     /// Renders and names an audio file for the agent frontend.
     pub fn run(args: &Args) -> Result<String, String> {
         create(args).map(|preview| preview.text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_protects_integer_audio_without_editing_the_mix() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("Loud.auris");
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        let track = session.add_default_instrument_track("Loud lead").unwrap();
+        session
+            .set_track_instrument(track, "auris.synth.fm2")
+            .unwrap();
+        let clip = session
+            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks::from_beats(4.0))
+            .unwrap();
+        session
+            .add_note(clip, Note::new(60, Ticks::ZERO, Ticks::from_beats(3.0)))
+            .unwrap();
+        session.set_param(auris_session::ParamTarget::TrackGain(track), 30.0);
+        session.save(&project).unwrap();
+        let original = std::fs::read(&project).unwrap();
+        let result = preview::create(
+            &serde_json::from_value(serde_json::json!({"project":project,"start_bar":1,"bars":1}))
+                .unwrap(),
+        )
+        .unwrap();
+        let decoded = auris_session::decode_audio(&result.path, 24000.0).unwrap();
+        assert!(
+            decoded.peak() < 0.9,
+            "preview clipped at {}",
+            decoded.peak()
+        );
+        assert!(result.text.contains("attenuation_db"), "{}", result.text);
+        assert_eq!(std::fs::read(&project).unwrap(), original);
     }
 }

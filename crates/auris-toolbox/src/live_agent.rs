@@ -209,6 +209,7 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         | "search_instruments"
         | "similar_instruments"
         | "inspect_audio"
+        | "listen"
         | "read_notes"
         | "add_track"
         | "rename_track"
@@ -589,6 +590,10 @@ mod tests {
                 serde_json::json!({"start_bar":1,"bars":1,"track":null}),
             ),
             (
+                "listen",
+                serde_json::json!({"start_bar":1,"bars":1,"focus":null,"compare_to":null}),
+            ),
+            (
                 "list_instruments",
                 serde_json::json!({"query":null,"offset":0,"refresh":false}),
             ),
@@ -692,7 +697,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            30 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            31 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))

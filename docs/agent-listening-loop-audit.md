@@ -1,5 +1,11 @@
 # Rendered-audio feedback in agent composition
 
+This is the initial investigation before the live audio path was added. The
+[implementation and follow-up trials](agent-listening-loop-validation.md) now
+cover a completed Codex audio-review/edit/A/B loop, protected previews, and the
+Claude Code trials blocked by an account session limit. The findings below
+describe the earlier build.
+
 On 2026-10-21, the in-app Codex agent could compose, render an inspection, adjust
 levels, and inspect the changed passage. It could not send that rendered audio to
 a listener through its live tools. An explicit request to listen, revise and listen
