@@ -202,6 +202,14 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             search_documentation::DESCRIPTION,
         ),
         definition::<check_spec::Args>(check_spec::NAME, check_spec::DESCRIPTION),
+        definition::<configure_plugin_paths::Args>(
+            configure_plugin_paths::NAME,
+            configure_plugin_paths::DESCRIPTION,
+        ),
+        definition::<preview_composition::Args>(
+            preview_composition::NAME,
+            preview_composition::DESCRIPTION,
+        ),
         definition::<compose::Args>(compose::NAME, compose::DESCRIPTION),
         definition::<render::Args>(render::NAME, render::DESCRIPTION),
         definition::<verify_render::Args>(verify_render::NAME, verify_render::DESCRIPTION),
@@ -260,6 +268,14 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         definition::<set_instrument_param::Args>(
             set_instrument_param::NAME,
             set_instrument_param::DESCRIPTION,
+        ),
+        definition::<set_instrument_params::Args>(
+            set_instrument_params::NAME,
+            set_instrument_params::DESCRIPTION,
+        ),
+        definition::<replace_notes_batch::Args>(
+            replace_notes_batch::NAME,
+            replace_notes_batch::DESCRIPTION,
         ),
     ]
 }

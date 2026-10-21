@@ -319,9 +319,20 @@ pub mod architecture {
     //! project), startup task groups, concise schemas and full on-demand help. Discovery handles
     //! have a random process scope and are checked against the owning library snapshot; refresh,
     //! library changes and bounded handle eviction invalidate them. Search filters apply before paging or neighbor selection,
-    //! and diagnostics are read separately. [`Session::setup_tracks`](crate::Session::setup_tracks)
+    //! and diagnostics are read separately. Saved-file tools share the desktop's configured
+    //! plugin paths for searching and selecting sounds. Diagnostics page the searched roots,
+    //! detected files and load outcomes alongside scan and acoustic measurement failures;
+    //! reading them uses the existing snapshot without rescanning or loading plugins.
+    //! `configure_plugin_paths` reads or edits these machine-level roots through
+    //! [`Settings::edit_plugin_paths`](crate::Settings::edit_plugin_paths). It refuses malformed
+    //! settings, saves only changed preferences and requires a fresh sound search afterward.
+    //! [`Session::setup_tracks`](crate::Session::setup_tracks)
     //! creates a bounded batch
     //! as one transaction; the saved-project adapter saves once and retains bounded retry receipts.
+    //! [`Session::set_instrument_params`](crate::Session::set_instrument_params) and
+    //! [`Session::replace_notes_batch`](crate::Session::replace_notes_batch) group bounded
+    //! control or score edits into one undo step. Failed batches leave the document intact;
+    //! unchanged retries create no history. Their saved-file tools checkpoint and save once.
     //! Conversation compaction is presentation work in `auris-agent`: a tool-less model
     //! summarizes older exchanges while the latest two completed exchanges remain verbatim.
     //! Summary failures leave history intact, and summaries never grant tool permissions.
@@ -1309,6 +1320,17 @@ pub mod composition {
     //! in the project before loudness balancing. Native instrument controls are not applied
     //! to a substituted SoundFont or hosted source. Drum writers share a kit only when their
     //! source, initial controls and insert chains agree.
+    //! [`Session::composition_preview`](crate::Session::composition_preview) reports the actual
+    //! form length, added ending bars, authored-part mapping and merged drum tracks from the
+    //! same generated draft, including vocal preparation. The `preview_composition` tool runs
+    //! this before saving or loading instruments; source availability is checked by `compose`.
+    //! Newly composed projects also keep an optional comparison baseline: effective static
+    //! controls, instrument selections, timeline maps and authored-note digests with recipes.
+    //! [`Session::inspect_composition_state`](crate::Session::inspect_composition_state) reads
+    //! current values and identifies later edits without regenerating notes or rewriting
+    //! `song_spec`. Older projects retain their current state and report comparison unavailable.
+    //! Mixer/effect settings, automation, audio takes and opaque plugin state remain in the
+    //! `.auris` document; the comparison report explicitly lists its narrower scope.
     //! Electric guitars are DI sources: Rock presets supply driven closed-cabinet amplifiers
     //! for lead/rhythm and clean amplification for contrasting parts. Pop and city-pop use
     //! lighter amplification and restrained chorus; synthwave's guitar arpeggio adds synced delay.

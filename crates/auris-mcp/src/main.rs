@@ -87,13 +87,49 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::setup_tracks::run(&args)).await
     }
-    /// Read scan and acoustic measurement failures after search_instruments or similar_instruments. Does not rescan. Messages are bounded; follow next_offset.
+    /// Read searched plugin roots, detected files, load outcomes and scan/acoustic failures after search_instruments or similar_instruments. Uses the desktop's configured plugin paths. Does not rescan. Entries are bounded; follow next_offset.
     #[tool(input_schema = tool_schema("instrument_diagnostics"))]
     async fn instrument_diagnostics(
         &self,
         Parameters(args): Parameters<toolbox::instrument_diagnostics::Args>,
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::instrument_diagnostics::run(&args)).await
+    }
+
+    /// Set 1..256 instrument parameters across tracks atomically, in native units. Discover exact keys/ranges with automation read. All targets are validated before editing; duplicate targets are refused. Returns previous/current values and automation overrides. Saves once with one checkpoint; identical retries do not save or add history.
+    #[tool(input_schema = tool_schema("set_instrument_params"))]
+    async fn set_instrument_params(
+        &self,
+        Parameters(args): Parameters<toolbox::set_instrument_params::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::set_instrument_params::run(&args)).await
+    }
+
+    /// Replace authored notes in 1..16 clips atomically, at most 65536 notes total. Each edit supplies track, 1-based clip, and exactly one of notes (up to 256 inline) or source (absolute UTF-8 JSON array path, at most 16 MiB). Uses replace_notes pitch/bar/beat/duration units; [] clears a clip. Preserves recipes, curves, transforms and lengths. All input is validated before editing. Saves once with one checkpoint; identical retries do not save or add history.
+    #[tool(input_schema = tool_schema("replace_notes_batch"))]
+    async fn replace_notes_batch(
+        &self,
+        Parameters(args): Parameters<toolbox::replace_notes_batch::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::replace_notes_batch::run(&args)).await
+    }
+
+    /// Preview a specification's actual bar count, added ending bars, part-to-track mapping, merged drum writers, vocal tracks and buses before compose. Uses the same score generation and lyric preparation as compose, but does not load instruments, render audio or write a project. Source availability is checked by compose. Read check_spec first for syntax validation.
+    #[tool(input_schema = tool_schema("preview_composition"))]
+    async fn preview_composition(
+        &self,
+        Parameters(args): Parameters<toolbox::preview_composition::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::preview_composition::run(&args)).await
+    }
+
+    /// Read or edit the shared extra CLAP/VST3 search paths used by MCP and desktop settings. Omit add/remove to list. Add absolute folders or plugin files; remove exact returned paths, up to 64 edits total. Saves machine settings only when changed; does not scan plugins or edit projects. Malformed settings are refused. After changing paths, run search_instruments with refresh:true and use the new sound IDs. A running desktop reloads these saved preferences on restart.
+    #[tool(input_schema = tool_schema("configure_plugin_paths"))]
+    async fn configure_plugin_paths(
+        &self,
+        Parameters(args): Parameters<toolbox::configure_plugin_paths::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::configure_plugin_paths::run(&args)).await
     }
     /// Find tool names by text and optional task group, without full schemas. Fetch tool_help for one result. Startup AURIS_MCP_TOOL_GROUPS controls which groups are callable.
     #[tool(input_schema = tool_schema("discover_tools"))]
@@ -286,7 +322,7 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::transcribe_mixture::run(&args)).await
     }
-    /// Reads the original song specification and the current key, chords, tempo, meter, sections and clip recipes. The specification is provenance; later manual edits are represented by the current state, not by that original text. Large results return an immutable report_id snapshot; use read_report for details instead of repeating analysis or edits.
+    /// Read the original song specification, current instrument controls, key/chords/tempo/meter/sections and clip recipes, plus tracked changes since composition. Old projects without a saved baseline report comparison unavailable. The original specification is provenance; the .auris project holds final edits. Comparison scope and untracked state are explicit. Large results return report_id; use read_report without repeating edits.
     #[tool(input_schema = tool_schema("inspect_composition"))]
     async fn inspect_composition(
         &self,
@@ -346,7 +382,7 @@ impl AurisMcp {
         finished(Ok(toolbox::spec_reference::run()))
     }
 
-    /// Validates a specification without composing anything. A rejected spec answers with every complaint at once, line numbers where they exist; a valid one answers with the full document, every default filled in — the cheap way to see what a draft actually means.
+    /// Validates a specification without composing anything. A rejected spec answers with every complaint at once, line numbers where they exist; a valid one answers with the full document, every default filled in — the cheap way to see what a draft actually means. Use preview_composition to inspect actual bar count and merged tracks before compose.
     #[tool(input_schema = tool_schema("check_spec"))]
     async fn check_spec(
         &self,

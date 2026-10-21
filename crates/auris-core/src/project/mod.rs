@@ -33,6 +33,8 @@
 //! so nothing a caller writes changes.
 
 mod clip;
+mod composition;
+pub use composition::{CompositionBaseline, CompositionClipBaseline, CompositionTrackBaseline};
 mod curve;
 /// Stored drum sound assignments, separate from acoustic measurements.
 pub mod drum;
@@ -271,6 +273,10 @@ pub struct Project {
     /// what lets the song sheet refill itself after a save and a reload — otherwise a piece could
     /// be composed, saved, reopened, and there would be no way back to the dials that made it.
     pub song_spec: Option<String>,
+    /// Initial composition state for explaining later edits; absent in older or manual projects.
+    /// This is comparison metadata, not an alternative score or a regeneration algorithm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition_baseline: Option<CompositionBaseline>,
     next_id: u64,
 }
 
@@ -326,6 +332,7 @@ impl Project {
             count_in_bars: 0,
             grid: default_grid(),
             song_spec: None,
+            composition_baseline: None,
             next_id: 1,
         }
     }

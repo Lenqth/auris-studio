@@ -1,6 +1,10 @@
 //! Saved-file bindings for the shared preset discovery and acoustic index.
 use super::*;
 
+pub(crate) fn configured_plugin_paths() -> Vec<PathBuf> {
+    Settings::load().plugin_paths
+}
+
 /// Bounded name, library, vendor, and preset-tag search.
 pub mod search_instruments {
     use super::*;
@@ -32,15 +36,17 @@ pub mod search_instruments {
     }
     /// Queries without editing or saving the project.
     pub fn run(args: &Args) -> Result<String, String> {
-        opened(&args.project)?.sound_library_job(&[]).run(
-            auris_session::SoundSearch::Text {
-                query: args.query.clone(),
-                limit: args.limit,
-                filter: args.filter.clone(),
-                offset: args.offset,
-            },
-            args.refresh,
-        )
+        opened(&args.project)?
+            .sound_library_job(&configured_plugin_paths())
+            .run(
+                auris_session::SoundSearch::Text {
+                    query: args.query.clone(),
+                    limit: args.limit,
+                    filter: args.filter.clone(),
+                    offset: args.offset,
+                },
+                args.refresh,
+            )
     }
 }
 
@@ -69,14 +75,16 @@ pub mod similar_instruments {
     }
     /// Queries or starts the read-only acoustic index.
     pub fn run(args: &Args) -> Result<String, String> {
-        opened(&args.project)?.sound_library_job(&[]).run(
-            auris_session::SoundSearch::Similar {
-                id: args.id.clone(),
-                limit: args.limit,
-                filter: args.filter.clone(),
-            },
-            false,
-        )
+        opened(&args.project)?
+            .sound_library_job(&configured_plugin_paths())
+            .run(
+                auris_session::SoundSearch::Similar {
+                    id: args.id.clone(),
+                    limit: args.limit,
+                    filter: args.filter.clone(),
+                },
+                false,
+            )
     }
 }
 fn limit() -> usize {
@@ -89,7 +97,7 @@ pub mod instrument_diagnostics {
     /// Wire name.
     pub const NAME: &str = "instrument_diagnostics";
     /// Model-facing contract.
-    pub const DESCRIPTION: &str = "Read scan and acoustic measurement failures after search_instruments or similar_instruments. Does not rescan. Messages are bounded; follow next_offset.";
+    pub const DESCRIPTION: &str = "Read searched plugin roots, detected files, load outcomes and scan/acoustic failures after search_instruments or similar_instruments. Uses the desktop's configured plugin paths. Does not rescan. Entries are bounded; follow next_offset.";
     /// Diagnostic page selector.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     #[serde(deny_unknown_fields)]
@@ -107,7 +115,7 @@ pub mod instrument_diagnostics {
     /// Reads an existing snapshot.
     pub fn run(args: &Args) -> Result<String, String> {
         opened(&args.project)?
-            .sound_library_job(&[])
+            .sound_library_job(&configured_plugin_paths())
             .diagnostics(args.offset, args.limit)
     }
 }

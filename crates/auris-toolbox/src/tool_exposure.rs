@@ -68,10 +68,20 @@ pub fn tool_group(name: &str) -> &'static str {
         | "section_gain"
         | "routing"
         | "set_instrument_param"
+        | "set_instrument_params"
         | "convert_track_to_audio" => "mix",
-        "spec_reference" | "check_spec" | "compose" | "edit_recipe" | "regenerate_clips"
-        | "teach_progression" | "forget_progression" | "list_progressions" | "list_presets"
-        | "add_part" | "accompany" => "composition",
+        "spec_reference"
+        | "check_spec"
+        | "preview_composition"
+        | "compose"
+        | "edit_recipe"
+        | "regenerate_clips"
+        | "teach_progression"
+        | "forget_progression"
+        | "list_progressions"
+        | "list_presets"
+        | "add_part"
+        | "accompany" => "composition",
         "create_project"
         | "import_audio"
         | "import_midi"
@@ -85,6 +95,7 @@ pub fn tool_group(name: &str) -> &'static str {
         | "notes"
         | "edit_notes"
         | "replace_notes"
+        | "replace_notes_batch"
         | "edit_harmony"
         | "set_drum_assignment" => "manual",
         _ => "common",

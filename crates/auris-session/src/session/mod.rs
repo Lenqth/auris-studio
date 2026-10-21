@@ -31,6 +31,11 @@
 //! now share.
 
 mod accompany;
+mod composition_inspection;
+mod composition_preview;
+pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
+mod batch_editing;
+pub use batch_editing::{InstrumentParamChange, InstrumentParamEdit};
 mod agent_instruments;
 mod setup_tracks;
 mod sound_search;

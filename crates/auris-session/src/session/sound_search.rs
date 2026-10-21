@@ -250,6 +250,7 @@ struct Catalog {
     generation: String,
     sounds: Vec<Sound>,
     errors: Vec<String>,
+    inventory: Vec<serde_json::Value>,
     index: Mutex<IndexState>,
     completed: AtomicUsize,
     control: TimbreMapControl,
@@ -425,6 +426,80 @@ struct PluginFiles {
     bytes: usize,
     truncated: bool,
     full: bool,
+    errors: Vec<String>,
+}
+
+fn record_inventory(entries: &mut Vec<serde_json::Value>, entry: serde_json::Value) {
+    if entries.len() < CATALOG_ERROR_LIMIT {
+        entries.push(entry);
+    } else {
+        entries[CATALOG_ERROR_LIMIT - 1] = serde_json::json!({
+            "kind":"inventory", "status":"truncated", "message":"Additional plugin inventory entries were omitted"
+        });
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RootInventoryMode {
+    Metadata,
+    Isolated,
+}
+
+fn root_inventory(extra_paths: &[PathBuf], mode: RootInventoryMode) -> Vec<serde_json::Value> {
+    let mut entries = Vec::new();
+    let mut seen = HashSet::new();
+    for (format, paths) in [
+        (
+            "clap",
+            super::hosted::clap_search_paths()
+                .into_iter()
+                .chain(extra_paths.iter().cloned())
+                .collect::<Vec<_>>(),
+        ),
+        ("vst3", auris_vst3::vst3_search_paths(extra_paths)),
+    ] {
+        for path in paths {
+            if !seen.insert((format, path.clone())) {
+                continue;
+            }
+            if entries.len() >= CATALOG_ERROR_LIMIT {
+                record_inventory(&mut entries, serde_json::json!({}));
+                return entries;
+            }
+            // Isolated discovery delegates filesystem access to its bounded child process too.
+            // A disconnected root must not block the parent while it is reporting that snapshot.
+            let metadata = match mode {
+                RootInventoryMode::Isolated => None,
+                RootInventoryMode::Metadata => Some(path.symlink_metadata()),
+            };
+            let matches_format = path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case(format));
+            let (status, message) = match metadata {
+                None => ("isolated_scan", None),
+                Some(Ok(metadata))
+                    if matches_format
+                        || (metadata.is_dir() && !metadata.file_type().is_symlink()) =>
+                {
+                    ("available", None)
+                }
+                Some(Ok(metadata)) if metadata.file_type().is_symlink() => ("skipped_link", None),
+                Some(Ok(_)) => ("not_directory_or_matching_plugin", None),
+                Some(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                    ("not_found", None)
+                }
+                Some(Err(error)) => ("unreadable", Some(error.to_string())),
+            };
+            record_inventory(
+                &mut entries,
+                serde_json::json!({
+                    "kind":"root", "format":format, "path":short_text(&path.to_string_lossy(),512),
+                    "status":status, "message":message.map(|text|short_text(&text,240))
+                }),
+            );
+        }
+    }
+    entries
 }
 
 impl PluginFiles {
@@ -482,16 +557,48 @@ fn scan_plugin_roots(
             files.truncated = true;
             continue;
         }
-        let Ok(metadata) = path.symlink_metadata() else {
-            continue;
+        let metadata = match path.symlink_metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                if error.kind() != std::io::ErrorKind::NotFound
+                    && files.errors.len() < CATALOG_ERROR_LIMIT
+                {
+                    files.errors.push(format!(
+                        "{}: {error}",
+                        short_text(&path.to_string_lossy(), 240)
+                    ));
+                }
+                continue;
+            }
         };
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
             continue;
         }
-        let Ok(entries) = path.read_dir() else {
-            continue;
+        let entries = match path.read_dir() {
+            Ok(entries) => entries,
+            Err(error) => {
+                if files.errors.len() < CATALOG_ERROR_LIMIT {
+                    files.errors.push(format!(
+                        "{}: {error}",
+                        short_text(&path.to_string_lossy(), 240)
+                    ));
+                }
+                continue;
+            }
         };
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    if files.errors.len() < CATALOG_ERROR_LIMIT {
+                        files.errors.push(format!(
+                            "{}: {error}",
+                            short_text(&path.to_string_lossy(), 240)
+                        ));
+                    }
+                    continue;
+                }
+            };
             *visited += 1;
             let path = entry.path();
             let bytes = path.as_os_str().len();
@@ -1145,17 +1252,19 @@ impl SoundLibraryJob {
         if let Some(Err(error)) = &state.result {
             errors.push(("index", error));
         }
-        if offset > errors.len() {
-            return Err("offset exceeds diagnostic count".into());
-        }
         let entries = errors
             .iter()
+            .map(|(kind, error)| serde_json::json!({"kind":kind,"message":short_text(error,240)}))
+            .chain(catalog.inventory.iter().cloned())
             .skip(offset)
             .take(limit)
-            .map(|(kind, error)| serde_json::json!({"kind":kind,"message":short_text(error,240)}))
             .collect::<Vec<_>>();
+        let total = errors.len() + catalog.inventory.len();
+        if offset > total {
+            return Err("offset exceeds diagnostic count".into());
+        }
         let next = offset + entries.len();
-        Ok(serde_json::json!({"entries":entries,"total":errors.len(),"next_offset":(next<errors.len()).then_some(next)}).to_string())
+        Ok(serde_json::json!({"entries":entries,"total":total,"error_count":errors.len(),"next_offset":(next<total).then_some(next)}).to_string())
     }
     /// Returns a bounded search response. First acoustic use starts a background index and
     /// returns `status: indexing`; subsequent calls report progress or completed neighbors.
@@ -1239,7 +1348,9 @@ impl SoundLibraryJob {
                 let page = page.into_iter().map(Sound::value).collect::<Vec<_>>();
                 Ok(sound_page(with_native_status(
                     serde_json::json!({"status":"ready","sounds":page,"total":matches.len(),"next_offset":(next<matches.len()).then_some(next),
-                    "scan_error_count":catalog.errors.len()}),
+                    "scan_error_count":catalog.errors.len(),
+                    "source_sound_count":catalog.sounds.iter().filter(|sound| filter.matches(sound)).count(),
+                    "diagnostics":(matches.is_empty() || !catalog.errors.is_empty()).then_some("Use instrument_diagnostics to inspect search roots, detected files and load outcomes.")}),
                     &catalog,
                 )))
             }
@@ -1419,6 +1530,18 @@ impl SoundLibraryJob {
             errors_truncated: false,
         };
         let mut errors = Vec::new();
+        let mut inventory = if self.scan_plugins {
+            root_inventory(
+                &self.extra_paths,
+                if self.isolated_plugin_discovery {
+                    RootInventoryMode::Isolated
+                } else {
+                    RootInventoryMode::Metadata
+                },
+            )
+        } else {
+            Vec::new()
+        };
         let mut stamps = self
             .font_paths
             .iter()
@@ -1443,11 +1566,23 @@ impl SoundLibraryJob {
                 if budget.sounds_truncated {
                     break;
                 }
+                let before = sounds.len();
                 discover_isolated_plugin(entry, &mut sounds, &mut budget);
+                record_inventory(
+                    &mut inventory,
+                    serde_json::json!({
+                        "kind":"plugin", "path":short_text(&entry.path.to_string_lossy(),512),
+                    "status":if budget.sounds_truncated {"metadata_limit"} else if sounds.len() > before { "loaded" } else { "no_instrument" },
+                        "sounds_found":sounds.len()-before
+                    }),
+                );
             }
             native_status = Some(snapshot.status);
         } else if self.scan_plugins {
             let plugin_files = installed_plugin_files(&self.extra_paths);
+            for error in &plugin_files.errors {
+                budget.push_error(&mut errors, error);
+            }
             if plugin_files.truncated {
                 budget.push_error(
                     &mut errors,
@@ -1472,6 +1607,7 @@ impl SoundLibraryJob {
                 if budget.sounds_truncated {
                     break;
                 }
+                let before = sounds.len();
                 let result = if *vst3 {
                     discover_vst3(
                         file,
@@ -1484,6 +1620,15 @@ impl SoundLibraryJob {
                 } else {
                     discover_clap(file, &mut sounds, &mut errors, &mut budget)
                 };
+                record_inventory(
+                    &mut inventory,
+                    serde_json::json!({
+                        "kind":"plugin", "format":if *vst3 {"vst3"} else {"clap"},
+                        "path":short_text(&file.to_string_lossy(),512),
+                    "status":if result.is_err() {"load_failed"} else if budget.sounds_truncated {"metadata_limit"} else if sounds.len() > before {"loaded"} else {"no_instrument"},
+                        "sounds_found":sounds.len()-before
+                    }),
+                );
                 if let Err(error) = result {
                     budget.push_error(&mut errors, format!("{}: {error}", file.display()));
                 }
@@ -1516,6 +1661,7 @@ impl SoundLibraryJob {
             generation,
             sounds,
             errors,
+            inventory,
             index: Mutex::new(IndexState::default()),
             completed: AtomicUsize::new(0),
             control: TimbreMapControl::default(),
@@ -2745,11 +2891,63 @@ mod tests {
             generation: format!("generation-{key}"),
             sounds: Vec::new(),
             errors: Vec::new(),
+            inventory: Vec::new(),
             index: Mutex::new(IndexState::default()),
             completed: AtomicUsize::new(0),
             control: TimbreMapControl::default(),
             native_status: None,
         })
+    }
+
+    #[test]
+    fn discovery_inventory_reports_missing_roots_and_pages_after_errors() {
+        let _serial = serial_test();
+        let scratch = Scratch::new("inventory-roots");
+        let missing = scratch.join("Missing");
+        let roots = root_inventory(std::slice::from_ref(&missing), RootInventoryMode::Metadata);
+        let isolated = root_inventory(std::slice::from_ref(&missing), RootInventoryMode::Isolated);
+        assert!(
+            isolated
+                .iter()
+                .all(|entry| entry["status"] == "isolated_scan")
+        );
+        assert!(
+            roots
+                .iter()
+                .any(|entry| entry["path"] == missing.to_string_lossy().as_ref()
+                    && entry["status"] == "not_found")
+        );
+        let session = session();
+        let job = isolated_job(&session);
+        let mut catalog = empty_catalog(&job.key);
+        let inner = Arc::get_mut(&mut catalog).unwrap();
+        inner.errors.push("example loading failure".into());
+        inner.inventory = roots;
+        {
+            let mut catalogs = CATALOGS.get_or_init(Default::default).lock().unwrap();
+            reserve_catalog_slot(&mut catalogs).unwrap();
+            catalogs.push(catalog.clone());
+        }
+        let answer: serde_json::Value =
+            serde_json::from_str(&job.diagnostics(1, 1).unwrap()).unwrap();
+        assert_eq!(answer["entries"][0]["kind"], "root");
+        assert_eq!(answer["error_count"], 1);
+        assert_eq!(answer["next_offset"], 2);
+        let last = 1 + catalog.inventory.len();
+        assert!(job.diagnostics(last, 1).is_ok());
+        assert!(job.diagnostics(last + 1, 1).is_err());
+        CATALOGS
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .retain(|cached| !Arc::ptr_eq(cached, &catalog));
+        let mut inventory = Vec::new();
+        for _ in 0..CATALOG_ERROR_LIMIT + 2 {
+            record_inventory(&mut inventory, serde_json::json!({"kind":"plugin"}));
+        }
+        assert_eq!(inventory.len(), CATALOG_ERROR_LIMIT);
+        assert_eq!(inventory.last().unwrap()["status"], "truncated");
     }
 
     #[test]
