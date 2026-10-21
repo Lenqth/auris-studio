@@ -1904,6 +1904,11 @@ pub mod singing {
     //! host-owned curves unchanged. Controls extend into rests for anticipated consonants
     //! and trailing decoder context; predicted energy still determines silence. VOICEVOX uses
     //! this contract with its frame query as context; another backend can keep tensors instead.
+    //! Before its final query, VOICEVOX predicts consonant timing with internal rests connected
+    //! to the preceding note. Rests no longer than the following predicted consonant stay connected
+    //! in the synthesis score; longer pauses remain. This prevents the Engine from truncating
+    //! consonants to fit tiny gaps. The adapter may make a second query to restore those pauses;
+    //! saved notes, vowel onsets, host controls and total duration are unchanged.
     //!
     //! File formats provide default capabilities, while a loaded
     //! [`auris_singer::SingingBackend::capabilities`] can override them for a particular model.
