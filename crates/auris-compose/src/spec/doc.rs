@@ -899,6 +899,17 @@ impl PartDoc {
             part.source = Some(source);
         }
         validate_params(&self.params, &format!("part `{name}`"), errors);
+        if part.source.is_some() && !self.params.is_empty() {
+            let keys = self
+                .params
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ");
+            errors.push(SpecError::about(format!(
+                "part `{name}`: params ({keys}) cannot be applied with source; remove params and use set_instrument_param after composing"
+            )));
+        }
         if let Some(effects) = &self.effects {
             for (index, effect) in effects.iter().enumerate() {
                 let context = format!("part `{name}` effect {}", index + 1);
@@ -1281,6 +1292,28 @@ impl PartDoc {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explicit_sources_refuse_controls_that_would_be_ignored() {
+        for source in [
+            "type = 'clap', path = 'Keys.clap', plugin_id = 'keys'",
+            "type = 'vst3', path = 'Keys.vst3', class_id = 'keys'",
+            "type = 'sound_font', path = 'Keys.sf2', bank = 0, patch = 0",
+        ] {
+            let text = format!(
+                "[[part]]\nname = 'selected'\nsource = {{ {source} }}\nparams = {{ 'clap.18' = 0.42 }}"
+            );
+            let errors = SongSpec::parse(&text).unwrap_err();
+            let message = errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(message.contains("selected"), "{message}");
+            assert!(message.contains("clap.18"), "{message}");
+            assert!(message.contains("set_instrument_param"), "{message}");
+        }
+    }
+
     #[test]
     fn nonfinite_authored_controls_and_empty_effect_ids_are_rejected() {
         for setting in [

@@ -221,6 +221,28 @@ fn a_collected_library_preset_keeps_ownership_when_chosen_for_a_new_song() {
 }
 
 #[test]
+fn ignored_source_controls_are_refused_before_loading_or_replacing_the_document() {
+    let mut session = session();
+    session.add_default_instrument_track("Keep me").unwrap();
+    session.forget_history();
+    let before = session.project().clone();
+    let dirty = session.is_dirty();
+    let mut spec = spec(PartSource::Clap {
+        path: "Missing.clap".into(),
+        plugin_id: "keys".into(),
+    });
+    spec.parts[0].params.insert("clap.18".into(), 0.42);
+    let error = session
+        .compose(&auris_compose::compose(&spec))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("set_instrument_param"), "{error}");
+    assert_eq!(session.project(), &before);
+    assert_eq!(session.is_dirty(), dirty);
+    assert!(session.undo().is_none());
+}
+
+#[test]
 fn missing_or_invalid_explicit_sources_never_replace_the_existing_song() {
     let scratch = Scratch::new("song-refused-source");
     let valid = scratch.soundfont("valid.sf2");

@@ -3486,6 +3486,25 @@ mod tests {
     }
 
     #[test]
+    fn checking_and_composing_refuse_ignored_source_controls_before_writing() {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("Untouched.auris");
+        let text = "[[part]]\nname = 'Keys'\nsource = { type = 'clap', path = 'Missing.clap', plugin_id = 'keys' }\nparams = { 'clap.18' = 0.42 }";
+        let checked = check_spec::run(&spec_args(Some(text), None)).unwrap_err();
+        let composed = compose::run(&compose::Args {
+            spec: spec_args(Some(text), None),
+            output: output.to_string_lossy().into_owned(),
+            force: false,
+        })
+        .unwrap_err();
+        assert_eq!(checked, composed);
+        assert!(checked.contains("Keys"), "{checked}");
+        assert!(checked.contains("clap.18"), "{checked}");
+        assert!(checked.contains("set_instrument_param"), "{checked}");
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
+    #[test]
     fn the_vocabulary_lists_answer_with_real_entries() {
         assert!(list_progressions::run().contains("@axis"));
         assert!(list_presets::run().contains(auris_session::prelude::PRESETS[0].name));
