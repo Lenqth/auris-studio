@@ -23,7 +23,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-07 | Medium | DSP | Ping-pong delay does nothing on a centred source (verified) |
 | AR-08 | Medium | Security | Native CLI file reads are approved automatically, in every mode, anywhere on disk |
 | AR-09 | Medium | i18n, macOS | The app launched from Finder ignores the system language |
 | AR-10 | Medium | VST3 | Every class in a multi-class bundle gets the first class's kind |
@@ -34,21 +33,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
-
-### AR-07 — Ping-pong delay does nothing on a centred source (verified)
-
-**Where.** `crates/auris-dsp/src/delay.rs:258-290`.
-
-**What happens.** In ping-pong mode each channel's input is written into its own line and only the
-feedback crosses. A source with identical left and right channels, which is any centred
-instrument, therefore produces identical repeats on both sides, and the toggle is inaudible. A
-probe with an impulse on both channels measured a left–right difference of exactly 0, with taps of
-1.000/1.000, 0.700/0.700 and 0.490/0.490. The existing test (`delay.rs:415-433`) feeds the left
-channel only, which is the one case where the current wiring alternates.
-
-**Direction.** Feed the mono sum (or the left channel alone) into one line, then cross the
-feedback, so the first repeat comes from one side and each later repeat alternates. Add a
-centred-source test.
 
 ### AR-08 — Native CLI file reads are approved automatically, in every mode, anywhere on disk
 

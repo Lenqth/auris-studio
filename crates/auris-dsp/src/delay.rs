@@ -275,9 +275,12 @@ impl Effect for Delay {
 
                 left_damp = crate::settled(left_damp + alpha * (delayed_right - left_damp));
                 right_damp = crate::settled(right_damp + alpha * (delayed_left - right_damp));
-                // The crossed feedback is what makes repeats alternate between the speakers.
-                left_line.write(*left_sample + feedback * left_damp);
-                right_line.write(*right_sample + feedback * right_damp);
+                // The input enters on the left only, summed to mono, and every repeat crosses to
+                // the other side. Feeding each side its own input made a centred source — most
+                // tracks — repeat identically on both, and the mode inaudible where it is used.
+                let mono = 0.5 * (*left_sample + *right_sample);
+                left_line.write(mono + feedback * left_damp);
+                right_line.write(feedback * right_damp);
 
                 *left_sample = *left_sample * (1.0 - mix) + delayed_left * mix;
                 *right_sample = *right_sample * (1.0 - mix) + delayed_right * mix;
@@ -425,11 +428,61 @@ mod tests {
         buffer.channel_mut(0)[0] = 1.0;
         plugin.process(&mut buffer, &context(4_096));
 
-        // Tap one comes back on the left (its own line), tap two crosses to the right.
-        assert!((buffer.channel(0)[480] - 1.0).abs() < 1e-6);
+        // The input is summed to mono into the left line, so a hard-left impulse comes back at
+        // half its level on the left; tap two crosses to the right at the feedback's level.
+        assert!((buffer.channel(0)[480] - 0.5).abs() < 1e-6);
         assert!(buffer.channel(1)[480].abs() < 1e-6);
         let crossed: f32 = buffer.channel(1)[955..=965].iter().map(|s| s.abs()).sum();
-        assert!(crossed > 0.5, "right channel repeat summed to {crossed}");
+        assert!(
+            (0.4..0.5).contains(&crossed),
+            "right channel repeat summed to {crossed}"
+        );
+        let stayed: f32 = buffer.channel(0)[955..=965].iter().map(|s| s.abs()).sum();
+        assert!(stayed < 1e-3, "left channel at tap two summed to {stayed}");
+    }
+
+    #[test]
+    fn ping_pong_alternates_a_centred_source() {
+        // The case that matters: most tracks are centred, and a ping-pong that fed each side its
+        // own input repeated them identically on both, which is no ping-pong at all.
+        let mut plugin = Delay::new();
+        plugin.set_param_by_key("time_ms", 10.0);
+        plugin.set_param_by_key("feedback", 0.7);
+        plugin.set_param_by_key("mix", 1.0);
+        plugin.set_param_by_key("damping_hz", 20_000.0);
+        plugin.set_param_by_key("ping_pong", 1.0);
+        plugin.prepare(&PrepareContext::new(SR, 8_192, 2));
+
+        let mut buffer = AudioBuffer::stereo(4_096, SR);
+        buffer.channel_mut(0)[0] = 1.0;
+        buffer.channel_mut(1)[0] = 1.0;
+        plugin.process(&mut buffer, &context(4_096));
+
+        let tap = |channel: usize, number: usize| -> f32 {
+            let at = 480 * number;
+            buffer.channel(channel)[at - 5..=at + 5]
+                .iter()
+                .map(|s| s.abs())
+                .sum()
+        };
+        assert!(
+            (tap(0, 1) - 1.0).abs() < 1e-5,
+            "first repeat left: {}",
+            tap(0, 1)
+        );
+        assert!(tap(1, 1) < 1e-5, "and not right: {}", tap(1, 1));
+        assert!(
+            (0.6..0.75).contains(&tap(1, 2)),
+            "second right: {}",
+            tap(1, 2)
+        );
+        assert!(tap(0, 2) < 1e-3, "and not left: {}", tap(0, 2));
+        assert!(
+            (0.4..0.55).contains(&tap(0, 3)),
+            "third left: {}",
+            tap(0, 3)
+        );
+        assert!(tap(1, 3) < 1e-3, "and not right: {}", tap(1, 3));
     }
 
     #[test]
@@ -446,9 +499,10 @@ mod tests {
             channel[0] = 1.0;
         }
         plugin.process(&mut buffer, &context(2_048));
-        for channel in 0..4 {
+        // The pair ping-pongs, so its first repeat is on the left alone; the rest are plain.
+        for (channel, expected) in [(0, 1.0), (1, 0.0), (2, 1.0), (3, 1.0)] {
             assert!(
-                (buffer.channel(channel)[480] - 1.0).abs() < 1e-6,
+                (buffer.channel(channel)[480] - expected).abs() < 1e-6,
                 "channel {channel} was {}",
                 buffer.channel(channel)[480]
             );
