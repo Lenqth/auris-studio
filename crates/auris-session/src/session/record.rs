@@ -789,18 +789,19 @@ impl Session {
         let Take { writer, files, .. } = take;
 
         // Read before the take is closed, because closing it is what stops them moving.
-        let (started_at, count_in_frames, dropped_frames) = match self.input.as_ref() {
+        let (started_at, count_in_frames, lag_frames, dropped_frames) = match self.input.as_ref() {
             Some(capture) => {
                 let seen = (
                     capture.started_at(),
                     capture.count_in_at_start(),
+                    capture.latency_at_start(),
                     capture.dropped_frames(),
                 );
                 // The writer's signal. The device stays open if somebody is monitoring through it.
                 capture.end_take();
                 seen
             }
-            None => (None, 0, 0),
+            None => (None, 0, 0, 0),
         };
         let frames = match writer.join() {
             Ok((reader, result)) => {
@@ -858,6 +859,10 @@ impl Session {
         // files, in front of the position they were stamped with: the playhead does not move
         // while a count is played. Dropping it is what puts the clip on the downbeat.
         let count_in = in_project_frames(count_in_frames);
+        // And how late the stamp is against what the player heard: the round trip through both
+        // devices and the graph's delay compensation. See `take_placement`.
+        let (take_start, head) =
+            take_placement(take_start, count_in, in_project_frames(lag_frames));
 
         // A transaction rather than a single `record`, because clearing the punch region goes
         // through `split_clip` and `remove_clip` and each of those records a step of its own when
@@ -872,7 +877,7 @@ impl Session {
         self.begin_transaction(Edit::RecordTake);
         let mut takes = Vec::with_capacity(files.len());
         for file in &files {
-            match self.land_take(file, take_start, count_in, project_rate) {
+            match self.land_take(file, take_start, head, project_rate) {
                 Ok(report) => takes.push(report),
                 Err(error) => {
                     // The take's own files stay — they are what was played — but the document
@@ -901,7 +906,7 @@ impl Session {
         &mut self,
         file: &TakeFile,
         take_start: u64,
-        count_in: u64,
+        head: u64,
         project_rate: f64,
     ) -> Result<TakeReport, SessionError> {
         // The track can be deleted while the take is still rolling: the arm went with it, but an
@@ -923,10 +928,11 @@ impl Session {
         // written a file at its own.
         let buffer = import_audio_file(&file.path, self.project.sample_rate)?;
         let punch = self.punch_frames_at(project_rate);
-        // The count-in comes off the front before the punch is worked out, because everything the
-        // punch is measured in — the take's position, what it covers — begins where the count
-        // ends. A take stopped during its own count leaves nothing to keep.
-        let played = (buffer.frame_count() as u64).saturating_sub(count_in);
+        // The head — count-in, and whatever the round trip put in front of the downbeat — comes
+        // off before the punch is worked out, because everything the punch is measured in — the
+        // take's position, what it covers — begins where it ends. A take stopped during its own
+        // count leaves nothing to keep.
+        let played = (buffer.frame_count() as u64).saturating_sub(head);
         let Some((offset, kept)) =
             punch_window(punch, take_start, played).filter(|(_, kept)| *kept > 0)
         else {
@@ -945,7 +951,7 @@ impl Session {
                 outside_punch: punch.is_some(),
             });
         };
-        let buffer = match (count_in + offset, kept == buffer.frame_count() as u64) {
+        let buffer = match (head + offset, kept == buffer.frame_count() as u64) {
             (0, true) => buffer,
             (from, _) => buffer.slice(from as usize, kept as usize),
         };
@@ -1262,6 +1268,23 @@ fn finish_all(streams: Vec<TakeStream>) -> Result<u64, IoError> {
 /// through the folder in a year is trying to find, and a timestamp is what a machine would have
 /// chosen. Numbered from the first one free, so deleting take 2 and recording again fills the gap
 /// rather than counting past it.
+/// Where a take lands and how many samples come off its head, in project frames.
+///
+/// `stamp` is where the capture stamped its first sample, `count_in` how much count-in that head
+/// holds, and `lag` how far the stamp runs ahead of what the player was hearing when that sample
+/// was captured. A counted take still starts on the downbeat it was counted into, so the lag only
+/// makes its head longer. An uncounted one moves back by the lag instead, and loses only what
+/// would land before the start of the song.
+pub(crate) fn take_placement(stamp: u64, count_in: u64, lag: u64) -> (u64, u64) {
+    if count_in > 0 {
+        (stamp, count_in.saturating_add(lag))
+    } else if lag <= stamp {
+        (stamp - lag, 0)
+    } else {
+        (0, lag - stamp)
+    }
+}
+
 pub(crate) fn take_file_name(folder: &std::path::Path, track_name: &str) -> String {
     let stem = sanitised(track_name);
     let audio = folder.join(auris_io::AUDIO_DIR);
@@ -1316,6 +1339,18 @@ mod tests {
             &TempoMap::constant(120.0),
             48_000.0,
         )
+    }
+
+    #[test]
+    fn a_take_moves_back_by_its_round_trip_or_drops_it_before_a_downbeat() {
+        // Uncounted: the performance began 1 520 frames before the stamp said.
+        assert_eq!(take_placement(50_000, 0, 1_520), (48_480, 0));
+        // Nothing measured: where the stamp says, as before.
+        assert_eq!(take_placement(50_000, 0, 0), (50_000, 0));
+        // Counted: still on the downbeat, with the round trip added to the head it drops.
+        assert_eq!(take_placement(96_000, 24_000, 1_520), (96_000, 25_520));
+        // At the very start of the song there is nowhere earlier to put it.
+        assert_eq!(take_placement(1_000, 0, 1_520), (0, 520));
     }
 
     #[test]

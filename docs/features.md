@@ -887,9 +887,16 @@ sustain and release are one shape with three corners to drag, not four numbers t
 ## Recording
 
 Click an audio track, press **Record** in the transport — or `R` — and play. Pressing it again
-stops the take and puts it on the timeline as a clip, at the position the playhead was at when the
-first sample arrived. The transport rolls when you start, so a take recorded against the rest of
-the song lines up with it.
+stops the take and puts it on the timeline as a clip, at the position you were hearing when its
+first sample was captured. The transport rolls when you start, so a take recorded against the rest
+of the song lines up with it.
+
+**The round trip is taken off.** What you hear leaves the speaker later than the playhead says —
+by the output buffer, the device and any delay compensation the mix carries — and what you play
+reaches Auris later again by the input's own latency. Auris measures both from the timestamps the
+two devices report and moves the take back by their sum, so an overdub lands where it was played
+rather than a few tens of milliseconds behind. Where the devices' clocks give no believable
+answer, the take lands at the playhead as it did before.
 
 **The selected audio track is where the take lands**, and its **R** button is outlined to say so
 before you press anything. Selecting another audio track moves the take with it; selecting a track

@@ -61,6 +61,7 @@ use cpal::{
 };
 use crossbeam_channel::{Receiver, Sender};
 
+use crate::clock::{OutputClock, capture_lag};
 use crate::device::{AudioDevice, AudioDeviceInfo, add_sample_rate_range, audio_host};
 use crate::error::EngineError;
 use crate::handle::EngineHandle;
@@ -98,6 +99,12 @@ pub const MAX_METERED_CHANNELS: usize = 32;
 
 /// What [`CaptureShared::started_at`] holds until the first block arrives.
 const NOT_STARTED: u64 = u64::MAX;
+
+/// The longest round trip a take is ever moved back by, in seconds.
+///
+/// Generous for any real interface and Bluetooth headset alike; a lag beyond it is two stream
+/// clocks that do not share an origin, and believing it would move the take somewhere arbitrary.
+const MAX_CAPTURE_LAG_SECONDS: f64 = 1.0;
 
 /// Every input device the default host can see.
 ///
@@ -190,6 +197,11 @@ struct CaptureShared {
     /// does not move during a count-in, so a take that began in the middle of one is a file whose
     /// first samples belong in front of the position it was stamped with — this says how many.
     count_in_at_start: AtomicU64,
+    /// How many engine frames that same first block's stamp runs ahead of what the player was
+    /// hearing when its first sample was captured: output and input latency and the graph's delay
+    /// compensation together. Zero when the two streams' clocks could not say. See
+    /// [`crate::clock`].
+    latency_at_start: AtomicU64,
     /// Loudest sample since the meter was last read, as an `f32` bit pattern.
     peak: AtomicU32,
     /// The same, one per input channel, for a meter beside each armed track.
@@ -373,6 +385,18 @@ impl Capture {
         self.shared.count_in_at_start.load(Ordering::Relaxed)
     }
 
+    /// How far, in engine frames, the take's stamp runs ahead of what the player heard when its
+    /// first sample was captured.
+    ///
+    /// The round trip a performance makes: the mix leaves the speaker late by the output latency
+    /// and the graph's delay compensation, and the playing comes back late by the input latency.
+    /// A take placed at [`Self::started_at`] without taking this off sits late by exactly that.
+    /// Zero when the devices' clocks gave no believable answer, which places the take where the
+    /// stamp says, as before.
+    pub fn latency_at_start(&self) -> u64 {
+        self.shared.latency_at_start.load(Ordering::Relaxed)
+    }
+
     /// How many frames have been handed over, which is how long the take is so far.
     pub fn frames(&self) -> u64 {
         self.shared.frames.load(Ordering::Relaxed)
@@ -426,6 +450,7 @@ impl Capture {
         }
         self.shared.started_at.store(NOT_STARTED, Ordering::Relaxed);
         self.shared.count_in_at_start.store(0, Ordering::Relaxed);
+        self.shared.latency_at_start.store(0, Ordering::Relaxed);
         self.shared.recording.store(true, Ordering::Release);
     }
 
@@ -528,6 +553,8 @@ struct CaptureSink {
     playhead: Arc<AtomicU64>,
     /// The count-in cell, read at the same moment as the playhead and for the same reason.
     count_in: Arc<AtomicU64>,
+    /// What the output stream says is being heard, and when. See [`crate::clock`].
+    clock: Arc<OutputClock>,
     channels: usize,
     /// The other readers of these samples: the render graph, for every track being monitored.
     ///
@@ -546,8 +573,21 @@ struct CaptureSink {
 }
 
 impl CaptureSink {
+    /// Accepts one callback's worth of interleaved samples, with no capture instant.
+    #[cfg(test)]
+    fn push<T>(&mut self, data: &[T])
+    where
+        T: Copy,
+        f32: FromSample<T>,
+    {
+        self.push_at(data, None);
+    }
+
     /// Accepts one callback's worth of interleaved samples, in whatever format the device speaks.
-    fn push<T>(&mut self, mut data: &[T])
+    ///
+    /// `captured` is when the device says the block's first frame was captured, in nanoseconds on
+    /// its stream clock, or `None` when it did not say.
+    fn push_at<T>(&mut self, mut data: &[T], captured: Option<u64>)
     where
         T: Copy,
         f32: FromSample<T>,
@@ -608,14 +648,30 @@ impl CaptureSink {
         // inside this callback promises nothing to a reader on another core, and without the
         // pairing a `stop_recording` that saw the position could still read the count as the
         // zero `begin_take` reset it to.
+        let playhead = self.playhead.load(Ordering::Relaxed);
         if self.shared.started_at.load(Ordering::Relaxed) == NOT_STARTED {
+            let count = self.count_in.load(Ordering::Relaxed);
             self.shared
                 .count_in_at_start
-                .store(self.count_in.load(Ordering::Relaxed), Ordering::Relaxed);
+                .store(count, Ordering::Relaxed);
+            // The virtual frame this stamp claims, against the one the output clock says was
+            // heard at the instant the block was captured. Written before the stamp, under the
+            // same Release, so `stop_recording` reads all three as one moment.
+            let stamped = i64::try_from(playhead)
+                .unwrap_or(i64::MAX)
+                .saturating_sub(i64::try_from(count).unwrap_or(i64::MAX));
+            let lag = captured
+                .filter(|nanos| *nanos != 0)
+                .zip(self.clock.read())
+                .and_then(|(captured, heard)| {
+                    capture_lag(stamped, heard, captured, MAX_CAPTURE_LAG_SECONDS)
+                })
+                .unwrap_or(0);
+            self.shared.latency_at_start.store(lag, Ordering::Relaxed);
         }
         let _ = self.shared.started_at.compare_exchange(
             NOT_STARTED,
-            self.playhead.load(Ordering::Relaxed),
+            playhead,
             Ordering::Release,
             Ordering::Relaxed,
         );
@@ -730,6 +786,7 @@ fn pool(
         dropped: AtomicU64::new(0),
         started_at: AtomicU64::new(NOT_STARTED),
         count_in_at_start: AtomicU64::new(0),
+        latency_at_start: AtomicU64::new(0),
         peak: AtomicU32::new(0),
         channel_peaks: [const { AtomicU32::new(0) }; MAX_METERED_CHANNELS],
         frames: AtomicU64::new(0),
@@ -776,6 +833,7 @@ fn pool(
         shared: Arc::clone(&shared),
         playhead: Arc::new(AtomicU64::new(0)),
         count_in: Arc::new(AtomicU64::new(0)),
+        clock: Arc::default(),
         channels: 1,
         monitors,
         stranded: std::array::from_fn(|_| None),
@@ -845,6 +903,7 @@ fn start_capture_with_setup(
         pool(sample_rate, engine.sample_rate(), engine.max_block());
     sink.playhead = engine.playhead_cell();
     sink.count_in = engine.count_in_cell();
+    sink.clock = Arc::clone(&engine.clock);
     sink.channels = channels;
     shared.running.store(true, Ordering::Relaxed);
 
@@ -935,7 +994,10 @@ where
     device
         .build_input_stream(
             config,
-            move |data: &[T], _: &cpal::InputCallbackInfo| sink.push(data),
+            move |data: &[T], info: &cpal::InputCallbackInfo| {
+                let captured = u64::try_from(info.timestamp().capture.as_nanos()).ok();
+                sink.push_at(data, captured)
+            },
             on_error,
             None,
         )
@@ -1095,6 +1157,38 @@ mod tests {
         // test for *that* is `an_open_device_with_no_take_running_records_nothing`.
         capture.begin_take();
         (capture, reader, sink, playhead)
+    }
+
+    #[test]
+    fn the_first_block_measures_how_far_the_stamp_runs_ahead_of_what_was_heard() {
+        let (capture, _reader, mut sink, playhead) = wired(1);
+        // The output says frame 48 000 is heard at t = 1 s; this block was captured 10 ms later,
+        // when frame 48 480 was coming out of the speaker. The playhead already reads 50 000.
+        sink.clock.publish(48_000, 1_000_000_000, 48_000.0);
+        playhead.store(50_000, Ordering::Relaxed);
+        sink.push_at(&[0.5f32; 64], Some(1_010_000_000));
+        assert_eq!(capture.started_at(), Some(50_000));
+        assert_eq!(capture.latency_at_start(), 1_520);
+
+        // Later blocks measure nothing; the first one is the take's.
+        sink.push_at(&[0.5f32; 64], Some(1_020_000_000));
+        assert_eq!(capture.latency_at_start(), 1_520);
+    }
+
+    #[test]
+    fn a_capture_with_no_believable_clock_keeps_the_plain_stamp() {
+        let (capture, _reader, mut sink, playhead) = wired(1);
+        playhead.store(50_000, Ordering::Relaxed);
+        // Nothing published: the transport was not moving.
+        sink.push_at(&[0.5f32; 64], Some(1_010_000_000));
+        assert_eq!(capture.latency_at_start(), 0);
+
+        let (capture, _reader, mut sink, playhead) = wired(1);
+        // Clocks without a shared origin: the arithmetic says minutes, which no device takes.
+        sink.clock.publish(48_000, 1_000_000_000, 48_000.0);
+        playhead.store(50_000, Ordering::Relaxed);
+        sink.push_at(&[0.5f32; 64], Some(900_000_000_000));
+        assert_eq!(capture.latency_at_start(), 0);
     }
 
     #[test]

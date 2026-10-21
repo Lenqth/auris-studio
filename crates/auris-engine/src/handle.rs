@@ -146,6 +146,8 @@ pub struct EngineHandle {
     pub(crate) playing: Arc<AtomicBool>,
     pub(crate) latency_stale: Arc<AtomicBool>,
     pub(crate) stream_notices: Arc<AtomicU32>,
+    /// What the output says it is playing, and when, for a capture to line a take up against.
+    pub(crate) clock: Arc<crate::clock::OutputClock>,
     pub(crate) sample_rate: f64,
     pub(crate) channel_count: usize,
     pub(crate) max_block: usize,

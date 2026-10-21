@@ -23,7 +23,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-05 | Medium-High | Recording | Takes are not compensated for round-trip latency and land late |
 | AR-06 | Medium | Denial of service | A MIDI file of meter changes takes quadratic time to import (verified) |
 | AR-07 | Medium | DSP | Ping-pong delay does nothing on a centred source (verified) |
 | AR-08 | Medium | Security | Native CLI file reads are approved automatically, in every mode, anywhere on disk |
@@ -37,25 +36,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
-
-### AR-05 — Takes are not compensated for round-trip latency and land late
-
-**Where.** The first input block stamps the take with the *output* engine's playhead
-(`crates/auris-engine/src/capture.rs:611-621`). That playhead is the next frame to be rendered,
-stored after each block (`device.rs:934-935`). `land_take` places the clip at exactly that stamp
-(`session/record.rs:953-956`).
-
-**What happens.** What the player hears lags the playhead by the output buffer, the device's
-output latency and the graph's plugin delay compensation. What the input delivers lags the
-performance by the input latency and buffer. Neither is subtracted anywhere, and there is no
-recording-offset setting (`settings.rs:166` says as much about the buffer figure). Every overdub
-therefore lands late by the round trip: typically 10–40 ms on WASAPI shared mode, more with a
-look-ahead limiter on the master. The module documentation covers start position and clock drift
-carefully but not latency.
-
-**Direction.** Subtract the output and input latency cpal reports (`StreamInstant` callback and
-capture/playback timestamps) plus the graph's latency, and offer a manual offset for devices that
-report nothing.
 
 ### AR-06 — A MIDI file of meter changes takes quadratic time to import (verified)
 
