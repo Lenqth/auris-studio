@@ -266,11 +266,13 @@ pub mod architecture {
     //! directly, while file writes and command escalations require a decision. Claude routes
     //! its explicit native tool catalog through ask rules and the stdio approval callback.
     //! Native tools operate on external files; the open song is still edited through live MCP.
-    //! Reference attachments are bounded and encoded in the transport worker, never on the
-    //! UI or audio thread. Text files are marked as reference data rather than user requests.
+    //! Reference attachments are prepared in the transport worker, never on the UI or audio
+    //! thread. Original audio snapshots have separate disk budgets (512 MiB per file, 1 GiB per
+    //! turn/cache) from model payloads. Copying is streamed and cancellable. Text files are
+    //! marked as reference data rather than user requests.
     //! Codex and Claude Code receive audio references as local CPU tempo/chord measurements,
     //! using the session's existing file analysis service on a temporary snapshot of the
-    //! bounded attachment bytes. This is explicitly not listening or note transcription.
+    //! original attachment. This is explicitly not listening or note transcription.
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
@@ -280,7 +282,11 @@ pub mod architecture {
     //! maps source seconds through the current tempo map and adds a physical-piano track/clip
     //! as one undo transaction. No source file path, model download or saved-project edit is
     //! exposed to the model. Notes remain estimates; this is transcription, not listening.
-    //! Native audio API turns retain the same scoped references alongside their audio content.
+    //! Native audio API turns retain the same exact sources. Above 25 MiB, the session prepares
+    //! a full-length 16 kHz PCM16 WAV for upload, preserving mono/stereo channels; the original
+    //! remains available for transcription. Decoding has the importer's 512 MiB sample budget,
+    //! and preparation accepts at most thirty minutes. The transport bounds actual payloads
+    //! at 128 MiB per turn; this is an Auris budget, not a provider capability guarantee.
     //! Live agents write bounded harmony with `edit_harmony` and singer lyrics with
     //! `write_lyrics`; both are undoable document edits and never regenerate notes.
     //! `list_voices`, `inspect_singer`, `set_singer_voice` and `sing` complete the vocal workflow.

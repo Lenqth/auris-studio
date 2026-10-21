@@ -43,7 +43,9 @@
 #![warn(missing_docs)]
 
 pub mod agent_policy;
+mod audio_attachment;
 pub mod audio_inspection;
+pub use audio_attachment::prepare_audio_attachment;
 pub mod audio_review;
 pub mod conversations;
 mod export_inspection;

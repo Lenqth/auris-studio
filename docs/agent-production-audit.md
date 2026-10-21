@@ -115,6 +115,13 @@ attempted in this audit; the blocker is the missing public live contract.
 
 ## High priority: the 25 MiB attachment gate blocks normal song-length WAVs
 
+Follow-up: live audio references now use streamed original snapshots with a 512 MiB
+per-file and 1 GiB per-turn/cache budget. Native API uploads have a separate 128 MiB
+prepared-payload budget, with full-length 16 kHz PCM16 conversion above 25 MiB.
+CLI local audio no longer consumes the image/text upload budget. The observations
+below describe the audited build; see [agent backends](agent-backends.md#reference-attachments)
+for the current limits and conversion policy.
+
 The user reported WAV rejection at 25 MiB. Both the per-file and per-turn raw-byte ceilings
 are `25 * 1024 * 1024`; the conversation audio-reference cache shares the total ceiling.
 The file-size check precedes decoding and local transcription. The CLI reference path also

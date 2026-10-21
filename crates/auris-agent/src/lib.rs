@@ -930,20 +930,19 @@ fn audio_media_type(path: &std::path::Path) -> Result<rig_core::message::AudioMe
     }
 }
 
-/// The largest reference file worth encoding into one request, in bytes.
-///
-/// Twenty-five megabytes — the ceiling the big providers publish for audio uploads, so the
-/// refusal here reads the same as the one the server would have sent, minus the upload. It
-/// also keeps a mistyped path to something enormous from being read whole into memory and
-/// grown a third again by the encoding before anything could object.
+/// Largest image or unconverted audio payload. Larger audio sources are prepared separately.
 const ATTACHMENT_CEILING: u64 = 25 * 1024 * 1024;
 
 /// Reference files retained by one model request. The aggregate byte ceiling below is authoritative;
 /// this count separately rejects a long list of empty files before opening any of them.
 pub const ATTACHMENT_COUNT_LIMIT: usize = 8;
 
-/// Largest aggregate of raw reference data attached to one user turn.
+/// Largest aggregate of image/text payloads on CLI routes, before base64 encoding.
 const ATTACHMENT_TOTAL_CEILING: u64 = 25 * 1024 * 1024;
+
+/// Actual prepared audio/image/text payload budget on the native API route, before base64.
+/// This bounds Auris memory usage; endpoints may impose smaller limits of their own.
+const NATIVE_ATTACHMENT_TOTAL_CEILING: u64 = 128 * 1024 * 1024;
 
 fn attachment_too_large(path: &std::path::Path, observed: u64) -> String {
     format!(
@@ -1007,7 +1006,7 @@ fn framed_message(text: &str, audio: &[String]) -> Result<Message, String> {
     framed_message_with_limits(
         text,
         audio,
-        ATTACHMENT_TOTAL_CEILING,
+        NATIVE_ATTACHMENT_TOTAL_CEILING,
         ATTACHMENT_COUNT_LIMIT,
     )
 }
@@ -1329,14 +1328,18 @@ async fn json_conversation(
                 policy.allow
             );
         }
-        let message = match check_attachments(options.provider, &audio).and_then(|()| {
+        let references = match check_attachments(options.provider, &audio) {
+            Ok(()) => attachments::live_references(&audio, bridge).await,
+            Err(error) => Err(error),
+        };
+        let message = match references.map(|references| {
             let mut content = vec![rig_core::message::UserContent::text(&said)];
             content.extend(
-                attachments::live_references(&audio, bridge)?
+                references
                     .into_iter()
                     .map(attachments::Reference::into_content),
             );
-            Ok(Message::User { content })
+            Message::User { content }
         }) {
             Ok(message) => message,
             Err(message) => {
@@ -2243,7 +2246,7 @@ mod tests {
     #[test]
     fn an_enormous_attachment_is_refused_before_it_is_read() {
         let clip =
-            std::env::temp_dir().join(format!("auris-agent-vast-{}.wav", std::process::id()));
+            std::env::temp_dir().join(format!("auris-agent-vast-{}.png", std::process::id()));
         let file = std::fs::File::create(&clip).unwrap();
         file.set_len(ATTACHMENT_CEILING + 1).unwrap();
         drop(file);
