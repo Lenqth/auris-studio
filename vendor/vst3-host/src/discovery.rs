@@ -214,6 +214,12 @@ pub struct ClassInfo {
     pub cardinality: i32,
     /// Version string (if available).
     pub version: String,
+    /// The class's own sub-categories, such as `Instrument|Synth` or `Fx|Delay`, when the factory
+    /// reports them (`PClassInfo2`). A bundle exporting several classes — a shell such as
+    /// WaveShell — mixes instruments and effects, and the bundle-level category describes only
+    /// the first of them. Empty when absent rather than guessed.
+    #[serde(default)]
+    pub sub_categories: String,
 }
 
 /// One audio or event bus.
@@ -637,6 +643,7 @@ pub fn get_detailed_plugin_info(path: &Path) -> Result<DetailedPluginInfo> {
                 }
                 let mut name = crate::internal::utils::c_str_to_string(&ci.name);
                 let mut version = String::new();
+                let mut sub_categories = String::new();
                 if let Some(factory3) = factory.cast::<IPluginFactory3>() {
                     let mut info3: PClassInfoW = std::mem::zeroed();
                     if factory3.getClassInfoUnicode(i, &mut info3) == kResultOk {
@@ -649,11 +656,15 @@ pub fn get_detailed_plugin_info(path: &Path) -> Result<DetailedPluginInfo> {
                             name = unicode_name;
                         }
                         version = utf16(&info3.version);
+                        sub_categories =
+                            crate::internal::utils::c_str_to_string(&info3.subCategories);
                     }
                 } else if let Some(factory2) = factory.cast::<IPluginFactory2>() {
                     let mut info2: PClassInfo2 = std::mem::zeroed();
                     if factory2.getClassInfo2(i, &mut info2) == kResultOk {
                         version = crate::internal::utils::c_str_to_string(&info2.version);
+                        sub_categories =
+                            crate::internal::utils::c_str_to_string(&info2.subCategories);
                     }
                 }
                 classes.push(ClassInfo {
@@ -662,6 +673,7 @@ pub fn get_detailed_plugin_info(path: &Path) -> Result<DetailedPluginInfo> {
                     class_id,
                     cardinality: ci.cardinality,
                     version,
+                    sub_categories,
                 });
             }
         }

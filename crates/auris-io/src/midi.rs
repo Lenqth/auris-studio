@@ -42,7 +42,9 @@ use auris_core::project::{
     CURVE_STEP, ClipCurve, CurvePoint, MidiClip, Note, NoteTransform, Project,
     validated_loop_pass_count,
 };
-use auris_core::time::{SignatureMap, TICKS_PER_QUARTER, TempoMap, Ticks, TimeSignature};
+use auris_core::time::{
+    SignatureMap, SignaturePoint, TICKS_PER_QUARTER, TempoMap, Ticks, TimeSignature,
+};
 use midly::num::{u4, u7, u15, u24, u28};
 use midly::{Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 use tempfile::NamedTempFile;
@@ -61,6 +63,12 @@ const MAX_MIDI_FILE_EVENTS: usize = 4_000_000;
 const MAX_MIDI_NOTES: usize = 500_000;
 const MAX_MIDI_AUTOMATION_POINTS: usize = 4_000_000;
 const MAX_MIDI_OUTPUT_EVENTS: usize = 4_000_000;
+/// Meter changes a file may carry.
+///
+/// Far below the event budget on purpose. A real score changes meter at most once a bar, and
+/// even a long through-composed piece stays in the hundreds, while every bar-and-beat question
+/// the timeline answers afterwards walks the list of changes.
+const MAX_MIDI_METER_CHANGES: usize = 16_384;
 
 /// Export ceilings shared with the render graph's practical scheduling bounds.
 ///
@@ -100,6 +108,7 @@ struct ImportLimits {
     notes: usize,
     automation_points: usize,
     output_events: usize,
+    meter_changes: usize,
 }
 
 const IMPORT_LIMITS: ImportLimits = ImportLimits {
@@ -108,6 +117,7 @@ const IMPORT_LIMITS: ImportLimits = ImportLimits {
     notes: MAX_MIDI_NOTES,
     automation_points: MAX_MIDI_AUTOMATION_POINTS,
     output_events: MAX_MIDI_OUTPUT_EVENTS,
+    meter_changes: MAX_MIDI_METER_CHANGES,
 };
 
 #[derive(Default)]
@@ -116,6 +126,7 @@ struct ImportBudget {
     notes: usize,
     automation_points: usize,
     output_events: usize,
+    meter_changes: usize,
 }
 
 impl ImportBudget {
@@ -160,6 +171,15 @@ impl ImportBudget {
         )?;
         self.automation_points = automation_points;
         self.output_events = output_events;
+        Ok(())
+    }
+
+    fn meter_change(&mut self, limits: ImportLimits) -> Result<()> {
+        self.meter_changes = bounded_increment(
+            self.meter_changes,
+            limits.meter_changes,
+            MidiImportResource::MeterChanges,
+        )?;
         Ok(())
     }
 
@@ -309,9 +329,10 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
     };
 
     let mut tempo_map = TempoMap::constant(DEFAULT_BPM);
-    let mut signatures = SignatureMap::constant(TimeSignature::default());
+    // Gathered and built once at the end. Inserting each change as it was read re-aligned the
+    // whole map every time, which made a file of meter changes quadratic to import.
+    let mut meters: Vec<SignaturePoint> = Vec::new();
     let mut saw_tempo = false;
-    let mut saw_signature = false;
     // Notes are gathered per source track *and* channel. A format 0 file is one track carrying
     // every channel, and a format 1 track can still carry more than one — either way two channels
     // are two instruments, and merging them would put a bass line inside the drum part.
@@ -385,12 +406,11 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
                         continue;
                     }
                     budget.timeline_point(limits)?;
-                    let signature = TimeSignature::new(numerator, denominator);
-                    match saw_signature || tick != Ticks::ZERO {
-                        false => signatures = SignatureMap::constant(signature),
-                        true => signatures.set_point(tick, signature),
-                    }
-                    saw_signature = true;
+                    budget.meter_change(limits)?;
+                    meters.push(SignaturePoint {
+                        tick,
+                        signature: TimeSignature::new(numerator, denominator),
+                    });
                 }
                 TrackEventKind::Meta(MetaMessage::TrackName(name)) => {
                     track_name = Some(String::from_utf8_lossy(name).trim().to_string())
@@ -526,9 +546,27 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
     }
     Ok(MidiImport {
         tempo_map,
-        signatures,
+        signatures: signature_map(meters),
         tracks,
     })
+}
+
+/// The meter changes a file gave, built into one map.
+///
+/// A file whose first change is not at the very start opens on 4/4 until it, which is what every
+/// sequencer assumes. Changes are aligned to bar lines in one pass, and of two that land in the
+/// same bar the later one in the file wins, as it would have one at a time.
+fn signature_map(mut meters: Vec<SignaturePoint>) -> SignatureMap {
+    if !meters.iter().any(|point| point.tick == Ticks::ZERO) {
+        meters.insert(
+            0,
+            SignaturePoint {
+                tick: Ticks::ZERO,
+                signature: TimeSignature::default(),
+            },
+        );
+    }
+    SignatureMap::from_points(meters)
 }
 
 struct InstrumentSeed {
@@ -1441,6 +1479,7 @@ mod tests {
             notes: usize::MAX,
             automation_points: usize::MAX,
             output_events: usize::MAX,
+            meter_changes: usize::MAX,
         }
     }
 
@@ -1798,6 +1837,66 @@ mod tests {
         assert_eq!(
             imported.signatures.signature_at(Ticks::ZERO),
             TimeSignature::new(6, 8)
+        );
+    }
+
+    /// A change of meter at the start of every bar, alternating 4/4 and 3/4 so no two merge.
+    fn meter_changes(count: usize) -> Vec<TrackEvent<'static>> {
+        (0..count)
+            .map(|index| {
+                let delta = match index {
+                    0 => 0,
+                    _ if index % 2 == 1 => 4 * u32::from(PPQ),
+                    _ => 3 * u32::from(PPQ),
+                };
+                let numerator = if index % 2 == 0 { 4 } else { 3 };
+                event(
+                    delta,
+                    TrackEventKind::Meta(MetaMessage::TimeSignature(numerator, 2, 24, 8)),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_file_of_meter_changes_is_read_in_one_pass() {
+        // Inserting each change as it came re-aligned the whole map every time: twenty thousand of
+        // these took a second and a half, and the event budget allowed four million.
+        let count = MAX_MIDI_METER_CHANGES;
+        let imported = import_with_limits(vec![meter_changes(count)], IMPORT_LIMITS).unwrap();
+        let points = imported.signatures.points();
+        assert_eq!(points.len(), count);
+        assert_eq!(points[1].tick, Ticks::from_beats(4.0));
+        assert_eq!(points[2].tick, Ticks::from_beats(7.0));
+        assert_eq!(points[2].signature, TimeSignature::new(4, 4));
+
+        let error = import_with_limits(vec![meter_changes(count + 1)], IMPORT_LIMITS).unwrap_err();
+        assert!(matches!(
+            error,
+            IoError::MidiImportTooLarge {
+                resource: MidiImportResource::MeterChanges,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn a_first_meter_after_the_start_leaves_the_head_in_four_four() {
+        let imported = metrical(vec![vec![
+            event(
+                8 * u32::from(PPQ),
+                TrackEventKind::Meta(MetaMessage::TimeSignature(3, 2, 24, 8)),
+            ),
+            note_on(0, 60, 100),
+            note_off(480, 60),
+        ]]);
+        assert_eq!(
+            imported.signatures.signature_at(Ticks::ZERO),
+            TimeSignature::new(4, 4)
+        );
+        assert_eq!(
+            imported.signatures.signature_at(Ticks::from_beats(8.0)),
+            TimeSignature::new(3, 4)
         );
     }
 

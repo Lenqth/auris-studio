@@ -203,14 +203,16 @@ fn parse_args(
 
     // The key: an explicitly named variable must exist — a silently empty key would come back
     // from the server as a 401 with this program's name on it. The OpenAI convention is picked
-    // up when present, because that is what every OpenAI-compatible tool trains people to set.
+    // up when present, because that is what every OpenAI-compatible tool trains people to set —
+    // but only for OpenAI itself. Sent to a LAN box or somebody else's compatible service, it is
+    // the user's OpenAI credential handed to a server that never asked for it.
     let key = match key_env {
         Some(name) => Some(env(&name).ok_or_else(|| {
             format!("the API key is named by '{name}', but that variable is not set")
         })?),
         None => match provider {
-            Provider::OpenAi => env("OPENAI_API_KEY"),
-            Provider::Ollama => None,
+            Provider::OpenAi if url.as_deref().is_none_or(is_openai) => env("OPENAI_API_KEY"),
+            Provider::OpenAi | Provider::Ollama => None,
         },
     };
 
@@ -260,6 +262,16 @@ fn parse_args(
         attachments,
         json,
     }))
+}
+
+/// Whether `url` is OpenAI's own API, over HTTPS, so that the conventional key may go there.
+fn is_openai(url: &str) -> bool {
+    reqwest::Url::parse(url).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url
+                .host_str()
+                .is_some_and(|host| host.eq_ignore_ascii_case("api.openai.com"))
+    })
 }
 
 /// [`parse_args`], with the `models` subcommand carved off first.
@@ -1509,6 +1521,30 @@ mod tests {
             panic!("ollama ignores the OpenAI convention");
         };
         assert_eq!(options.key, None);
+
+        // And only for OpenAI's own server: a compatible one elsewhere is not handed it.
+        let Command::Run(options) = parse(
+            "--model m --provider openai --url https://api.openai.com/v1",
+            &convention,
+        )
+        .unwrap() else {
+            panic!("openai at its own address runs");
+        };
+        assert_eq!(options.key.as_deref(), Some("sk-x"));
+        for url in [
+            "http://192.168.1.20:8080/v1",
+            "https://api.openai.com.example.net/v1",
+            "http://api.openai.com/v1",
+        ] {
+            let Command::Run(options) = parse(
+                &format!("--model m --provider openai --url {url}"),
+                &convention,
+            )
+            .unwrap() else {
+                panic!("a compatible server runs without a key");
+            };
+            assert_eq!(options.key, None, "{url}");
+        }
     }
 
     #[test]

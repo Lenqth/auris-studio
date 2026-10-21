@@ -256,7 +256,8 @@ fn headless() -> Result<Session, String> {
     Session::new(
         SessionOptions::headless()
             .with_shipped_fonts(true)
-            .with_shipped_dictionary(true),
+            .with_shipped_dictionary(true)
+            .with_plugin_paths(auris_session::Settings::load().plugin_paths),
     )
     .map_err(|error| error.to_string())
 }
@@ -1409,7 +1410,8 @@ fn new_project(args: &[String]) -> Result<(), String> {
         SessionOptions::headless()
             .with_sample_rate(sample_rate)
             .with_shipped_fonts(true)
-            .with_shipped_dictionary(true),
+            .with_shipped_dictionary(true)
+            .with_plugin_paths(auris_session::Settings::load().plugin_paths),
     )
     .map_err(|error| error.to_string())?;
     session.set_bpm(bpm);

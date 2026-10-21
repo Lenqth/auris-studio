@@ -18,5 +18,10 @@ serde = { workspace = true, features = ["derive"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Globalization"] }
 
+# A Mac application started from Finder inherits no locale variables either; it asks Foundation
+# for the user's ordered languages. Already in the tree by way of the plugin windows.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { workspace = true, features = ["NSArray", "NSLocale", "NSString"] }
+
 [dev-dependencies]
 serde_json.workspace = true

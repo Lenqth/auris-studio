@@ -14,6 +14,7 @@ use crate::error::SessionError;
 use crate::history::Edit;
 
 use super::Session;
+use super::plugin_trust::PluginTrust;
 
 #[derive(Default)]
 pub(super) struct Vst3Plugins {
@@ -340,15 +341,28 @@ impl Vst3Plugins {
         self.retiring.retain(|plugin| !plugin.is_idle());
     }
 
-    pub(super) fn place(&mut self, project: &Project, prepare: &PrepareContext) -> PlacedEffects {
+    pub(super) fn place(
+        &mut self,
+        project: &Project,
+        prepare: &PrepareContext,
+        trust: &mut PluginTrust,
+    ) -> PlacedEffects {
         self.sweep();
         let wanted = effect_requests(project);
         retire_missing(&mut self.slots, &wanted, &mut self.retiring);
         let mut placed = PlacedEffects::new();
         for (id, request) in wanted {
             let rendered = {
-                let slot = match fit(&mut self.slots, id, &request, prepare, &mut self.retiring) {
-                    Ok(slot) => slot,
+                let slot = match fit(
+                    &mut self.slots,
+                    id,
+                    &request,
+                    prepare,
+                    &mut self.retiring,
+                    trust,
+                ) {
+                    Ok(Some(slot)) => slot,
+                    Ok(None) => continue,
                     Err(error) => {
                         self.remember_render_error(error);
                         continue;
@@ -370,6 +384,7 @@ impl Vst3Plugins {
         &mut self,
         project: &Project,
         prepare: &PrepareContext,
+        trust: &mut PluginTrust,
     ) -> PlacedInstruments {
         self.sweep();
         let wanted = instrument_requests(project);
@@ -382,8 +397,10 @@ impl Vst3Plugins {
                 &request,
                 prepare,
                 &mut self.retiring,
+                trust,
             ) {
-                Ok(slot) => slot,
+                Ok(Some(slot)) => slot,
+                Ok(None) => continue,
                 Err(error) => {
                     self.remember_render_error(error);
                     continue;
@@ -498,13 +515,18 @@ impl Vst3Plugins {
     }
 }
 
+/// The slot for `key`, loading its plugin when the slot is new or names another plugin.
+///
+/// `Ok(None)` when the file lies outside every plugin folder: loading a VST3 runs its code, and a
+/// project is data anybody can send. See [`super::plugin_trust`].
 fn fit<'a, K: Ord + Copy>(
     slots: &'a mut BTreeMap<K, Vst3Slot>,
     key: K,
     request: &Request<'_>,
     prepare: &PrepareContext,
     retiring: &mut Vec<Vst3Plugin>,
-) -> Result<&'a mut Vst3Slot, Vst3Error> {
+    trust: &mut PluginTrust,
+) -> Result<Option<&'a mut Vst3Slot>, Vst3Error> {
     let replace = slots
         .get(&key)
         .is_some_and(|slot| slot.file != request.file || slot.class_id != request.class_id);
@@ -512,6 +534,14 @@ fn fit<'a, K: Ord + Copy>(
         retiring.push(old.plugin);
     }
     if let std::collections::btree_map::Entry::Vacant(entry) = slots.entry(key) {
+        if !trust.allows(&request.file) {
+            log::warn!(
+                "`{}` is outside every plugin folder; not loading it",
+                request.file.display()
+            );
+            trust.block(&request.file);
+            return Ok(None);
+        }
         match Vst3Plugin::load(&request.file, &request.class_id, prepare) {
             Ok(plugin) => {
                 entry.insert(Vst3Slot {
@@ -529,6 +559,7 @@ fn fit<'a, K: Ord + Copy>(
     }
     slots
         .get_mut(&key)
+        .map(Some)
         .ok_or_else(|| Vst3Error::UnknownPlugin(request.class_id.clone()))
 }
 

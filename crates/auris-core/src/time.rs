@@ -714,6 +714,15 @@ pub struct TempoPoint {
 #[serde(try_from = "TempoMapRepr")]
 pub struct TempoMap {
     points: Vec<TempoPoint>,
+    /// Seconds from the start of the timeline to each point.
+    ///
+    /// Summed segment by segment from the start, in order — the very additions a walk from the
+    /// start makes, so a lookup that starts from here gives exactly the answer the walk did, bit
+    /// for bit. Kept because the walk was linear in the number of changes and runs per note while
+    /// a graph is built and per block on the audio thread, and an imported performance can carry
+    /// a tempo change on every beat. Rebuilt by every constructor and mutator.
+    #[serde(skip)]
+    starts: Vec<f64>,
 }
 
 /// On-disk shape of a [`TempoMap`]. It mirrors what `Serialize` emits, so files written by
@@ -753,11 +762,32 @@ impl TempoMap {
 
     /// A map with one tempo for the whole timeline.
     pub fn constant(bpm: f64) -> Self {
-        Self {
-            points: vec![TempoPoint {
-                tick: Ticks::ZERO,
-                bpm: Self::clamp_bpm(bpm),
-            }],
+        Self::indexed(vec![TempoPoint {
+            tick: Ticks::ZERO,
+            bpm: Self::clamp_bpm(bpm),
+        }])
+    }
+
+    /// A map over already-normalised points, with its lookup table built.
+    fn indexed(points: Vec<TempoPoint>) -> Self {
+        let mut map = Self {
+            points,
+            starts: Vec::new(),
+        };
+        map.reindex();
+        map
+    }
+
+    /// Rebuilds [`Self::starts`] after the points changed.
+    fn reindex(&mut self) {
+        self.starts.clear();
+        self.starts.reserve(self.points.len());
+        let mut seconds = 0.0;
+        self.starts.push(seconds);
+        for pair in self.points.windows(2) {
+            seconds +=
+                (pair[1].tick.0 - pair[0].tick.0) as f64 * Self::seconds_per_tick(pair[0].bpm);
+            self.starts.push(seconds);
         }
     }
 
@@ -797,7 +827,7 @@ impl TempoMap {
                 _ => unique.push(point),
             }
         }
-        Ok(Self { points: unique })
+        Ok(Self::indexed(unique))
     }
 
     fn clamp_bpm(bpm: f64) -> f64 {
@@ -821,6 +851,7 @@ impl TempoMap {
     /// Replaces the tempo of the first segment.
     pub fn set_initial_bpm(&mut self, bpm: f64) {
         self.points[0].bpm = Self::clamp_bpm(bpm);
+        self.reindex();
     }
 
     /// Inserts or replaces a tempo change.
@@ -831,6 +862,7 @@ impl TempoMap {
             Ok(index) => self.points[index].bpm = bpm,
             Err(index) => self.points.insert(index, TempoPoint { tick, bpm }),
         }
+        self.reindex();
     }
 
     /// Removes the tempo change at `tick`. The anchor at tick 0 cannot be removed.
@@ -840,6 +872,7 @@ impl TempoMap {
         }
         if let Ok(index) = self.points.binary_search_by_key(&tick, |p| p.tick) {
             self.points.remove(index);
+            self.reindex();
         }
     }
 
@@ -879,21 +912,13 @@ impl TempoMap {
         if tick.0 <= 0 {
             return Seconds(tick.0 as f64 * Self::seconds_per_tick(self.points[0].bpm));
         }
-        let mut seconds = 0.0;
-        for (index, point) in self.points.iter().enumerate() {
-            let segment_end = self
-                .points
-                .get(index + 1)
-                .map_or(tick, |next| next.tick.min(tick));
-            if segment_end <= point.tick {
-                break;
-            }
-            seconds += (segment_end.0 - point.tick.0) as f64 * Self::seconds_per_tick(point.bpm);
-            if segment_end == tick {
-                break;
-            }
+        let index = self.segment_index(tick);
+        let point = &self.points[index];
+        let into = tick.0 - point.tick.0;
+        if into == 0 {
+            return Seconds(self.starts[index]);
         }
-        Seconds(seconds)
+        Seconds(self.starts[index] + into as f64 * Self::seconds_per_tick(point.bpm))
     }
 
     /// Inverse of [`Self::ticks_to_seconds`].
@@ -901,25 +926,11 @@ impl TempoMap {
         if seconds.0 <= 0.0 {
             return Ticks((seconds.0 / Self::seconds_per_tick(self.points[0].bpm)).round() as i64);
         }
-        let mut elapsed = 0.0;
-        for (index, point) in self.points.iter().enumerate() {
-            let seconds_per_tick = Self::seconds_per_tick(point.bpm);
-            match self.points.get(index + 1) {
-                Some(next) => {
-                    let segment_seconds = (next.tick.0 - point.tick.0) as f64 * seconds_per_tick;
-                    if elapsed + segment_seconds > seconds.0 {
-                        let into_segment = (seconds.0 - elapsed) / seconds_per_tick;
-                        return Ticks(point.tick.0 + into_segment.round() as i64);
-                    }
-                    elapsed += segment_seconds;
-                }
-                None => {
-                    let into_segment = (seconds.0 - elapsed) / seconds_per_tick;
-                    return Ticks(point.tick.0 + into_segment.round() as i64);
-                }
-            }
-        }
-        Ticks::ZERO
+        // The segment is the first whose end lies past `seconds`, or the last one.
+        let index = self.starts[1..].partition_point(|start| *start <= seconds.0);
+        let point = &self.points[index];
+        let into_segment = (seconds.0 - self.starts[index]) / Self::seconds_per_tick(point.bpm);
+        Ticks(point.tick.0 + into_segment.round() as i64)
     }
 
     /// Converts a musical position to a sample position.
@@ -936,6 +947,101 @@ impl TempoMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The walk from the start that the indexed lookups replaced, kept to hold them to it.
+    fn walked_seconds(map: &TempoMap, tick: Ticks) -> f64 {
+        if tick.0 <= 0 {
+            return tick.0 as f64 * TempoMap::seconds_per_tick(map.points[0].bpm);
+        }
+        let mut seconds = 0.0;
+        for (index, point) in map.points.iter().enumerate() {
+            let end = map
+                .points
+                .get(index + 1)
+                .map_or(tick, |next| next.tick.min(tick));
+            if end <= point.tick {
+                break;
+            }
+            seconds += (end.0 - point.tick.0) as f64 * TempoMap::seconds_per_tick(point.bpm);
+            if end == tick {
+                break;
+            }
+        }
+        seconds
+    }
+
+    fn walked_ticks(map: &TempoMap, seconds: f64) -> Ticks {
+        if seconds <= 0.0 {
+            return Ticks((seconds / TempoMap::seconds_per_tick(map.points[0].bpm)).round() as i64);
+        }
+        let mut elapsed = 0.0;
+        for (index, point) in map.points.iter().enumerate() {
+            let per_tick = TempoMap::seconds_per_tick(point.bpm);
+            match map.points.get(index + 1) {
+                Some(next) => {
+                    let segment = (next.tick.0 - point.tick.0) as f64 * per_tick;
+                    if elapsed + segment > seconds {
+                        return Ticks(
+                            point.tick.0 + ((seconds - elapsed) / per_tick).round() as i64,
+                        );
+                    }
+                    elapsed += segment;
+                }
+                None => {
+                    return Ticks(point.tick.0 + ((seconds - elapsed) / per_tick).round() as i64);
+                }
+            }
+        }
+        Ticks::ZERO
+    }
+
+    #[test]
+    fn indexed_tempo_lookups_answer_exactly_what_the_walk_did() {
+        // A dense, uneven map — a tempo change on most beats, as an imported performance has —
+        // edited the ways an editor edits one, compared bit for bit at every step.
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = |range: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % range
+        };
+        let mut map = TempoMap::constant(97.0);
+        for _ in 0..400 {
+            let tick = Ticks((next(2_000) * 240) as i64);
+            map.set_point(tick, 40.0 + next(200) as f64 + next(1_000) as f64 / 1_000.0);
+            if next(5) == 0 {
+                map.remove_point(Ticks((next(2_000) * 240) as i64));
+            }
+            if next(50) == 0 {
+                map.set_initial_bpm(60.0 + next(120) as f64);
+            }
+        }
+        let end = map.points.last().unwrap().tick.0 + 10_000;
+        for _ in 0..5_000 {
+            let tick = Ticks(next(end as u64) as i64 - 1_000);
+            assert_eq!(
+                map.ticks_to_seconds(tick).0.to_bits(),
+                walked_seconds(&map, tick).to_bits(),
+                "{tick:?}"
+            );
+            let seconds = walked_seconds(&map, tick) + next(1_000) as f64 / 7_919.0;
+            assert_eq!(
+                map.seconds_to_ticks(Seconds(seconds)),
+                walked_ticks(&map, seconds)
+            );
+        }
+        for point in map.points.clone() {
+            assert_eq!(
+                map.ticks_to_seconds(point.tick).0.to_bits(),
+                walked_seconds(&map, point.tick).to_bits()
+            );
+            let at = walked_seconds(&map, point.tick);
+            assert_eq!(map.seconds_to_ticks(Seconds(at)), walked_ticks(&map, at));
+        }
+        let parsed: TempoMap = serde_json::from_str(&serde_json::to_string(&map).unwrap()).unwrap();
+        assert_eq!(parsed, map, "the index is rebuilt, not stored");
+    }
 
     #[test]
     fn tick_addition_saturates_at_document_boundaries() {

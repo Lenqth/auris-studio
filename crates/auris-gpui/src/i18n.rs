@@ -282,6 +282,13 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
         SessionError::Vst3(inner) => with(Key::ErrorPlugin, inner.to_string()),
         SessionError::Core(inner) => with(Key::ErrorDocument, core_error_text(inner, language)),
         SessionError::UnknownPlugin(id) => messages::unknown_plugin(language, id),
+        SessionError::UntrustedPlugin(path) => match language {
+            Language::English => error.to_string(),
+            Language::Japanese => format!(
+                "{} はプラグインフォルダの外にあるため読み込みませんでした。使うには、そのフォルダをプラグインフォルダに追加してください",
+                path.display()
+            ),
+        },
         SessionError::UnknownTrack(_) => Key::ErrorUnknownTrack.get(language).to_string(),
         SessionError::UnknownClip(_) => Key::ErrorUnknownClip.get(language).to_string(),
         SessionError::UnknownNote { .. } => Key::ErrorUnknownNote.get(language).to_string(),

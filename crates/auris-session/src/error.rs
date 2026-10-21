@@ -113,6 +113,16 @@ pub enum SessionError {
     #[error("no plugin is registered as `{0}`")]
     UnknownPlugin(String),
 
+    /// A plugin file lies outside every plugin folder, so it was not loaded.
+    ///
+    /// A document or a specification names its plugins by path, and loading one runs its code;
+    /// only the platform's plugin folders and the ones listed in the settings are trusted.
+    #[error(
+        "{} is outside the plugin folders and was not loaded; add its folder to the plugin folders to use it",
+        .0.display()
+    )]
+    UntrustedPlugin(std::path::PathBuf),
+
     /// A third-party plugin could not be loaded, instantiated or driven.
     #[error(transparent)]
     Clap(#[from] auris_clap::ClapError),

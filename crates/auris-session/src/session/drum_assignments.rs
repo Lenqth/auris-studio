@@ -231,7 +231,14 @@ impl Session {
         map.sync_voices_from_lanes();
 
         self.begin_transaction(Edit::SetDrumAssignment);
-        let changed = self.set_drum_map(track, map)?;
+        let changed = match self.set_drum_map(track, map) {
+            Ok(changed) => changed,
+            Err(error) => {
+                // An open transaction would disable Undo and autosave until the next gesture.
+                self.revert_transaction();
+                return Err(error);
+            }
+        };
         let mut moved = false;
         if move_existing_hits {
             let entry = self.project.track_mut(track).unwrap();

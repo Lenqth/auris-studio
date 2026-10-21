@@ -1887,6 +1887,7 @@ fn session_options(settings: &Settings) -> SessionOptions {
         // Off in a test for the fonts' reason: a checkout with the dictionary fetched would
         // otherwise run a different suite than a CI machine without it.
         shipped_dictionary: live,
+        plugin_paths: settings.plugin_paths.clone(),
         ..SessionOptions::default()
     }
 }
@@ -2986,6 +2987,11 @@ impl AurisApp {
                 self.session
                     .take_vst3_render_error()
                     .map(SessionError::Vst3)
+            })
+            .or_else(|| {
+                self.session
+                    .take_blocked_plugin()
+                    .map(SessionError::UntrustedPlugin)
             });
         if let Some(error) = error {
             let text = crate::i18n::error_text(&error, self.language());

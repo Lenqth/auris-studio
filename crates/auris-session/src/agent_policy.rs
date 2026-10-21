@@ -192,7 +192,11 @@ impl Operation {
             Ok(Self {
                 name: tool.into(),
                 mutating: matches!(tool, "cli_command" | "cli_file_change"),
-                confirm: matches!(tool, "search_internet" | "cli_command" | "cli_file_change"),
+                // A native read is free only inside the folder the CLI works in. The worker
+                // decides that from the path the CLI asked for, and says so here; anything
+                // else — another project, a home directory's keys — asks like a network call.
+                confirm: matches!(tool, "search_internet" | "cli_command" | "cli_file_change")
+                    || (tool == "cli_file_read" && args["within_project"] != true),
             })
         } else {
             Err(format!("Tool '{tool}' is not available to the live agent"))
@@ -483,6 +487,35 @@ mod tests {
         }
         assert!(Operation::parse("render", &serde_json::json!({})).is_err());
         assert!(Operation::parse("edit_project.remove_track", &serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn native_reads_are_free_only_inside_the_working_folder() {
+        let inside = Operation::parse(
+            "cli_file_read",
+            &serde_json::json!({"backend":"claude","within_project":true}),
+        )
+        .unwrap();
+        let outside = Operation::parse(
+            "cli_file_read",
+            &serde_json::json!({"backend":"claude","within_project":false}),
+        )
+        .unwrap();
+        let unsaid = Operation::parse("cli_file_read", &serde_json::json!({})).unwrap();
+        for mode in [Mode::ReadOnly, Mode::Edit, Mode::Plan] {
+            let policy = Policy {
+                mode,
+                ..Policy::default()
+            };
+            assert_eq!(policy.decide(&inside), Decision::Allow, "{mode:?}");
+            assert_eq!(policy.decide(&outside), Decision::Ask, "{mode:?}");
+            assert_eq!(policy.decide(&unsaid), Decision::Ask, "{mode:?}");
+        }
+        let review = Policy {
+            mode: Mode::AutoReview,
+            ..Policy::default()
+        };
+        assert_eq!(review.decide(&outside), Decision::Review);
     }
 
     #[test]

@@ -3297,6 +3297,9 @@ impl AurisApp {
 
     /// Makes the browser look again after the plugin folders were durably changed.
     pub(crate) fn invalidate_plugin_files(&mut self) {
+        // The same folders decide which plugins a document may load, so a plugin a project
+        // names in a folder just added is loaded now rather than at the next open.
+        self.session.set_plugin_paths(&self.settings.plugin_paths);
         self.plugin_discovery_generation = self.plugin_discovery_generation.wrapping_add(1);
         if let Some(cancelled) = self.plugin_discovery_cancel.take() {
             cancelled.store(true, Ordering::Relaxed);

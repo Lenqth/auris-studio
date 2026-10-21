@@ -52,6 +52,7 @@ use crate::error::SessionError;
 use crate::history::Edit;
 
 use super::Session;
+use super::plugin_trust::PluginTrust;
 
 /// Every hosted plugin this session has, and the files they came from.
 #[derive(Default)]
@@ -343,8 +344,13 @@ impl HostedPlugins {
     /// Slots the project no longer has are dropped. A slot whose file or plugin cannot be loaded
     /// produces nothing, which leaves the graph to fill it with the bypassed placeholder it uses
     /// for any effect it cannot build — a project with a plugin that is not installed opens, with
-    /// that one slot silent.
-    pub(super) fn place(&mut self, project: &Project, prepare: &PrepareContext) -> PlacedEffects {
+    /// that one slot silent. So does a plugin outside every plugin folder: see [`super::plugin_trust`].
+    pub(super) fn place(
+        &mut self,
+        project: &Project,
+        prepare: &PrepareContext,
+        trust: &mut PluginTrust,
+    ) -> PlacedEffects {
         self.sweep_retired();
         let wanted = hosted_slots(project);
         let leaving: Vec<EffectSlotId> = self
@@ -363,7 +369,7 @@ impl HostedPlugins {
 
         let mut placed = PlacedEffects::new();
         for (id, request) in &wanted {
-            let Some(file) = self.library_path(&request.file) else {
+            let Some(file) = self.library_path(&request.file, trust) else {
                 continue;
             };
             let slot = fit(
@@ -401,6 +407,7 @@ impl HostedPlugins {
         &mut self,
         project: &Project,
         prepare: &PrepareContext,
+        trust: &mut PluginTrust,
     ) -> PlacedInstruments {
         let wanted = hosted_instruments(project);
         let leaving: Vec<TrackId> = self
@@ -417,7 +424,7 @@ impl HostedPlugins {
 
         let mut placed = PlacedInstruments::new();
         for (track, request) in &wanted {
-            let Some(file) = self.library_path(&request.file) else {
+            let Some(file) = self.library_path(&request.file, trust) else {
                 continue;
             };
             let slot = fit(
@@ -536,13 +543,31 @@ impl HostedPlugins {
         }
     }
 
+    /// Whether this file is already open.
+    pub(super) fn has_library(&self, file: &Path) -> bool {
+        self.libraries.contains_key(file)
+    }
+
     /// Makes sure a file is open, returning the key it is filed under.
-    fn library_path(&mut self, file: &Path) -> Option<PathBuf> {
+    ///
+    /// A file the document names is opened only from a plugin folder. A project is data anybody
+    /// can send, and opening a library runs its code, so a path outside every plugin folder is
+    /// refused and recorded for the frontend to report rather than trusted because it is written
+    /// down.
+    fn library_path(&mut self, file: &Path, trust: &mut PluginTrust) -> Option<PathBuf> {
         if self.libraries.contains_key(file) {
             return Some(file.to_path_buf());
         }
-        // SAFETY: the file is named by the document, which named it because the user chose it.
-        // Nothing safer is available: hosting a plugin means running its code.
+        if !trust.allows(file) {
+            log::warn!(
+                "`{}` is outside every plugin folder; not loading it",
+                file.display()
+            );
+            trust.block(file);
+            return None;
+        }
+        // SAFETY: the file lies in a plugin folder the platform or the user designated. Nothing
+        // safer is available: hosting a plugin means running its code.
         match unsafe { ClapLibrary::load(file) } {
             Ok(library) => {
                 self.libraries.insert(file.to_path_buf(), library);
@@ -1795,13 +1820,13 @@ mod tests {
             )
             .unwrap();
 
-        let placed = hosted.place(&project, &prepare());
+        let placed = hosted.place(&project, &prepare(), &mut PluginTrust::default());
         assert_eq!(placed.len(), 1);
         assert!(hosted.slots.contains_key(&slot));
         drop(placed);
 
         project.remove_effect(slot);
-        let placed = hosted.place(&project, &prepare());
+        let placed = hosted.place(&project, &prepare(), &mut PluginTrust::default());
         assert!(placed.is_empty());
         assert!(
             !hosted.slots.contains_key(&slot),
@@ -1831,12 +1856,12 @@ mod tests {
             )
             .unwrap();
 
-        let first = hosted.place(&project, &prepare());
+        let first = hosted.place(&project, &prepare(), &mut PluginTrust::default());
         assert_eq!(first.len(), 1);
 
         // The slot leaves the project while `first` — the engine's graph — is still alive.
         project.remove_effect(slot);
-        let second = hosted.place(&project, &prepare());
+        let second = hosted.place(&project, &prepare(), &mut PluginTrust::default());
         assert!(second.is_empty());
         assert_eq!(
             hosted.retiring.len(),
@@ -2711,6 +2736,30 @@ mod tests {
     }
 
     #[test]
+    fn a_document_cannot_make_the_session_run_a_plugin_outside_the_plugin_folders() {
+        let scratch = super::super::fixtures::Scratch::new("untrusted-clap");
+        let file = scratch.join("Payload.clap");
+        std::fs::write(&file, b"not loaded").unwrap();
+        let mut session = super::super::fixtures::session();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        session.project.add_hosted_effect(
+            Some(track),
+            "clap:com.example.payload",
+            AssetPath::external(&file),
+        );
+        session.rebuild_graph();
+
+        assert!(!session.hosted.has_library(&file), "its code never ran");
+        assert_eq!(session.take_blocked_plugin(), Some(file.clone()));
+        session.rebuild_graph();
+        assert_eq!(session.take_blocked_plugin(), None, "reported once");
+
+        // A relative path would mean wherever the process started.
+        let relative = Path::new("Payload.clap");
+        assert!(!session.plugin_file_allowed(relative));
+    }
+
+    #[test]
     fn a_plugin_that_will_not_load_leaves_its_slot_empty_rather_than_failing() {
         let mut hosted = HostedPlugins::default();
         let mut project = Project::new("Hosted", 48_000.0);
@@ -2722,7 +2771,9 @@ mod tests {
         );
 
         assert!(
-            hosted.place(&project, &prepare()).is_empty(),
+            hosted
+                .place(&project, &prepare(), &mut PluginTrust::default())
+                .is_empty(),
             "the graph fills an empty slot with its own placeholder"
         );
     }

@@ -479,14 +479,22 @@ impl Session {
                     || pre_fader.is_some_and(|value| value != send.pre_fader);
                 if changed {
                     self.begin_transaction(Edit::ExternalChanges);
-                    if let Some(level) = level_db {
-                        self.set_send_level(owner, send.id, *level).map_err(error)?;
+                    let applied = level_db
+                        .map_or(Ok(()), |level| self.set_send_level(owner, send.id, level))
+                        .and_then(|()| {
+                            pre_fader
+                                .map_or(Ok(()), |pre| self.set_send_pre_fader(owner, send.id, pre))
+                        });
+                    // Closed either way: an open transaction disables Undo and autosave.
+                    match applied {
+                        Ok(()) => {
+                            self.end_transaction();
+                        }
+                        Err(failure) => {
+                            self.revert_transaction();
+                            return Err(error(failure));
+                        }
                     }
-                    if let Some(pre) = pre_fader {
-                        self.set_send_pre_fader(owner, send.id, *pre)
-                            .map_err(error)?;
-                    }
-                    self.end_transaction();
                 }
                 result = json!({"send_id":send_id,"level_db":level_db.unwrap_or(send.level_db),"pre_fader":pre_fader.unwrap_or(send.pre_fader),"automated":self.is_automated(ParamTarget::Send {track:owner,send:send.id})});
             }

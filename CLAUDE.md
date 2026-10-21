@@ -29,8 +29,9 @@ keep them alive:
 * **The keystroke a user sees is not the keystroke that is stored.** `secondary-s` is stored;
   `actions::normalise_keystroke` turns it into what the keyboard reports, for comparing, and
   `actions::menu_keystroke` into ⌘S or Ctrl+S, for reading.
-* **Windows sets no locale variables.** `Language::from_system_locale` is what makes a Japanese
-  Windows install come up in Japanese.
+* **Windows sets no locale variables, and neither does Finder.** `Language::from_system_locale`
+  is what makes a Japanese Windows install, and the Mac application opened from Finder rather
+  than a terminal, come up in Japanese.
 
 The plugin hosts use Windows 0.62 bindings. Windows runs `auris-gpu` on Vulkan.
 
@@ -56,6 +57,7 @@ it gets edited first: when the two disagree, the guide is right and this is stal
 ```
 Cargo.toml               virtual manifest; `default-members` points at the desktop app
 vendor/rustysynth        somebody else's crate, forked — see its README; excluded from the workspace
+vendor/vst3-host         VST3 host bindings, forked for a single-owner realtime path — see README-AURIS.md
 crates/auris-core        types, music theory, plugin traits, project model — no local dependencies
 crates/auris-dsp         effects and DSP primitives
 crates/auris-synth       built-in chiptune instruments; depends on auris-dsp
@@ -64,9 +66,11 @@ crates/auris-sampler     SoundFont playback: the font bank and the sampler instr
 crates/auris-singer      singing-voice synthesis: DiffSinger, LeapSinger and VOICEVOX offline;
                          depends on auris-core and auris-vocal
 crates/auris-clap        hosting of third-party CLAP plugins; depends on auris-core only
+crates/auris-vst3        hosting of third-party VST3 plugins; depends on auris-core only
 crates/auris-engine      render graph, transport, cpal in and out, offline renderer
 crates/auris-io          audio file import/export, project save/load
 crates/auris-gpu         optional wgpu compute for offline analysis
+crates/auris-analysis    offline music recognition: DSP and local model inference
 crates/auris-compose     score-based automatic composition; depends on auris-core only
 crates/auris-vocal       singing: lyrics to IPA phonemes, notes to voice-model frames;
                          depends on auris-core only
@@ -74,10 +78,11 @@ crates/auris-i18n        interface text in every language; no local dependencies
 crates/auris-session     headless session: the document, the engine, every command
 crates/auris-toolbox     the session's commands as tools for a language model;
                          shared by auris-mcp and auris-agent
+crates/auris-agent       the model client (Ollama, OpenAI-compatible, Claude Code, Codex) as a
+                         library the desktop runs on a background worker; not a binary
 crates/auris-gpui        desktop frontend (binary `auris-studio`)
 crates/auris-cli         command line frontend (binary `auris`)
 crates/auris-mcp         Model Context Protocol frontend (binary `auris-mcp`)
-crates/auris-agent       LLM client frontend: Ollama / OpenAI-compatible (binary `auris-agent`)
 ```
 
 Dependency direction is strictly downhill and the frontend boundary matters:
@@ -107,7 +112,9 @@ Dependency direction is strictly downhill and the frontend boundary matters:
   CLI), `auris-toolbox` every word said to a model — tool names, descriptions, schemas and the
   work behind them, in English, since neither protocol has a language field. `auris-mcp` and
   `auris-agent` both take the toolbox, which is what keeps the tool called `compose` identical
-  at both doors; each keeps its transport to itself (`rmcp`+`tokio`, `rig`+`tokio`). A frontend
+  at both doors; each keeps its transport to itself (`rmcp`+`tokio`, `rig`+`tokio`). The
+  desktop is the one frontend that also links `auris-agent`, because the agent door is a
+  library the window runs on a background worker rather than a program of its own. A frontend
   naming `auris-engine`, `auris-core` or `auris-io` means logic that belongs in the session
   layer has leaked upward — move it down instead of adding the dependency.
 

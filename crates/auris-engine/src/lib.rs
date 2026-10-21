@@ -75,6 +75,7 @@
 //! ```
 
 pub mod capture;
+pub mod clock;
 pub mod command;
 pub mod device;
 pub mod error;

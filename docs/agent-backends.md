@@ -5,6 +5,10 @@ and the API connection configured in Settings > Agent. An `OPENAI_API_KEY` also 
 discovery at OpenAI's default endpoint. Providers are queried concurrently;
 an unavailable provider does not hide models returned by another.
 
+`OPENAI_API_KEY` is sent only to OpenAI itself (`https://api.openai.com`). A custom
+OpenAI-compatible URL gets no key unless the connection names one with its API key variable,
+so pointing Auris at a LAN server or another service never hands it your OpenAI credential.
+
 Choose a model in the command row at the bottom of the message composer. Each option names its connection,
 for example `GPT-6.1 Sol (Codex)`. Custom API connections also show their host.
 Choosing an option switches its backend automatically and preserves the configured

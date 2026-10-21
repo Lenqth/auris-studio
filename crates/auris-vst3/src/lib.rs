@@ -189,7 +189,11 @@ pub fn plugins_in(path: &Path) -> Result<Vec<Vst3PluginInfo>, Vst3Error> {
         .iter()
         .filter(|class| class.category.contains("Audio Module Class"))
         .map(|class| {
-            let kind = kind_of(&detailed.info.category, detailed.info.has_midi_input);
+            let (kind, category) = class_kind(
+                &class.sub_categories,
+                &detailed.info.category,
+                detailed.info.has_midi_input,
+            );
             Vst3PluginInfo {
                 class_id: class.class_id.clone(),
                 name: if class.name.is_empty() {
@@ -204,7 +208,7 @@ pub fn plugins_in(path: &Path) -> Result<Vec<Vst3PluginInfo>, Vst3Error> {
                     class.version.clone()
                 },
                 kind,
-                category: category_of(&detailed.info.category, kind),
+                category,
                 has_gui: detailed.info.has_gui,
             }
         })
@@ -858,6 +862,8 @@ struct Bridge {
     prepare: PrepareContext,
     sidechain: bool,
     values: Vec<f32>,
+    /// The control snapshot as this renderer last read it. See [`adopt_changed_parameters`].
+    seen: Vec<f32>,
     dirty_parameters: Vec<bool>,
     parameter_point_counts: Vec<u8>,
     latency: usize,
@@ -957,6 +963,7 @@ impl Bridge {
             prepare: shared.prepare,
             sidechain: shared.sidechain,
             parameter_point_counts: vec![0; values.len()],
+            seen: values.clone(),
             values,
             dirty_parameters,
             latency,
@@ -1001,16 +1008,13 @@ impl Bridge {
         if revision == self.snapshot_revision {
             return;
         }
-        for index in 0..self.values.len() {
-            let Some(value) = self.snapshot.value(index) else {
-                continue;
-            };
-            if value.to_bits() == self.values[index].to_bits() {
-                continue;
-            }
-            self.values[index] = value;
-            self.dirty_parameters[index] = true;
-        }
+        let snapshot = &self.snapshot;
+        adopt_changed_parameters(
+            |index| snapshot.value(index),
+            &mut self.seen,
+            &mut self.values,
+            &mut self.dirty_parameters,
+        );
         self.snapshot_revision = revision;
     }
 
@@ -1253,6 +1257,33 @@ impl Bridge {
     }
 }
 
+/// Takes into a renderer only the control values that changed since it last looked.
+///
+/// The snapshot holds every parameter, and a knob turned in the editor bumps its revision once
+/// for all of them. Copying the whole snapshot then overwrote whatever automation had written
+/// this block with the editor's stale view of it — a jump on every automated parameter whenever
+/// any other one was touched. `seen` is the snapshot as this renderer last read it.
+fn adopt_changed_parameters(
+    snapshot: impl Fn(usize) -> Option<f32>,
+    seen: &mut [f32],
+    values: &mut [f32],
+    dirty: &mut [bool],
+) {
+    for index in 0..values.len() {
+        let Some(value) = snapshot(index) else {
+            continue;
+        };
+        if value.to_bits() == seen[index].to_bits() {
+            continue;
+        }
+        seen[index] = value;
+        if value.to_bits() != values[index].to_bits() {
+            values[index] = value;
+            dirty[index] = true;
+        }
+    }
+}
+
 fn realtime_batch_fits(
     events: usize,
     parameter_points: usize,
@@ -1387,6 +1418,24 @@ fn unit_of(parameter: &Parameter) -> ParamUnit {
     }
 }
 
+/// One class's kind and browser group, from its own sub-categories when the factory gave them.
+///
+/// A bundle can export instruments and effects side by side, and `bundle_category` and
+/// `bundle_midi_input` describe only its first audio class. A class that names itself is taken at
+/// its word, without the MIDI-input guess, which also belongs to that first class.
+fn class_kind(
+    sub_categories: &str,
+    bundle_category: &str,
+    bundle_midi_input: bool,
+) -> (PluginKind, PluginCategory) {
+    let (category, midi_input) = match sub_categories.trim().is_empty() {
+        true => (bundle_category, bundle_midi_input),
+        false => (sub_categories, false),
+    };
+    let kind = kind_of(category, midi_input);
+    (kind, category_of(category, kind))
+}
+
 fn kind_of(category: &str, midi_input: bool) -> PluginKind {
     let lower = category.to_ascii_lowercase();
     if lower.contains("instrument")
@@ -1517,6 +1566,58 @@ fn deliver(channels: &[Vec<f32>], target: &mut AudioBuffer, frames: usize, overw
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_editor_change_moves_only_the_parameter_it_changed() {
+        // Automation has written parameter 0 this block; the editor then turned parameter 1.
+        let snapshot = [0.2f32, 0.9, 0.5];
+        let mut seen = vec![0.2f32, 0.4, 0.5];
+        let mut values = vec![0.75f32, 0.4, 0.5];
+        let mut dirty = vec![true, false, false];
+        adopt_changed_parameters(
+            |index| snapshot.get(index).copied(),
+            &mut seen,
+            &mut values,
+            &mut dirty,
+        );
+        assert_eq!(values, [0.75, 0.9, 0.5], "the automated value stands");
+        assert_eq!(dirty, [true, true, false]);
+        assert_eq!(seen, snapshot);
+
+        // When the editor moves the automated parameter itself, the editor wins until the lane
+        // writes again.
+        let snapshot = [0.3f32, 0.9, 0.5];
+        adopt_changed_parameters(
+            |index| snapshot.get(index).copied(),
+            &mut seen,
+            &mut values,
+            &mut dirty,
+        );
+        assert_eq!(values[0], 0.3);
+    }
+
+    #[test]
+    fn each_class_of_a_shell_bundle_is_classified_by_its_own_sub_categories() {
+        // The bundle-level category is the first class's: an instrument, with MIDI input.
+        let bundle = ("Instrument|Synth", true);
+        assert_eq!(
+            class_kind("Fx|Delay", bundle.0, bundle.1),
+            (PluginKind::Effect, PluginCategory::Delay)
+        );
+        assert_eq!(
+            class_kind("Fx|Analyzer", bundle.0, bundle.1),
+            (PluginKind::Effect, PluginCategory::Utility)
+        );
+        assert_eq!(
+            class_kind("Instrument|Sampler", "Fx|Dynamics", false),
+            (PluginKind::Instrument, PluginCategory::Sampler)
+        );
+        // A class that says nothing still falls back to what the bundle says.
+        assert_eq!(
+            class_kind("", bundle.0, bundle.1),
+            (PluginKind::Instrument, PluginCategory::Synth)
+        );
+    }
     use std::sync::atomic::{AtomicUsize, Ordering};
     #[test]
     fn ids_are_namespaced() {

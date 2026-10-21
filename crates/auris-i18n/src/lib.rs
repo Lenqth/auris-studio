@@ -92,8 +92,8 @@ impl Language {
     /// come first even where the system can be asked directly, because someone who exports
     /// `LANG` for one program means it for that program.
     ///
-    /// [`Language::from_system_locale`] is the fallback, and on Windows it is the only thing
-    /// that ever answers.
+    /// [`Language::from_system_locale`] is the fallback. On Windows it is the only thing that
+    /// ever answers, and on macOS it is what answers for the application started from Finder.
     pub fn from_environment() -> Language {
         ["LC_ALL", "LC_MESSAGES", "LANG"]
             .into_iter()
@@ -110,7 +110,10 @@ impl Language {
     ///
     /// Windows is why this exists. It sets none of those variables, so a program that reads
     /// only them shows English to every Japanese user — who then has to find the language
-    /// setting by reading English.
+    /// setting by reading English. macOS is the same case in a different place: a terminal
+    /// gets `LANG`, but an application started from Finder, the Dock or Launchpad is started
+    /// by launchd, which sets none. There the answer is the ordered list in System Settings,
+    /// and the first language in it that this build speaks.
     pub fn from_system_locale() -> Option<Language> {
         #[cfg(target_os = "windows")]
         {
@@ -127,7 +130,14 @@ impl Language {
             let end = usize::try_from(written).ok()?.checked_sub(1)?;
             Language::from_locale(&String::from_utf16_lossy(name.get(..end)?))
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            objc2_foundation::NSLocale::preferredLanguages()
+                .to_vec()
+                .iter()
+                .find_map(|language| Language::from_locale(&language.to_string()))
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         {
             None
         }

@@ -2298,6 +2298,37 @@ mod tests {
     }
 
     #[test]
+    fn a_shipped_font_named_at_a_windows_path_is_this_machines_copy() {
+        // A composed project saved on Windows names the shipped font where that machine keeps
+        // it. Opened anywhere else, the font must be recognised by its name and keep its id, or
+        // every track playing it goes silent.
+        let scratch = Scratch::new("windows-font-path");
+        let local = scratch.join("GeneralUser GS v2.0.2.sf2");
+        std::fs::write(&local, vec![0u8; 64]).unwrap();
+        let mut project = Project::new("From Windows", 48_000.0);
+        let saved = project.add_soundfont(
+            "GeneralUser GS",
+            AssetPath::external(
+                r"C:\Users\bob\AppData\Roaming\auris-studio\SoundFonts\GeneralUser GS v2.0.2.sf2",
+            ),
+            64,
+        );
+
+        let ids = install_library_reference(
+            &mut project,
+            None,
+            &local,
+            "GeneralUser GS",
+            64,
+            SoundFontId(999),
+        );
+
+        assert_eq!(ids, [saved]);
+        assert_eq!(project.soundfonts.len(), 1);
+        assert_eq!(project.soundfonts[&saved].path, AssetPath::external(&local));
+    }
+
+    #[test]
     fn saving_over_another_project_is_refused_until_it_is_agreed_to() {
         // The system save dialog offers to replace the *name* that was typed. A project is
         // written one folder deeper than that, so the dialog never saw the document that would

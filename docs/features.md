@@ -887,9 +887,16 @@ sustain and release are one shape with three corners to drag, not four numbers t
 ## Recording
 
 Click an audio track, press **Record** in the transport — or `R` — and play. Pressing it again
-stops the take and puts it on the timeline as a clip, at the position the playhead was at when the
-first sample arrived. The transport rolls when you start, so a take recorded against the rest of
-the song lines up with it.
+stops the take and puts it on the timeline as a clip, at the position you were hearing when its
+first sample was captured. The transport rolls when you start, so a take recorded against the rest
+of the song lines up with it.
+
+**The round trip is taken off.** What you hear leaves the speaker later than the playhead says —
+by the output buffer, the device and any delay compensation the mix carries — and what you play
+reaches Auris later again by the input's own latency. Auris measures both from the timestamps the
+two devices report and moves the take back by their sum, so an overdub lands where it was played
+rather than a few tens of milliseconds behind. Where the devices' clocks give no believable
+answer, the take lands at the playhead as it did before.
 
 **The selected audio track is where the take lands**, and its **R** button is outlined to say so
 before you press anything. Selecting another audio track moves the take with it; selecting a track
@@ -1088,6 +1095,13 @@ directories the project's other files turned out to be living in. A font is conf
 recorded size, so a different one wearing the same name is not quietly adopted. Anything found is
 written back into the document, so the search happens once rather than on every open. Anything
 genuinely gone is reported, and the project still opens with that one track silent.
+
+CLAP and VST3 plugins are named by path too, but a path in a document is never enough to run one.
+A plugin is loaded only from a **plugin folder**: the standard CLAP and VST3 folders for your
+platform, and the folders and files you added in the plugin browser. A project that names a plugin
+anywhere else — beside itself, on the disk image it arrived on — opens with that slot silent, and
+the status line names the file. Add its folder to load it. Opening a project is opening a document,
+and a document from somebody else must not be able to run code they put next to it.
 
 ## Key bindings
 

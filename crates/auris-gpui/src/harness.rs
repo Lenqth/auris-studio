@@ -49,7 +49,7 @@ pub(crate) const WINDOW: gpui::Size<Pixels> = gpui::Size {
 fn isolate_config() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        let root = std::env::temp_dir().join(format!("auris-gpui-tests-{}", std::process::id()));
+        let root = configuration_root_in(&std::env::temp_dir());
         let config = root.join("config");
         let recovery = root.join("recovery");
         std::fs::create_dir_all(&config).expect("a temp configuration directory can be made");
@@ -61,6 +61,16 @@ fn isolate_config() {
             std::env::set_var(auris_session::RECOVERY_DIR_VAR, &recovery);
         }
     });
+}
+
+fn configuration_root_in(parent: &std::path::Path) -> std::path::PathBuf {
+    // PIDs can be reused while an earlier run's preferences remain. Keep a unique directory
+    // for post-failure inspection without letting its state leak into another run.
+    tempfile::Builder::new()
+        .prefix("auris-gpui-tests-")
+        .tempdir_in(parent)
+        .expect("a unique test configuration directory can be made")
+        .keep()
 }
 
 /// Opens the application in a test window, as `main` opens it in a real one.
@@ -398,6 +408,19 @@ pub(crate) fn drag_with(
 mod tests {
     use super::*;
     use crate::actions;
+
+    #[test]
+    fn a_new_run_never_reuses_a_previous_runs_configuration() {
+        let parent = tempfile::tempdir().unwrap();
+        let previous = configuration_root_in(parent.path());
+        std::fs::create_dir_all(previous.join("config")).unwrap();
+        let sounds = previous.join("config/sounds.json");
+        std::fs::write(&sounds, b"previous run's sounds").unwrap();
+
+        let current = configuration_root_in(parent.path());
+        assert!(!current.join("config/sounds.json").exists());
+        assert_eq!(std::fs::read(sounds).unwrap(), b"previous run's sounds");
+    }
 
     /// The window opens at all: a session, a keymap, a theme and a full view tree, with no
     /// display and no audio device anywhere.

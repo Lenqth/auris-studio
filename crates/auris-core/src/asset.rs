@@ -103,8 +103,22 @@ impl AssetPath {
     }
 
     /// The file name, which is what identifies an asset once its path has stopped being true.
+    ///
+    /// Read from the stored text with **both** separators, whatever platform reads it. That is
+    /// the whole job this name has: it is asked for when the stored path is wrong, and the commonest
+    /// way for it to be wrong is that the document came from another machine. A project saved on
+    /// Windows stores `C:\…\GeneralUser GS.sf2`, and to `Path::file_name` on a Mac that is one long
+    /// name with no directory in it, which nothing on the Mac is called. `..` and `.` name no file.
     pub fn file_name(&self) -> Option<&std::ffi::OsStr> {
-        self.as_stored().file_name()
+        let stored = self.as_stored();
+        let Some(text) = stored.to_str() else {
+            // Not UTF-8, so not text a Windows machine wrote; the platform's own reading stands.
+            return stored.file_name();
+        };
+        text.rsplit(['/', '\\'])
+            .find(|part| !part.is_empty())
+            .filter(|part| !matches!(*part, "." | ".."))
+            .map(std::ffi::OsStr::new)
     }
 
     /// A path that can actually be opened, given the folder the document lives in.
@@ -178,6 +192,30 @@ mod tests {
             asset.resolve(Some(Path::new("/backup/second"))),
             Some(PathBuf::from("/backup/second/Audio/kick.wav")),
             "the same document in a different folder must find its own copy"
+        );
+    }
+
+    #[test]
+    fn a_file_name_is_read_with_either_separator_on_every_platform() {
+        use std::ffi::OsStr;
+        // What a Windows machine stores for the shipped font, read here whatever this is.
+        let windows = AssetPath::external(
+            r"C:\Users\bob\AppData\Roaming\auris-studio\SoundFonts\GeneralUser GS v2.0.2.sf2",
+        );
+        assert_eq!(
+            windows.file_name(),
+            Some(OsStr::new("GeneralUser GS v2.0.2.sf2"))
+        );
+        let mac = AssetPath::external("/Users/bob/Library/Application Support/auris/GM.sf2");
+        assert_eq!(mac.file_name(), Some(OsStr::new("GM.sf2")));
+        assert_eq!(
+            AssetPath::external("/library/fonts/").file_name(),
+            Some(OsStr::new("fonts"))
+        );
+        assert_eq!(AssetPath::external(r"C:\fonts\..").file_name(), None);
+        assert_eq!(
+            AssetPath::inside("Audio/kick.wav").file_name(),
+            Some(OsStr::new("kick.wav"))
         );
     }
 

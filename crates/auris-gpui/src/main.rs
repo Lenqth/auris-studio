@@ -58,7 +58,15 @@ fn main() {
     // Before anything reads a preference: the configuration moved to `~/.config/auris-studio`,
     // and an installation that predates the move keeps its settings, keymap and colour scheme.
 
-    Application::new().run(|cx: &mut App| {
+    // Finder hands a double-clicked document to a running or launching application as an
+    // open-document event rather than an argument. The handler has no window to talk to, so it
+    // posts the URLs here and the window collects them once it exists.
+    let (handed_over, open_requests) = std::sync::mpsc::channel::<Vec<String>>();
+    let application = Application::new();
+    application.on_open_urls(move |urls| {
+        let _ = handed_over.send(urls);
+    });
+    application.run(move |cx: &mut App| {
         // Installs the Markdown renderer's theme and language registry. The agent transcript uses
         // gpui-component's TextView, as picocode does, while the rest of the window keeps Auris's
         // own deliberately small widget set and palette.
@@ -125,16 +133,41 @@ fn main() {
             }
         });
 
-        // A project named on the command line, or handed over by the shell because somebody
-        // double-clicked a `.auris` file with this registered against it. Opened *after* the
-        // window exists, through the same path the file dialog and a dropped file use: it
-        // reports what it opened, deals with missing audio, and paints a frame before it starts
-        // decoding, none of which could happen if the document were loaded before the window.
+        // A project named on the command line, which is how Windows and a terminal hand one
+        // over. Opened *after* the window exists, through the same path the file dialog and a
+        // dropped file use: it reports what it opened, deals with missing audio, and paints a
+        // frame before it starts decoding, none of which could happen if the document were
+        // loaded before the window.
         if let Some(path) = project_argument(std::env::args_os()) {
             window
                 .update(cx, |view, _, cx| view.open_project_at(path, cx))
                 .ok();
         }
+        // And the ones macOS hands over as events, at launch or later. Later there may be
+        // unsaved work, so these go through the guard a dropped project does.
+        cx.spawn(async move |cx| {
+            loop {
+                while let Ok(urls) = open_requests.try_recv() {
+                    let Some(path) = urls.iter().find_map(|url| handed_over_project(url)) else {
+                        continue;
+                    };
+                    let opened = window.update(cx, |view, _, cx| {
+                        let pending = ui::prompt::PendingAction::OpenDropped(path.clone());
+                        if view.confirm_discard(pending) {
+                            view.open_project_at(path, cx);
+                        }
+                        cx.notify();
+                    });
+                    if opened.is_err() {
+                        return;
+                    }
+                }
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(200))
+                    .await;
+            }
+        })
+        .detach();
 
         // The key bindings are dispatched to the focused view, so focus the app up front —
         // otherwise the space bar would not start playback until something was clicked. The
@@ -179,6 +212,18 @@ fn main() {
 
         cx.activate(true);
     });
+}
+
+/// The local file a URL from the shell's open-document event names.
+///
+/// Only `file:` URLs: the bundle declares the `.auris` document type and nothing else, so
+/// anything else arriving here is not a project and is ignored.
+fn handed_over_project(url: &str) -> Option<PathBuf> {
+    let url = url::Url::parse(url).ok()?;
+    if url.scheme() != "file" {
+        return None;
+    }
+    url.to_file_path().ok()
 }
 
 /// The project to open at launch, out of the arguments the shell handed over.
@@ -291,6 +336,24 @@ fn fitted_size(wanted: gpui::Size<Pixels>, available: gpui::Size<Pixels>) -> gpu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_handed_over_file_url_is_the_project_it_names() {
+        let (url, path) = if cfg!(windows) {
+            (
+                "file:///C:/Songs/My%20Song/My%20Song.auris",
+                PathBuf::from("C:/Songs/My Song/My Song.auris"),
+            )
+        } else {
+            (
+                "file:///Users/bob/My%20Song/My%20Song.auris",
+                PathBuf::from("/Users/bob/My Song/My Song.auris"),
+            )
+        };
+        assert_eq!(handed_over_project(url), Some(path));
+        assert_eq!(handed_over_project("https://example.com/Song.auris"), None);
+        assert_eq!(handed_over_project("not a url"), None);
+    }
 
     #[test]
     fn a_window_opens_no_larger_than_the_screen_it_opens_on() {
