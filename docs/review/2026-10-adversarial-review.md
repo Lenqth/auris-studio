@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-11 | Low-Medium | Security | `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured |
 | AR-12 | Low | VST3 | An editor change during playback overrides automation for one block |
 | AR-14 | Low | DSP | `loudness_quantile` panics on a NaN block; one infinite block reads as silence |
 | AR-15 | Low | Agent | The Codex path check is case-sensitive about `.exe` |
@@ -42,19 +41,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-11 — `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured
-
-**Where.** `crates/auris-agent/src/lib.rs:199-214` resolves the key. It is then used for every
-completion through `OpenAIConfig::new(key)…with_base_url(url)` (`:687-689`) and for listing
-models (`:838`).
-
-**What happens.** With the OpenAI provider and no `api_key_env`, the key is read from
-`OPENAI_API_KEY` whatever the base URL is. A user who points Auris at a LAN or third-party
-OpenAI-compatible server sends their real OpenAI key there.
-
-**Direction.** Use the implicit `OPENAI_API_KEY` only when the URL is unset or is `api.openai.com`,
-and require an explicit `api_key_env` otherwise.
 
 ### AR-12 — An editor change during playback overrides automation for one block
 
