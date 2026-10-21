@@ -195,6 +195,14 @@ alongside human-readable labels in MCP.
 
 ## Other workflow gaps
 
+* **The live composing agent has no auditory feedback loop.** A follow-up real Codex
+  trial with an explicit listen/revise/listen request used measured rendering,
+  normalization and reinspection, and reported that listening was unavailable.
+  Saved-project MCP `listen` did submit actual audio to a separate critic, which
+  returned no actionable correction. Connect the current unsaved session to an audio
+  critic, validate its judgments, and verify the actual preview before relying on
+  musical feedback. The probe also exposed a clipped critic preview despite an earlier
+  clean live inspection. See the [listening-loop audit](agent-listening-loop-audit.md).
 * **Leading and trailing silence need an explicit cover policy.** A manual cover test
   found that source padding is carried into the arrangement without a clear choice
   between preserving recording time and aligning the first musical event. Detect the

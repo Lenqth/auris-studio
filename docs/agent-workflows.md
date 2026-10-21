@@ -138,6 +138,10 @@ OpenAI-compatible endpoint.
 
 ## Listen, revise, listen again
 
+The [live composition audit](agent-listening-loop-audit.md) found that the in-app
+Codex controller currently uses measurement-based inspection, with no live `listen`
+operation. The saved-project MCP workflow in this section is a separate path.
+
 The controller and the listener can be different models. Qwen/Ornith can choose
 editing tools while `listen` sends the rendered WAV to an audio-capable critic.
 The critic returns observations and has no tools that can modify the project.
