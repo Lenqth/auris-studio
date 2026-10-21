@@ -22,7 +22,7 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
-    /// Write the document's key and Roman-numeral chord progression across a bounded bar range. Choose harmony explicitly for a new song before adding notes. Changes metadata only; existing notes and mix are preserved. One Undo reverts the edit; changes remain unsaved.
+    /// Write the document's key, Roman-numeral chord progression and/or section label across a bounded bar range. For a new song, write its harmony and named form (intro, verse, chorus, bridge, outro as appropriate) before adding notes. Changes metadata only; existing notes and mix are preserved. One Undo reverts the edit; changes remain unsaved.
     EditHarmony {
         /// First bar, 1-based.
         #[schemars(range(min = 1))]
@@ -34,6 +34,8 @@ pub enum Command {
         key: Option<String>,
         /// Roman chart, e.g. | I | vi | IV | V |; interpreted in the supplied or current key.
         chords: Option<String>,
+        /// Optional section name for this range, e.g. Intro or Chorus. Replaces internal section changes and restores the previous section after the range. Supply section alone to write structure without changing harmony.
+        section: Option<String>,
         /// Clear this range instead of supplying chords.
         #[serde(default)]
         clear_chords: bool,
@@ -408,6 +410,7 @@ impl Session {
                 bars,
                 key,
                 chords,
+                section,
                 clear_chords,
             } => self.agent_edit_harmony(
                 start_bar,
@@ -415,6 +418,7 @@ impl Session {
                 key.as_deref(),
                 chords.as_deref(),
                 clear_chords,
+                section.as_deref(),
             ),
             Command::WriteLyrics { clip, text, from } => {
                 if text.trim().is_empty() || text.len() > 16384 {

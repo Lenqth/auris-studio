@@ -349,6 +349,10 @@ mod tests {
                 "edit_harmony",
                 serde_json::json!({"start_bar":1,"bars":4,"key":"D major","chords":"| I | IV | V | I |"}),
             ),
+            (
+                "edit_harmony",
+                serde_json::json!({"start_bar":5,"bars":8,"section":"Chorus"}),
+            ),
             ("list_voices", serde_json::json!({})),
             ("inspect_singer", serde_json::json!({"track":1})),
             (
@@ -554,7 +558,7 @@ mod tests {
         let fixtures = [
             (
                 "edit_harmony",
-                serde_json::json!({"start_bar":1,"bars":4,"key":null,"chords":"| I | IV | V | I |","clear_chords":false}),
+                serde_json::json!({"start_bar":1,"bars":4,"key":null,"chords":"| I | IV | V | I |","section":"Chorus","clear_chords":false}),
             ),
             ("list_voices", serde_json::json!({"offset":0})),
             ("inspect_singer", serde_json::json!({"track":1,"offset":0})),

@@ -109,6 +109,10 @@ For manual work, create_project starts empty; import_audio adds an audio track a
 import_midi creates a new project from MIDI. export_midi writes the instrumental score.
 For a new composition: spec_reference teaches the TOML .asong format; list_presets and
 list_progressions provide vocabulary. check_spec validates; compose saves the new project.
+Write a named form with section definitions and the form list, using Intro, Verse, Chorus,
+Bridge and Outro where appropriate. Section lengths must cover the intended arrangement;
+clip names and prose outlines do not create section metadata. Verify saved sections with
+inspect_composition before claiming completion. Keep deliberately simple loops simple.
 For a local change: edit_harmony changes harmony without rewriting notes; edit_recipe changes
 recipe controls. regenerate_clips regenerates selected clips with take kind same, next or seed.
 Regeneration requires explicit replace_hand_edits for manually edited generated notes.

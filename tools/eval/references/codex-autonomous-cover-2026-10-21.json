@@ -1,0 +1,5250 @@
+{
+  "schema": 1,
+  "date": "2026-10-21",
+  "base_commit": "ff7fa0e0",
+  "scope": "Real GPUI test window and application worker, signed-in Codex CLI 0.163.0, gpt-6.1-sol high effort, isolated in-memory AutoReview; no display/GPU/audio device. Only a WAV and short task request supplied to cover agents. No host source code, dependency paths, reference notes, MIDI or correctness feedback supplied.",
+  "reference": {
+    "record": "tools/eval/references/codex-live-transcription-2026-10-21.json",
+    "record_sha256": "ed15eb0d03b3c29fc1f2046b9a4e65e4dcdc045ae02decacec138066295131f4",
+    "events": 238,
+    "source_score_bpm": 100,
+    "description": "One existing public-domain SATB composition rendered as piano, not real/acoustic audio or a multi-song cohort."
+  },
+  "matching": "Maximum one-to-one exact MIDI pitch; onset <=50 ms, separate onset <=100 ms; offset tolerance max(50 ms,20% reference duration). Actual imported ticks mapped through actual project tempo.",
+  "interpretation": "Completed means actual editable cover, note readback and rendered inspection. Controller saved and exported afterwards. Not subjective listening, an agent-exported WAV, or guaranteed transcription quality. Natural workflows include several edits, so one Undo of the full sequence need not restore the initial document; Redo restored the final state. Import transaction behavior remains separately unit tested.",
+  "input_policy": "No approval bypass or permanent rule changes. Initial home-directory enumeration remained unexecuted pending human consent. The fresh independent retry followed new generic runtime-discovery guidance; its code was generated and refined solely from source audio before scoring.",
+  "limits": "Both covers retain project BPM 120, not inferred source BPM 100. Padding policy, tempo/downbeat estimation, releases, pedal and playability remain open. Source/hash evidence is point-in-time and cannot prevent a separate process changing files after authorization.",
+  "trials": [
+    {
+      "id": "independent",
+      "completed": false,
+      "report_sha256": "43ee961d24f8bd6a1fee42f58ac2cae25e619d414772f81b49143abea06f5a0f",
+      "elapsed_seconds": 39.1655455,
+      "failure": "Automatic review needs a human decision; approval was not bypassed",
+      "prompt": "添付した音声ファイルから、編集可能なピアノカバーを作ってください。Basic Pitchは使わず、音声そのものを解析して採譜してください。完成後に音符と音声を確認してください。",
+      "acceptance": {
+        "exported": true,
+        "imported": false,
+        "used_basic_pitch": false,
+        "cover_added": false,
+        "dirty_before_host_save": false,
+        "one_undo_restored": true,
+        "redo_restored": true,
+        "readback_after_import": false,
+        "inspected_after_import": false
+      },
+      "project_sha256": "7b989c40cbe13a3fbd7d18542a71aa9cc44abc146cc2357703704eb9afa75de0",
+      "staged_project": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\artifacts\\independent\\Cover\\Cover.auris",
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 120.0
+          }
+        ]
+      },
+      "sections": {
+        "points": []
+      },
+      "before_sha256": "7b989c40cbe13a3fbd7d18542a71aa9cc44abc146cc2357703704eb9afa75de0",
+      "after_sha256": "7b989c40cbe13a3fbd7d18542a71aa9cc44abc146cc2357703704eb9afa75de0",
+      "model_answers": [
+        "Basic Pitchは使わず、元の音声波形をローカルで解析して採譜します。取り込み後に音符データと、ピアノでレンダリングした音声の状態を確認します。"
+      ],
+      "review_observations": [
+        "Auto review — Allow: 採譜に使うPython・uvの場所とプロジェクト内のファイル一覧を確認するだけで、ファイルの変更や外部送信はありません。",
+        "Auto review — Waiting for approval: Python環境の確認に加え、ホーム直下の隠しフォルダーを含む一覧も取得します。採譜に必要な範囲か不明なため、この一覧の参照も許可しますか？"
+      ],
+      "tool_observations": [
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "44d79cc4927fb84504839b31cf268d8c32d98ba262eaa0c3dbe396d795991cc8"
+        },
+        {
+          "name": "export_audio_attachment",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e130b698e0c1607754eea075dc083ed70da0d19c55458295ea224ab356aab227",
+          "result_sha256": "c4952dd2d35d094e7ea8bed8a0a9707dd76654143eac036d204a8501e35a549a"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "2f833dc50999dc1ed27e72ba6d1b90772cc97dcaad729396dc2052dce487a2d6",
+          "result_sha256": "11276069483e29c8f248f64551b7a47956272deb4009e2b36eaa5e4f44f5098e"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": false,
+          "arguments_sha256": "eebf103cadfb0ae26fc5f45221e39c6f918a122088729c10b65e5920b90266f9",
+          "result_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "programs": [],
+      "raw_report": ".local-evaluations/codex-autonomous-2026-10-21/independent-result/result.json",
+      "log_sha256": "f97e07bdd13576a8d1ffabc4153b120940c082a00b30cd0038219709e76ccfd7",
+      "runner_sha256": "4dc913c87430a70a3172ed308081b91f792ad3deba412cc561bb555a0a6f0f09"
+    },
+    {
+      "id": "ordinary",
+      "completed": true,
+      "report_sha256": "f28f69a1e2cbc84f9960255d1f707550ad8df0bcedd05d6eec0a94ad13bbdf2f",
+      "elapsed_seconds": 36.0700967,
+      "failure": null,
+      "prompt": "添付した音声ファイルから、編集可能なピアノカバーを作ってください。完成後に音符と音声を確認してください。",
+      "acceptance": {
+        "exported": false,
+        "imported": false,
+        "used_basic_pitch": true,
+        "cover_added": true,
+        "dirty_before_host_save": true,
+        "one_undo_restored": false,
+        "redo_restored": true,
+        "readback_after_import": true,
+        "inspected_after_import": true
+      },
+      "project_sha256": "b1c7cfc1940e29064e16f10c278d8e070752c90fc86ac83889281829f10c63c7",
+      "staged_project": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\artifacts\\ordinary\\Cover\\Cover.auris",
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 120.0
+          }
+        ]
+      },
+      "sections": {
+        "points": []
+      },
+      "before_sha256": "7b989c40cbe13a3fbd7d18542a71aa9cc44abc146cc2357703704eb9afa75de0",
+      "after_sha256": "b1c7cfc1940e29064e16f10c278d8e070752c90fc86ac83889281829f10c63c7",
+      "model_answers": [
+        "添付音声をローカルで自動採譜し、編集可能なピアノトラックを作ります。作成後に音符データとレンダリング音声を確認します。自動採譜のため、音の抜けや余分な音が残る場合があります。\n",
+        "編集可能な「ピアノカバー」を作成しました。\n\n- 約38.4秒、258音。元音声のタイミングと音の強弱を保持。\n- 全音符データと全区間のレンダリング音声を確認。音量は−18 LUFSに調整済みです。\n\n確認は試聴ではなく、音符・音声の測定によるものです。自動採譜による余分な音や抜けが残る可能性があります。変更は未保存で、Undoできます。"
+      ],
+      "review_observations": [],
+      "tool_observations": [
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "44d79cc4927fb84504839b31cf268d8c32d98ba262eaa0c3dbe396d795991cc8"
+        },
+        {
+          "name": "create_piano_cover",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "aabd3bf866a61af6d8868799787afe41d0819d7a353d5ad35c30dea93fc9c70d",
+          "result_sha256": "4861a7fecc295369ffc244919e53695afb695b178b50a168b26f34360e0c7478"
+        },
+        {
+          "name": "read_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "f7da42007a36d19dac5562abda25f81c041db31e33df417ba5a0eb610c071d00",
+          "result_sha256": "336c0bfc8f870457285e6c7f3b3dc8d18d8e1764c240811830ef2794a839c68a"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "6277b04f3a96bbd851caf297efdf1188fbf3102cb0f83fe678460efe369a591f",
+          "result_sha256": "aa7eda679398bb781d6e8f4de0d4d3198bf85857bf9004d6353804f361992893"
+        },
+        {
+          "name": "read_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "b9975496685397e34c840f4578f9132c24d4d4e6e865bc1553c319674ab14ea2",
+          "result_sha256": "336c0bfc8f870457285e6c7f3b3dc8d18d8e1764c240811830ef2794a839c68a"
+        },
+        {
+          "name": "read_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "3041138181e6c0033259949cd97bb43347e99b8d0492e77b486ffef0630e4973",
+          "result_sha256": "eb0b3060173624ba9a0124e858775e4aae828a04510af8399e3fc171cd767cca"
+        },
+        {
+          "name": "read_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "9977d50ba28b5e44afd7eb5bfef9417fc28a79a031124b8f5bbfe497ed1c9b92",
+          "result_sha256": "25843666794d2bad922aeca381fa0772c22eda15b6b4bd917ad4e0b0531ec4d1"
+        },
+        {
+          "name": "normalize_mix",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "c9e7783cf632c4adfc0e74c812c5b0ef15ae966c72bc74527798146bb57af3b4",
+          "result_sha256": "72365e88df2eabfc2d26ff4176c64ad7624a8bf162fac4279d728a9f69aafe82"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "6277b04f3a96bbd851caf297efdf1188fbf3102cb0f83fe678460efe369a591f",
+          "result_sha256": "530bf179b337fc9a56a54158d89205d6efd5faa094d023429fbac0d015f589e6"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "2d26627008cdb4f9ad62b1cd0306577189cd5f62dff9e7e77e0455b09f4cd205",
+          "result_sha256": "cfceabc57bae49c61beafa9466095a5cf188ec64316076a1e6a6e029359b12ce"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "77b1b2dae4b388f423d52efc3fa4d2ac4d175bd59ccf2ea6c82bc67151ac350b",
+          "result_sha256": "ada823901b12e64514d41f05b4f6a8fcd87a7cc3cec797e6d20aa8d871ecc0de"
+        },
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "ad3fd15c4ae7cd463764806deb71353edba68060e5838c29d3da5b5ea1a72daa"
+        }
+      ],
+      "notes": [
+        {
+          "pitch": 55,
+          "start": 0.0,
+          "end": 0.6005208333333333,
+          "strength": 0.7760225
+        },
+        {
+          "pitch": 62,
+          "start": 0.0,
+          "end": 0.6005208333333333,
+          "strength": 0.8275048
+        },
+        {
+          "pitch": 67,
+          "start": 0.0,
+          "end": 0.6005208333333333,
+          "strength": 0.68757206
+        },
+        {
+          "pitch": 71,
+          "start": 0.0,
+          "end": 0.5890625,
+          "strength": 0.81606287
+        },
+        {
+          "pitch": 71,
+          "start": 0.5890625,
+          "end": 1.1895833333333332,
+          "strength": 0.7807954
+        },
+        {
+          "pitch": 55,
+          "start": 0.6005208333333333,
+          "end": 1.2010416666666666,
+          "strength": 0.7737057
+        },
+        {
+          "pitch": 62,
+          "start": 0.6005208333333333,
+          "end": 1.1895833333333332,
+          "strength": 0.8158852
+        },
+        {
+          "pitch": 67,
+          "start": 0.6005208333333333,
+          "end": 1.1895833333333332,
+          "strength": 0.66384894
+        },
+        {
+          "pitch": 60,
+          "start": 1.1895833333333332,
+          "end": 1.8015625,
+          "strength": 0.71489495
+        },
+        {
+          "pitch": 69,
+          "start": 1.1895833333333332,
+          "end": 1.7786458333333333,
+          "strength": 0.7318716
+        },
+        {
+          "pitch": 72,
+          "start": 1.1895833333333332,
+          "end": 1.7786458333333333,
+          "strength": 0.6365867
+        },
+        {
+          "pitch": 55,
+          "start": 1.2010416666666666,
+          "end": 1.7901041666666666,
+          "strength": 0.70146036
+        },
+        {
+          "pitch": 55,
+          "start": 1.7901041666666666,
+          "end": 2.390625,
+          "strength": 0.7533313
+        },
+        {
+          "pitch": 74,
+          "start": 1.7901041666666666,
+          "end": 2.390625,
+          "strength": 0.51120037
+        },
+        {
+          "pitch": 86,
+          "start": 1.7901041666666666,
+          "end": 1.9520833333333334,
+          "strength": 0.40874845
+        },
+        {
+          "pitch": 59,
+          "start": 1.8015625,
+          "end": 2.4026041666666664,
+          "strength": 0.7776517
+        },
+        {
+          "pitch": 67,
+          "start": 1.8015625,
+          "end": 2.4026041666666664,
+          "strength": 0.63926166
+        },
+        {
+          "pitch": 52,
+          "start": 2.390625,
+          "end": 3.26875,
+          "strength": 0.6868298
+        },
+        {
+          "pitch": 55,
+          "start": 2.390625,
+          "end": 2.552604166666667,
+          "strength": 0.5519084
+        },
+        {
+          "pitch": 74,
+          "start": 2.390625,
+          "end": 2.9682291666666667,
+          "strength": 0.7236585
+        },
+        {
+          "pitch": 86,
+          "start": 2.390625,
+          "end": 2.5296875,
+          "strength": 0.4244661
+        },
+        {
+          "pitch": 64,
+          "start": 2.4026041666666664,
+          "end": 3.2453125,
+          "strength": 0.5106487
+        },
+        {
+          "pitch": 67,
+          "start": 2.4026041666666664,
+          "end": 2.9916666666666667,
+          "strength": 0.77050155
+        },
+        {
+          "pitch": 67,
+          "start": 2.9916666666666667,
+          "end": 3.222395833333333,
+          "strength": 0.60925114
+        },
+        {
+          "pitch": 72,
+          "start": 2.9916666666666667,
+          "end": 3.56875,
+          "strength": 0.6636568
+        },
+        {
+          "pitch": 54,
+          "start": 3.303125,
+          "end": 3.5807291666666665,
+          "strength": 0.7243244
+        },
+        {
+          "pitch": 62,
+          "start": 3.303125,
+          "end": 3.5921875,
+          "strength": 0.69451064
+        },
+        {
+          "pitch": 69,
+          "start": 3.303125,
+          "end": 3.5921875,
+          "strength": 0.6549025
+        },
+        {
+          "pitch": 55,
+          "start": 3.5921875,
+          "end": 4.204166666666667,
+          "strength": 0.75434625
+        },
+        {
+          "pitch": 62,
+          "start": 3.5921875,
+          "end": 4.192708333333333,
+          "strength": 0.81058526
+        },
+        {
+          "pitch": 67,
+          "start": 3.5921875,
+          "end": 4.18125,
+          "strength": 0.66380966
+        },
+        {
+          "pitch": 71,
+          "start": 3.5921875,
+          "end": 4.18125,
+          "strength": 0.79895073
+        },
+        {
+          "pitch": 50,
+          "start": 4.192708333333333,
+          "end": 4.781770833333333,
+          "strength": 0.7235705
+        },
+        {
+          "pitch": 62,
+          "start": 4.192708333333333,
+          "end": 4.793229166666666,
+          "strength": 0.6067445
+        },
+        {
+          "pitch": 66,
+          "start": 4.192708333333333,
+          "end": 4.793229166666666,
+          "strength": 0.7919725
+        },
+        {
+          "pitch": 69,
+          "start": 4.192708333333333,
+          "end": 4.781770833333333,
+          "strength": 0.6873123
+        },
+        {
+          "pitch": 67,
+          "start": 4.781770833333333,
+          "end": 5.39375,
+          "strength": 0.7797032
+        },
+        {
+          "pitch": 59,
+          "start": 4.793229166666666,
+          "end": 5.39375,
+          "strength": 0.7654818
+        },
+        {
+          "pitch": 62,
+          "start": 4.793229166666666,
+          "end": 5.39375,
+          "strength": 0.89032555
+        },
+        {
+          "pitch": 59,
+          "start": 5.39375,
+          "end": 5.9828125,
+          "strength": 0.7529872
+        },
+        {
+          "pitch": 62,
+          "start": 5.39375,
+          "end": 5.994270833333333,
+          "strength": 0.88378865
+        },
+        {
+          "pitch": 67,
+          "start": 5.39375,
+          "end": 5.9828125,
+          "strength": 0.76890516
+        },
+        {
+          "pitch": 57,
+          "start": 5.994270833333333,
+          "end": 6.594791666666667,
+          "strength": 0.7578356
+        },
+        {
+          "pitch": 62,
+          "start": 5.994270833333333,
+          "end": 6.594791666666667,
+          "strength": 0.75815517
+        },
+        {
+          "pitch": 66,
+          "start": 5.994270833333333,
+          "end": 6.583333333333333,
+          "strength": 0.787565
+        },
+        {
+          "pitch": 69,
+          "start": 5.994270833333333,
+          "end": 6.583333333333333,
+          "strength": 0.6393431
+        },
+        {
+          "pitch": 55,
+          "start": 6.594791666666667,
+          "end": 7.195833333333333,
+          "strength": 0.7725683
+        },
+        {
+          "pitch": 62,
+          "start": 6.594791666666667,
+          "end": 7.195833333333333,
+          "strength": 0.8164228
+        },
+        {
+          "pitch": 67,
+          "start": 6.594791666666667,
+          "end": 7.195833333333333,
+          "strength": 0.67564064
+        },
+        {
+          "pitch": 71,
+          "start": 6.594791666666667,
+          "end": 7.195833333333333,
+          "strength": 0.81529564
+        },
+        {
+          "pitch": 50,
+          "start": 7.195833333333333,
+          "end": 8.084895833333333,
+          "strength": 0.6829484
+        },
+        {
+          "pitch": 55,
+          "start": 7.195833333333333,
+          "end": 7.334375,
+          "strength": 0.5271207
+        },
+        {
+          "pitch": 62,
+          "start": 7.195833333333333,
+          "end": 8.096354166666666,
+          "strength": 0.57643396
+        },
+        {
+          "pitch": 67,
+          "start": 7.195833333333333,
+          "end": 8.038541666666667,
+          "strength": 0.7243515
+        },
+        {
+          "pitch": 71,
+          "start": 7.195833333333333,
+          "end": 8.0734375,
+          "strength": 0.707062
+        },
+        {
+          "pitch": 50,
+          "start": 8.084895833333333,
+          "end": 8.396875,
+          "strength": 0.73722786
+        },
+        {
+          "pitch": 66,
+          "start": 8.084895833333333,
+          "end": 8.396875,
+          "strength": 0.80531305
+        },
+        {
+          "pitch": 69,
+          "start": 8.084895833333333,
+          "end": 8.396875,
+          "strength": 0.67741066
+        },
+        {
+          "pitch": 62,
+          "start": 8.096354166666666,
+          "end": 8.396875,
+          "strength": 0.6378238
+        },
+        {
+          "pitch": 50,
+          "start": 8.396875,
+          "end": 9.575,
+          "strength": 0.7256653
+        },
+        {
+          "pitch": 62,
+          "start": 8.396875,
+          "end": 9.425,
+          "strength": 0.49301648
+        },
+        {
+          "pitch": 66,
+          "start": 8.396875,
+          "end": 9.540104166666666,
+          "strength": 0.74228513
+        },
+        {
+          "pitch": 69,
+          "start": 8.396875,
+          "end": 9.5515625,
+          "strength": 0.63205755
+        },
+        {
+          "pitch": 55,
+          "start": 9.586458333333333,
+          "end": 10.1984375,
+          "strength": 0.77316934
+        },
+        {
+          "pitch": 67,
+          "start": 9.586458333333333,
+          "end": 10.1984375,
+          "strength": 0.6809103
+        },
+        {
+          "pitch": 71,
+          "start": 9.586458333333333,
+          "end": 10.1984375,
+          "strength": 0.81658727
+        },
+        {
+          "pitch": 62,
+          "start": 9.597916666666666,
+          "end": 10.1984375,
+          "strength": 0.8231955
+        },
+        {
+          "pitch": 55,
+          "start": 10.1984375,
+          "end": 10.798958333333333,
+          "strength": 0.77322507
+        },
+        {
+          "pitch": 62,
+          "start": 10.1984375,
+          "end": 10.7875,
+          "strength": 0.82039577
+        },
+        {
+          "pitch": 67,
+          "start": 10.1984375,
+          "end": 10.798958333333333,
+          "strength": 0.6623507
+        },
+        {
+          "pitch": 71,
+          "start": 10.1984375,
+          "end": 10.7875,
+          "strength": 0.7925656
+        },
+        {
+          "pitch": 60,
+          "start": 10.7875,
+          "end": 11.4,
+          "strength": 0.7049661
+        },
+        {
+          "pitch": 69,
+          "start": 10.7875,
+          "end": 11.3765625,
+          "strength": 0.7292182
+        },
+        {
+          "pitch": 72,
+          "start": 10.7875,
+          "end": 11.365104166666667,
+          "strength": 0.64480376
+        },
+        {
+          "pitch": 55,
+          "start": 10.798958333333333,
+          "end": 11.388020833333334,
+          "strength": 0.7063569
+        },
+        {
+          "pitch": 55,
+          "start": 11.388020833333334,
+          "end": 12.000520833333333,
+          "strength": 0.75542253
+        },
+        {
+          "pitch": 59,
+          "start": 11.388020833333334,
+          "end": 12.000520833333333,
+          "strength": 0.78101283
+        },
+        {
+          "pitch": 67,
+          "start": 11.388020833333334,
+          "end": 12.000520833333333,
+          "strength": 0.6366937
+        },
+        {
+          "pitch": 74,
+          "start": 11.388020833333334,
+          "end": 11.9890625,
+          "strength": 0.5099197
+        },
+        {
+          "pitch": 86,
+          "start": 11.388020833333334,
+          "end": 11.55,
+          "strength": 0.40686747
+        },
+        {
+          "pitch": 74,
+          "start": 11.9890625,
+          "end": 12.578125,
+          "strength": 0.720155
+        },
+        {
+          "pitch": 52,
+          "start": 12.000520833333333,
+          "end": 12.866666666666667,
+          "strength": 0.6915596
+        },
+        {
+          "pitch": 55,
+          "start": 12.000520833333333,
+          "end": 12.150520833333333,
+          "strength": 0.5456499
+        },
+        {
+          "pitch": 64,
+          "start": 12.000520833333333,
+          "end": 12.84375,
+          "strength": 0.51010907
+        },
+        {
+          "pitch": 67,
+          "start": 12.000520833333333,
+          "end": 12.589583333333334,
+          "strength": 0.77120644
+        },
+        {
+          "pitch": 67,
+          "start": 12.589583333333334,
+          "end": 12.8203125,
+          "strength": 0.61046594
+        },
+        {
+          "pitch": 72,
+          "start": 12.589583333333334,
+          "end": 13.166666666666666,
+          "strength": 0.6679585
+        },
+        {
+          "pitch": 54,
+          "start": 12.889583333333333,
+          "end": 13.190104166666666,
+          "strength": 0.7166163
+        },
+        {
+          "pitch": 62,
+          "start": 12.889583333333333,
+          "end": 13.190104166666666,
+          "strength": 0.69306606
+        },
+        {
+          "pitch": 69,
+          "start": 12.889583333333333,
+          "end": 13.2015625,
+          "strength": 0.65784734
+        },
+        {
+          "pitch": 55,
+          "start": 13.190104166666666,
+          "end": 13.802083333333334,
+          "strength": 0.75657624
+        },
+        {
+          "pitch": 62,
+          "start": 13.190104166666666,
+          "end": 13.790625,
+          "strength": 0.8126005
+        },
+        {
+          "pitch": 71,
+          "start": 13.190104166666666,
+          "end": 13.790625,
+          "strength": 0.79063374
+        },
+        {
+          "pitch": 67,
+          "start": 13.2015625,
+          "end": 13.790625,
+          "strength": 0.6645148
+        },
+        {
+          "pitch": 50,
+          "start": 13.790625,
+          "end": 14.391145833333333,
+          "strength": 0.71783733
+        },
+        {
+          "pitch": 62,
+          "start": 13.790625,
+          "end": 14.391145833333333,
+          "strength": 0.60457623
+        },
+        {
+          "pitch": 66,
+          "start": 13.790625,
+          "end": 14.391145833333333,
+          "strength": 0.7923272
+        },
+        {
+          "pitch": 69,
+          "start": 13.790625,
+          "end": 14.3796875,
+          "strength": 0.6894261
+        },
+        {
+          "pitch": 59,
+          "start": 14.391145833333333,
+          "end": 15.003124999999999,
+          "strength": 0.7623599
+        },
+        {
+          "pitch": 62,
+          "start": 14.391145833333333,
+          "end": 14.991666666666667,
+          "strength": 0.886622
+        },
+        {
+          "pitch": 67,
+          "start": 14.391145833333333,
+          "end": 14.991666666666667,
+          "strength": 0.7804252
+        },
+        {
+          "pitch": 62,
+          "start": 14.991666666666667,
+          "end": 15.5921875,
+          "strength": 0.88451606
+        },
+        {
+          "pitch": 67,
+          "start": 14.991666666666667,
+          "end": 15.5921875,
+          "strength": 0.76027447
+        },
+        {
+          "pitch": 59,
+          "start": 15.003124999999999,
+          "end": 15.580729166666666,
+          "strength": 0.75683206
+        },
+        {
+          "pitch": 57,
+          "start": 15.5921875,
+          "end": 16.193229166666665,
+          "strength": 0.75704485
+        },
+        {
+          "pitch": 62,
+          "start": 15.5921875,
+          "end": 16.193229166666665,
+          "strength": 0.75971997
+        },
+        {
+          "pitch": 66,
+          "start": 15.5921875,
+          "end": 16.18125,
+          "strength": 0.78798187
+        },
+        {
+          "pitch": 69,
+          "start": 15.5921875,
+          "end": 16.169791666666665,
+          "strength": 0.65201706
+        },
+        {
+          "pitch": 91,
+          "start": 15.5921875,
+          "end": 15.73125,
+          "strength": 0.43385282
+        },
+        {
+          "pitch": 55,
+          "start": 16.18125,
+          "end": 16.79375,
+          "strength": 0.7706482
+        },
+        {
+          "pitch": 67,
+          "start": 16.18125,
+          "end": 16.805208333333333,
+          "strength": 0.6821373
+        },
+        {
+          "pitch": 62,
+          "start": 16.193229166666665,
+          "end": 16.79375,
+          "strength": 0.8146889
+        },
+        {
+          "pitch": 71,
+          "start": 16.193229166666665,
+          "end": 16.79375,
+          "strength": 0.7879715
+        },
+        {
+          "pitch": 50,
+          "start": 16.79375,
+          "end": 17.394270833333334,
+          "strength": 0.68622875
+        },
+        {
+          "pitch": 55,
+          "start": 16.79375,
+          "end": 16.897395833333334,
+          "strength": 0.42980474
+        },
+        {
+          "pitch": 62,
+          "start": 16.79375,
+          "end": 17.394270833333334,
+          "strength": 0.5504838
+        },
+        {
+          "pitch": 69,
+          "start": 16.79375,
+          "end": 16.97864583333333,
+          "strength": 0.4057825
+        },
+        {
+          "pitch": 67,
+          "start": 16.805208333333333,
+          "end": 17.394270833333334,
+          "strength": 0.7051119
+        },
+        {
+          "pitch": 50,
+          "start": 17.394270833333334,
+          "end": 17.994791666666668,
+          "strength": 0.683919
+        },
+        {
+          "pitch": 62,
+          "start": 17.394270833333334,
+          "end": 17.694270833333334,
+          "strength": 0.6308137
+        },
+        {
+          "pitch": 66,
+          "start": 17.394270833333334,
+          "end": 17.694270833333334,
+          "strength": 0.7822501
+        },
+        {
+          "pitch": 69,
+          "start": 17.394270833333334,
+          "end": 17.694270833333334,
+          "strength": 0.56614846
+        },
+        {
+          "pitch": 67,
+          "start": 17.6828125,
+          "end": 17.983333333333334,
+          "strength": 0.8071549
+        },
+        {
+          "pitch": 62,
+          "start": 17.694270833333334,
+          "end": 17.994791666666668,
+          "strength": 0.7037691
+        },
+        {
+          "pitch": 66,
+          "start": 17.694270833333334,
+          "end": 17.983333333333334,
+          "strength": 0.52971196
+        },
+        {
+          "pitch": 43,
+          "start": 17.983333333333334,
+          "end": 19.161458333333332,
+          "strength": 0.68050945
+        },
+        {
+          "pitch": 67,
+          "start": 17.983333333333334,
+          "end": 19.161458333333332,
+          "strength": 0.6277683
+        },
+        {
+          "pitch": 59,
+          "start": 17.994791666666668,
+          "end": 19.15,
+          "strength": 0.7292096
+        },
+        {
+          "pitch": 62,
+          "start": 17.994791666666668,
+          "end": 19.195833333333333,
+          "strength": 0.7496787
+        },
+        {
+          "pitch": 50,
+          "start": 19.184375,
+          "end": 19.796354166666667,
+          "strength": 0.68674916
+        },
+        {
+          "pitch": 54,
+          "start": 19.195833333333333,
+          "end": 19.796354166666667,
+          "strength": 0.7335632
+        },
+        {
+          "pitch": 62,
+          "start": 19.195833333333333,
+          "end": 19.796354166666667,
+          "strength": 0.68004316
+        },
+        {
+          "pitch": 69,
+          "start": 19.195833333333333,
+          "end": 19.796354166666667,
+          "strength": 0.52992594
+        },
+        {
+          "pitch": 50,
+          "start": 19.796354166666667,
+          "end": 20.397395833333334,
+          "strength": 0.69451606
+        },
+        {
+          "pitch": 54,
+          "start": 19.796354166666667,
+          "end": 20.385416666666668,
+          "strength": 0.717286
+        },
+        {
+          "pitch": 62,
+          "start": 19.796354166666667,
+          "end": 20.397395833333334,
+          "strength": 0.6774429
+        },
+        {
+          "pitch": 69,
+          "start": 19.796354166666667,
+          "end": 20.397395833333334,
+          "strength": 0.5255222
+        },
+        {
+          "pitch": 50,
+          "start": 20.397395833333334,
+          "end": 20.997916666666665,
+          "strength": 0.6992546
+        },
+        {
+          "pitch": 55,
+          "start": 20.397395833333334,
+          "end": 20.98645833333333,
+          "strength": 0.7184757
+        },
+        {
+          "pitch": 62,
+          "start": 20.397395833333334,
+          "end": 20.98645833333333,
+          "strength": 0.6998763
+        },
+        {
+          "pitch": 71,
+          "start": 20.397395833333334,
+          "end": 20.997916666666665,
+          "strength": 0.763445
+        },
+        {
+          "pitch": 55,
+          "start": 20.98645833333333,
+          "end": 21.1015625,
+          "strength": 0.4744319
+        },
+        {
+          "pitch": 62,
+          "start": 20.98645833333333,
+          "end": 21.5984375,
+          "strength": 0.6276425
+        },
+        {
+          "pitch": 67,
+          "start": 20.98645833333333,
+          "end": 21.586979166666666,
+          "strength": 0.6692276
+        },
+        {
+          "pitch": 50,
+          "start": 20.997916666666665,
+          "end": 21.5984375,
+          "strength": 0.58785385
+        },
+        {
+          "pitch": 52,
+          "start": 20.997916666666665,
+          "end": 21.563541666666666,
+          "strength": 0.5867324
+        },
+        {
+          "pitch": 50,
+          "start": 21.5984375,
+          "end": 22.198958333333334,
+          "strength": 0.68801403
+        },
+        {
+          "pitch": 54,
+          "start": 21.5984375,
+          "end": 22.176041666666666,
+          "strength": 0.72608155
+        },
+        {
+          "pitch": 62,
+          "start": 21.5984375,
+          "end": 22.198958333333334,
+          "strength": 0.67811143
+        },
+        {
+          "pitch": 69,
+          "start": 21.5984375,
+          "end": 22.1875,
+          "strength": 0.5331053
+        },
+        {
+          "pitch": 55,
+          "start": 22.1875,
+          "end": 22.499479166666667,
+          "strength": 0.69330907
+        },
+        {
+          "pitch": 71,
+          "start": 22.1875,
+          "end": 22.499479166666667,
+          "strength": 0.73407847
+        },
+        {
+          "pitch": 50,
+          "start": 22.198958333333334,
+          "end": 22.788020833333334,
+          "strength": 0.71381354
+        },
+        {
+          "pitch": 62,
+          "start": 22.198958333333334,
+          "end": 22.788020833333334,
+          "strength": 0.6409654
+        },
+        {
+          "pitch": 57,
+          "start": 22.4875,
+          "end": 22.799479166666668,
+          "strength": 0.7062053
+        },
+        {
+          "pitch": 72,
+          "start": 22.4875,
+          "end": 22.8109375,
+          "strength": 0.6902281
+        },
+        {
+          "pitch": 50,
+          "start": 22.788020833333334,
+          "end": 23.4,
+          "strength": 0.69763017
+        },
+        {
+          "pitch": 55,
+          "start": 22.788020833333334,
+          "end": 23.388541666666665,
+          "strength": 0.71476257
+        },
+        {
+          "pitch": 62,
+          "start": 22.788020833333334,
+          "end": 23.4,
+          "strength": 0.7051361
+        },
+        {
+          "pitch": 71,
+          "start": 22.788020833333334,
+          "end": 23.4,
+          "strength": 0.7627102
+        },
+        {
+          "pitch": 55,
+          "start": 23.388541666666665,
+          "end": 23.504166666666666,
+          "strength": 0.488159
+        },
+        {
+          "pitch": 50,
+          "start": 23.4,
+          "end": 23.9890625,
+          "strength": 0.58600456
+        },
+        {
+          "pitch": 52,
+          "start": 23.4,
+          "end": 23.9546875,
+          "strength": 0.5873395
+        },
+        {
+          "pitch": 62,
+          "start": 23.4,
+          "end": 23.9890625,
+          "strength": 0.62246424
+        },
+        {
+          "pitch": 67,
+          "start": 23.4,
+          "end": 23.977604166666666,
+          "strength": 0.67241114
+        },
+        {
+          "pitch": 50,
+          "start": 23.9890625,
+          "end": 24.6015625,
+          "strength": 0.68461233
+        },
+        {
+          "pitch": 54,
+          "start": 23.9890625,
+          "end": 24.6015625,
+          "strength": 0.7285929
+        },
+        {
+          "pitch": 62,
+          "start": 23.9890625,
+          "end": 24.6015625,
+          "strength": 0.6783294
+        },
+        {
+          "pitch": 69,
+          "start": 23.9890625,
+          "end": 24.613020833333334,
+          "strength": 0.52166027
+        },
+        {
+          "pitch": 50,
+          "start": 24.6015625,
+          "end": 25.190625,
+          "strength": 0.69207275
+        },
+        {
+          "pitch": 54,
+          "start": 24.6015625,
+          "end": 25.190625,
+          "strength": 0.67416215
+        },
+        {
+          "pitch": 62,
+          "start": 24.6015625,
+          "end": 25.178645833333334,
+          "strength": 0.60834813
+        },
+        {
+          "pitch": 71,
+          "start": 24.6015625,
+          "end": 24.9015625,
+          "strength": 0.70136166
+        },
+        {
+          "pitch": 72,
+          "start": 24.890104166666667,
+          "end": 25.202083333333334,
+          "strength": 0.63056916
+        },
+        {
+          "pitch": 54,
+          "start": 25.190625,
+          "end": 25.79114583333333,
+          "strength": 0.70500094
+        },
+        {
+          "pitch": 71,
+          "start": 25.190625,
+          "end": 25.79114583333333,
+          "strength": 0.74408966
+        },
+        {
+          "pitch": 51,
+          "start": 25.202083333333334,
+          "end": 25.802604166666665,
+          "strength": 0.6841958
+        },
+        {
+          "pitch": 66,
+          "start": 25.202083333333334,
+          "end": 25.79114583333333,
+          "strength": 0.6137789
+        },
+        {
+          "pitch": 59,
+          "start": 25.721875,
+          "end": 25.79114583333333,
+          "strength": 0.42178667
+        },
+        {
+          "pitch": 59,
+          "start": 25.79114583333333,
+          "end": 26.403125,
+          "strength": 0.65129983
+        },
+        {
+          "pitch": 66,
+          "start": 25.79114583333333,
+          "end": 26.380208333333332,
+          "strength": 0.6715608
+        },
+        {
+          "pitch": 69,
+          "start": 25.79114583333333,
+          "end": 26.380208333333332,
+          "strength": 0.6345464
+        },
+        {
+          "pitch": 51,
+          "start": 25.802604166666665,
+          "end": 26.36875,
+          "strength": 0.70358765
+        },
+        {
+          "pitch": 52,
+          "start": 26.391666666666666,
+          "end": 26.9921875,
+          "strength": 0.65906143
+        },
+        {
+          "pitch": 64,
+          "start": 26.391666666666666,
+          "end": 26.9921875,
+          "strength": 0.6662245
+        },
+        {
+          "pitch": 67,
+          "start": 26.391666666666666,
+          "end": 26.9921875,
+          "strength": 0.69094604
+        },
+        {
+          "pitch": 59,
+          "start": 26.403125,
+          "end": 26.9921875,
+          "strength": 0.78314775
+        },
+        {
+          "pitch": 45,
+          "start": 26.9921875,
+          "end": 27.569791666666667,
+          "strength": 0.66820925
+        },
+        {
+          "pitch": 57,
+          "start": 26.9921875,
+          "end": 27.592708333333334,
+          "strength": 0.66436106
+        },
+        {
+          "pitch": 61,
+          "start": 26.9921875,
+          "end": 27.58125,
+          "strength": 0.7784081
+        },
+        {
+          "pitch": 69,
+          "start": 27.003645833333334,
+          "end": 27.592708333333334,
+          "strength": 0.5784472
+        },
+        {
+          "pitch": 50,
+          "start": 27.592708333333334,
+          "end": 28.759375,
+          "strength": 0.7258831
+        },
+        {
+          "pitch": 55,
+          "start": 27.592708333333334,
+          "end": 28.193229166666665,
+          "strength": 0.6741313
+        },
+        {
+          "pitch": 62,
+          "start": 27.592708333333334,
+          "end": 28.2046875,
+          "strength": 0.7413281
+        },
+        {
+          "pitch": 54,
+          "start": 28.193229166666665,
+          "end": 28.782291666666666,
+          "strength": 0.7641742
+        },
+        {
+          "pitch": 62,
+          "start": 28.2046875,
+          "end": 28.79375,
+          "strength": 0.49122575
+        },
+        {
+          "pitch": 55,
+          "start": 28.79375,
+          "end": 29.394791666666666,
+          "strength": 0.8042077
+        },
+        {
+          "pitch": 62,
+          "start": 28.79375,
+          "end": 29.394791666666666,
+          "strength": 0.87423444
+        },
+        {
+          "pitch": 71,
+          "start": 28.79375,
+          "end": 29.394791666666666,
+          "strength": 0.81882817
+        },
+        {
+          "pitch": 55,
+          "start": 29.394791666666666,
+          "end": 29.9953125,
+          "strength": 0.7649434
+        },
+        {
+          "pitch": 62,
+          "start": 29.394791666666666,
+          "end": 29.9953125,
+          "strength": 0.81032056
+        },
+        {
+          "pitch": 67,
+          "start": 29.394791666666666,
+          "end": 29.983854166666667,
+          "strength": 0.66839135
+        },
+        {
+          "pitch": 71,
+          "start": 29.394791666666666,
+          "end": 29.9953125,
+          "strength": 0.78581184
+        },
+        {
+          "pitch": 53,
+          "start": 29.9953125,
+          "end": 30.59583333333333,
+          "strength": 0.7533655
+        },
+        {
+          "pitch": 65,
+          "start": 29.9953125,
+          "end": 30.59583333333333,
+          "strength": 0.4890987
+        },
+        {
+          "pitch": 69,
+          "start": 29.9953125,
+          "end": 30.59583333333333,
+          "strength": 0.7937412
+        },
+        {
+          "pitch": 72,
+          "start": 29.9953125,
+          "end": 30.59583333333333,
+          "strength": 0.6210369
+        },
+        {
+          "pitch": 74,
+          "start": 30.584374999999998,
+          "end": 31.196354166666666,
+          "strength": 0.71544826
+        },
+        {
+          "pitch": 53,
+          "start": 30.59583333333333,
+          "end": 31.196354166666666,
+          "strength": 0.7340769
+        },
+        {
+          "pitch": 65,
+          "start": 30.59583333333333,
+          "end": 31.184895833333332,
+          "strength": 0.54765546
+        },
+        {
+          "pitch": 69,
+          "start": 30.59583333333333,
+          "end": 31.196354166666666,
+          "strength": 0.79835486
+        },
+        {
+          "pitch": 52,
+          "start": 31.196354166666666,
+          "end": 32.0625,
+          "strength": 0.7088857
+        },
+        {
+          "pitch": 67,
+          "start": 31.196354166666666,
+          "end": 31.796875,
+          "strength": 0.68512696
+        },
+        {
+          "pitch": 71,
+          "start": 31.196354166666666,
+          "end": 31.796875,
+          "strength": 0.71289754
+        },
+        {
+          "pitch": 74,
+          "start": 31.196354166666666,
+          "end": 31.773958333333333,
+          "strength": 0.76029074
+        },
+        {
+          "pitch": 67,
+          "start": 31.796875,
+          "end": 32.1203125,
+          "strength": 0.7704977
+        },
+        {
+          "pitch": 72,
+          "start": 31.796875,
+          "end": 32.36302083333333,
+          "strength": 0.66597265
+        },
+        {
+          "pitch": 54,
+          "start": 32.09739583333333,
+          "end": 32.3859375,
+          "strength": 0.7123952
+        },
+        {
+          "pitch": 62,
+          "start": 32.09739583333333,
+          "end": 32.3859375,
+          "strength": 0.7003545
+        },
+        {
+          "pitch": 69,
+          "start": 32.09739583333333,
+          "end": 32.3859375,
+          "strength": 0.6615104
+        },
+        {
+          "pitch": 55,
+          "start": 32.3859375,
+          "end": 32.99791666666667,
+          "strength": 0.75688934
+        },
+        {
+          "pitch": 62,
+          "start": 32.3859375,
+          "end": 32.99791666666667,
+          "strength": 0.791823
+        },
+        {
+          "pitch": 71,
+          "start": 32.3859375,
+          "end": 32.98645833333333,
+          "strength": 0.794704
+        },
+        {
+          "pitch": 67,
+          "start": 32.397395833333334,
+          "end": 33.00989583333333,
+          "strength": 0.6542046
+        },
+        {
+          "pitch": 48,
+          "start": 32.99791666666667,
+          "end": 33.598958333333336,
+          "strength": 0.64395136
+        },
+        {
+          "pitch": 60,
+          "start": 32.99791666666667,
+          "end": 33.598958333333336,
+          "strength": 0.6549063
+        },
+        {
+          "pitch": 64,
+          "start": 32.99791666666667,
+          "end": 33.598958333333336,
+          "strength": 0.8273456
+        },
+        {
+          "pitch": 69,
+          "start": 32.99791666666667,
+          "end": 33.586979166666666,
+          "strength": 0.7179335
+        },
+        {
+          "pitch": 48,
+          "start": 33.598958333333336,
+          "end": 34.153125,
+          "strength": 0.70700336
+        },
+        {
+          "pitch": 55,
+          "start": 33.598958333333336,
+          "end": 34.18802083333333,
+          "strength": 0.7002695
+        },
+        {
+          "pitch": 64,
+          "start": 33.598958333333336,
+          "end": 34.18802083333333,
+          "strength": 0.7845606
+        },
+        {
+          "pitch": 67,
+          "start": 33.598958333333336,
+          "end": 34.18802083333333,
+          "strength": 0.6106769
+        },
+        {
+          "pitch": 55,
+          "start": 34.18802083333333,
+          "end": 34.78854166666667,
+          "strength": 0.70653856
+        },
+        {
+          "pitch": 62,
+          "start": 34.18802083333333,
+          "end": 34.8,
+          "strength": 0.7707547
+        },
+        {
+          "pitch": 67,
+          "start": 34.18802083333333,
+          "end": 34.78854166666667,
+          "strength": 0.6789821
+        },
+        {
+          "pitch": 47,
+          "start": 34.19947916666666,
+          "end": 34.77708333333333,
+          "strength": 0.664571
+        },
+        {
+          "pitch": 66,
+          "start": 34.78854166666667,
+          "end": 35.377604166666664,
+          "strength": 0.6934708
+        },
+        {
+          "pitch": 45,
+          "start": 34.8,
+          "end": 35.366145833333334,
+          "strength": 0.60900176
+        },
+        {
+          "pitch": 57,
+          "start": 34.8,
+          "end": 35.354166666666664,
+          "strength": 0.46761003
+        },
+        {
+          "pitch": 60,
+          "start": 34.8,
+          "end": 35.40052083333333,
+          "strength": 0.71128184
+        },
+        {
+          "pitch": 69,
+          "start": 34.8,
+          "end": 35.377604166666664,
+          "strength": 0.66575986
+        },
+        {
+          "pitch": 43,
+          "start": 35.3890625,
+          "end": 35.989583333333336,
+          "strength": 0.70764434
+        },
+        {
+          "pitch": 62,
+          "start": 35.3890625,
+          "end": 35.989583333333336,
+          "strength": 0.654335
+        },
+        {
+          "pitch": 67,
+          "start": 35.3890625,
+          "end": 35.989583333333336,
+          "strength": 0.6848708
+        },
+        {
+          "pitch": 71,
+          "start": 35.3890625,
+          "end": 35.978125,
+          "strength": 0.73963
+        },
+        {
+          "pitch": 50,
+          "start": 35.989583333333336,
+          "end": 36.59010416666666,
+          "strength": 0.68700093
+        },
+        {
+          "pitch": 62,
+          "start": 35.989583333333336,
+          "end": 36.6015625,
+          "strength": 0.55325586
+        },
+        {
+          "pitch": 67,
+          "start": 35.989583333333336,
+          "end": 36.59010416666666,
+          "strength": 0.70585054
+        },
+        {
+          "pitch": 69,
+          "start": 35.989583333333336,
+          "end": 36.6015625,
+          "strength": 0.4204908
+        },
+        {
+          "pitch": 50,
+          "start": 36.59010416666666,
+          "end": 37.236979166666664,
+          "strength": 0.66847265
+        },
+        {
+          "pitch": 66,
+          "start": 36.59010416666666,
+          "end": 37.17916666666667,
+          "strength": 0.6639695
+        },
+        {
+          "pitch": 62,
+          "start": 36.6015625,
+          "end": 37.190625,
+          "strength": 0.65803814
+        },
+        {
+          "pitch": 69,
+          "start": 36.6015625,
+          "end": 36.90208333333333,
+          "strength": 0.5633012
+        },
+        {
+          "pitch": 67,
+          "start": 36.890625,
+          "end": 37.190625,
+          "strength": 0.808959
+        },
+        {
+          "pitch": 43,
+          "start": 37.190625,
+          "end": 38.3921875,
+          "strength": 0.74603206
+        },
+        {
+          "pitch": 59,
+          "start": 37.190625,
+          "end": 38.3921875,
+          "strength": 0.79966456
+        },
+        {
+          "pitch": 62,
+          "start": 37.190625,
+          "end": 38.23020833333333,
+          "strength": 0.45826527
+        },
+        {
+          "pitch": 67,
+          "start": 37.190625,
+          "end": 38.3921875,
+          "strength": 0.74959713
+        }
+      ],
+      "scores": {
+        "onset_50ms": {
+          "matches": 238,
+          "false_positives": 20,
+          "false_negatives": 0,
+          "precision": 0.9224806201550387,
+          "recall": 1.0,
+          "f1": 0.9596774193548387
+        },
+        "onset_100ms": {
+          "matches": 238,
+          "false_positives": 20,
+          "false_negatives": 0,
+          "precision": 0.9224806201550387,
+          "recall": 1.0,
+          "f1": 0.9596774193548387
+        },
+        "onset_offset": {
+          "matches": 230,
+          "false_positives": 28,
+          "false_negatives": 8,
+          "precision": 0.8914728682170543,
+          "recall": 0.9663865546218487,
+          "f1": 0.9274193548387097
+        }
+      },
+      "existing_track_content_preserved": true,
+      "source_audio_sha256": "049e881f2939744ad9643c69d1d20cdb790b95654ac716080678d820b2e81410",
+      "programs": [],
+      "raw_report": ".local-evaluations/codex-autonomous-2026-10-21/ordinary-result/result.json",
+      "log_sha256": "369abdc558e30800860597f2a7cf3914e2bd7413bc810648f6800795bcf078d6",
+      "runner_sha256": "4dc913c87430a70a3172ed308081b91f792ad3deba412cc561bb555a0a6f0f09",
+      "delivery": {
+        "project_sha256": "b1c7cfc1940e29064e16f10c278d8e070752c90fc86ac83889281829f10c63c7",
+        "wav_sha256": "1a76d63fc58797431d32b0c5adc02cc4be2147d1b4c3e0203dfc723b9d1f4e07",
+        "wav_bytes": 11057018,
+        "inspection": "Wrote C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\ordinary\\cover.wav — 00:38.392, 2 ch, 24-bit, peak -3.9 dBFS.\nEncoded WAV C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\ordinary\\cover.wav: PASS. 48000 Hz, 2 ch, 24-bit, 38.39 s, -18.0 LUFS, peak -3.9 dBFS, true peak -3.9 dBTP, full-scale samples 0, final 0.5 s RMS -30.7 dBFS. SHA-256 1a76d63fc58797431d32b0c5adc02cc4be2147d1b4c3e0203dfc723b9d1f4e07.",
+        "folder": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\ordinary"
+      }
+    },
+    {
+      "id": "composition",
+      "completed": true,
+      "report_sha256": "3f9fa0ed87e729f75e357fed6813a3d5b386d707ddf0a8f8276347b8c0c08173",
+      "elapsed_seconds": 58.2094219,
+      "failure": null,
+      "prompt": "16小節の明るいポップ曲を新しく作ってください。メロディーと伴奏を付けてください。",
+      "acceptance": {
+        "exported": false,
+        "imported": false,
+        "used_basic_pitch": false,
+        "cover_added": false,
+        "dirty_before_host_save": true,
+        "one_undo_restored": false,
+        "redo_restored": true,
+        "readback_after_import": false,
+        "inspected_after_import": false
+      },
+      "project_sha256": "feb69d450f476e1d89325033873dc91ccd1832a4184de6229beb12f1fc839521",
+      "staged_project": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\artifacts\\composition\\Cover\\Cover.auris",
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 128.0
+          }
+        ]
+      },
+      "sections": {
+        "points": [
+          {
+            "tick": 0,
+            "label": "Aメロ"
+          },
+          {
+            "tick": 30720,
+            "label": "サビ"
+          },
+          {
+            "tick": 53760,
+            "label": "エンディング"
+          },
+          {
+            "tick": 61440,
+            "label": null
+          }
+        ]
+      },
+      "before_sha256": "7b989c40cbe13a3fbd7d18542a71aa9cc44abc146cc2357703704eb9afa75de0",
+      "after_sha256": "feb69d450f476e1d89325033873dc91ccd1832a4184de6229beb12f1fc839521",
+      "model_answers": [
+        "Dメジャー、128 BPMの明るいポップ曲にします。前半8小節、サビ6小節、締め2小節の構成で、メロディーにコード伴奏・ベース・ドラムを付けます。\n",
+        "16小節の明るいポップ曲を作成しました。\n\n- Dメジャー／128 BPM、約30秒\n- Aメロ8小節 → サビ6小節 → エンディング2小節\n- ピアノのメロディー＋ギター伴奏・ベース・ドラム\n\n構成と音量を確認済みです。変更は未保存で、Undoできます。"
+      ],
+      "review_observations": [],
+      "tool_observations": [
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "44d79cc4927fb84504839b31cf268d8c32d98ba262eaa0c3dbe396d795991cc8"
+        },
+        {
+          "name": "edit_harmony",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "314221811b1c73c31e014307d3cd3b5aaf176526f85208f5eea6d4ae9aae02e9",
+          "result_sha256": "3b39a6621277e1e35a46f1821869d93aa5b7c6dcef494dc35f983b1fbef36924"
+        },
+        {
+          "name": "edit_harmony",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "aa0df0046225191a51114d935d98dac7b8af837f443a3349fbcea3c64ce49460",
+          "result_sha256": "e0b5b79f56bfed872e15a6ecd0f4a909377ad414f1cdf17daf8554975896dc94"
+        },
+        {
+          "name": "edit_harmony",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "7c80b3f0a13d79b3d913614de7644da315e450acb00ffccaa3a25567da8f8bfd",
+          "result_sha256": "fcda14826e4ca8ca0981c9ab614549d3035c59a0c67e0fbe6e0f2b9f4077bd90"
+        },
+        {
+          "name": "set_tempo",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "f2828d3183d63a8c60d57a938f80425b37785771c8ad93afcc8dfb8dc4b384e0",
+          "result_sha256": "cd12352f2913838f457a2046cbd43f7ace034c6572e6794df774e5fb295ce958"
+        },
+        {
+          "name": "search_instruments",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "6aa9408417257b43bcd8b78dab7366c18ebacbe71da218ba09e44fd2882acacf",
+          "result_sha256": "673e4670c606b5397c69d36432a8f06d1437c91c1523b3af7ec8d64cf47c5d63"
+        },
+        {
+          "name": "search_instruments",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "db8470941679b9c7d72399aaa8201e3b5d1e6b1d87b4b759bff70665cd1aa336",
+          "result_sha256": "f5261da1a643441d5cda327b3f095754e7e56b051e015689c6fc00e5f8b3f99a"
+        },
+        {
+          "name": "search_instruments",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "dfe8e41d66d7e179e02c916bda5d7126b59d1a84e6fb5e367c87da875d109a3d",
+          "result_sha256": "a0566438667b3dffcfd37e1dcb34c45701092c7a6a3852c06251876ee604e103"
+        },
+        {
+          "name": "search_instruments",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "31c5541fdccba3204cff45c3e19fe7426f470d3f02d6e6b8aac3ef9cdf3a94c9",
+          "result_sha256": "984c8c6c914766786f7d1cef9184d2835bf616000c33689823c247107c4f72fe"
+        },
+        {
+          "name": "search_instruments",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "a969abb2d7c230d32b4988c9ce17b90076249de9c1053cde519f2291f82b815e",
+          "result_sha256": "458a42e843766e7c88ed4c7954b7c65e2d26f1c62fbc048f5ba69a41be9a5206"
+        },
+        {
+          "name": "search_instruments",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "3b5e9e8808fffb9fdb29211ab5a61eba0984366c6c0230f3a6a6817a3f2eb330",
+          "result_sha256": "b7619cc870f3b99812ce2b13004eb692b4bd5966d8ea6f8053bd58a00bce955d"
+        },
+        {
+          "name": "add_clip",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "3813f7ebfd7fe6251ed5d93985a7e566e4e67aacf26a1ce9cf4c0f6dc5e43645",
+          "result_sha256": "553eaac826ce50ec828c647c8ee0f67aff7f9f2e7a6aa9c91b762a2add0f4f31"
+        },
+        {
+          "name": "add_track",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "f5a5dee4c3f4d921defb6adb1be5a5d09ebc940f27b11bdebe3de67a60f03ced",
+          "result_sha256": "2135893273a2e2465b866c2e7cd889fd138c7325b540b1cc56062c3be7bf9897"
+        },
+        {
+          "name": "add_track",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "42edbc8b197a7ede84d74164908f1bbabb71a0d636a2f06953e9dd61ed200ed3",
+          "result_sha256": "60446166baab2b406c7e3dc71f0b2e956f2ca30a51685dcdc6483553c20ba72e"
+        },
+        {
+          "name": "add_track",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e2e96e65b451d546c977be85f68cae9f0f12d5b83ce98d3c7d62ab00f2f3da53",
+          "result_sha256": "cf75e6c32abb8e8c19591927e8009ac85c3066d84542a55b3a6ff68f56e3c7c8"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e326dd6714004ba4834bcde36bcf39b23180384b945769b998a48c9c2e9b2037",
+          "result_sha256": "61dee7425e19e77f6e4229c73dfc7e332a1904aec84a3d0373fd7be667cc235b"
+        },
+        {
+          "name": "set_instrument",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "4936108c9ec91567d4d3fecd90d8ee54759631d8c877b8343d8d84ca791d503e",
+          "result_sha256": "d46a0526185cf18c8de5fa1af98830f553e13fe90fa1bb9015cfc7ccd801e5f5"
+        },
+        {
+          "name": "set_instrument",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "ed007577243e5f2415b3758d32d1a6e1fa8eb6e29f608e1db239bfbed5c1b0c1",
+          "result_sha256": "d46a0526185cf18c8de5fa1af98830f553e13fe90fa1bb9015cfc7ccd801e5f5"
+        },
+        {
+          "name": "set_instrument",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "388b4a6ec383bef7109c0a3366013cb3e864e22a8c22d0d8e46e2c172b68c9aa",
+          "result_sha256": "d46a0526185cf18c8de5fa1af98830f553e13fe90fa1bb9015cfc7ccd801e5f5"
+        },
+        {
+          "name": "set_instrument",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "8ba26ee122c4cbf7f0fdd76924198e1c52aecdfa4a238bd7e9ece5316e1a3415",
+          "result_sha256": "d46a0526185cf18c8de5fa1af98830f553e13fe90fa1bb9015cfc7ccd801e5f5"
+        },
+        {
+          "name": "add_clip",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "efebd6ad553faaacf867435f620cb295b1c08740ef2b9661af1b23324bad7176",
+          "result_sha256": "4428553507e2ce3a3ec3100498127025c88f4e52f3c083d7e2bacb95fc827fe6"
+        },
+        {
+          "name": "add_clip",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "0e7a913e62e9e32ee76cdd7b42feae2ee14c6bbbf2a96459145d6ef41c6431af",
+          "result_sha256": "250c77695fa9961cc40abade028675a0db2150e7908f5656b93fd265c36b7d49"
+        },
+        {
+          "name": "add_clip",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "6883469a34fc7eea04e13ea8fbff411265a08481e304c99d3285cfc6a0685ad4",
+          "result_sha256": "42a9aef9183bb1dfe3ffebec7c744e4a20b4d08454f50e942e7780f91c7809ee"
+        },
+        {
+          "name": "set_level",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "a7e452ec9121723e3773cba74fd9a7f7eb3d41979f1d8222b4a76b0dfd0760f6",
+          "result_sha256": "dfd117d744396a51cbd12bbc01b28fe53a55312ad68284c66cc4f1368a80993d"
+        },
+        {
+          "name": "set_level",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "b16e029113ccb110a4973f59886199f4b657d4b7ff9c86de2540506284a15bcb",
+          "result_sha256": "dfd117d744396a51cbd12bbc01b28fe53a55312ad68284c66cc4f1368a80993d"
+        },
+        {
+          "name": "set_level",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "4886123aec8ba83daffcf7acd3bdf5df1436047e8ded4af5406a678f74c39160",
+          "result_sha256": "dfd117d744396a51cbd12bbc01b28fe53a55312ad68284c66cc4f1368a80993d"
+        },
+        {
+          "name": "set_level",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "1abe02272a767695ec42243c5c73a3e7e326c0f764b5f89accfbfeb2ac924fb4",
+          "result_sha256": "dfd117d744396a51cbd12bbc01b28fe53a55312ad68284c66cc4f1368a80993d"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "f596bc688e7c6dfe2f529114c9c3ea5bfc5aeea1e5119b47c6e58a3687b3cb54",
+          "result_sha256": "c18d67a908833694629e2d38273ed6fce6007226204337a5394a934b1aff427b"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "fa123e7068e409fb3c89fbd38f2b75df91a61769027a2c70f99ea4e47aac92b4",
+          "result_sha256": "bca7054669acca41982c372fffd3842643878644bc9b24911eac1c803adb154a"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "4e8ac829c15f57d3664fc588616ad5349b6a22f491b7ce8b379d56104e348fcf",
+          "result_sha256": "194bbc9a2e306e2ae6fb1d09e50e0a6669578c4a013eaf6c8a9e0677805268a0"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "527a40575f56c33952d47f8703f1cef2eb5764f16f32d095bae58af965c23fca",
+          "result_sha256": "c18d67a908833694629e2d38273ed6fce6007226204337a5394a934b1aff427b"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "b3ce19145671d0de0a71f1f5bc47ee73bc08f1260777a122146bd6673aebc711",
+          "result_sha256": "bca7054669acca41982c372fffd3842643878644bc9b24911eac1c803adb154a"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "521b30baf3b9dfea2ca3987568966a44b6be7df6ed8da5d25126f83aa177b5ee",
+          "result_sha256": "c9ba7c05a735a957e2a5727bc8dba8293a74e0fdd58fb2411a5afb89345b8eb7"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "55441f5a227a78ccbe90902ca931db7f72f7e82ff3cfa7423351c38f364f75e0",
+          "result_sha256": "1edcbc6fca12112ca3e30ccff31ecef9630c81014d38b65e77353258cd02e8b0"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "8b92fcbc41433bdebd50932650a1440397b54a3350a91d10fc76c8a786ea03d1",
+          "result_sha256": "60f176091c05006909e8789167816a8d94b721830708e649c530152eeb0b9ed7"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e3040b37f0224c69d74f1adbbcc1542faa9323f484df981ec9b272aa9d20bcc3",
+          "result_sha256": "c18d67a908833694629e2d38273ed6fce6007226204337a5394a934b1aff427b"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "f6f389fb9b7878d06ea1ed91118152364cb1b95f6ee9f9300f01739ccb4703d2",
+          "result_sha256": "bca7054669acca41982c372fffd3842643878644bc9b24911eac1c803adb154a"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "d1f7f47cb10ba17cfc09d91f4199a058a7207a7e3e09a19ec1721284b29e8b44",
+          "result_sha256": "cd0be7228f2e66da70a55b13405b24301eab199f3051dff540d594f35ec318bb"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "b9ac6ff99aae7042ce3e8152a2a46b848a1170a297b705bd74d7b069f89760dc",
+          "result_sha256": "c18d67a908833694629e2d38273ed6fce6007226204337a5394a934b1aff427b"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "d7c51a2ef2a855ac4b8908f089e3b14ad39622fb6c90ddc8c37ef3af61ec9150",
+          "result_sha256": "bca7054669acca41982c372fffd3842643878644bc9b24911eac1c803adb154a"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "7940ed9ad85206b7008b104681e7d8932e1ae187bb6c78227ee92e3ba96ea8e1",
+          "result_sha256": "c9ba7c05a735a957e2a5727bc8dba8293a74e0fdd58fb2411a5afb89345b8eb7"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "52411513525586241e5547d5cacf24d2306d4c8c2e164c424dd3cc36490c4b2a",
+          "result_sha256": "1edcbc6fca12112ca3e30ccff31ecef9630c81014d38b65e77353258cd02e8b0"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "a4544f51566a74c709a6ea5c74d16208cbc104217d458c3caa1f7509416bc565",
+          "result_sha256": "eb2b81039097511fcaa11c39eead1e3eff987412d4a5d5920618e18447253e4c"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "617fe2f56f37ad1cece715117bd5a11e493c84e773773342cc9f00ea1ff10a66",
+          "result_sha256": "e35b74a41df58fcd8c80e16b6e6a4f6df89429b11c4d9092891b5165fac6429f"
+        },
+        {
+          "name": "add_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "8c22b26002eb1e0de4d5fa5305d254b22669b5532342de0a2a8e3b6bca6d4ecd",
+          "result_sha256": "a365713f5390e4a30b6a43b9e0a49997116076aed9dedffb0023aab539fff15b"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e326dd6714004ba4834bcde36bcf39b23180384b945769b998a48c9c2e9b2037",
+          "result_sha256": "62a44f8a9c02b435cdd3d6894fe75665a06ca3416c0e28361817fa28d4d81862"
+        },
+        {
+          "name": "normalize_mix",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "2a5f27ceaa502700df5727160396f10ff1c792a6a40df0ba8799d6b2d96b4cd0",
+          "result_sha256": "4e51ae3c1244618c3222e2419124fe28e6348b3c2e53573ed9dbf285183b2895"
+        },
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "e015302c5e021528380fcc4a8fda346d71092af2f2241e1e04370d1fdfd93b4a"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e326dd6714004ba4834bcde36bcf39b23180384b945769b998a48c9c2e9b2037",
+          "result_sha256": "52a425cb7616132d03da5e75de4c75b280fba447cc2ee7abcd3c3d8bfd9fd5aa"
+        }
+      ],
+      "notes_count": 540,
+      "clip_boundaries": [
+        {
+          "track": "Track 1",
+          "start": 0,
+          "length": 61440
+        },
+        {
+          "track": "コード伴奏",
+          "start": 0,
+          "length": 61440
+        },
+        {
+          "track": "ベース",
+          "start": 0,
+          "length": 61440
+        },
+        {
+          "track": "ポップ・ドラム",
+          "start": 0,
+          "length": 61440
+        }
+      ],
+      "programs": [],
+      "raw_report": ".local-evaluations/codex-autonomous-2026-10-21/composition-result/result.json",
+      "log_sha256": "e82774e9294f00f949a1d1c87c736a1cf2ce57b4b2efe1593b5619a98ffb44e4",
+      "runner_sha256": "4dc913c87430a70a3172ed308081b91f792ad3deba412cc561bb555a0a6f0f09",
+      "delivery": {
+        "project_sha256": "feb69d450f476e1d89325033873dc91ccd1832a4184de6229beb12f1fc839521",
+        "wav_sha256": "ab0f52bb3b88328e985f9abde27513e053250912d2b9180d1e821d1f1f308bec",
+        "wav_bytes": 8640068,
+        "inspection": "Wrote C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\composition\\cover.wav — 00:30.000, 2 ch, 24-bit, peak -1.0 dBFS.\nEncoded WAV C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\composition\\cover.wav: PASS. 48000 Hz, 2 ch, 24-bit, 30.00 s, -17.4 LUFS, peak -1.0 dBFS, true peak -1.0 dBTP, full-scale samples 0, final 0.5 s RMS -35.6 dBFS. SHA-256 ab0f52bb3b88328e985f9abde27513e053250912d2b9180d1e821d1f1f308bec.",
+        "folder": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\composition"
+      }
+    },
+    {
+      "id": "independent-2",
+      "completed": true,
+      "report_sha256": "259d6935150b6bfaa483c76e69bccc5467d24137576e3fecd786207f53233a37",
+      "elapsed_seconds": 384.6402097,
+      "failure": null,
+      "prompt": "添付した音声ファイルから、編集可能なピアノカバーを作ってください。Basic Pitchは使わず、音声そのものを解析して採譜してください。完成後に音符と音声を確認してください。",
+      "acceptance": {
+        "exported": true,
+        "imported": true,
+        "used_basic_pitch": false,
+        "cover_added": true,
+        "dirty_before_host_save": true,
+        "one_undo_restored": false,
+        "redo_restored": true,
+        "readback_after_import": true,
+        "inspected_after_import": true
+      },
+      "project_sha256": "51b189c00cdddcfb1b37a6028f8705da3c123702fe028e2766c68fe84bdedf87",
+      "staged_project": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\artifacts\\independent-2\\Cover\\Cover.auris",
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 120.0
+          }
+        ]
+      },
+      "sections": {
+        "points": []
+      },
+      "before_sha256": "7b989c40cbe13a3fbd7d18542a71aa9cc44abc146cc2357703704eb9afa75de0",
+      "after_sha256": "51b189c00cdddcfb1b37a6028f8705da3c123702fe028e2766c68fe84bdedf87",
+      "model_answers": [
+        "Basic Pitchは使わず、元の音声をローカルで周波数解析して採譜します。取り込み後に音符データとレンダリング音声を確認します。\n",
+        "元音声の発音位置と重なった音高を検出できました。現在、倍音を余分な高音として拾った候補を整理し、発音位置を波形上の立ち上がりに合わせています。\n",
+        "Basic Pitchを使わず、元音声の周波数・倍音・発音位置を解析し、編集可能な222音のピアノカバーを追加しました。\n\n音符全件と全編のレンダリング音声を計測・画像で確認済みです（試聴ではありません）。弱い音やオクターブ、音の長さには推定誤差が残ります。\n\n変更は未保存で、Undo可能です。"
+      ],
+      "review_observations": [
+        "Auto review — Allow: 採譜に必要なツールの有無とプロジェクト内のファイル一覧を確認するだけで、ファイル変更や外部送信はありません。",
+        "Auto review — Allow: 音声解析に使うインストール済みPythonと実行パスを確認するだけで、ファイル変更や外部送信を伴わない低リスクな操作です。",
+        "Auto review — Allow: 音声解析に必要なPython仮想環境と標準的な数値・音声処理ライブラリを作業フォルダー内に導入する、限定的で低リスクな操作です。Basic Pitchは使用しません。",
+        "Auto review — Allow: 指定の音声を読み取り、周波数と音高の候補を解析・表示するだけの処理です。Basic Pitchを使わない採譜の依頼に沿っており、ファイルの変更や外部送信はありません。",
+        "Auto review — Allow: 音声ファイルを読み取り、採譜に必要な周波数解析結果を表示する限定的な操作です。Basic Pitchは使用せず、ファイルの変更や外部送信もありません。",
+        "Auto review — Allow: 採譜に必要な音声の周波数・倍音解析のみを行い、ファイルの変更や外部送信はありません。Basic Pitchも使用していません。",
+        "Auto review — Allow: 依頼に沿ってBasic Pitchを使わず音声を解析する処理です。書き込みは作業フォルダー内の解析スクリプトと結果ファイルに限定され、元音声の変更や外部送信はありません。",
+        "Auto review — Allow: 依頼に沿った音声の直接解析の改良です。提示されたスクリプトの処理は、元音声の読み取りとプロジェクト内の解析コード・採譜データの更新に限定され、Basic Pitchの使用や外部送信はありません。",
+        "Auto review — Allow: 対象音声をローカルで読み取り、採譜に必要な発音タイミングを解析する操作です。Basic Pitchの使用、外部送信、元ファイルの変更はありません。",
+        "Auto review — Allow: 依頼に沿ってBasic Pitchを使わず音声を解析し、作業フォルダー内の採譜JSONを更新する限定的な処理です。外部送信や元音声の変更はありません。"
+      ],
+      "tool_observations": [
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "44d79cc4927fb84504839b31cf268d8c32d98ba262eaa0c3dbe396d795991cc8"
+        },
+        {
+          "name": "export_audio_attachment",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "a6177898a606fe57340687e75494c0b8e93341d0cd7768b651e160112dca5fed",
+          "result_sha256": "e20279ef6c76537be3d4e057761ccf143f9b7a37220d0f837f8d674af7e065fd"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "77cfaf72ed87b093e59f474ba7d2d396c1d911e396ca536241c4cb94b59067a7",
+          "result_sha256": "c673c7d62232ab8ffb1254030df397901fa9845e8405420c296e9d99745b4258"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "dbe2c126423cc1b965c2963e833eaf665a33c26fb111560e699fac636b791ce6",
+          "result_sha256": "0627f964d501ff1b1046c79733874bc3cae30c63f27c98084a01724cd7224bad"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e9f73782a198f100d8085581c23312c00207fb656f3bea23e25f4d0f9cf4b6d2",
+          "result_sha256": "86414eb4564ea11b5c7dcc572a75ff5d8d97930a9efac726786b341da2dc415a"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "51f994b25a122fa1abd34be8a2d332b9378598073b5fd2b3b79d89b3ae98830e",
+          "result_sha256": "218f68927c19c87a64bd5f5585d8fbb5237146b4fd096b1a10f24d8dfb80ed0f"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "964a05e4d6c813d3d59e3acc775a306a5b0b888785e6b28f2b21f13a2c0e4ee1",
+          "result_sha256": "819be534566ff68e54e1bc85c2048bfe8275e1a4de3e8f91765fd49d76b8826d"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "8e6d3ea8131853ce7714747168748634ebf507122e36ec4572f509e096344da3",
+          "result_sha256": "a311a5db444a61c3dd818a0eb5e1a2c53cdd73c701313ef6c52313f3fe39f166"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "542c2ed8ba8f07bfac9ef6da2a93404a05cd02c93d634965fba0b8b829f7f992",
+          "result_sha256": "cfed548fd4e7beade7a49038a49754940518c3f64c989023a04cc3f281f8e908"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "e53baa36e72e3a7d413496a3bed226e590af18397877f07563a7ebeb4c2088b9",
+          "result_sha256": "f04da42b4ea52f1104c85cee7cb64740e153451e86a4cee89c3489784dfb6ad3"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "fffd8cf2dc7a76294841a569ccdd72fd969b8ea107c17e01feec9ac59d8a7284",
+          "result_sha256": "46e6e650b80f400d42954086a68655dc7ad97e9e5da12527fb1ea402641d80b2"
+        },
+        {
+          "name": "cli_command",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "31cc14e6cdcc3ae4d96f10344705304145545f9808578eed7a3ca8613d504b46",
+          "result_sha256": "4234e437b936d18a8758ce136d9e3267a9001a88a89e1061ecff78a3c8fc138c"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": false,
+          "completed": true,
+          "arguments_sha256": "6277b04f3a96bbd851caf297efdf1188fbf3102cb0f83fe678460efe369a591f",
+          "result_sha256": "08b2bd73473c2299d0882c516e898f08a6ffe3a058de69bc53318d901aed2164"
+        },
+        {
+          "name": "import_transcription",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "2810750d2c6942401938442b5f49af5b1577d07f8cfefb69682357a5c8f0472d",
+          "result_sha256": "89ae58221c99a4370237144dce70f180d06c51f74ca68afbb1903a5a3ef4a6ac"
+        },
+        {
+          "name": "read_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "f7da42007a36d19dac5562abda25f81c041db31e33df417ba5a0eb610c071d00",
+          "result_sha256": "eaa4ddd5fdfad10faf425918c6a1b910fe7a1123525e1bfc8dc24ec9f039cec7"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "6b11ab00ab11497f0651b7b148bd19a76fb11d4203a28de6d380128824e5496a",
+          "result_sha256": "d3deea7463dcecfbd49567c47acffd5a32ccb6e3b15137645c34f52a41f9ffb1"
+        },
+        {
+          "name": "read_notes",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "3041138181e6c0033259949cd97bb43347e99b8d0492e77b486ffef0630e4973",
+          "result_sha256": "1c72f1af69b0fdd77dc896054000c0b3c2a81148f887deb69dd06b6cc02ae81e"
+        },
+        {
+          "name": "normalize_mix",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "c9e7783cf632c4adfc0e74c812c5b0ef15ae966c72bc74527798146bb57af3b4",
+          "result_sha256": "4f0889046ab1fa7ab031ecc884bc85c1f8c85c86184d39fad27e4ffbd32b0d50"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "2bb4412759199a5f72ba860634a40968ddb46254864561979df2890edd41a147",
+          "result_sha256": "1f60eb3f7253bde69b185496fbd2f5aae67ccf6515533ea23b8146bfb9339a5e"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "61557f9966b64faa2b4573cf1223ba04757940940cf38bb9274a373796f84b2a",
+          "result_sha256": "5484d6cde2f6c022a7dd870218450ddbfed52c9e8039813aca32dcfbee9d857f"
+        },
+        {
+          "name": "inspect_audio",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "6e64c92fcd5c85245063d4c5d6164d75efc27169dad7ce7419e916d48255c56d",
+          "result_sha256": "dc278cfba62fbc17259f8d9a92da334cea368b397138da9a0d4a0b34145f5636"
+        },
+        {
+          "name": "inspect_project",
+          "ok": true,
+          "completed": true,
+          "arguments_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "result_sha256": "be8d4269b8b477320dfbfef9a160e64aa2091a3ac0164a175261ae7abcf10b2b"
+        }
+      ],
+      "notes": [
+        {
+          "pitch": 55,
+          "start": 0.0,
+          "end": 0.575,
+          "strength": 0.6099
+        },
+        {
+          "pitch": 62,
+          "start": 0.0,
+          "end": 0.575,
+          "strength": 0.8282
+        },
+        {
+          "pitch": 67,
+          "start": 0.0,
+          "end": 0.4401041666666667,
+          "strength": 0.7658
+        },
+        {
+          "pitch": 71,
+          "start": 0.0,
+          "end": 0.575,
+          "strength": 0.8135
+        },
+        {
+          "pitch": 55,
+          "start": 0.6,
+          "end": 1.175,
+          "strength": 0.6094
+        },
+        {
+          "pitch": 62,
+          "start": 0.6,
+          "end": 1.0598958333333333,
+          "strength": 0.8288
+        },
+        {
+          "pitch": 67,
+          "start": 0.6,
+          "end": 1.0302083333333334,
+          "strength": 0.754
+        },
+        {
+          "pitch": 71,
+          "start": 0.6,
+          "end": 1.15,
+          "strength": 0.8124
+        },
+        {
+          "pitch": 55,
+          "start": 1.2,
+          "end": 1.775,
+          "strength": 0.6084
+        },
+        {
+          "pitch": 60,
+          "start": 1.2,
+          "end": 1.7598958333333332,
+          "strength": 0.8128
+        },
+        {
+          "pitch": 69,
+          "start": 1.2,
+          "end": 1.7098958333333334,
+          "strength": 0.8811
+        },
+        {
+          "pitch": 72,
+          "start": 1.2,
+          "end": 1.6901041666666667,
+          "strength": 0.7785
+        },
+        {
+          "pitch": 55,
+          "start": 1.8,
+          "end": 2.409895833333333,
+          "strength": 0.6178
+        },
+        {
+          "pitch": 59,
+          "start": 1.8,
+          "end": 2.409895833333333,
+          "strength": 0.7904
+        },
+        {
+          "pitch": 67,
+          "start": 1.8,
+          "end": 2.25,
+          "strength": 0.8638
+        },
+        {
+          "pitch": 74,
+          "start": 1.8,
+          "end": 2.375,
+          "strength": 0.8149
+        },
+        {
+          "pitch": 52,
+          "start": 2.4,
+          "end": 3.3098958333333335,
+          "strength": 0.4837
+        },
+        {
+          "pitch": 64,
+          "start": 2.4,
+          "end": 2.8598958333333333,
+          "strength": 0.6616
+        },
+        {
+          "pitch": 67,
+          "start": 2.4,
+          "end": 3.1098958333333333,
+          "strength": 0.9479
+        },
+        {
+          "pitch": 74,
+          "start": 2.4,
+          "end": 2.8401041666666664,
+          "strength": 0.7433
+        },
+        {
+          "pitch": 72,
+          "start": 3.0,
+          "end": 3.5302083333333334,
+          "strength": 0.8066
+        },
+        {
+          "pitch": 54,
+          "start": 3.3,
+          "end": 3.6401041666666667,
+          "strength": 0.5887
+        },
+        {
+          "pitch": 62,
+          "start": 3.3,
+          "end": 4.059895833333333,
+          "strength": 0.8926
+        },
+        {
+          "pitch": 69,
+          "start": 3.3,
+          "end": 3.5697916666666667,
+          "strength": 0.8907
+        },
+        {
+          "pitch": 55,
+          "start": 3.6,
+          "end": 4.219791666666667,
+          "strength": 0.6105
+        },
+        {
+          "pitch": 67,
+          "start": 3.6,
+          "end": 4.069791666666666,
+          "strength": 0.7548
+        },
+        {
+          "pitch": 71,
+          "start": 3.6,
+          "end": 4.109895833333333,
+          "strength": 0.8167
+        },
+        {
+          "pitch": 50,
+          "start": 4.2,
+          "end": 4.809895833333333,
+          "strength": 0.4146
+        },
+        {
+          "pitch": 66,
+          "start": 4.2,
+          "end": 4.759895833333333,
+          "strength": 0.9858
+        },
+        {
+          "pitch": 69,
+          "start": 4.2,
+          "end": 4.690104166666667,
+          "strength": 0.7345
+        },
+        {
+          "pitch": 59,
+          "start": 4.8,
+          "end": 5.375,
+          "strength": 0.7934
+        },
+        {
+          "pitch": 62,
+          "start": 4.8,
+          "end": 5.375,
+          "strength": 1.0
+        },
+        {
+          "pitch": 67,
+          "start": 4.8,
+          "end": 5.375,
+          "strength": 0.9087
+        },
+        {
+          "pitch": 74,
+          "start": 4.8,
+          "end": 5.140104166666666,
+          "strength": 0.4726
+        },
+        {
+          "pitch": 59,
+          "start": 5.4,
+          "end": 5.969791666666667,
+          "strength": 0.7951
+        },
+        {
+          "pitch": 62,
+          "start": 5.4,
+          "end": 6.575,
+          "strength": 1.0
+        },
+        {
+          "pitch": 67,
+          "start": 5.4,
+          "end": 5.909895833333334,
+          "strength": 0.9094
+        },
+        {
+          "pitch": 74,
+          "start": 5.4,
+          "end": 5.740104166666667,
+          "strength": 0.4723
+        },
+        {
+          "pitch": 57,
+          "start": 6.0,
+          "end": 6.580208333333333,
+          "strength": 0.7173
+        },
+        {
+          "pitch": 66,
+          "start": 6.0,
+          "end": 6.55,
+          "strength": 0.9877
+        },
+        {
+          "pitch": 69,
+          "start": 6.0,
+          "end": 6.430208333333333,
+          "strength": 0.533
+        },
+        {
+          "pitch": 55,
+          "start": 6.6,
+          "end": 7.219791666666667,
+          "strength": 0.6099
+        },
+        {
+          "pitch": 62,
+          "start": 6.6,
+          "end": 7.25,
+          "strength": 0.8274
+        },
+        {
+          "pitch": 67,
+          "start": 6.6,
+          "end": 7.040104166666667,
+          "strength": 0.7661
+        },
+        {
+          "pitch": 71,
+          "start": 6.6,
+          "end": 7.175,
+          "strength": 0.815
+        },
+        {
+          "pitch": 50,
+          "start": 7.2,
+          "end": 8.075,
+          "strength": 0.4189
+        },
+        {
+          "pitch": 67,
+          "start": 7.2,
+          "end": 7.919791666666667,
+          "strength": 0.9382
+        },
+        {
+          "pitch": 71,
+          "start": 7.2,
+          "end": 7.930208333333333,
+          "strength": 0.81
+        },
+        {
+          "pitch": 50,
+          "start": 8.1,
+          "end": 9.459895833333333,
+          "strength": 0.4143
+        },
+        {
+          "pitch": 66,
+          "start": 8.1,
+          "end": 9.290104166666666,
+          "strength": 0.9865
+        },
+        {
+          "pitch": 69,
+          "start": 8.1,
+          "end": 8.375,
+          "strength": 0.7334
+        },
+        {
+          "pitch": 69,
+          "start": 8.4,
+          "end": 9.219791666666666,
+          "strength": 0.7368
+        },
+        {
+          "pitch": 55,
+          "start": 9.6,
+          "end": 10.175,
+          "strength": 0.6102
+        },
+        {
+          "pitch": 62,
+          "start": 9.6,
+          "end": 10.175,
+          "strength": 0.8277
+        },
+        {
+          "pitch": 67,
+          "start": 9.6,
+          "end": 10.040104166666666,
+          "strength": 0.7537
+        },
+        {
+          "pitch": 71,
+          "start": 9.6,
+          "end": 10.175,
+          "strength": 0.8136
+        },
+        {
+          "pitch": 55,
+          "start": 10.2,
+          "end": 10.775,
+          "strength": 0.6094
+        },
+        {
+          "pitch": 62,
+          "start": 10.2,
+          "end": 10.659895833333334,
+          "strength": 0.8288
+        },
+        {
+          "pitch": 67,
+          "start": 10.2,
+          "end": 10.630208333333334,
+          "strength": 0.754
+        },
+        {
+          "pitch": 71,
+          "start": 10.2,
+          "end": 10.75,
+          "strength": 0.8124
+        },
+        {
+          "pitch": 55,
+          "start": 10.8,
+          "end": 11.375,
+          "strength": 0.6084
+        },
+        {
+          "pitch": 60,
+          "start": 10.8,
+          "end": 11.359895833333333,
+          "strength": 0.8128
+        },
+        {
+          "pitch": 69,
+          "start": 10.8,
+          "end": 11.309895833333334,
+          "strength": 0.8811
+        },
+        {
+          "pitch": 72,
+          "start": 10.8,
+          "end": 11.290104166666666,
+          "strength": 0.7785
+        },
+        {
+          "pitch": 55,
+          "start": 11.4,
+          "end": 12.009895833333333,
+          "strength": 0.6179
+        },
+        {
+          "pitch": 59,
+          "start": 11.4,
+          "end": 12.009895833333333,
+          "strength": 0.7907
+        },
+        {
+          "pitch": 67,
+          "start": 11.4,
+          "end": 11.85,
+          "strength": 0.8641
+        },
+        {
+          "pitch": 74,
+          "start": 11.4,
+          "end": 11.975,
+          "strength": 0.8158
+        },
+        {
+          "pitch": 52,
+          "start": 12.0,
+          "end": 12.909895833333334,
+          "strength": 0.4837
+        },
+        {
+          "pitch": 64,
+          "start": 12.0,
+          "end": 12.459895833333333,
+          "strength": 0.6616
+        },
+        {
+          "pitch": 67,
+          "start": 12.0,
+          "end": 12.709895833333333,
+          "strength": 0.9479
+        },
+        {
+          "pitch": 74,
+          "start": 12.0,
+          "end": 12.440104166666666,
+          "strength": 0.7433
+        },
+        {
+          "pitch": 72,
+          "start": 12.6,
+          "end": 13.130208333333334,
+          "strength": 0.8066
+        },
+        {
+          "pitch": 54,
+          "start": 12.9,
+          "end": 13.240104166666667,
+          "strength": 0.5887
+        },
+        {
+          "pitch": 62,
+          "start": 12.9,
+          "end": 13.659895833333334,
+          "strength": 0.8926
+        },
+        {
+          "pitch": 69,
+          "start": 12.9,
+          "end": 13.169791666666667,
+          "strength": 0.8907
+        },
+        {
+          "pitch": 55,
+          "start": 13.2,
+          "end": 13.819791666666667,
+          "strength": 0.6105
+        },
+        {
+          "pitch": 67,
+          "start": 13.2,
+          "end": 13.669791666666667,
+          "strength": 0.7548
+        },
+        {
+          "pitch": 71,
+          "start": 13.2,
+          "end": 13.709895833333333,
+          "strength": 0.8167
+        },
+        {
+          "pitch": 50,
+          "start": 13.799999999999999,
+          "end": 14.409895833333334,
+          "strength": 0.4146
+        },
+        {
+          "pitch": 66,
+          "start": 13.799999999999999,
+          "end": 14.359895833333333,
+          "strength": 0.9858
+        },
+        {
+          "pitch": 69,
+          "start": 13.799999999999999,
+          "end": 14.290104166666666,
+          "strength": 0.7345
+        },
+        {
+          "pitch": 59,
+          "start": 14.4,
+          "end": 14.975,
+          "strength": 0.7934
+        },
+        {
+          "pitch": 62,
+          "start": 14.4,
+          "end": 14.975,
+          "strength": 1.0
+        },
+        {
+          "pitch": 67,
+          "start": 14.4,
+          "end": 14.975,
+          "strength": 0.9087
+        },
+        {
+          "pitch": 74,
+          "start": 14.4,
+          "end": 14.740104166666667,
+          "strength": 0.4726
+        },
+        {
+          "pitch": 59,
+          "start": 15.0,
+          "end": 15.569791666666667,
+          "strength": 0.7951
+        },
+        {
+          "pitch": 62,
+          "start": 15.0,
+          "end": 16.175,
+          "strength": 1.0
+        },
+        {
+          "pitch": 67,
+          "start": 15.0,
+          "end": 15.509895833333333,
+          "strength": 0.9094
+        },
+        {
+          "pitch": 74,
+          "start": 15.0,
+          "end": 15.340104166666666,
+          "strength": 0.4723
+        },
+        {
+          "pitch": 57,
+          "start": 15.6,
+          "end": 16.180208333333333,
+          "strength": 0.7173
+        },
+        {
+          "pitch": 66,
+          "start": 15.6,
+          "end": 16.15,
+          "strength": 0.9877
+        },
+        {
+          "pitch": 69,
+          "start": 15.6,
+          "end": 16.030208333333334,
+          "strength": 0.4992
+        },
+        {
+          "pitch": 55,
+          "start": 16.2,
+          "end": 16.8,
+          "strength": 0.6102
+        },
+        {
+          "pitch": 62,
+          "start": 16.2,
+          "end": 16.659895833333334,
+          "strength": 0.8278
+        },
+        {
+          "pitch": 67,
+          "start": 16.2,
+          "end": 16.775,
+          "strength": 0.7544
+        },
+        {
+          "pitch": 71,
+          "start": 16.2,
+          "end": 16.709895833333334,
+          "strength": 0.8153
+        },
+        {
+          "pitch": 50,
+          "start": 16.8,
+          "end": 17.375,
+          "strength": 0.4162
+        },
+        {
+          "pitch": 67,
+          "start": 16.8,
+          "end": 17.33020833333333,
+          "strength": 0.9712
+        },
+        {
+          "pitch": 69,
+          "start": 16.8,
+          "end": 17.290104166666666,
+          "strength": 0.7856
+        },
+        {
+          "pitch": 50,
+          "start": 17.4,
+          "end": 18.0,
+          "strength": 0.4252
+        },
+        {
+          "pitch": 66,
+          "start": 17.4,
+          "end": 17.940104166666668,
+          "strength": 0.9878
+        },
+        {
+          "pitch": 67,
+          "start": 17.7,
+          "end": 18.569791666666667,
+          "strength": 0.9653
+        },
+        {
+          "pitch": 43,
+          "start": 18.0,
+          "end": 19.169791666666665,
+          "strength": 0.358
+        },
+        {
+          "pitch": 59,
+          "start": 18.0,
+          "end": 19.030208333333334,
+          "strength": 0.8056
+        },
+        {
+          "pitch": 62,
+          "start": 18.0,
+          "end": 18.980208333333334,
+          "strength": 0.8075
+        },
+        {
+          "pitch": 50,
+          "start": 19.2,
+          "end": 19.775,
+          "strength": 0.4335
+        },
+        {
+          "pitch": 54,
+          "start": 19.2,
+          "end": 19.775,
+          "strength": 0.5822
+        },
+        {
+          "pitch": 62,
+          "start": 19.2,
+          "end": 19.775,
+          "strength": 0.4838
+        },
+        {
+          "pitch": 69,
+          "start": 19.2,
+          "end": 19.775,
+          "strength": 0.769
+        },
+        {
+          "pitch": 50,
+          "start": 19.8,
+          "end": 20.375,
+          "strength": 0.4504
+        },
+        {
+          "pitch": 54,
+          "start": 19.8,
+          "end": 20.409895833333334,
+          "strength": 0.5921
+        },
+        {
+          "pitch": 62,
+          "start": 19.8,
+          "end": 20.375,
+          "strength": 0.4914
+        },
+        {
+          "pitch": 69,
+          "start": 19.8,
+          "end": 20.280208333333334,
+          "strength": 0.776
+        },
+        {
+          "pitch": 50,
+          "start": 20.4,
+          "end": 20.975,
+          "strength": 0.428
+        },
+        {
+          "pitch": 55,
+          "start": 20.4,
+          "end": 21.00989583333333,
+          "strength": 0.6054
+        },
+        {
+          "pitch": 62,
+          "start": 20.4,
+          "end": 20.975,
+          "strength": 0.6366
+        },
+        {
+          "pitch": 71,
+          "start": 20.4,
+          "end": 20.890104166666667,
+          "strength": 0.8394
+        },
+        {
+          "pitch": 50,
+          "start": 21.0,
+          "end": 21.575,
+          "strength": 0.438
+        },
+        {
+          "pitch": 52,
+          "start": 21.0,
+          "end": 21.609895833333333,
+          "strength": 0.4866
+        },
+        {
+          "pitch": 62,
+          "start": 21.0,
+          "end": 21.575,
+          "strength": 0.6764
+        },
+        {
+          "pitch": 67,
+          "start": 21.0,
+          "end": 21.50989583333333,
+          "strength": 0.954
+        },
+        {
+          "pitch": 50,
+          "start": 21.6,
+          "end": 22.175,
+          "strength": 0.4485
+        },
+        {
+          "pitch": 54,
+          "start": 21.6,
+          "end": 22.209895833333334,
+          "strength": 0.582
+        },
+        {
+          "pitch": 62,
+          "start": 21.6,
+          "end": 22.175,
+          "strength": 0.4919
+        },
+        {
+          "pitch": 69,
+          "start": 21.6,
+          "end": 22.08020833333333,
+          "strength": 0.7683
+        },
+        {
+          "pitch": 50,
+          "start": 22.2,
+          "end": 22.775,
+          "strength": 0.428
+        },
+        {
+          "pitch": 55,
+          "start": 22.2,
+          "end": 22.519791666666666,
+          "strength": 0.6062
+        },
+        {
+          "pitch": 62,
+          "start": 22.2,
+          "end": 22.775,
+          "strength": 0.6366
+        },
+        {
+          "pitch": 71,
+          "start": 22.2,
+          "end": 22.519791666666666,
+          "strength": 0.8394
+        },
+        {
+          "pitch": 57,
+          "start": 22.5,
+          "end": 22.83020833333333,
+          "strength": 0.7412
+        },
+        {
+          "pitch": 72,
+          "start": 22.5,
+          "end": 22.819791666666667,
+          "strength": 0.8042
+        },
+        {
+          "pitch": 50,
+          "start": 22.8,
+          "end": 23.375,
+          "strength": 0.4264
+        },
+        {
+          "pitch": 55,
+          "start": 22.8,
+          "end": 23.409895833333334,
+          "strength": 0.6053
+        },
+        {
+          "pitch": 62,
+          "start": 22.8,
+          "end": 23.375,
+          "strength": 0.6933
+        },
+        {
+          "pitch": 71,
+          "start": 22.8,
+          "end": 23.290104166666666,
+          "strength": 0.841
+        },
+        {
+          "pitch": 50,
+          "start": 23.4,
+          "end": 23.975,
+          "strength": 0.4387
+        },
+        {
+          "pitch": 52,
+          "start": 23.4,
+          "end": 24.00989583333333,
+          "strength": 0.4868
+        },
+        {
+          "pitch": 62,
+          "start": 23.4,
+          "end": 23.975,
+          "strength": 0.6774
+        },
+        {
+          "pitch": 67,
+          "start": 23.4,
+          "end": 23.909895833333334,
+          "strength": 0.9541
+        },
+        {
+          "pitch": 50,
+          "start": 24.0,
+          "end": 24.575,
+          "strength": 0.4476
+        },
+        {
+          "pitch": 54,
+          "start": 24.0,
+          "end": 24.575,
+          "strength": 0.582
+        },
+        {
+          "pitch": 62,
+          "start": 24.0,
+          "end": 24.575,
+          "strength": 0.5115
+        },
+        {
+          "pitch": 69,
+          "start": 24.0,
+          "end": 24.490104166666665,
+          "strength": 0.7675
+        },
+        {
+          "pitch": 50,
+          "start": 24.6,
+          "end": 25.230208333333334,
+          "strength": 0.4419
+        },
+        {
+          "pitch": 54,
+          "start": 24.6,
+          "end": 25.175,
+          "strength": 0.6018
+        },
+        {
+          "pitch": 62,
+          "start": 24.6,
+          "end": 25.109895833333333,
+          "strength": 0.6029
+        },
+        {
+          "pitch": 71,
+          "start": 24.6,
+          "end": 24.930208333333333,
+          "strength": 0.8154
+        },
+        {
+          "pitch": 72,
+          "start": 24.9,
+          "end": 25.219791666666666,
+          "strength": 0.8071
+        },
+        {
+          "pitch": 51,
+          "start": 25.2,
+          "end": 25.775,
+          "strength": 0.4365
+        },
+        {
+          "pitch": 54,
+          "start": 25.2,
+          "end": 25.8,
+          "strength": 0.6102
+        },
+        {
+          "pitch": 66,
+          "start": 25.2,
+          "end": 25.775,
+          "strength": 1.0
+        },
+        {
+          "pitch": 71,
+          "start": 25.2,
+          "end": 25.690104166666668,
+          "strength": 0.8057
+        },
+        {
+          "pitch": 51,
+          "start": 25.8,
+          "end": 26.419791666666665,
+          "strength": 0.4389
+        },
+        {
+          "pitch": 59,
+          "start": 25.8,
+          "end": 26.375,
+          "strength": 0.8134
+        },
+        {
+          "pitch": 66,
+          "start": 25.8,
+          "end": 26.369791666666668,
+          "strength": 1.0
+        },
+        {
+          "pitch": 69,
+          "start": 25.8,
+          "end": 26.3,
+          "strength": 0.9046
+        },
+        {
+          "pitch": 52,
+          "start": 26.4,
+          "end": 27.0,
+          "strength": 0.4958
+        },
+        {
+          "pitch": 59,
+          "start": 26.4,
+          "end": 27.00989583333333,
+          "strength": 0.821
+        },
+        {
+          "pitch": 64,
+          "start": 26.4,
+          "end": 26.930208333333333,
+          "strength": 0.9595
+        },
+        {
+          "pitch": 67,
+          "start": 26.4,
+          "end": 26.940104166666668,
+          "strength": 0.8909
+        },
+        {
+          "pitch": 45,
+          "start": 27.0,
+          "end": 27.590104166666666,
+          "strength": 0.3496
+        },
+        {
+          "pitch": 57,
+          "start": 27.0,
+          "end": 27.640104166666667,
+          "strength": 0.6102
+        },
+        {
+          "pitch": 61,
+          "start": 27.0,
+          "end": 27.630208333333332,
+          "strength": 0.9992
+        },
+        {
+          "pitch": 50,
+          "start": 27.597395833333334,
+          "end": 28.809895833333332,
+          "strength": 0.4259
+        },
+        {
+          "pitch": 55,
+          "start": 27.597395833333334,
+          "end": 28.219791666666666,
+          "strength": 0.6042
+        },
+        {
+          "pitch": 62,
+          "start": 27.597395833333334,
+          "end": 28.169791666666665,
+          "strength": 0.7585
+        },
+        {
+          "pitch": 54,
+          "start": 28.2,
+          "end": 28.819791666666667,
+          "strength": 0.6035
+        },
+        {
+          "pitch": 55,
+          "start": 28.8,
+          "end": 29.375,
+          "strength": 0.6084
+        },
+        {
+          "pitch": 62,
+          "start": 28.8,
+          "end": 29.849999999999998,
+          "strength": 1.0
+        },
+        {
+          "pitch": 71,
+          "start": 28.8,
+          "end": 29.375,
+          "strength": 0.839
+        },
+        {
+          "pitch": 55,
+          "start": 29.4,
+          "end": 30.00989583333333,
+          "strength": 0.6095
+        },
+        {
+          "pitch": 67,
+          "start": 29.4,
+          "end": 29.869791666666668,
+          "strength": 0.7539
+        },
+        {
+          "pitch": 71,
+          "start": 29.4,
+          "end": 29.930208333333333,
+          "strength": 0.8125
+        },
+        {
+          "pitch": 53,
+          "start": 30.0,
+          "end": 30.575,
+          "strength": 0.514
+        },
+        {
+          "pitch": 65,
+          "start": 30.0,
+          "end": 30.380208333333332,
+          "strength": 0.4847
+        },
+        {
+          "pitch": 69,
+          "start": 30.0,
+          "end": 30.575,
+          "strength": 0.8625
+        },
+        {
+          "pitch": 72,
+          "start": 30.0,
+          "end": 30.490104166666665,
+          "strength": 0.6712
+        },
+        {
+          "pitch": 53,
+          "start": 30.599999999999998,
+          "end": 31.209895833333334,
+          "strength": 0.504
+        },
+        {
+          "pitch": 65,
+          "start": 30.599999999999998,
+          "end": 31.290104166666666,
+          "strength": 0.5138
+        },
+        {
+          "pitch": 69,
+          "start": 30.599999999999998,
+          "end": 31.109895833333333,
+          "strength": 0.8902
+        },
+        {
+          "pitch": 74,
+          "start": 30.599999999999998,
+          "end": 31.175,
+          "strength": 0.7622
+        },
+        {
+          "pitch": 52,
+          "start": 31.2,
+          "end": 32.119791666666664,
+          "strength": 0.4569
+        },
+        {
+          "pitch": 67,
+          "start": 31.2,
+          "end": 31.775,
+          "strength": 0.7948
+        },
+        {
+          "pitch": 71,
+          "start": 31.2,
+          "end": 31.740104166666665,
+          "strength": 0.7859
+        },
+        {
+          "pitch": 74,
+          "start": 31.2,
+          "end": 31.640104166666667,
+          "strength": 0.7647
+        },
+        {
+          "pitch": 67,
+          "start": 31.8,
+          "end": 32.09010416666666,
+          "strength": 0.9976
+        },
+        {
+          "pitch": 72,
+          "start": 31.8,
+          "end": 32.33020833333333,
+          "strength": 0.8076
+        },
+        {
+          "pitch": 54,
+          "start": 32.1,
+          "end": 32.440104166666664,
+          "strength": 0.5886
+        },
+        {
+          "pitch": 62,
+          "start": 32.1,
+          "end": 32.880208333333336,
+          "strength": 0.8861
+        },
+        {
+          "pitch": 69,
+          "start": 32.1,
+          "end": 32.369791666666664,
+          "strength": 0.8898
+        },
+        {
+          "pitch": 55,
+          "start": 32.4,
+          "end": 32.95,
+          "strength": 0.6103
+        },
+        {
+          "pitch": 67,
+          "start": 32.4,
+          "end": 32.83020833333333,
+          "strength": 0.7666
+        },
+        {
+          "pitch": 71,
+          "start": 32.4,
+          "end": 32.91979166666667,
+          "strength": 0.8162
+        },
+        {
+          "pitch": 48,
+          "start": 33.0,
+          "end": 33.575,
+          "strength": 0.3653
+        },
+        {
+          "pitch": 60,
+          "start": 33.0,
+          "end": 33.55,
+          "strength": 0.7659
+        },
+        {
+          "pitch": 64,
+          "start": 33.0,
+          "end": 33.575,
+          "strength": 1.0
+        },
+        {
+          "pitch": 69,
+          "start": 33.0,
+          "end": 33.50989583333333,
+          "strength": 0.8921
+        },
+        {
+          "pitch": 48,
+          "start": 33.6,
+          "end": 34.219791666666666,
+          "strength": 0.3406
+        },
+        {
+          "pitch": 55,
+          "start": 33.6,
+          "end": 34.175,
+          "strength": 0.6223
+        },
+        {
+          "pitch": 64,
+          "start": 33.6,
+          "end": 34.209895833333334,
+          "strength": 0.9996
+        },
+        {
+          "pitch": 67,
+          "start": 33.6,
+          "end": 34.01979166666666,
+          "strength": 0.6082
+        },
+        {
+          "pitch": 47,
+          "start": 34.2,
+          "end": 34.81979166666667,
+          "strength": 0.3886
+        },
+        {
+          "pitch": 55,
+          "start": 34.2,
+          "end": 34.790104166666666,
+          "strength": 0.6285
+        },
+        {
+          "pitch": 62,
+          "start": 34.2,
+          "end": 34.719791666666666,
+          "strength": 1.0
+        },
+        {
+          "pitch": 67,
+          "start": 34.2,
+          "end": 34.690104166666664,
+          "strength": 0.8572
+        },
+        {
+          "pitch": 45,
+          "start": 34.8,
+          "end": 35.39010416666667,
+          "strength": 0.3471
+        },
+        {
+          "pitch": 60,
+          "start": 34.8,
+          "end": 35.369791666666664,
+          "strength": 0.856
+        },
+        {
+          "pitch": 66,
+          "start": 34.8,
+          "end": 35.34010416666666,
+          "strength": 0.9917
+        },
+        {
+          "pitch": 43,
+          "start": 35.4,
+          "end": 36.0,
+          "strength": 0.3567
+        },
+        {
+          "pitch": 55,
+          "start": 35.4,
+          "end": 35.58020833333333,
+          "strength": 0.2714
+        },
+        {
+          "pitch": 62,
+          "start": 35.4,
+          "end": 35.83020833333333,
+          "strength": 0.6204
+        },
+        {
+          "pitch": 67,
+          "start": 35.4,
+          "end": 35.975,
+          "strength": 0.4683
+        },
+        {
+          "pitch": 71,
+          "start": 35.4,
+          "end": 35.93020833333333,
+          "strength": 0.6573
+        },
+        {
+          "pitch": 50,
+          "start": 36.0,
+          "end": 36.575,
+          "strength": 0.4155
+        },
+        {
+          "pitch": 67,
+          "start": 36.0,
+          "end": 36.530208333333334,
+          "strength": 0.9713
+        },
+        {
+          "pitch": 69,
+          "start": 36.0,
+          "end": 36.49010416666667,
+          "strength": 0.7842
+        },
+        {
+          "pitch": 50,
+          "start": 36.6,
+          "end": 37.16979166666667,
+          "strength": 0.4246
+        },
+        {
+          "pitch": 66,
+          "start": 36.6,
+          "end": 37.15989583333333,
+          "strength": 0.9878
+        },
+        {
+          "pitch": 67,
+          "start": 36.9,
+          "end": 37.75,
+          "strength": 0.9653
+        },
+        {
+          "pitch": 43,
+          "start": 37.2,
+          "end": 38.34010416666666,
+          "strength": 0.3622
+        },
+        {
+          "pitch": 59,
+          "start": 37.2,
+          "end": 38.280208333333334,
+          "strength": 0.8162
+        }
+      ],
+      "scores": {
+        "onset_50ms": {
+          "matches": 217,
+          "false_positives": 5,
+          "false_negatives": 21,
+          "precision": 0.9774774774774775,
+          "recall": 0.9117647058823529,
+          "f1": 0.9434782608695653
+        },
+        "onset_100ms": {
+          "matches": 217,
+          "false_positives": 5,
+          "false_negatives": 21,
+          "precision": 0.9774774774774775,
+          "recall": 0.9117647058823529,
+          "f1": 0.9434782608695653
+        },
+        "onset_offset": {
+          "matches": 175,
+          "false_positives": 47,
+          "false_negatives": 63,
+          "precision": 0.7882882882882883,
+          "recall": 0.7352941176470589,
+          "f1": 0.7608695652173912
+        }
+      },
+      "existing_track_content_preserved": true,
+      "source_audio_sha256": "049e881f2939744ad9643c69d1d20cdb790b95654ac716080678d820b2e81410",
+      "programs": [
+        {
+          "path": "Cover\\refine.py",
+          "sha256": "12b6adb2a248da42611047f29209087a979ba482bdc54edebe0bbb31afc68a80",
+          "source_utf8": "\"\"\"Waveform-onset alignment and harmonic-duplicate rejection for NNLS results.\"\"\"\nimport hashlib,json\nfrom pathlib import Path\nimport numpy as np\nimport soundfile as sf\nfrom scipy import signal,ndimage\nz=np.load('analysis.npz');pitches=z['pitches'];t=z['times'];a=z['activation'];fund=z['fund']\ny,sr=sf.read(r'C:\\Users\\uthree\\AppData\\Local\\Temp\\auris-analysis-5PH1Pp.wav');x=y.mean(axis=1)\nf,tt,spec=signal.stft(x,sr,nperseg=1024,noverlap=904)\nflux=ndimage.gaussian_filter1d(np.maximum(np.diff(abs(spec),axis=1),0).sum(axis=0),1)\nix,_=signal.find_peaks(flux,height=.018,prominence=.014,distance=60)\nonsets=np.r_[0,tt[ix]+.0025]\nevents=[]\nfor onset in onsets:\n    after=(t>=onset+.04)&(t<onset+.20)\n    before=(t>=onset-.14)&(t<onset-.04)\n    peak=np.quantile(a[:,after],.80,axis=1)\n    raw=np.quantile(fund[:,after],.65,axis=1)\n    prev=np.median(fund[:,before],axis=1) if before.any() else np.zeros(len(pitches))\n    accepted=[]\n    for k,p in enumerate(pitches):\n        cutoff=.0015 if p<59 else .0045\n        if peak[k]<cutoff or raw[k]<(.00085 if p<59 else .0015):continue\n        if onset>0 and raw[k]<prev[k]*1.23:continue\n        if onset>0 and raw[k]-prev[k]<(.0005 if p<59 else .0012):continue\n        accepted.append(k)\n    # High candidates coincident with stronger octave parents are harmonics,\n    # unless they have unusually strong independent fundamental support.\n    for k in accepted:\n        p=int(pitches[k])\n        if p>=75:\n            lower=np.where(pitches==p-12)[0]\n            if len(lower) and lower[0] in accepted and raw[k]<1.2*raw[lower[0]]:continue\n        env=a[k]\n        start_idx=np.searchsorted(t,onset+.12)\n        threshold=max(.00065,.16*peak[k])\n        end_idx=start_idx\n        while end_idx<len(t)-1:\n            if np.max(env[end_idx:min(end_idx+7,len(t))])<threshold:break\n            if t[end_idx]-onset>4.0:break\n            end_idx+=1\n        end=min(38.4,float(t[end_idx]-.06))\n        if end<onset+.18:end=onset+.18\n        events.append(dict(pitch=p,start=round(float(onset),4),end=round(end,4),strength=float(peak[k])))\n# Resolve same-pitch repeats without removing overlaps between different pitches.\nfor p in pitches:\n    ns=[n for n in events if n['pitch']==p]\n    for n,nxt in zip(ns,ns[1:]):n['end']=min(n['end'],round(nxt['start']-.025,4))\n# Retain source-measured relative dynamics.\nscale=np.quantile([n['strength'] for n in events],.96)\nfor n in events:n['strength']=round(float(np.clip((n['strength']/scale)**.5,.20,1)),4)\nbase=json.loads(Path('transcription.json').read_text(encoding='utf-8'))\nbase['notes']=events\nbase['source']['method']='codex.multienvelope-nnls-waveform-onsets-v3'\nbase['source']['artifact_sha256']=hashlib.sha256(Path('transcribe.py').read_bytes()+Path(__file__).read_bytes()).hexdigest()\nbase['limitations']='Deterministic source-waveform DSP; no Basic Pitch or trained model. Multi-envelope harmonic nonnegative spectral fitting, measured spectral-flux onset alignment, high-octave duplicate rejection. All accepted simultaneous pitches retained. Strengths are measured relative spectral levels, not original MIDI velocity. Weak/masked notes and octave/unison allocation remain uncertain. High-octave rejection may omit quiet octave doublings. Releases estimated from envelopes; no pedal reconstruction or manual listening.'\nPath('transcription.json').write_text(json.dumps(base,ensure_ascii=False,indent=2),encoding='utf-8')\nprint('notes',len(events),'range',min(n['pitch']for n in events),max(n['pitch']for n in events))\nfor n in events: print(n)\r\n"
+        },
+        {
+          "path": "Cover\\transcribe.py",
+          "sha256": "0591e1ae47e74f2482086a044b1e813a2521acf040284efca7a3d4c2675a2ec1",
+          "source_utf8": "\"\"\"Deterministic source-only harmonic spectral factorization for piano transcription.\"\"\"\r\nimport hashlib\r\nimport json\r\nfrom pathlib import Path\r\nimport numpy as np\r\nimport soundfile as sf\r\nfrom scipy import signal, ndimage\r\n\r\nSOURCE = Path(r'C:\\Users\\uthree\\AppData\\Local\\Temp\\auris-analysis-5PH1Pp.wav')\r\ny, sr = sf.read(SOURCE)\r\nx = y.mean(axis=1) if y.ndim == 2 else y\r\nx = signal.resample_poly(x, 1, 2)\r\nsr //= 2\r\nnfft, hop = 8192, 240\r\nfreq, times, spec = signal.stft(x, sr, nperseg=nfft, noverlap=nfft-hop)\r\nv = np.abs(spec).astype(np.float64)\r\nuse = freq < 6500\r\nfreq, v = freq[use], v[use]\r\npitches = np.arange(43, 85)\r\nf0 = 440 * 2.0 ** ((pitches - 69) / 12)\r\nfund = []\r\nfor hz in f0:\r\n    ix = np.abs(freq-hz) < max(3.6, hz*.008)\r\n    fund.append(v[ix].max(axis=0))\r\nfund = np.array(fund)\r\nd = np.zeros((len(freq), len(pitches)*3))\r\nfor k, hz in enumerate(f0):\r\n    if ndimage.median_filter(fund[k], size=9).max() < .002:\r\n        continue\r\n    active = fund[k] > .45 * fund[k].max()\r\n    # A lower-envelope template discounts additional simultaneously sounding notes.\r\n    template = np.quantile(v[:, active] / (fund[k, active][None, :]+1e-10), .08, axis=1)\r\n    mask = np.zeros(len(freq), dtype=bool)\r\n    for h in range(1, 13):\r\n        ideal = hz*h\r\n        if ideal > freq[-1]: break\r\n        mask |= (freq > ideal-4.5) & (freq < ideal*(1+.0008*h*h)+5)\r\n    for c, q in enumerate([.08, .40, .75]):\r\n        d[:, k*3+c] = np.quantile(v[:, active] / (fund[k, active][None, :]+1e-10), q, axis=1)*mask\r\n# Spectral whitening gives quieter fundamentals a useful role without fitting noise.\r\nweight = 1 / np.maximum(np.mean(v, axis=1), .00018)**.55\r\ndw, vw = d*weight[:, None], v*weight[:, None]\r\nnorm = np.linalg.norm(dw, axis=0)\r\ndw /= np.maximum(norm, 1e-9)\r\ngram, proj = dw.T @ dw, dw.T @ vw\r\nh = np.maximum(proj, 1e-9)\r\nfor _ in range(220):\r\n    h *= np.maximum(proj-.00020, 0) / np.maximum(gram @ h, 1e-10)\r\na = (h / np.maximum(norm[:, None], 1e-9)).reshape(len(pitches),3,-1).sum(axis=1)\r\na = ndimage.median_filter(a, size=(1, 3))\r\nnotes=[]\r\nfor k,p in enumerate(pitches):\r\n    env=a[k]\r\n    # A pitch must have measurable fundamental energy, not only upper partials.\r\n    threshold=max(.0014, .105*env.max())\r\n    on=(env>threshold) & (fund[k] > max(.0009, .10*fund[k].max()))\r\n    on=ndimage.binary_closing(on,iterations=2)\r\n    bounds=np.flatnonzero(np.diff(np.r_[False,on,False])).reshape(-1,2)\r\n    for s,e in bounds:\r\n        if e-s<10:continue\r\n        # Positive envelope rises recover repeated strikes of the same pitch.\r\n        diff=np.maximum(env[3:]-env[:-3],0)\r\n        peaks,_=signal.find_peaks(diff, height=max(.0014,.18*env[s:e].max()),distance=13,prominence=.001)\r\n        cuts=[s]+[int(q+1) for q in peaks if s+10<q<e-10]+[e]\r\n        for l,r in zip(cuts[:-1],cuts[1:]):\r\n            if r-l<9:continue\r\n            peak=float(env[l:r].max())\r\n            if peak<.0022:continue\r\n            # STFT crossing compensates the analysis window; gate is approximate.\r\n            start=max(0,float(times[l]-.025))\r\n            end=min(len(y)/(sr*2),float(times[r]-.035))\r\n            if end-start<.09:continue\r\n            notes.append(dict(pitch=int(p),start=round(start,4),end=round(end,4),strength=peak))\r\nnotes.sort(key=lambda n:(n['start'],n['pitch']))\r\nlevel=np.quantile([n['strength'] for n in notes],.96)\r\nfor n in notes:n['strength']=round(float(np.clip((n['strength']/level)**.5,.22,1)),4)\r\nresult=dict(source=dict(method='codex.source-multienvelope-harmonic-nnls-v2',artifact_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),audio_sha256=hashlib.sha256(SOURCE.read_bytes()).hexdigest()),seconds=len(y)/(sr*2),notes=notes,limitations='Deterministic DSP, not Basic Pitch and no trained model. Harmonic lower-envelope dictionary and nonnegative spectral fitting derived only from original waveform. Overlapping detected pitches retained. Relative strengths are measured spectral envelopes, not recovered MIDI velocities. Weak notes, octave/unison allocation, rapid repeats and release times are uncertain; no pedal or exact articulation recovery; no manual listening.')\r\nPath('transcription.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')\r\nnp.savez('analysis.npz',pitches=pitches,times=times,activation=a,fund=fund)\r\nprint('notes',len(notes),'pitches',sorted(set(n['pitch'] for n in notes)))\r\nfor n in notes:\r\n    if n['start']<4.8:print(n)\r\n"
+        }
+      ],
+      "draft": {
+        "source": {
+          "method": "codex.multienvelope-nnls-waveform-onsets-v3",
+          "artifact_sha256": "29dbab4f7857dbe436f5c7d0315e6fac5e9480fe3495e23c0fb6892f9e7b9aaa",
+          "audio_sha256": "049e881f2939744ad9643c69d1d20cdb790b95654ac716080678d820b2e81410"
+        },
+        "seconds": 38.4,
+        "notes": [
+          {
+            "pitch": 55,
+            "start": 0.0,
+            "end": 0.575,
+            "strength": 0.6099
+          },
+          {
+            "pitch": 62,
+            "start": 0.0,
+            "end": 0.575,
+            "strength": 0.8282
+          },
+          {
+            "pitch": 67,
+            "start": 0.0,
+            "end": 0.44,
+            "strength": 0.7658
+          },
+          {
+            "pitch": 71,
+            "start": 0.0,
+            "end": 0.575,
+            "strength": 0.8135
+          },
+          {
+            "pitch": 55,
+            "start": 0.6,
+            "end": 1.175,
+            "strength": 0.6094
+          },
+          {
+            "pitch": 62,
+            "start": 0.6,
+            "end": 1.06,
+            "strength": 0.8288
+          },
+          {
+            "pitch": 67,
+            "start": 0.6,
+            "end": 1.03,
+            "strength": 0.754
+          },
+          {
+            "pitch": 71,
+            "start": 0.6,
+            "end": 1.15,
+            "strength": 0.8124
+          },
+          {
+            "pitch": 55,
+            "start": 1.2,
+            "end": 1.775,
+            "strength": 0.6084
+          },
+          {
+            "pitch": 60,
+            "start": 1.2,
+            "end": 1.76,
+            "strength": 0.8128
+          },
+          {
+            "pitch": 69,
+            "start": 1.2,
+            "end": 1.71,
+            "strength": 0.8811
+          },
+          {
+            "pitch": 72,
+            "start": 1.2,
+            "end": 1.69,
+            "strength": 0.7785
+          },
+          {
+            "pitch": 55,
+            "start": 1.8,
+            "end": 2.41,
+            "strength": 0.6178
+          },
+          {
+            "pitch": 59,
+            "start": 1.8,
+            "end": 2.41,
+            "strength": 0.7904
+          },
+          {
+            "pitch": 67,
+            "start": 1.8,
+            "end": 2.25,
+            "strength": 0.8638
+          },
+          {
+            "pitch": 74,
+            "start": 1.8,
+            "end": 2.375,
+            "strength": 0.8149
+          },
+          {
+            "pitch": 52,
+            "start": 2.4,
+            "end": 3.31,
+            "strength": 0.4837
+          },
+          {
+            "pitch": 64,
+            "start": 2.4,
+            "end": 2.86,
+            "strength": 0.6616
+          },
+          {
+            "pitch": 67,
+            "start": 2.4,
+            "end": 3.11,
+            "strength": 0.9479
+          },
+          {
+            "pitch": 74,
+            "start": 2.4,
+            "end": 2.84,
+            "strength": 0.7433
+          },
+          {
+            "pitch": 72,
+            "start": 3.0,
+            "end": 3.53,
+            "strength": 0.8066
+          },
+          {
+            "pitch": 54,
+            "start": 3.3,
+            "end": 3.64,
+            "strength": 0.5887
+          },
+          {
+            "pitch": 62,
+            "start": 3.3,
+            "end": 4.06,
+            "strength": 0.8926
+          },
+          {
+            "pitch": 69,
+            "start": 3.3,
+            "end": 3.57,
+            "strength": 0.8907
+          },
+          {
+            "pitch": 55,
+            "start": 3.6,
+            "end": 4.22,
+            "strength": 0.6105
+          },
+          {
+            "pitch": 67,
+            "start": 3.6,
+            "end": 4.07,
+            "strength": 0.7548
+          },
+          {
+            "pitch": 71,
+            "start": 3.6,
+            "end": 4.11,
+            "strength": 0.8167
+          },
+          {
+            "pitch": 50,
+            "start": 4.2,
+            "end": 4.81,
+            "strength": 0.4146
+          },
+          {
+            "pitch": 66,
+            "start": 4.2,
+            "end": 4.76,
+            "strength": 0.9858
+          },
+          {
+            "pitch": 69,
+            "start": 4.2,
+            "end": 4.69,
+            "strength": 0.7345
+          },
+          {
+            "pitch": 59,
+            "start": 4.8,
+            "end": 5.375,
+            "strength": 0.7934
+          },
+          {
+            "pitch": 62,
+            "start": 4.8,
+            "end": 5.375,
+            "strength": 1.0
+          },
+          {
+            "pitch": 67,
+            "start": 4.8,
+            "end": 5.375,
+            "strength": 0.9087
+          },
+          {
+            "pitch": 74,
+            "start": 4.8,
+            "end": 5.14,
+            "strength": 0.4726
+          },
+          {
+            "pitch": 59,
+            "start": 5.4,
+            "end": 5.97,
+            "strength": 0.7951
+          },
+          {
+            "pitch": 62,
+            "start": 5.4,
+            "end": 6.575,
+            "strength": 1.0
+          },
+          {
+            "pitch": 67,
+            "start": 5.4,
+            "end": 5.91,
+            "strength": 0.9094
+          },
+          {
+            "pitch": 74,
+            "start": 5.4,
+            "end": 5.74,
+            "strength": 0.4723
+          },
+          {
+            "pitch": 57,
+            "start": 6.0,
+            "end": 6.58,
+            "strength": 0.7173
+          },
+          {
+            "pitch": 66,
+            "start": 6.0,
+            "end": 6.55,
+            "strength": 0.9877
+          },
+          {
+            "pitch": 69,
+            "start": 6.0,
+            "end": 6.43,
+            "strength": 0.533
+          },
+          {
+            "pitch": 55,
+            "start": 6.6,
+            "end": 7.22,
+            "strength": 0.6099
+          },
+          {
+            "pitch": 62,
+            "start": 6.6,
+            "end": 7.25,
+            "strength": 0.8274
+          },
+          {
+            "pitch": 67,
+            "start": 6.6,
+            "end": 7.04,
+            "strength": 0.7661
+          },
+          {
+            "pitch": 71,
+            "start": 6.6,
+            "end": 7.175,
+            "strength": 0.815
+          },
+          {
+            "pitch": 50,
+            "start": 7.2,
+            "end": 8.075,
+            "strength": 0.4189
+          },
+          {
+            "pitch": 67,
+            "start": 7.2,
+            "end": 7.92,
+            "strength": 0.9382
+          },
+          {
+            "pitch": 71,
+            "start": 7.2,
+            "end": 7.93,
+            "strength": 0.81
+          },
+          {
+            "pitch": 50,
+            "start": 8.1,
+            "end": 9.46,
+            "strength": 0.4143
+          },
+          {
+            "pitch": 66,
+            "start": 8.1,
+            "end": 9.29,
+            "strength": 0.9865
+          },
+          {
+            "pitch": 69,
+            "start": 8.1,
+            "end": 8.375,
+            "strength": 0.7334
+          },
+          {
+            "pitch": 69,
+            "start": 8.4,
+            "end": 9.22,
+            "strength": 0.7368
+          },
+          {
+            "pitch": 55,
+            "start": 9.6,
+            "end": 10.175,
+            "strength": 0.6102
+          },
+          {
+            "pitch": 62,
+            "start": 9.6,
+            "end": 10.175,
+            "strength": 0.8277
+          },
+          {
+            "pitch": 67,
+            "start": 9.6,
+            "end": 10.04,
+            "strength": 0.7537
+          },
+          {
+            "pitch": 71,
+            "start": 9.6,
+            "end": 10.175,
+            "strength": 0.8136
+          },
+          {
+            "pitch": 55,
+            "start": 10.2,
+            "end": 10.775,
+            "strength": 0.6094
+          },
+          {
+            "pitch": 62,
+            "start": 10.2,
+            "end": 10.66,
+            "strength": 0.8288
+          },
+          {
+            "pitch": 67,
+            "start": 10.2,
+            "end": 10.63,
+            "strength": 0.754
+          },
+          {
+            "pitch": 71,
+            "start": 10.2,
+            "end": 10.75,
+            "strength": 0.8124
+          },
+          {
+            "pitch": 55,
+            "start": 10.8,
+            "end": 11.375,
+            "strength": 0.6084
+          },
+          {
+            "pitch": 60,
+            "start": 10.8,
+            "end": 11.36,
+            "strength": 0.8128
+          },
+          {
+            "pitch": 69,
+            "start": 10.8,
+            "end": 11.31,
+            "strength": 0.8811
+          },
+          {
+            "pitch": 72,
+            "start": 10.8,
+            "end": 11.29,
+            "strength": 0.7785
+          },
+          {
+            "pitch": 55,
+            "start": 11.4,
+            "end": 12.01,
+            "strength": 0.6179
+          },
+          {
+            "pitch": 59,
+            "start": 11.4,
+            "end": 12.01,
+            "strength": 0.7907
+          },
+          {
+            "pitch": 67,
+            "start": 11.4,
+            "end": 11.85,
+            "strength": 0.8641
+          },
+          {
+            "pitch": 74,
+            "start": 11.4,
+            "end": 11.975,
+            "strength": 0.8158
+          },
+          {
+            "pitch": 52,
+            "start": 12.0,
+            "end": 12.91,
+            "strength": 0.4837
+          },
+          {
+            "pitch": 64,
+            "start": 12.0,
+            "end": 12.46,
+            "strength": 0.6616
+          },
+          {
+            "pitch": 67,
+            "start": 12.0,
+            "end": 12.71,
+            "strength": 0.9479
+          },
+          {
+            "pitch": 74,
+            "start": 12.0,
+            "end": 12.44,
+            "strength": 0.7433
+          },
+          {
+            "pitch": 72,
+            "start": 12.6,
+            "end": 13.13,
+            "strength": 0.8066
+          },
+          {
+            "pitch": 54,
+            "start": 12.9,
+            "end": 13.24,
+            "strength": 0.5887
+          },
+          {
+            "pitch": 62,
+            "start": 12.9,
+            "end": 13.66,
+            "strength": 0.8926
+          },
+          {
+            "pitch": 69,
+            "start": 12.9,
+            "end": 13.17,
+            "strength": 0.8907
+          },
+          {
+            "pitch": 55,
+            "start": 13.2,
+            "end": 13.82,
+            "strength": 0.6105
+          },
+          {
+            "pitch": 67,
+            "start": 13.2,
+            "end": 13.67,
+            "strength": 0.7548
+          },
+          {
+            "pitch": 71,
+            "start": 13.2,
+            "end": 13.71,
+            "strength": 0.8167
+          },
+          {
+            "pitch": 50,
+            "start": 13.8,
+            "end": 14.41,
+            "strength": 0.4146
+          },
+          {
+            "pitch": 66,
+            "start": 13.8,
+            "end": 14.36,
+            "strength": 0.9858
+          },
+          {
+            "pitch": 69,
+            "start": 13.8,
+            "end": 14.29,
+            "strength": 0.7345
+          },
+          {
+            "pitch": 59,
+            "start": 14.4,
+            "end": 14.975,
+            "strength": 0.7934
+          },
+          {
+            "pitch": 62,
+            "start": 14.4,
+            "end": 14.975,
+            "strength": 1.0
+          },
+          {
+            "pitch": 67,
+            "start": 14.4,
+            "end": 14.975,
+            "strength": 0.9087
+          },
+          {
+            "pitch": 74,
+            "start": 14.4,
+            "end": 14.74,
+            "strength": 0.4726
+          },
+          {
+            "pitch": 59,
+            "start": 15.0,
+            "end": 15.57,
+            "strength": 0.7951
+          },
+          {
+            "pitch": 62,
+            "start": 15.0,
+            "end": 16.175,
+            "strength": 1.0
+          },
+          {
+            "pitch": 67,
+            "start": 15.0,
+            "end": 15.51,
+            "strength": 0.9094
+          },
+          {
+            "pitch": 74,
+            "start": 15.0,
+            "end": 15.34,
+            "strength": 0.4723
+          },
+          {
+            "pitch": 57,
+            "start": 15.6,
+            "end": 16.18,
+            "strength": 0.7173
+          },
+          {
+            "pitch": 66,
+            "start": 15.6,
+            "end": 16.15,
+            "strength": 0.9877
+          },
+          {
+            "pitch": 69,
+            "start": 15.6,
+            "end": 16.03,
+            "strength": 0.4992
+          },
+          {
+            "pitch": 55,
+            "start": 16.2,
+            "end": 16.8,
+            "strength": 0.6102
+          },
+          {
+            "pitch": 62,
+            "start": 16.2,
+            "end": 16.66,
+            "strength": 0.8278
+          },
+          {
+            "pitch": 67,
+            "start": 16.2,
+            "end": 16.775,
+            "strength": 0.7544
+          },
+          {
+            "pitch": 71,
+            "start": 16.2,
+            "end": 16.71,
+            "strength": 0.8153
+          },
+          {
+            "pitch": 50,
+            "start": 16.8,
+            "end": 17.375,
+            "strength": 0.4162
+          },
+          {
+            "pitch": 67,
+            "start": 16.8,
+            "end": 17.33,
+            "strength": 0.9712
+          },
+          {
+            "pitch": 69,
+            "start": 16.8,
+            "end": 17.29,
+            "strength": 0.7856
+          },
+          {
+            "pitch": 50,
+            "start": 17.4,
+            "end": 18.0,
+            "strength": 0.4252
+          },
+          {
+            "pitch": 66,
+            "start": 17.4,
+            "end": 17.94,
+            "strength": 0.9878
+          },
+          {
+            "pitch": 67,
+            "start": 17.7,
+            "end": 18.57,
+            "strength": 0.9653
+          },
+          {
+            "pitch": 43,
+            "start": 18.0,
+            "end": 19.17,
+            "strength": 0.358
+          },
+          {
+            "pitch": 59,
+            "start": 18.0,
+            "end": 19.03,
+            "strength": 0.8056
+          },
+          {
+            "pitch": 62,
+            "start": 18.0,
+            "end": 18.98,
+            "strength": 0.8075
+          },
+          {
+            "pitch": 50,
+            "start": 19.2,
+            "end": 19.775,
+            "strength": 0.4335
+          },
+          {
+            "pitch": 54,
+            "start": 19.2,
+            "end": 19.775,
+            "strength": 0.5822
+          },
+          {
+            "pitch": 62,
+            "start": 19.2,
+            "end": 19.775,
+            "strength": 0.4838
+          },
+          {
+            "pitch": 69,
+            "start": 19.2,
+            "end": 19.775,
+            "strength": 0.769
+          },
+          {
+            "pitch": 50,
+            "start": 19.8,
+            "end": 20.375,
+            "strength": 0.4504
+          },
+          {
+            "pitch": 54,
+            "start": 19.8,
+            "end": 20.41,
+            "strength": 0.5921
+          },
+          {
+            "pitch": 62,
+            "start": 19.8,
+            "end": 20.375,
+            "strength": 0.4914
+          },
+          {
+            "pitch": 69,
+            "start": 19.8,
+            "end": 20.28,
+            "strength": 0.776
+          },
+          {
+            "pitch": 50,
+            "start": 20.4,
+            "end": 20.975,
+            "strength": 0.428
+          },
+          {
+            "pitch": 55,
+            "start": 20.4,
+            "end": 21.01,
+            "strength": 0.6054
+          },
+          {
+            "pitch": 62,
+            "start": 20.4,
+            "end": 20.975,
+            "strength": 0.6366
+          },
+          {
+            "pitch": 71,
+            "start": 20.4,
+            "end": 20.89,
+            "strength": 0.8394
+          },
+          {
+            "pitch": 50,
+            "start": 21.0,
+            "end": 21.575,
+            "strength": 0.438
+          },
+          {
+            "pitch": 52,
+            "start": 21.0,
+            "end": 21.61,
+            "strength": 0.4866
+          },
+          {
+            "pitch": 62,
+            "start": 21.0,
+            "end": 21.575,
+            "strength": 0.6764
+          },
+          {
+            "pitch": 67,
+            "start": 21.0,
+            "end": 21.51,
+            "strength": 0.954
+          },
+          {
+            "pitch": 50,
+            "start": 21.6,
+            "end": 22.175,
+            "strength": 0.4485
+          },
+          {
+            "pitch": 54,
+            "start": 21.6,
+            "end": 22.21,
+            "strength": 0.582
+          },
+          {
+            "pitch": 62,
+            "start": 21.6,
+            "end": 22.175,
+            "strength": 0.4919
+          },
+          {
+            "pitch": 69,
+            "start": 21.6,
+            "end": 22.08,
+            "strength": 0.7683
+          },
+          {
+            "pitch": 50,
+            "start": 22.2,
+            "end": 22.775,
+            "strength": 0.428
+          },
+          {
+            "pitch": 55,
+            "start": 22.2,
+            "end": 22.52,
+            "strength": 0.6062
+          },
+          {
+            "pitch": 62,
+            "start": 22.2,
+            "end": 22.775,
+            "strength": 0.6366
+          },
+          {
+            "pitch": 71,
+            "start": 22.2,
+            "end": 22.52,
+            "strength": 0.8394
+          },
+          {
+            "pitch": 57,
+            "start": 22.5,
+            "end": 22.83,
+            "strength": 0.7412
+          },
+          {
+            "pitch": 72,
+            "start": 22.5,
+            "end": 22.82,
+            "strength": 0.8042
+          },
+          {
+            "pitch": 50,
+            "start": 22.8,
+            "end": 23.375,
+            "strength": 0.4264
+          },
+          {
+            "pitch": 55,
+            "start": 22.8,
+            "end": 23.41,
+            "strength": 0.6053
+          },
+          {
+            "pitch": 62,
+            "start": 22.8,
+            "end": 23.375,
+            "strength": 0.6933
+          },
+          {
+            "pitch": 71,
+            "start": 22.8,
+            "end": 23.29,
+            "strength": 0.841
+          },
+          {
+            "pitch": 50,
+            "start": 23.4,
+            "end": 23.975,
+            "strength": 0.4387
+          },
+          {
+            "pitch": 52,
+            "start": 23.4,
+            "end": 24.01,
+            "strength": 0.4868
+          },
+          {
+            "pitch": 62,
+            "start": 23.4,
+            "end": 23.975,
+            "strength": 0.6774
+          },
+          {
+            "pitch": 67,
+            "start": 23.4,
+            "end": 23.91,
+            "strength": 0.9541
+          },
+          {
+            "pitch": 50,
+            "start": 24.0,
+            "end": 24.575,
+            "strength": 0.4476
+          },
+          {
+            "pitch": 54,
+            "start": 24.0,
+            "end": 24.575,
+            "strength": 0.582
+          },
+          {
+            "pitch": 62,
+            "start": 24.0,
+            "end": 24.575,
+            "strength": 0.5115
+          },
+          {
+            "pitch": 69,
+            "start": 24.0,
+            "end": 24.49,
+            "strength": 0.7675
+          },
+          {
+            "pitch": 50,
+            "start": 24.6,
+            "end": 25.23,
+            "strength": 0.4419
+          },
+          {
+            "pitch": 54,
+            "start": 24.6,
+            "end": 25.175,
+            "strength": 0.6018
+          },
+          {
+            "pitch": 62,
+            "start": 24.6,
+            "end": 25.11,
+            "strength": 0.6029
+          },
+          {
+            "pitch": 71,
+            "start": 24.6,
+            "end": 24.93,
+            "strength": 0.8154
+          },
+          {
+            "pitch": 72,
+            "start": 24.9,
+            "end": 25.22,
+            "strength": 0.8071
+          },
+          {
+            "pitch": 51,
+            "start": 25.2,
+            "end": 25.775,
+            "strength": 0.4365
+          },
+          {
+            "pitch": 54,
+            "start": 25.2,
+            "end": 25.8,
+            "strength": 0.6102
+          },
+          {
+            "pitch": 66,
+            "start": 25.2,
+            "end": 25.775,
+            "strength": 1.0
+          },
+          {
+            "pitch": 71,
+            "start": 25.2,
+            "end": 25.69,
+            "strength": 0.8057
+          },
+          {
+            "pitch": 51,
+            "start": 25.8,
+            "end": 26.42,
+            "strength": 0.4389
+          },
+          {
+            "pitch": 59,
+            "start": 25.8,
+            "end": 26.375,
+            "strength": 0.8134
+          },
+          {
+            "pitch": 66,
+            "start": 25.8,
+            "end": 26.37,
+            "strength": 1.0
+          },
+          {
+            "pitch": 69,
+            "start": 25.8,
+            "end": 26.3,
+            "strength": 0.9046
+          },
+          {
+            "pitch": 52,
+            "start": 26.4,
+            "end": 27.0,
+            "strength": 0.4958
+          },
+          {
+            "pitch": 59,
+            "start": 26.4,
+            "end": 27.01,
+            "strength": 0.821
+          },
+          {
+            "pitch": 64,
+            "start": 26.4,
+            "end": 26.93,
+            "strength": 0.9595
+          },
+          {
+            "pitch": 67,
+            "start": 26.4,
+            "end": 26.94,
+            "strength": 0.8909
+          },
+          {
+            "pitch": 45,
+            "start": 27.0,
+            "end": 27.59,
+            "strength": 0.3496
+          },
+          {
+            "pitch": 57,
+            "start": 27.0,
+            "end": 27.64,
+            "strength": 0.6102
+          },
+          {
+            "pitch": 61,
+            "start": 27.0,
+            "end": 27.63,
+            "strength": 0.9992
+          },
+          {
+            "pitch": 50,
+            "start": 27.5975,
+            "end": 28.81,
+            "strength": 0.4259
+          },
+          {
+            "pitch": 55,
+            "start": 27.5975,
+            "end": 28.22,
+            "strength": 0.6042
+          },
+          {
+            "pitch": 62,
+            "start": 27.5975,
+            "end": 28.17,
+            "strength": 0.7585
+          },
+          {
+            "pitch": 54,
+            "start": 28.2,
+            "end": 28.82,
+            "strength": 0.6035
+          },
+          {
+            "pitch": 55,
+            "start": 28.8,
+            "end": 29.375,
+            "strength": 0.6084
+          },
+          {
+            "pitch": 62,
+            "start": 28.8,
+            "end": 29.85,
+            "strength": 1.0
+          },
+          {
+            "pitch": 71,
+            "start": 28.8,
+            "end": 29.375,
+            "strength": 0.839
+          },
+          {
+            "pitch": 55,
+            "start": 29.4,
+            "end": 30.01,
+            "strength": 0.6095
+          },
+          {
+            "pitch": 67,
+            "start": 29.4,
+            "end": 29.87,
+            "strength": 0.7539
+          },
+          {
+            "pitch": 71,
+            "start": 29.4,
+            "end": 29.93,
+            "strength": 0.8125
+          },
+          {
+            "pitch": 53,
+            "start": 30.0,
+            "end": 30.575,
+            "strength": 0.514
+          },
+          {
+            "pitch": 65,
+            "start": 30.0,
+            "end": 30.38,
+            "strength": 0.4847
+          },
+          {
+            "pitch": 69,
+            "start": 30.0,
+            "end": 30.575,
+            "strength": 0.8625
+          },
+          {
+            "pitch": 72,
+            "start": 30.0,
+            "end": 30.49,
+            "strength": 0.6712
+          },
+          {
+            "pitch": 53,
+            "start": 30.6,
+            "end": 31.21,
+            "strength": 0.504
+          },
+          {
+            "pitch": 65,
+            "start": 30.6,
+            "end": 31.29,
+            "strength": 0.5138
+          },
+          {
+            "pitch": 69,
+            "start": 30.6,
+            "end": 31.11,
+            "strength": 0.8902
+          },
+          {
+            "pitch": 74,
+            "start": 30.6,
+            "end": 31.175,
+            "strength": 0.7622
+          },
+          {
+            "pitch": 52,
+            "start": 31.2,
+            "end": 32.12,
+            "strength": 0.4569
+          },
+          {
+            "pitch": 67,
+            "start": 31.2,
+            "end": 31.775,
+            "strength": 0.7948
+          },
+          {
+            "pitch": 71,
+            "start": 31.2,
+            "end": 31.74,
+            "strength": 0.7859
+          },
+          {
+            "pitch": 74,
+            "start": 31.2,
+            "end": 31.64,
+            "strength": 0.7647
+          },
+          {
+            "pitch": 67,
+            "start": 31.8,
+            "end": 32.09,
+            "strength": 0.9976
+          },
+          {
+            "pitch": 72,
+            "start": 31.8,
+            "end": 32.33,
+            "strength": 0.8076
+          },
+          {
+            "pitch": 54,
+            "start": 32.1,
+            "end": 32.44,
+            "strength": 0.5886
+          },
+          {
+            "pitch": 62,
+            "start": 32.1,
+            "end": 32.88,
+            "strength": 0.8861
+          },
+          {
+            "pitch": 69,
+            "start": 32.1,
+            "end": 32.37,
+            "strength": 0.8898
+          },
+          {
+            "pitch": 55,
+            "start": 32.4,
+            "end": 32.95,
+            "strength": 0.6103
+          },
+          {
+            "pitch": 67,
+            "start": 32.4,
+            "end": 32.83,
+            "strength": 0.7666
+          },
+          {
+            "pitch": 71,
+            "start": 32.4,
+            "end": 32.92,
+            "strength": 0.8162
+          },
+          {
+            "pitch": 48,
+            "start": 33.0,
+            "end": 33.575,
+            "strength": 0.3653
+          },
+          {
+            "pitch": 60,
+            "start": 33.0,
+            "end": 33.55,
+            "strength": 0.7659
+          },
+          {
+            "pitch": 64,
+            "start": 33.0,
+            "end": 33.575,
+            "strength": 1.0
+          },
+          {
+            "pitch": 69,
+            "start": 33.0,
+            "end": 33.51,
+            "strength": 0.8921
+          },
+          {
+            "pitch": 48,
+            "start": 33.6,
+            "end": 34.22,
+            "strength": 0.3406
+          },
+          {
+            "pitch": 55,
+            "start": 33.6,
+            "end": 34.175,
+            "strength": 0.6223
+          },
+          {
+            "pitch": 64,
+            "start": 33.6,
+            "end": 34.21,
+            "strength": 0.9996
+          },
+          {
+            "pitch": 67,
+            "start": 33.6,
+            "end": 34.02,
+            "strength": 0.6082
+          },
+          {
+            "pitch": 47,
+            "start": 34.2,
+            "end": 34.82,
+            "strength": 0.3886
+          },
+          {
+            "pitch": 55,
+            "start": 34.2,
+            "end": 34.79,
+            "strength": 0.6285
+          },
+          {
+            "pitch": 62,
+            "start": 34.2,
+            "end": 34.72,
+            "strength": 1.0
+          },
+          {
+            "pitch": 67,
+            "start": 34.2,
+            "end": 34.69,
+            "strength": 0.8572
+          },
+          {
+            "pitch": 45,
+            "start": 34.8,
+            "end": 35.39,
+            "strength": 0.3471
+          },
+          {
+            "pitch": 60,
+            "start": 34.8,
+            "end": 35.37,
+            "strength": 0.856
+          },
+          {
+            "pitch": 66,
+            "start": 34.8,
+            "end": 35.34,
+            "strength": 0.9917
+          },
+          {
+            "pitch": 43,
+            "start": 35.4,
+            "end": 36.0,
+            "strength": 0.3567
+          },
+          {
+            "pitch": 55,
+            "start": 35.4,
+            "end": 35.58,
+            "strength": 0.2714
+          },
+          {
+            "pitch": 62,
+            "start": 35.4,
+            "end": 35.83,
+            "strength": 0.6204
+          },
+          {
+            "pitch": 67,
+            "start": 35.4,
+            "end": 35.975,
+            "strength": 0.4683
+          },
+          {
+            "pitch": 71,
+            "start": 35.4,
+            "end": 35.93,
+            "strength": 0.6573
+          },
+          {
+            "pitch": 50,
+            "start": 36.0,
+            "end": 36.575,
+            "strength": 0.4155
+          },
+          {
+            "pitch": 67,
+            "start": 36.0,
+            "end": 36.53,
+            "strength": 0.9713
+          },
+          {
+            "pitch": 69,
+            "start": 36.0,
+            "end": 36.49,
+            "strength": 0.7842
+          },
+          {
+            "pitch": 50,
+            "start": 36.6,
+            "end": 37.17,
+            "strength": 0.4246
+          },
+          {
+            "pitch": 66,
+            "start": 36.6,
+            "end": 37.16,
+            "strength": 0.9878
+          },
+          {
+            "pitch": 67,
+            "start": 36.9,
+            "end": 37.75,
+            "strength": 0.9653
+          },
+          {
+            "pitch": 43,
+            "start": 37.2,
+            "end": 38.34,
+            "strength": 0.3622
+          },
+          {
+            "pitch": 59,
+            "start": 37.2,
+            "end": 38.28,
+            "strength": 0.8162
+          }
+        ],
+        "limitations": "Deterministic source-waveform DSP; no Basic Pitch or trained model. Multi-envelope harmonic nonnegative spectral fitting, measured spectral-flux onset alignment, high-octave duplicate rejection. All accepted simultaneous pitches retained. Strengths are measured relative spectral levels, not original MIDI velocity. Weak/masked notes and octave/unison allocation remain uncertain. High-octave rejection may omit quiet octave doublings. Releases estimated from envelopes; no pedal reconstruction or manual listening."
+      },
+      "draft_sha256": "31281f1453d1ca440444cfa6100644a7fe6b8bb841723e98586ec96194c0707f",
+      "verified_program_hash_recipe": "SHA256(transcribe.py original bytes || refine.py original bytes)",
+      "verified_program_sha256": "29dbab4f7857dbe436f5c7d0315e6fac5e9480fe3495e23c0fb6892f9e7b9aaa",
+      "raw_report": ".local-evaluations/codex-autonomous-2026-10-21/independent-2-result/result.json",
+      "log_sha256": "71733b8f31ea028a23e1da08e253079b6d3b7f4928f89cf278c2ce562fda2801",
+      "runner_sha256": "4c486863313a89b7061090a8b04260e9b345f0df4c172be13062983aa024d8da",
+      "delivery": {
+        "project_sha256": "51b189c00cdddcfb1b37a6028f8705da3c123702fe028e2766c68fe84bdedf87",
+        "wav_sha256": "43a9b959a3a9f456f1e046bc3de3da2df17bd4d69ea8e3d051cfa7a57ddceda0",
+        "wav_bytes": 11042018,
+        "inspection": "Wrote C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\independent-2\\cover.wav — 00:38.340, 2 ch, 24-bit, peak -3.2 dBFS.\nEncoded WAV C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\independent-2\\cover.wav: PASS. 48000 Hz, 2 ch, 24-bit, 38.34 s, -18.0 LUFS, peak -3.2 dBFS, true peak -3.2 dBTP, full-scale samples 0, final 0.5 s RMS -33.5 dBFS. SHA-256 43a9b959a3a9f456f1e046bc3de3da2df17bd4d69ea8e3d051cfa7a57ddceda0.",
+        "folder": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\codex-autonomous-2026-10-21\\delivery\\independent-2"
+      },
+      "packages": [
+        {
+          "name": "cffi",
+          "version": "2.1.1"
+        },
+        {
+          "name": "numpy",
+          "version": "2.5.4"
+        },
+        {
+          "name": "pycparser",
+          "version": "3.11"
+        },
+        {
+          "name": "scipy",
+          "version": "1.18.1"
+        },
+        {
+          "name": "soundfile",
+          "version": "0.14.0"
+        },
+        {
+          "name": "typing-extensions",
+          "version": "4.16.0"
+        }
+      ],
+      "max_import_timing_error_seconds": 0.00020833333334024928
+    }
+  ],
+  "source_files_sha256": {
+    "crates/auris-agent/src/approval_review.rs": "6d5d7ff1c8a09949194b9a4b84021ac3601a2aac5b143e62ecab7c74f9876ddb",
+    "crates/auris-agent/src/approval_review/evidence.rs": "cf3b7045373ddd1cbe9a0fdecc2b42b2bbb3c080d727a7ad198eacaf9f98783a",
+    "crates/auris-agent/src/backends/mod.rs": "171fa7cc85611aff14d8f5c5ff01f4675f3cc5bc8a3b7e4061ff66bfa5d16dc0",
+    "crates/auris-agent/src/lib.rs": "f788bdde2cc49e1d89d53b0e57fce1ce4929473229519af3ef161bf7a78d7fa2",
+    "crates/auris-gpui/src/ui/agent_chat/controls.rs": "359bc9f1f209fe429ac830f22a19abf5810c8a1f3fe0de8dacfa9f2cdfc50146",
+    "crates/auris-gpui/src/ui/agent_chat/transcription_eval.rs": "0236bf7554de639d6f012dff5e15ba453fef4469e0ce0992af894fbe4db38469",
+    "crates/auris-session/src/live_agent.rs": "9eacd4480897a6101843614a0102a380b6ee9b3ada7854ee40f3192d53f60617",
+    "crates/auris-session/src/live_agent/harmony.rs": "2b252364a41b1fcfeec7eead213dfcb3ed3cc940e6a7a500efa595d347dd1a34",
+    "tools/eval/piano_transcription.py": "91b02b3b9b8c81732f4e9084fefad3dbb645a8a8f0b463587bf29bd899f7076b",
+    "tools/eval/live_transcription.py": "f82903ab9da8d26616dbb3746d3beba4ab3778b77c14f6fa81c94bc931983358"
+  },
+  "verification": {
+    "workspace_tests": {
+      "log_sha256": "227ffa556ff8fa5e15cffb1eb3adcfddd8113b2f36d0fbe68a8b4a5bb7fd62cb",
+      "local_log": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\workspace-tests-final.log",
+      "passed": 4279,
+      "ignored": 20,
+      "all_reported_tests_successful": true,
+      "observed_exit_code": 0
+    },
+    "clippy": {
+      "log_sha256": "f1188f52cc914d4098ff02ad97e7bb0879a17d593a46f7b95ce0e1dea40dd5e8",
+      "local_log": "C:\\Users\\uthree\\.codex\\worktrees\\e606\\auris-studio\\.local-evaluations\\workspace-clippy-final.log",
+      "observed_exit_code": 0
+    },
+    "additional_checks": {
+      "review_tests": {
+        "passed": 8,
+        "log_sha256": "3407e75c1fb21d51d9919fbb2a1dd3c6876c34d45d9db4d0b026520cef095596"
+      },
+      "desktop_permission_tests": {
+        "passed": 13,
+        "log_sha256": "f2ecccd279b38d2ff39aef0351627379cf3670ede02ef4ab8d51a76fdc20a237"
+      },
+      "measurement_tests": {
+        "passed": 17,
+        "log_sha256": "63352095a04057704cf9be1a6eda937914228527623b2ce534fef36298aae3e8"
+      },
+      "note": "Full workspace passed before an equivalent Clippy conditional cleanup; the affected review tests and workspace Clippy passed after that cleanup."
+    }
+  },
+  "runner_variants": "The first three trials precede the added runtime-discovery sentence. The fresh independent-2 trial uses that guidance. Both use the same review-evidence and section APIs; subsequent Clippy cleanup only collapses an equivalent conditional."
+}

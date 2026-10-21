@@ -341,10 +341,19 @@ pub mod architecture {
     //! Auto-review mode delegates operations needing confirmation to a separate conversation
     //! with the selected backend/model and no execution tools. It receives human requests and
     //! exact operation evidence, never authority from the executing model. Deny rules run first;
+    //! repeated long strings use a lossless shared-text encoding within a 256 KiB request.
+    //! Background evidence collection supplies recent completed native calls and bounded current
+    //! project-local script snapshots, with contents and SHA-256. Hidden/external paths and
+    //! oversized scripts are not silently treated as inspected. Script hashes and resolved paths
+    //! are checked again after an approving review; changed evidence cannot grant a permit.
     //! review approval grants only a one-time permit after the desktop checks the document and
     //! policy again. A refusal blocks the operation; uncertainty, malformed output, unavailable
     //! models and timeout leave manual confirmation available. Cancelling the pending approval
     //! also cancels the review. Bypass skips this review as well as user confirmation.
+    //! New manually written agent compositions use bounded `edit_harmony` section labels as well
+    //! as key/chord metadata. A section-only edit preserves harmony and notes, restores the prior
+    //! section after its range and is one undo step. Song-spec compositions already carry their
+    //! form into the document; clip names and assistant prose are not section metadata.
     //! The MCP presentation supports explicit short project handles (never an implicit current
     //! project), startup task groups, concise schemas and full on-demand help. Discovery handles
     //! have a random process scope and are checked against the owning library snapshot; refresh,

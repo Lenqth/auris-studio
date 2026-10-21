@@ -195,6 +195,17 @@ alongside human-readable labels in MCP.
 
 ## Other workflow gaps
 
+* **Leading and trailing silence need an explicit cover policy.** A manual cover test
+  found that source padding is carried into the arrangement without a clear choice
+  between preserving recording time and aligning the first musical event. Detect the
+  active musical range, preserve intentional pickups and instrument decay, and report
+  any removed leading/trailing padding. Validate source-to-score offsets, quiet attacks,
+  long releases and near-silent recordings. This remains an open task.
+* **Covers need tempo and beat estimation.** Import currently converts source seconds
+  through the existing project tempo; that is not BPM estimation. Estimate BPM with
+  confidence and half/double-time alternatives, locate the beat/downbeat phase, and
+  verify placement on the resulting bar grid. Handle rubato or ambiguous tempo without
+  presenting a guessed constant BPM as measured fact. This remains an open task.
 * **Different cover tools on different transports.** Live `create_piano_cover` uses bundled
   polyphonic Basic Pitch. Saved MCP has no such callable: an actual request returned
   `tool not found`. Its `transcribe_audio` is explicitly monophonic YIN; it returned 71

@@ -6,6 +6,10 @@ inference. The new APIs preserve recognition results from an existing frozen
 program. They do not make an agent-generated recognizer accurate: a newly generated
 DSP program produced substantially more false notes than Basic Pitch.
 
+The later [audio-only workflow evaluation](codex-autonomous-cover-evaluation.md)
+tests the repaired review-evidence path without supplying a frozen program and
+also verifies section-aware composition.
+
 The [measurement record](../tools/eval/references/codex-live-transcription-2026-10-21.json)
 retains the programs, original drafts, actual imported notes, recovered reference,
 scores, conversation text, acceptance observations and the artifact-recovery limits.

@@ -14,6 +14,16 @@ existing interior key points remain. The operation edits the key/chord map, pres
 and mix, and is one Undo step. Audible chord notes alone do not populate this map.
 `clear_chords:true` clears the selected range; omit `chords` when clearing.
 
+Write the form into the section lane too. For example,
+`{"start_bar":1,"bars":4,"section":"Intro"}` and
+`{"start_bar":5,"bars":8,"section":"Chorus"}` are valid `edit_harmony` calls without
+key or chord changes. A label covers its requested range, replaces interior section
+changes and restores the previous label after the range. Labels must be nonempty,
+at most 256 UTF-8 bytes and contain no control characters. Notes and mix are preserved;
+one Undo reverts the range edit. Plan sections appropriate to the music when composing
+a new song and verify their positions with `inspect_project`. Clip names and a prose
+outline do not create section metadata. A short loop can remain one section.
+
 ### Live vocal production
 
 Create a `singer` track and a note clip, then add its melody with `add_notes`.
@@ -472,6 +482,11 @@ approval, and late results cannot approve another request. Review never creates 
 Always allow rule and never overrides a deny rule. It adds a model request for each
 review; it is a fallible recommendation, not an operating-system sandbox. Bypass
 continues to skip both human confirmation and automatic review.
+
+The reviewer also receives bounded current project-script snapshots and recent
+completed native calls. Long repeated command text is encoded without losing its
+contents. See [automatic approval evidence](agent-review-evidence.md) for the
+collection limits, integrity checks and remaining file-change race boundary.
 
 Compact context or `/compact` summarizes older exchanges with the configured model,
 without granting that model tools. The latest two completed exchanges are kept
