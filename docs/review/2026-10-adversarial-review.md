@@ -23,7 +23,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-03 | High | Cross-platform | A Windows-saved project opens on macOS with its SoundFont tracks silent |
 | AR-04 | High | macOS release | `Auris Studio.app` has no microphone usage description, so recording fails |
 | AR-05 | Medium-High | Recording | Takes are not compensated for round-trip latency and land late |
 | AR-06 | Medium | Denial of service | A MIDI file of meter changes takes quadratic time to import (verified) |
@@ -40,27 +39,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
-
-### AR-03 — A Windows-saved project opens on macOS with its SoundFont tracks silent
-
-**Where.** `AssetPath::file_name` is `Path::file_name` of the stored string
-(`crates/auris-core/src/asset.rs:106-108`). Two places match by it:
-`install_library_reference` (`session/files.rs:1536-1546`), which re-attaches the shipped fonts,
-and `locate`/`find_named` (`session/assets.rs:250-253`, `412-424`), which find moved assets.
-
-**What happens.** On Windows, an `External` path is stored with backslashes,
-`C:\Users\…\GeneralUser GS v2.0.2.sf2`. On macOS and Linux a backslash is an ordinary character,
-so `file_name()` returns the whole string. The shipped font then matches nothing. It is inserted
-again under a fresh ID while the tracks keep the old one, the old ID has no samples, and every
-SoundFont track is silent. Every composed project names the shipped General MIDI font as
-`External`, so this hits the common case. The comment at `files.rs:706-711` describes precisely
-this case as the one that "always has an answer". `Inside` paths already split on both separators
-(`asset.rs:129-134`); `External` file names do not. macOS to Windows works, because Windows
-accepts `/`.
-
-**Direction.** Take the last component after splitting on both `/` and `\` (the rule `resolve`
-already applies), and add a test with a literal `C:\…` path. As things stand, a test on Windows
-passes for the wrong reason.
 
 ### AR-04 — `Auris Studio.app` has no microphone usage description, so recording fails
 
