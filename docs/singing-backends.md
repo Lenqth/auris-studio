@@ -298,12 +298,15 @@ Half-width kana, decomposed voiced marks, and surrounding whitespace are normali
 outgoing lyrics too (` ｶﾞ ` becomes `ガ`). Each pitched note still needs one kana mora;
 entering several morae on a single note, such as `ララ`, is rejected by the Engine.
 
-VOICEVOX Engine 0.25.2 fails its query when an internal note or rest is only one frame long
-and the following note starts with a consonant. Auris reports the score event before sending
-the query: lengthen it to at least two frames (about 21.3 ms), or remove the tiny rest.
-Boundary rests receive padding automatically. Vowels, `ン`, and `ッ` do not need that preceding
-consonant space. Zero-length events, invalid MIDI keys, and rests with lyrics are also reported
-before transmission.
+VOICEVOX Engine 0.25.2 can truncate a consonant to half the preceding rest, making a two-frame
+gap leave only about 11 ms for the consonant. Auris predicts consonant lengths with internal
+rests connected to the preceding note. Gaps too short for the predicted consonant stay
+connected; longer pauses are restored without predicting consonant lengths again. Pitch and
+volume are recalculated for the restored phoneme timeline. The saved notes, vowel onsets and
+total duration stay fixed. Existing takes need to be rendered again to hear this correction.
+One-frame notes receive temporary query frames, removed before synthesis; boundary rests
+receive padding automatically. Zero-length events, invalid MIDI keys, and rests with lyrics
+are reported before transmission.
 
 The connection's output sample rate must divide into whole samples per Engine frame. Use
 24000 or 48000 Hz for the standard 93.75 fps Engine; 44100 Hz cannot represent this grid exactly

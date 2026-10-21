@@ -354,6 +354,63 @@ fn bridge_predicted_rests(score: &mut SingerScore, query: &Value) -> Result<(), 
     })
 }
 
+/// Split retained pauses out of the connected vowels, keeping every predicted consonant.
+fn restore_predicted_rests(score: &SingerScore, query: &mut Value) -> Result<(), SingError> {
+    let invalid = || SingError::Inference("VOICEVOX query cannot restore predicted rests".into());
+    let mut rests = Vec::new();
+    let mut at = 0usize;
+    for (index, note) in score.notes.iter().enumerate() {
+        let end = at
+            .checked_add(note.frame_length as usize)
+            .ok_or_else(invalid)?;
+        if index > 0
+            && note.key.is_none()
+            && score.notes[index - 1].key.is_some()
+            && score
+                .notes
+                .get(index + 1)
+                .is_some_and(starts_with_consonant)
+        {
+            rests.push((at, end));
+        }
+        at = end;
+    }
+    let phonemes = query["phonemes"].as_array_mut().ok_or_else(invalid)?;
+    let mut restored = Vec::with_capacity(phonemes.len() + rests.len());
+    let mut rests = rests.into_iter().peekable();
+    at = 0;
+    for mut phoneme in std::mem::take(phonemes) {
+        let length = phoneme["frame_length"]
+            .as_u64()
+            .and_then(|length| usize::try_from(length).ok())
+            .ok_or_else(invalid)?;
+        let end = at.checked_add(length).ok_or_else(invalid)?;
+        if let Some(&(start, onset)) = rests.peek()
+            && start < end
+        {
+            // The vowel ends where the anticipated consonant begins. Only its
+            // portion inside the rest becomes pau; the consonant stays intact.
+            if start < at || end >= onset {
+                return Err(invalid());
+            }
+            if start > at {
+                phoneme["frame_length"] = json!(start - at);
+                restored.push(phoneme);
+            }
+            restored.push(json!({"phoneme": "pau", "frame_length": end - start}));
+            rests.next();
+        } else {
+            restored.push(phoneme);
+        }
+        at = end;
+    }
+    if rests.next().is_some() {
+        return Err(invalid());
+    }
+    *phonemes = restored;
+    Ok(())
+}
+
 fn starts_with_consonant(note: &SingerNote) -> bool {
     note.key.is_some()
         && auris_vocal::kana_phonemes(&note.lyric).is_some_and(|phonemes| phonemes.len() > 1)
@@ -755,10 +812,20 @@ impl CurveGenerator for VoicevoxBackend {
         if connected != padded {
             bridge_predicted_rests(&mut padded, &query)?;
             if padded != connected {
-                query = self.post_json(
-                    "/sing_frame_audio_query",
+                restore_predicted_rests(&padded, &mut query)?;
+                // A second score query predicts consonant lengths again in the
+                // restored rest context, where the Engine can truncate them anew.
+                // Recompute only the acoustic curves for the preserved timeline.
+                query["f0"] = self.post_json(
+                    "/sing_frame_f0",
                     style.query_style_id,
-                    json!({ "notes": padded.notes }),
+                    json!({ "score": padded, "frame_audio_query": query }),
+                )?;
+                restore_query_timing(&mut query, expected, &[])?;
+                query["volume"] = self.post_json(
+                    "/sing_frame_volume",
+                    style.query_style_id,
+                    json!({ "score": padded, "frame_audio_query": query }),
                 )?;
             }
         }
@@ -1311,7 +1378,7 @@ mod tests {
         let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
         let original = test_score(&[(23, "す"), (2, ""), (25, "な"), (20, ""), (25, "か")]);
         let server = thread::spawn(move || {
-            for (events, phonemes) in [
+            for (index, (events, phonemes)) in [
                 (
                     vec![(94, ""), (25, "す"), (45, "な"), (25, "か"), (94, "")],
                     vec![
@@ -1346,21 +1413,41 @@ mod tests {
                         (94, "pau"),
                     ],
                 ),
-            ] {
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 let (mut stream, _) = listener.accept().unwrap();
-                let request = request_body(&read_request(&mut stream));
-                assert_eq!(request["notes"], json!(test_score(&events).notes));
+                let request = read_request(&mut stream);
+                let body = request_body(&request);
                 let query = json!({
                     "f0": vec![220.0; 283],
                     "volume": vec![0.5; 283],
                     "phonemes": phonemes.into_iter().map(|(length, phoneme)| json!({"phoneme":phoneme,"frame_length":length})).collect::<Vec<_>>()
                 });
+                let response = if index == 0 {
+                    assert!(request.starts_with("POST /sing_frame_audio_query?speaker=6000"));
+                    assert_eq!(body["notes"], json!(test_score(&events).notes));
+                    query
+                } else {
+                    assert!(request.starts_with("POST /sing_frame_f0?speaker=6000"));
+                    assert_eq!(body["score"]["notes"], json!(test_score(&events).notes));
+                    assert_eq!(body["frame_audio_query"]["phonemes"], query["phonemes"]);
+                    json!(vec![220.0; 283])
+                };
                 answer(
                     &mut stream,
                     "application/json",
-                    &serde_json::to_vec(&query).unwrap(),
+                    &serde_json::to_vec(&response).unwrap(),
                 );
             }
+            let (mut stream, _) = listener.accept().unwrap();
+            assert!(read_request(&mut stream).starts_with("POST /sing_frame_volume?speaker=6000"));
+            answer(
+                &mut stream,
+                "application/json",
+                &serde_json::to_vec(&vec![0.5; 283]).unwrap(),
+            );
         });
         let frames = SingerFrames {
             hop_seconds: backend.info.hop_seconds(),
@@ -1375,6 +1462,241 @@ mod tests {
         assert_eq!(prediction.context["phonemes"][5]["phoneme"], "pau");
         assert_eq!(original.notes[1].frame_length, 2);
         assert_eq!(prediction.pitch_hz.unwrap().len(), 95 + 188);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn restoring_a_pause_does_not_predict_and_truncate_its_consonant_again() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let path = temp_connection();
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&connection(
+                &format!("http://{address}"),
+                24_000,
+                93.75,
+                json!([{"name":"Style","query_style_id":6000,"decode_style_id":3002}]),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let server = thread::spawn(move || {
+            // Engine 0.25.2 predicts four /t/ frames with the notes connected,
+            // but clips a fresh prediction to two frames with this five-frame rest.
+            let timeline = |events: &[(usize, &str)]| {
+                json!({
+                    "f0": vec![260.0; 243], "volume": vec![0.5; 243],
+                    "phonemes": events.iter().map(|(length, phoneme)| json!({
+                        "phoneme": phoneme, "frame_length": length
+                    })).collect::<Vec<_>>()
+                })
+            };
+            let (mut stream, _) = listener.accept().unwrap();
+            assert!(
+                read_request(&mut stream).starts_with("POST /sing_frame_audio_query?speaker=6000")
+            );
+            answer(
+                &mut stream,
+                "application/json",
+                &serde_json::to_vec(&timeline(&[
+                    (94, "pau"),
+                    (26, "a"),
+                    (4, "t"),
+                    (25, "e"),
+                    (94, "pau"),
+                ]))
+                .unwrap(),
+            );
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            if request.starts_with("POST /sing_frame_audio_query") {
+                answer(
+                    &mut stream,
+                    "application/json",
+                    &serde_json::to_vec(&timeline(&[
+                        (94, "pau"),
+                        (25, "a"),
+                        (3, "pau"),
+                        (2, "t"),
+                        (25, "e"),
+                        (94, "pau"),
+                    ]))
+                    .unwrap(),
+                );
+                return;
+            }
+            assert!(request.starts_with("POST /sing_frame_f0?speaker=6000"));
+            let body = request_body(&request);
+            assert_eq!(
+                body["score"]["notes"],
+                json!(test_score(&[(94, ""), (25, "あ"), (5, ""), (25, "て"), (94, "")]).notes)
+            );
+            assert_eq!(
+                body["frame_audio_query"]["phonemes"][2],
+                json!({"phoneme":"pau","frame_length":1})
+            );
+            answer(
+                &mut stream,
+                "application/json",
+                &serde_json::to_vec(&vec![261.0; 243]).unwrap(),
+            );
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            assert!(request.starts_with("POST /sing_frame_volume?speaker=6000"));
+            assert_eq!(
+                request_body(&request)["frame_audio_query"]["f0"],
+                json!(vec![261.0; 243])
+            );
+            answer(
+                &mut stream,
+                "application/json",
+                &serde_json::to_vec(&vec![0.25; 243]).unwrap(),
+            );
+        });
+        let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
+        let score = test_score(&[(25, "あ"), (5, ""), (25, "て")]);
+        let frames = SingerFrames {
+            hop_seconds: backend.info.hop_seconds(),
+            inventory: vec!["a".into()],
+            phonemes: vec![0; 55],
+            f0_hz: vec![261.62555; 55],
+            energy: vec![1.0; 55],
+        };
+        let prediction = backend.generate_curves(&frames, &score, 0, 0).unwrap();
+        server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+        let consonant = prediction.context["phonemes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["phoneme"] == "t")
+            .unwrap();
+        assert_eq!(
+            consonant["frame_length"], 4,
+            "the pause must not consume the predicted /t/"
+        );
+        assert_eq!(prediction.pitch_hz.unwrap(), vec![261.0; 243]);
+        assert_eq!(prediction.energy.unwrap(), vec![0.25; 243]);
+    }
+
+    #[test]
+    fn restored_pauses_preserve_multiple_consonants_and_existing_vowel_gaps() {
+        let score = test_score(&[
+            (10, ""),
+            (20, "あ"),
+            (6, ""),
+            (20, "て"),
+            (3, ""),
+            (20, "お"),
+            (8, ""),
+            (20, "か"),
+            (10, ""),
+        ]);
+        let mut query = json!({"phonemes": [
+            {"phoneme":"pau", "frame_length":10},
+            {"phoneme":"a", "frame_length":22},
+            {"phoneme":"t", "frame_length":4},
+            {"phoneme":"e", "frame_length":20},
+            {"phoneme":"pau", "frame_length":3},
+            {"phoneme":"o", "frame_length":22},
+            {"phoneme":"k", "frame_length":6},
+            {"phoneme":"a", "frame_length":20},
+            {"phoneme":"pau", "frame_length":10},
+        ]});
+        restore_predicted_rests(&score, &mut query).unwrap();
+        let phonemes: Vec<_> = query["phonemes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                (
+                    p["phoneme"].as_str().unwrap(),
+                    p["frame_length"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            phonemes,
+            [
+                ("pau", 10),
+                ("a", 20),
+                ("pau", 2),
+                ("t", 4),
+                ("e", 20),
+                ("pau", 3),
+                ("o", 20),
+                ("pau", 2),
+                ("k", 6),
+                ("a", 20),
+                ("pau", 10),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_running_engine_keeps_predicted_stops_when_restoring_short_pauses() {
+        let Ok(url) = std::env::var("AURIS_VOICEVOX_TEST_URL") else {
+            return;
+        };
+        let path = temp_connection();
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&connection(
+                &url,
+                24_000,
+                93.75,
+                json!([{"name":"Metan","query_style_id":6000,"decode_style_id":3002}]),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
+        for events in [
+            vec![(25, "あ"), (5, ""), (25, "て")],
+            vec![(24, "せ"), (2, ""), (46, "て")],
+            vec![(24, "し"), (2, ""), (24, "お"), (2, ""), (24, "り")],
+        ] {
+            let score = test_score(&events);
+            let original = score.clone();
+            let count = score.notes.iter().map(|n| n.frame_length as usize).sum();
+            let frames = SingerFrames {
+                hop_seconds: backend.info.hop_seconds(),
+                inventory: vec!["a".into()],
+                phonemes: vec![0; count],
+                f0_hz: vec![261.62555; count],
+                energy: vec![0.8; count],
+            };
+            let (mut connected, _) = query_score(&score, 94).unwrap();
+            bridge_rests(&mut connected, |_, _| true).unwrap();
+            let reference = backend
+                .post_json(
+                    "/sing_frame_audio_query",
+                    6000,
+                    json!({"notes": connected.notes}),
+                )
+                .unwrap();
+            let prediction = backend.generate_curves(&frames, &score, 0, 0).unwrap();
+            let stops = |query: &Value| {
+                query["phonemes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|p| p["phoneme"] == "t")
+                    .map(|p| p["frame_length"].as_u64().unwrap())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(stops(&prediction.context), stops(&reference), "{events:?}");
+            assert!(
+                !prediction.context["phonemes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|p| p["phoneme"] == "y")
+            );
+            assert_eq!(prediction.pitch_hz.unwrap().len(), count + 188);
+            assert_eq!(score, original);
+        }
         std::fs::remove_file(path).unwrap();
     }
 

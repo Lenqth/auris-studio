@@ -1992,8 +1992,10 @@ pub mod singing {
     //! Before its final query, VOICEVOX predicts consonant timing with internal rests connected
     //! to the preceding note. Rests no longer than the following predicted consonant stay connected
     //! in the synthesis score; longer pauses remain. This prevents the Engine from truncating
-    //! consonants to fit tiny gaps. The adapter may make a second query to restore those pauses;
-    //! saved notes, vowel onsets, host controls and total duration are unchanged.
+    //! consonants to fit tiny gaps. To restore longer pauses, the adapter splits them out of the
+    //! preceding vowel and recalculates pitch and volume for that phoneme timeline. It does not
+    //! predict consonant lengths again: the changed rest context could truncate them a second
+    //! time. Saved notes, vowel onsets, host controls and total duration are unchanged.
     //!
     //! File formats provide default capabilities, while a loaded
     //! [`auris_singer::SingingBackend::capabilities`] can override them for a particular model.
