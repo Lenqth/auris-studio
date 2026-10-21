@@ -60,8 +60,19 @@ pub struct CurvePrediction<C> {
     pub leading_frames: usize,
     /// Extra frames after the host timeline, included in each predicted array.
     pub trailing_frames: usize,
+    /// Predicted ranges that take musical edits from a different host frame.
+    pub expression_spans: Vec<ExpressionSpan>,
     /// Pronunciation, tensors, or other data retained for the backend's decoder.
     pub context: C,
+}
+
+/// A predicted articulation owned by a note whose nominal onset lies elsewhere.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExpressionSpan {
+    /// Range on the prediction clock, including leading context.
+    pub frames: std::ops::Range<usize>,
+    /// Frame on the host clock supplying the note's pitch ratio and gain.
+    pub control_frame: usize,
 }
 
 /// Acoustic curves ready for decoding, with musical edits already applied.
@@ -180,6 +191,28 @@ impl<C> CurvePrediction<C> {
             }
             offset = end;
         }
+        let mut previous_end = 0;
+        let mut articulated = Vec::with_capacity(self.expression_spans.len());
+        for span in self.expression_spans {
+            if span.frames.start < previous_end
+                || span.frames.start >= span.frames.end
+                || span.frames.end > count
+                || span.control_frame >= frames.len()
+            {
+                return Err(invalid(
+                    "expression spans must be ordered ranges on the frame grid",
+                ));
+            }
+            let control = controls[span.control_frame + self.leading_frames]
+                .ok_or_else(|| invalid("an expression span must refer to a sung host frame"))?;
+            previous_end = span.frames.end;
+            articulated.push((span.frames, control));
+        }
+        // Read every source before overriding ranges: a later source may itself
+        // lie inside another articulation's range.
+        for (range, control) in articulated {
+            controls[range].fill(Some(control));
+        }
         let mut next = None;
         for control in controls.iter_mut().rev() {
             if control.is_some() {
@@ -246,6 +279,7 @@ mod tests {
                 energy: ENERGY.then(|| vec![0.0, 0.04, 0.4, 0.2, 0.3, 0.0, 0.0, 0.0]),
                 leading_frames: 1,
                 trailing_frames: 2,
+                expression_spans: Vec::new(),
                 context: (speaker, seed),
             })
         }
@@ -304,6 +338,98 @@ mod tests {
                 vec![0.0, 0.0, 0.5, 0.25, 0.0, 0.0, 0.0, 0.0]
             }
         );
+    }
+
+    #[test]
+    fn anticipated_consonants_use_the_incoming_notes_pitch_edits_and_velocity() {
+        let frames = SingerFrames {
+            hop_seconds: 0.01,
+            inventory: vec!["a".into()],
+            phonemes: vec![0; 7],
+            f0_hz: vec![880.0, 880.0, 880.0, 880.0, 220.0, 220.0, 220.0],
+            energy: vec![0.0, 0.0, 0.0, 0.0, 0.8, 0.8, 0.8],
+        };
+        let score = SingerScore {
+            notes: vec![
+                SingerNote {
+                    key: Some(69),
+                    frame_length: 4,
+                    lyric: "あ".into(),
+                },
+                SingerNote {
+                    key: Some(69),
+                    frame_length: 3,
+                    lyric: "か".into(),
+                },
+            ],
+        };
+        let prediction = CurvePrediction {
+            pitch_hz: Some(vec![400.0; 9]),
+            energy: Some(vec![0.5; 9]),
+            leading_frames: 1,
+            trailing_frames: 1,
+            context: (),
+            expression_spans: vec![ExpressionSpan {
+                frames: 3..5,
+                control_frame: 4,
+            }],
+        };
+        let prepared = prediction
+            .apply_expression(&frames, &score, Predictor::<true, true>::SOURCES)
+            .unwrap();
+        assert_eq!(&prepared.pitch_hz[3..5], &[200.0; 2]);
+        assert!(
+            prepared.energy[3..5]
+                .iter()
+                .all(|gain| (*gain - 0.4).abs() < 1e-6)
+        );
+        assert_eq!(
+            prepared.energy[2], 0.0,
+            "the preceding vowel still follows its own zero velocity"
+        );
+    }
+
+    #[test]
+    fn malformed_expression_spans_are_rejected() {
+        let (frames, score) = input();
+        for spans in [
+            vec![ExpressionSpan {
+                frames: 2..2,
+                control_frame: 1,
+            }],
+            vec![ExpressionSpan {
+                frames: 2..9,
+                control_frame: 1,
+            }],
+            vec![ExpressionSpan {
+                frames: 2..3,
+                control_frame: 5,
+            }],
+            vec![ExpressionSpan {
+                frames: 2..3,
+                control_frame: 0,
+            }],
+            vec![
+                ExpressionSpan {
+                    frames: 2..4,
+                    control_frame: 1,
+                },
+                ExpressionSpan {
+                    frames: 3..5,
+                    control_frame: 1,
+                },
+            ],
+        ] {
+            let mut prediction = Predictor::<true, true>
+                .generate_curves(&frames, &score, 0, 0)
+                .unwrap();
+            prediction.expression_spans = spans;
+            assert!(
+                prediction
+                    .apply_expression(&frames, &score, Predictor::<true, true>::SOURCES)
+                    .is_err()
+            );
+        }
     }
 
     #[test]

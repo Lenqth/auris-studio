@@ -1,0 +1,670 @@
+{
+  "engine": "VOICEVOX Engine 0.25.2",
+  "query_style_id": 6000,
+  "baseline_commit": "8025e4ab",
+  "frame_rate": 93.75,
+  "midi_key": 60,
+  "target_note_frames": 24,
+  "boundary_frames": 94,
+  "inventory_source": "https://github.com/VOICEVOX/voicevox_engine/blob/0.25.2/voicevox_engine/tts_pipeline/mora_mapping.py",
+  "inventory_source_sha256": "19e6d2058c13f113fa8fe950a24caf3761abd7f2850f9846f8a535bdd33e73a2",
+  "mora_count": 163,
+  "conditions": [
+    {
+      "preceding_note_frames": 24,
+      "rest_frames": 0,
+      "cases": 163,
+      "baseline_phone_mismatches": 35,
+      "final_phone_mismatches": 0,
+      "final_duration_errors": 0
+    },
+    {
+      "preceding_note_frames": 24,
+      "rest_frames": 2,
+      "cases": 163,
+      "baseline_phone_mismatches": 35,
+      "final_phone_mismatches": 0,
+      "final_duration_errors": 0
+    },
+    {
+      "preceding_note_frames": 24,
+      "rest_frames": 8,
+      "cases": 163,
+      "baseline_phone_mismatches": 35,
+      "final_phone_mismatches": 0,
+      "final_duration_errors": 0
+    },
+    {
+      "preceding_note_frames": 4,
+      "rest_frames": 0,
+      "cases": 163,
+      "baseline_phone_mismatches": 68,
+      "final_phone_mismatches": 0,
+      "final_duration_errors": 0
+    },
+    {
+      "preceding_note_frames": 2,
+      "rest_frames": 0,
+      "cases": 163,
+      "baseline_phone_mismatches": 36,
+      "final_phone_mismatches": 0,
+      "final_duration_errors": 0
+    },
+    {
+      "preceding_note_frames": 1,
+      "rest_frames": 0,
+      "cases": 163,
+      "baseline_phone_mismatches": 156,
+      "final_phone_mismatches": 0,
+      "final_duration_errors": 156
+    }
+  ],
+  "incorrect_mora_splits": [
+    {
+      "mora": "リェ",
+      "expected": [
+        "ry",
+        "e"
+      ],
+      "baseline": [
+        "r",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "リィ",
+      "expected": [
+        "ry",
+        "i"
+      ],
+      "baseline": [
+        "r",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "ミェ",
+      "expected": [
+        "my",
+        "e"
+      ],
+      "baseline": [
+        "m",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "ミィ",
+      "expected": [
+        "my",
+        "i"
+      ],
+      "baseline": [
+        "m",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "ピェ",
+      "expected": [
+        "py",
+        "e"
+      ],
+      "baseline": [
+        "p",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "ピィ",
+      "expected": [
+        "py",
+        "i"
+      ],
+      "baseline": [
+        "p",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "ビェ",
+      "expected": [
+        "by",
+        "e"
+      ],
+      "baseline": [
+        "b",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "ビィ",
+      "expected": [
+        "by",
+        "i"
+      ],
+      "baseline": [
+        "b",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "ヒェ",
+      "expected": [
+        "hy",
+        "e"
+      ],
+      "baseline": [
+        "h",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "ヒィ",
+      "expected": [
+        "hy",
+        "i"
+      ],
+      "baseline": [
+        "h",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "ニェ",
+      "expected": [
+        "ny",
+        "e"
+      ],
+      "baseline": [
+        "n",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "ニィ",
+      "expected": [
+        "ny",
+        "i"
+      ],
+      "baseline": [
+        "n",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "デョ",
+      "expected": [
+        "dy",
+        "o"
+      ],
+      "baseline": [
+        "d",
+        "e",
+        "y",
+        "o"
+      ]
+    },
+    {
+      "mora": "デャ",
+      "expected": [
+        "dy",
+        "a"
+      ],
+      "baseline": [
+        "d",
+        "e",
+        "y",
+        "a"
+      ]
+    },
+    {
+      "mora": "デェ",
+      "expected": [
+        "dy",
+        "e"
+      ],
+      "baseline": [
+        "d",
+        "e",
+        "e"
+      ]
+    },
+    {
+      "mora": "テョ",
+      "expected": [
+        "ty",
+        "o"
+      ],
+      "baseline": [
+        "t",
+        "e",
+        "y",
+        "o"
+      ]
+    },
+    {
+      "mora": "テャ",
+      "expected": [
+        "ty",
+        "a"
+      ],
+      "baseline": [
+        "t",
+        "e",
+        "y",
+        "a"
+      ]
+    },
+    {
+      "mora": "テェ",
+      "expected": [
+        "ty",
+        "e"
+      ],
+      "baseline": [
+        "t",
+        "e",
+        "e"
+      ]
+    },
+    {
+      "mora": "ズィ",
+      "expected": [
+        "z",
+        "i"
+      ],
+      "baseline": [
+        "z",
+        "u",
+        "i"
+      ]
+    },
+    {
+      "mora": "スィ",
+      "expected": [
+        "s",
+        "i"
+      ],
+      "baseline": [
+        "s",
+        "u",
+        "i"
+      ]
+    },
+    {
+      "mora": "グヮ",
+      "expected": [
+        "gw",
+        "a"
+      ],
+      "baseline": [
+        "g",
+        "u",
+        "w",
+        "a"
+      ]
+    },
+    {
+      "mora": "グォ",
+      "expected": [
+        "gw",
+        "o"
+      ],
+      "baseline": [
+        "g",
+        "u",
+        "o"
+      ]
+    },
+    {
+      "mora": "グェ",
+      "expected": [
+        "gw",
+        "e"
+      ],
+      "baseline": [
+        "g",
+        "u",
+        "e"
+      ]
+    },
+    {
+      "mora": "グゥ",
+      "expected": [
+        "gw",
+        "u"
+      ],
+      "baseline": [
+        "g",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "mora": "グィ",
+      "expected": [
+        "gw",
+        "i"
+      ],
+      "baseline": [
+        "g",
+        "u",
+        "i"
+      ]
+    },
+    {
+      "mora": "クヮ",
+      "expected": [
+        "kw",
+        "a"
+      ],
+      "baseline": [
+        "k",
+        "u",
+        "w",
+        "a"
+      ]
+    },
+    {
+      "mora": "クォ",
+      "expected": [
+        "kw",
+        "o"
+      ],
+      "baseline": [
+        "k",
+        "u",
+        "o"
+      ]
+    },
+    {
+      "mora": "クェ",
+      "expected": [
+        "kw",
+        "e"
+      ],
+      "baseline": [
+        "k",
+        "u",
+        "e"
+      ]
+    },
+    {
+      "mora": "クゥ",
+      "expected": [
+        "kw",
+        "u"
+      ],
+      "baseline": [
+        "k",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "mora": "クィ",
+      "expected": [
+        "kw",
+        "i"
+      ],
+      "baseline": [
+        "k",
+        "u",
+        "i"
+      ]
+    },
+    {
+      "mora": "ギェ",
+      "expected": [
+        "gy",
+        "e"
+      ],
+      "baseline": [
+        "g",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "ギィ",
+      "expected": [
+        "gy",
+        "i"
+      ],
+      "baseline": [
+        "g",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "キェ",
+      "expected": [
+        "ky",
+        "e"
+      ],
+      "baseline": [
+        "k",
+        "i",
+        "e"
+      ]
+    },
+    {
+      "mora": "キィ",
+      "expected": [
+        "ky",
+        "i"
+      ],
+      "baseline": [
+        "k",
+        "i",
+        "i"
+      ]
+    },
+    {
+      "mora": "ウゥ",
+      "expected": [
+        "w",
+        "u"
+      ],
+      "baseline": [
+        "u",
+        "u"
+      ]
+    }
+  ],
+  "scope": "Phone-sequence preservation, not a perceptual score for every singer or pitch.",
+  "complete_inventory_mora_count": 187,
+  "baseline_incorrect_readings_all_spellings": [
+    {
+      "mora": "ウゥ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "キィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "キェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ギィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ギェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "クァ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "クィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "クゥ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "クェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "クォ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "クヮ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "グァ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "グィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "グゥ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "グェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "グォ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "グヮ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "スィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ズィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "テェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "テャ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "テョ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "デェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "デャ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "デョ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ニィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ニェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ヒィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ヒェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ビィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ビェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ピィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ピェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ミィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ミェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "リィ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "リェ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ヴャ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ヴュ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ヴョ",
+      "baseline_mora_count": 2
+    },
+    {
+      "mora": "ヶ",
+      "baseline_mora_count": 0
+    }
+  ],
+  "control_probe": {
+    "decode_style_id": 3002,
+    "host_velocities": [
+      0.0,
+      0.8
+    ],
+    "k_frames": 10,
+    "k_waveform_rms_before": 0.0007836961077611488,
+    "k_waveform_rms_after": 0.007869294946014621,
+    "s_frames": 11,
+    "s_waveform_rms_before": 0.00038984383834169653,
+    "s_waveform_rms_after": 0.005106032463110649
+  }
+}

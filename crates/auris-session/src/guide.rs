@@ -1984,10 +1984,14 @@ pub mod singing {
     //!
     //! A predictor implements [`auris_singer::CurveGenerator`]. Its prediction retains typed,
     //! backend-owned decoder context beside optional pitch and energy arrays and their leading
-    //! and trailing frame counts. The common preparation step validates the frame grid,
+    //! and trailing frame counts. Optional [`auris_singer::ExpressionSpan`] ranges associate an
+    //! anticipated articulation with its owning note's controls. The common preparation step
+    //! validates the frame grid,
     //! modulates predicted pitch relative to score keys, scales predicted energy, and copies
     //! host-owned curves unchanged. Controls extend into rests for anticipated consonants
-    //! and trailing decoder context; predicted energy still determines silence. VOICEVOX uses
+    //! and trailing decoder context; predicted energy still determines silence. A consonant
+    //! that overlaps the preceding note still uses its own note's velocity and pitch edits,
+    //! so a quiet preceding vowel cannot mute it or apply a different bend. VOICEVOX uses
     //! this contract with its frame query as context; another backend can keep tensors instead.
     //! Before its final query, VOICEVOX predicts consonant timing with internal rests connected
     //! to the preceding note. Rests no longer than the following predicted consonant stay connected
@@ -1996,6 +2000,10 @@ pub mod singing {
     //! preceding vowel and recalculates pitch and volume for that phoneme timeline. It does not
     //! predict consonant lengths again: the changed rest context could truncate them a second
     //! time. Saved notes, vowel onsets, host controls and total duration are unchanged.
+    //! When a predicted consonant fills a short preceding note completely, one of its frames
+    //! is reserved for that note's vowel and the acoustic curves are recalculated. A one-frame
+    //! note directly before a consonant cannot represent both sounds on the Engine's grid and
+    //! is reported as a lyric-duration error before inference, rather than deleting a phoneme.
     //!
     //! File formats provide default capabilities, while a loaded
     //! [`auris_singer::SingingBackend::capabilities`] can override them for a particular model.

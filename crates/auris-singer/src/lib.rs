@@ -18,7 +18,9 @@ mod score;
 mod voicevox;
 
 pub use backend::{BackendKind, SingingBackend, SingingRender, VoiceCapabilities, VoiceModel};
-pub use curves::{CurveGenerator, CurvePrediction, CurveSource, CurveSources, PreparedCurves};
+pub use curves::{
+    CurveGenerator, CurvePrediction, CurveSource, CurveSources, ExpressionSpan, PreparedCurves,
+};
 pub use leapsinger::{LeapSingerManifest, LeapSingerSpeaker, LeapSingerVariant};
 pub use limits::validate_automatic_voice_entry;
 pub use metadata::{VoiceCard, VoiceInfo};
@@ -48,7 +50,7 @@ pub enum LyricIssue {
     /// A prolonged-sound mark has no preceding vowel to extend.
     #[error("the prolonged-sound mark needs a preceding vowel; enter ア, イ, ウ, エ or オ")]
     MissingVowel,
-    /// The note cannot hold even one frame per mora.
+    /// The duration cannot preserve every mora and its required articulation.
     #[error("lengthen the note or distribute its lyric across more notes")]
     TooShort,
 }

@@ -138,7 +138,9 @@ fn digraph(base: char, small: char) -> Option<Vec<String>> {
     let palatal = |onset: &str| -> Option<Vec<String>> {
         let vowel = match small {
             'ゃ' => "a",
+            'ぃ' => "i",
             'ゅ' => "ɯ",
+            'ぇ' => "e",
             'ょ' => "o",
             _ => return None,
         };
@@ -158,6 +160,14 @@ fn digraph(base: char, small: char) -> Option<Vec<String>> {
     match base {
         'き' => palatal("kʲ"),
         'ぎ' => palatal("gʲ"),
+        'く' | 'ぐ' => {
+            let onset = if base == 'く' { "kʷ" } else { "gʷ" };
+            if small == 'ゎ' {
+                Some(tokens(&[onset, "a"]))
+            } else {
+                with_vowel(onset)
+            }
+        }
         'し' => palatal("ɕ").or_else(|| with_vowel("ɕ")),
         'じ' | 'ぢ' => palatal("dʑ").or_else(|| with_vowel("dʑ")),
         'ち' => palatal("tɕ").or_else(|| with_vowel("tɕ")),
@@ -169,25 +179,26 @@ fn digraph(base: char, small: char) -> Option<Vec<String>> {
         'り' => palatal("ɾʲ"),
         'て' => match small {
             'ぃ' => Some(tokens(&["t", "i"])),
-            'ゅ' => Some(tokens(&["tʲ", "ɯ"])),
-            _ => None,
+            _ => palatal("tʲ"),
         },
         'で' => match small {
             'ぃ' => Some(tokens(&["d", "i"])),
-            'ゅ' => Some(tokens(&["dʲ", "ɯ"])),
-            _ => None,
+            _ => palatal("dʲ"),
         },
+        'す' => (small == 'ぃ').then(|| tokens(&["s", "i"])),
+        'ず' => (small == 'ぃ').then(|| tokens(&["dz", "i"])),
         'と' => (small == 'ぅ').then(|| tokens(&["t", "ɯ"])),
         'ど' => (small == 'ぅ').then(|| tokens(&["d", "ɯ"])),
         'つ' => with_vowel("ts"),
         'ふ' => with_vowel("ɸ"),
         'う' => match small {
             'ぃ' => Some(tokens(&["w", "i"])),
+            'ぅ' => Some(tokens(&["w", "ɯ"])),
             'ぇ' => Some(tokens(&["w", "e"])),
             'ぉ' => Some(tokens(&["w", "o"])),
             _ => None,
         },
-        'ゔ' => with_vowel("v"),
+        'ゔ' => with_vowel("v").or_else(|| palatal("bʲ")),
         'い' => (small == 'ぇ').then(|| tokens(&["j", "e"])),
         _ => None,
     }
@@ -204,7 +215,7 @@ fn single(c: char) -> Option<Vec<String>> {
         'か' => &["k", "a"],
         'き' => &["k", "i"],
         'く' => &["k", "ɯ"],
-        'け' => &["k", "e"],
+        'け' | 'ゖ' => &["k", "e"],
         'こ' => &["k", "o"],
         'が' => &["g", "a"],
         'ぎ' => &["g", "i"],
@@ -296,6 +307,66 @@ mod tests {
         assert_eq!(phonemes("ふぁ"), ["ɸ", "a"]);
         assert_eq!(phonemes("てぃ"), ["t", "i"]);
         assert_eq!(phonemes("うぉ"), ["w", "o"]);
+    }
+
+    #[test]
+    fn extended_moras_keep_their_consonant_instead_of_splitting_into_syllables() {
+        for (text, onset, vowel) in [
+            ("きぃ", "kʲ", "i"),
+            ("きぇ", "kʲ", "e"),
+            ("ぎぃ", "gʲ", "i"),
+            ("ぎぇ", "gʲ", "e"),
+            ("にぃ", "ɲ", "i"),
+            ("にぇ", "ɲ", "e"),
+            ("ひぃ", "ç", "i"),
+            ("ひぇ", "ç", "e"),
+            ("びぃ", "bʲ", "i"),
+            ("びぇ", "bʲ", "e"),
+            ("ぴぃ", "pʲ", "i"),
+            ("ぴぇ", "pʲ", "e"),
+            ("みぃ", "mʲ", "i"),
+            ("みぇ", "mʲ", "e"),
+            ("りぃ", "ɾʲ", "i"),
+            ("りぇ", "ɾʲ", "e"),
+            ("すぃ", "s", "i"),
+            ("ずぃ", "dz", "i"),
+            ("くぁ", "kʷ", "a"),
+            ("くぃ", "kʷ", "i"),
+            ("くぅ", "kʷ", "ɯ"),
+            ("くぇ", "kʷ", "e"),
+            ("くぉ", "kʷ", "o"),
+            ("ぐぁ", "gʷ", "a"),
+            ("ぐぃ", "gʷ", "i"),
+            ("ぐぅ", "gʷ", "ɯ"),
+            ("ぐぇ", "gʷ", "e"),
+            ("ぐぉ", "gʷ", "o"),
+            ("てゃ", "tʲ", "a"),
+            ("てぇ", "tʲ", "e"),
+            ("てょ", "tʲ", "o"),
+            ("でゃ", "dʲ", "a"),
+            ("でぇ", "dʲ", "e"),
+            ("でょ", "dʲ", "o"),
+            ("うぅ", "w", "ɯ"),
+        ] {
+            let expected = tokens(&[onset, vowel]);
+            assert_eq!(kana_phonemes(text), Some(expected.clone()), "{text}");
+            assert_eq!(split_kana_moras(text), Some(vec![text.into()]), "{text}");
+            let recovered = phonemes_to_kana(&expected).unwrap();
+            assert_eq!(kana_phonemes(&recovered), Some(expected), "{text}");
+        }
+    }
+
+    #[test]
+    fn engine_aliases_keep_their_single_mora_pronunciation() {
+        for (text, expected) in [
+            ("ヴャ", tokens(&["bʲ", "a"])),
+            ("ヴュ", tokens(&["bʲ", "ɯ"])),
+            ("ヴョ", tokens(&["bʲ", "o"])),
+            ("ヶ", tokens(&["k", "e"])),
+        ] {
+            assert_eq!(kana_phonemes(text), Some(expected), "{text}");
+            assert_eq!(split_kana_moras(text).unwrap().len(), 1, "{text}");
+        }
     }
 
     #[test]

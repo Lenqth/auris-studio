@@ -17,8 +17,8 @@ use crate::limits::{
 };
 use crate::metadata::{VoiceCard, VoiceInfo};
 use crate::{
-    Acceleration, CurveGenerator, CurvePrediction, CurveSource, CurveSources, SingError,
-    validate_frames,
+    Acceleration, CurveGenerator, CurvePrediction, CurveSource, CurveSources, ExpressionSpan,
+    SingError, validate_frames,
 };
 
 const NAME: &str = "VOICEVOX";
@@ -87,6 +87,15 @@ fn padded_score(score: &SingerScore, padding: u32) -> Result<SingerScore, SingEr
         },
         error => error,
     })?;
+    for (index, pair) in score.notes.windows(2).enumerate() {
+        if pair[0].key.is_some() && pair[0].frame_length == 1 && starts_with_consonant(&pair[1]) {
+            return Err(SingError::InvalidLyric {
+                event: origins[index],
+                lyric: pair[0].lyric.clone(),
+                issue: crate::LyricIssue::TooShort,
+            });
+        }
+    }
     bridge_short_rests(&mut score)?;
     validate_score(&score)?;
     let rest = || SingerNote {
@@ -147,45 +156,13 @@ fn split_lyrics(score: &mut SingerScore) -> Result<Vec<usize>, SingError> {
     Ok(origins)
 }
 
-/// Give the Engine's consonant predictor two frames before every consonant.
-/// Record only the inserted frames so the prediction can return to the original clock.
-fn query_score(score: &SingerScore, padding: u32) -> Result<(SingerScore, Vec<usize>), SingError> {
-    let mut score = padded_score(score, padding)?;
-    let mut removed = Vec::new();
-    let mut at = 0usize;
-    for index in 0..score.notes.len() {
-        if score.notes[index].frame_length == 1
-            && score
-                .notes
-                .get(index + 1)
-                .is_some_and(starts_with_consonant)
-        {
-            score.notes[index].frame_length = 2;
-            removed.push(at + 1);
-        }
-        at = at
-            .checked_add(score.notes[index].frame_length as usize)
-            .ok_or_else(|| SingError::Inference("VOICEVOX score is too long".into()))?;
-    }
-    Ok((score, removed))
-}
-
-/// Validate all three Engine timelines before decoding, then remove query-only frames.
-fn restore_query_timing(
-    query: &mut Value,
-    expected: usize,
-    removed: &[usize],
-) -> Result<(), SingError> {
+/// Validate all three Engine timelines without dropping a sung phoneme.
+fn validate_query_timing(query: &mut Value, expected: usize) -> Result<(), SingError> {
     let invalid = || {
         SingError::Inference(
             "VOICEVOX query has inconsistent phoneme, f0 or volume frame lengths".into(),
         )
     };
-    if removed.windows(2).any(|pair| pair[0] >= pair[1])
-        || removed.last().is_some_and(|last| *last >= expected)
-    {
-        return Err(invalid());
-    }
     for field in ["f0", "volume"] {
         if query[field]
             .as_array()
@@ -196,7 +173,7 @@ fn restore_query_timing(
     }
     let phonemes = query["phonemes"].as_array_mut().ok_or_else(invalid)?;
     let mut at = 0usize;
-    for phoneme in phonemes.iter_mut() {
+    for phoneme in phonemes.iter() {
         if phoneme["phoneme"].as_str().is_none_or(str::is_empty) {
             return Err(invalid());
         }
@@ -208,28 +185,15 @@ fn restore_query_timing(
             .checked_add(length)
             .filter(|end| *end <= expected)
             .ok_or_else(invalid)?;
-        let omitted = removed.partition_point(|frame| *frame < end)
-            - removed.partition_point(|frame| *frame < at);
-        phoneme["frame_length"] = json!(length - omitted);
+        if length == 0 && phoneme["phoneme"] != "pau" {
+            return Err(invalid());
+        }
         at = end;
     }
     if at != expected {
         return Err(invalid());
     }
     phonemes.retain(|phoneme| phoneme["frame_length"].as_u64() != Some(0));
-    for field in ["f0", "volume"] {
-        let values = query[field].as_array_mut().ok_or_else(invalid)?;
-        let mut at = 0;
-        let mut omitted = removed.iter().copied().peekable();
-        values.retain(|_| {
-            let keep = omitted.peek() != Some(&at);
-            if !keep {
-                omitted.next();
-            }
-            at += 1;
-            keep
-        });
-    }
     Ok(())
 }
 
@@ -414,6 +378,45 @@ fn restore_predicted_rests(score: &SingerScore, query: &mut Value) -> Result<(),
 fn starts_with_consonant(note: &SingerNote) -> bool {
     note.key.is_some()
         && auris_vocal::kana_phonemes(&note.lyric).is_some_and(|phonemes| phonemes.len() > 1)
+}
+
+fn is_query_consonant(phoneme: &Value) -> bool {
+    phoneme["phoneme"].as_str().is_some_and(|symbol| {
+        !matches!(
+            symbol,
+            "pau" | "cl" | "N" | "a" | "e" | "i" | "o" | "u" | "A" | "E" | "I" | "O" | "U"
+        )
+    })
+}
+
+/// Reserve a frame for a short note's vowel when the next consonant took its whole duration.
+fn preserve_syllables(query: &mut Value) -> Result<bool, SingError> {
+    let invalid =
+        || SingError::Inference("VOICEVOX score is too short to preserve its syllables".into());
+    let phonemes = query["phonemes"].as_array_mut().ok_or_else(invalid)?;
+    let mut changed = false;
+    for index in 0..phonemes.len() {
+        if phonemes[index]["frame_length"].as_u64() != Some(0)
+            || phonemes[index]["phoneme"] == "pau"
+        {
+            continue;
+        }
+        if is_query_consonant(&phonemes[index]) {
+            return Err(invalid());
+        }
+        let next = phonemes.get(index + 1).ok_or_else(invalid)?;
+        let length = next["frame_length"]
+            .as_u64()
+            .filter(|length| *length > 1)
+            .ok_or_else(invalid)?;
+        if !is_query_consonant(next) {
+            return Err(invalid());
+        }
+        phonemes[index]["frame_length"] = json!(1);
+        phonemes[index + 1]["frame_length"] = json!(length - 1);
+        changed = true;
+    }
+    Ok(changed)
 }
 
 /// Reject malformed events before adapting the Engine's temporal constraints.
@@ -756,8 +759,48 @@ fn prediction_from_query(
         energy: Some(energy),
         leading_frames: padding,
         trailing_frames: padding,
+        expression_spans: Vec::new(),
         context: query,
     })
+}
+
+/// Anticipated consonants carry the edits of their own note, even across another note.
+fn consonant_expression_spans(
+    score: &SingerScore,
+    query: &Value,
+    padding: usize,
+) -> Result<Vec<ExpressionSpan>, SingError> {
+    let invalid = || SingError::Inference("VOICEVOX query has invalid expression timing".into());
+    let normalized = padded_score(score, padding as u32)?;
+    let mut onsets = BTreeMap::new();
+    let mut at = 0usize;
+    for note in &normalized.notes {
+        if starts_with_consonant(note) {
+            onsets.insert(at, at.checked_sub(padding).ok_or_else(invalid)?);
+        }
+        at = at
+            .checked_add(note.frame_length as usize)
+            .ok_or_else(invalid)?;
+    }
+    at = 0;
+    let mut spans = Vec::new();
+    for phoneme in query["phonemes"].as_array().ok_or_else(invalid)? {
+        let length = phoneme["frame_length"]
+            .as_u64()
+            .and_then(|v| usize::try_from(v).ok())
+            .ok_or_else(invalid)?;
+        let end = at.checked_add(length).ok_or_else(invalid)?;
+        if is_query_consonant(phoneme)
+            && let Some(&control_frame) = onsets.get(&end)
+        {
+            spans.push(ExpressionSpan {
+                frames: at..end,
+                control_frame,
+            });
+        }
+        at = end;
+    }
+    Ok(spans)
 }
 
 impl CurveGenerator for VoicevoxBackend {
@@ -784,7 +827,7 @@ impl CurveGenerator for VoicevoxBackend {
                 count: self.info.n_speakers,
             })?;
         let padding = (self.config.frame_rate * BOUNDARY_SECONDS).ceil() as u32;
-        let (mut padded, removed) = query_score(score, padding)?;
+        let mut padded = padded_score(score, padding)?;
         let expected = padded
             .notes
             .iter()
@@ -808,29 +851,35 @@ impl CurveGenerator for VoicevoxBackend {
             style.query_style_id,
             json!({ "notes": connected.notes }),
         )?;
-        restore_query_timing(&mut query, expected, &[])?;
+        let mut curves_changed = preserve_syllables(&mut query)?;
+        validate_query_timing(&mut query, expected)?;
         if connected != padded {
             bridge_predicted_rests(&mut padded, &query)?;
             if padded != connected {
                 restore_predicted_rests(&padded, &mut query)?;
-                // A second score query predicts consonant lengths again in the
-                // restored rest context, where the Engine can truncate them anew.
-                // Recompute only the acoustic curves for the preserved timeline.
-                query["f0"] = self.post_json(
-                    "/sing_frame_f0",
-                    style.query_style_id,
-                    json!({ "score": padded, "frame_audio_query": query }),
-                )?;
-                restore_query_timing(&mut query, expected, &[])?;
-                query["volume"] = self.post_json(
-                    "/sing_frame_volume",
-                    style.query_style_id,
-                    json!({ "score": padded, "frame_audio_query": query }),
-                )?;
+                curves_changed = true;
             }
         }
-        restore_query_timing(&mut query, expected, &removed)?;
-        prediction_from_query(query, padding as usize)
+        if curves_changed {
+            // Recalculate acoustics for the corrected phoneme timeline without
+            // predicting durations again and losing the correction.
+            query["f0"] = self.post_json(
+                "/sing_frame_f0",
+                style.query_style_id,
+                json!({ "score": padded, "frame_audio_query": query }),
+            )?;
+            validate_query_timing(&mut query, expected)?;
+            query["volume"] = self.post_json(
+                "/sing_frame_volume",
+                style.query_style_id,
+                json!({ "score": padded, "frame_audio_query": query }),
+            )?;
+        }
+        validate_query_timing(&mut query, expected)?;
+        let spans = consonant_expression_spans(score, &query, padding as usize)?;
+        let mut prediction = prediction_from_query(query, padding as usize)?;
+        prediction.expression_spans = spans;
+        Ok(prediction)
     }
 }
 
@@ -971,6 +1020,139 @@ mod tests {
     use auris_vocal::{SingerFrames, SingerNote, SingerScore};
 
     use super::*;
+
+    #[test]
+    fn a_running_engine_preserves_the_mora_inventory_across_timing_adaptation() {
+        let Ok(url) = std::env::var("AURIS_VOICEVOX_TEST_URL") else {
+            return;
+        };
+        // Japanese mora spellings accepted by Engine 0.25.2. Reference phonemes
+        // come from the Engine directly, independently of Auris's kana parser.
+        let moras = [
+            "ァ", "ア", "ィ", "イ", "イェ", "ゥ", "ウ", "ウィ", "ウゥ", "ウェ", "ウォ", "ェ", "エ",
+            "ォ", "オ", "カ", "ガ", "キ", "キィ", "キェ", "キャ", "キュ", "キョ", "ギ", "ギィ",
+            "ギェ", "ギャ", "ギュ", "ギョ", "ク", "クァ", "クィ", "クゥ", "クェ", "クォ", "クヮ",
+            "グ", "グァ", "グィ", "グゥ", "グェ", "グォ", "グヮ", "ケ", "ゲ", "コ", "ゴ", "サ",
+            "ザ", "シ", "シェ", "シャ", "シュ", "ショ", "ジ", "ジェ", "ジャ", "ジュ", "ジョ", "ス",
+            "スィ", "ズ", "ズィ", "セ", "ゼ", "ソ", "ゾ", "タ", "ダ", "チ", "チェ", "チャ", "チュ",
+            "チョ", "ヂ", "ヂェ", "ヂャ", "ヂュ", "ヂョ", "ッ", "ツ", "ツァ", "ツィ", "ツェ",
+            "ツォ", "ヅ", "テ", "ティ", "テェ", "テャ", "テュ", "テョ", "デ", "ディ", "デェ",
+            "デャ", "デュ", "デョ", "ト", "トゥ", "ド", "ドゥ", "ナ", "ニ", "ニィ", "ニェ", "ニャ",
+            "ニュ", "ニョ", "ヌ", "ネ", "ノ", "ハ", "バ", "パ", "ヒ", "ヒィ", "ヒェ", "ヒャ",
+            "ヒュ", "ヒョ", "ビ", "ビィ", "ビェ", "ビャ", "ビュ", "ビョ", "ピ", "ピィ", "ピェ",
+            "ピャ", "ピュ", "ピョ", "フ", "ファ", "フィ", "フェ", "フォ", "ブ", "プ", "ヘ", "ベ",
+            "ペ", "ホ", "ボ", "ポ", "マ", "ミ", "ミィ", "ミェ", "ミャ", "ミュ", "ミョ", "ム", "メ",
+            "モ", "ャ", "ヤ", "ュ", "ユ", "ョ", "ヨ", "ラ", "リ", "リィ", "リェ", "リャ", "リュ",
+            "リョ", "ル", "レ", "ロ", "ヮ", "ワ", "ヰ", "ヱ", "ヲ", "ン", "ヴ", "ヴァ", "ヴィ",
+            "ヴェ", "ヴォ", "ヴャ", "ヴュ", "ヴョ", "ヶ",
+        ];
+        let path = temp_connection();
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&connection(
+                &url,
+                24_000,
+                93.75,
+                json!([{"name":"Metan","query_style_id":6000,"decode_style_id":3002}]),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
+        for (length, gap) in [(24, 0), (24, 2), (24, 8), (4, 0), (2, 0)] {
+            let mut events = Vec::new();
+            for mora in moras {
+                events.push((length, "ア"));
+                if gap > 0 {
+                    events.push((gap, ""));
+                }
+                events.extend([(24, mora), (30, "")]);
+            }
+            let score = test_score(&events);
+            let count = score.notes.iter().map(|n| n.frame_length as usize).sum();
+            let frames = SingerFrames {
+                hop_seconds: backend.info.hop_seconds(),
+                inventory: vec!["a".into()],
+                phonemes: vec![0; count],
+                f0_hz: vec![261.62555; count],
+                energy: vec![0.8; count],
+            };
+            let mut raw = score.clone();
+            let boundary = SingerNote {
+                key: None,
+                frame_length: 94,
+                lyric: String::new(),
+            };
+            raw.notes.insert(0, boundary.clone());
+            raw.notes.push(boundary);
+            let reference = backend
+                .post_json("/sing_frame_audio_query", 6000, json!(raw))
+                .unwrap();
+            let prediction = backend.generate_curves(&frames, &score, 0, 0).unwrap();
+            let pronounced = |query: &Value| {
+                query["phonemes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|p| p["phoneme"] != "pau")
+                    .map(|p| p["phoneme"].as_str().unwrap().to_string())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(
+                pronounced(&prediction.context),
+                pronounced(&reference),
+                "previous length {length}, gap {gap}"
+            );
+            assert!(
+                prediction.context["phonemes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|p| p["frame_length"].as_u64().unwrap() > 0)
+            );
+            assert_eq!(prediction.pitch_hz.as_ref().unwrap().len(), count + 188);
+            prediction
+                .apply_expression(&frames, &score, VoicevoxBackend::SOURCES)
+                .unwrap();
+        }
+        for mora in moras {
+            let score = test_score(&[(1, "ア"), (24, mora)]);
+            if starts_with_consonant(&score.notes[1]) {
+                assert!(
+                    matches!(
+                        validate_lyrics(&score),
+                        Err(SingError::InvalidLyric {
+                            issue: crate::LyricIssue::TooShort,
+                            ..
+                        })
+                    ),
+                    "{mora}"
+                );
+            } else {
+                validate_lyrics(&score).unwrap();
+            }
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn anticipated_consonant_ranges_belong_to_the_incoming_notes() {
+        let score = test_score(&[(4, "あ"), (3, "か")]);
+        let query = json!({"phonemes":[
+            {"phoneme":"pau","frame_length":1},
+            {"phoneme":"a","frame_length":2},
+            {"phoneme":"k","frame_length":2},
+            {"phoneme":"a","frame_length":3},
+            {"phoneme":"pau","frame_length":1},
+        ]});
+        assert_eq!(
+            consonant_expression_spans(&score, &query, 1).unwrap(),
+            vec![ExpressionSpan {
+                frames: 3..5,
+                control_frame: 4
+            }]
+        );
+    }
 
     fn read_request(stream: &mut TcpStream) -> String {
         let mut bytes = Vec::new();
@@ -1667,7 +1849,7 @@ mod tests {
                 f0_hz: vec![261.62555; count],
                 energy: vec![0.8; count],
             };
-            let (mut connected, _) = query_score(&score, 94).unwrap();
+            let mut connected = padded_score(&score, 94).unwrap();
             bridge_rests(&mut connected, |_, _| true).unwrap();
             let reference = backend
                 .post_json(
@@ -1725,48 +1907,48 @@ mod tests {
     }
 
     #[test]
-    fn short_note_queries_restore_the_original_frame_clock() {
-        let original = test_score(&[(1, "ア"), (1, "キ"), (25, "カ")]);
-        let (outgoing, removed) = query_score(&original, 94).unwrap();
-        assert_eq!(removed, [95, 97]);
-        assert_eq!(outgoing.notes[1].frame_length, 2);
-        assert_eq!(outgoing.notes[2].frame_length, 2);
-        let mut query = json!({
-            "f0": [10.0, 20.0, 30.0, 40.0, 50.0],
-            "volume": [1.0, 2.0, 3.0, 4.0, 5.0],
-            "phonemes": [
-                {"phoneme": "a", "frame_length": 2},
-                {"phoneme": "k", "frame_length": 1},
-                {"phoneme": "i", "frame_length": 2}
-            ]
-        });
-        restore_query_timing(&mut query, 5, &[1, 2]).unwrap();
-        assert_eq!(query["f0"], json!([10.0, 40.0, 50.0]));
-        assert_eq!(query["volume"], json!([1.0, 4.0, 5.0]));
-        assert_eq!(
-            query["phonemes"],
-            json!([
-                {"phoneme": "a", "frame_length": 1},
-                {"phoneme": "i", "frame_length": 2}
-            ])
-        );
+    fn a_short_note_cannot_lose_its_vowel_to_the_following_consonant() {
+        let mut query = json!({"phonemes":[
+            {"phoneme":"pau","frame_length":94},
+            {"phoneme":"a","frame_length":0},
+            {"phoneme":"m","frame_length":4},
+            {"phoneme":"a","frame_length":24},
+            {"phoneme":"pau","frame_length":94},
+        ]});
+        assert!(preserve_syllables(&mut query).unwrap());
+        assert_eq!(query["phonemes"][1]["frame_length"], 1);
+        assert_eq!(query["phonemes"][2]["frame_length"], 3);
+    }
+
+    #[test]
+    fn one_frame_before_a_consonant_reports_the_original_lyric_event() {
+        let score = test_score(&[(25, "かな"), (1, "あ"), (25, "ま")]);
+        let error = validate_lyrics(&score).unwrap_err();
+        assert!(matches!(
+            error,
+            SingError::InvalidLyric {
+                event: 1,
+                issue: crate::LyricIssue::TooShort,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn multi_mora_notes_split_without_losing_lyrics_or_frames() {
-        let (outgoing, _) = query_score(&test_score(&[(25, "こーひー")]), 94).unwrap();
+        let outgoing = padded_score(&test_score(&[(25, "こーひー")]), 94).unwrap();
         assert_eq!(
             &outgoing.notes[1..5],
             test_score(&[(7, "こ"), (6, "オ"), (6, "ひ"), (6, "イ")]).notes
         );
-        assert!(query_score(&test_score(&[(1, "かな")]), 94).is_err());
+        assert!(padded_score(&test_score(&[(1, "かな")]), 94).is_err());
     }
 
     #[test]
     fn malformed_engine_phoneme_lengths_are_rejected_before_synthesis() {
         for length in [json!(-1), json!(2), json!(1.5), json!(null)] {
             let mut query = json!({"f0": [100.0], "volume": [1.0], "phonemes": [{"phoneme": "a", "frame_length": length}]});
-            assert!(restore_query_timing(&mut query, 1, &[]).is_err());
+            assert!(validate_query_timing(&mut query, 1).is_err());
         }
     }
 
@@ -1869,13 +2051,12 @@ mod tests {
     }
 
     #[test]
-    fn short_internal_notes_get_temporary_query_frames() {
+    fn short_internal_notes_are_checked_without_deleting_query_frames() {
         for events in [
             vec![(1, "ア"), (25, "カ")],
             vec![(25, "ア"), (1, "イ"), (25, "カ")],
         ] {
-            let (_, removed) = query_score(&test_score(&events), 94).unwrap();
-            assert_eq!(removed.len(), 1);
+            assert!(padded_score(&test_score(&events), 94).is_err());
         }
         for events in [
             vec![(1, ""), (25, "カ")],
@@ -1887,8 +2068,7 @@ mod tests {
             vec![(1, "カ")],
             vec![(25, "")],
         ] {
-            let (_, removed) = query_score(&test_score(&events), 94).unwrap();
-            assert!(removed.is_empty());
+            assert!(padded_score(&test_score(&events), 94).is_ok());
         }
     }
 
@@ -2181,14 +2361,11 @@ mod tests {
             samples.len()
         );
         for events in [
-            vec![(1, "ア"), (25, "カ")],
-            vec![(1, "カ"), (1, "キ"), (1, "ク"), (25, "ケ")],
             vec![(25, "カ"), (1, ""), (25, "キ")],
             vec![(23, "す"), (2, ""), (25, "な")],
             vec![(23, "な"), (2, ""), (25, "つ")],
             vec![(25, "こーひー")],
             vec![(25, "シァ"), (25, "フゥ"), (25, "じぃ")],
-            vec![(2, "かな")],
             vec![(25, "ひ"), (25, "か"), (25, "り")],
         ] {
             let score = test_score(&events);

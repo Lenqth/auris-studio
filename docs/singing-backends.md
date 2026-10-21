@@ -287,6 +287,8 @@ and expression scale the predicted volume. Auris does not add its generic glide 
 attack/release envelope to this backend. Controls extend into rests so the Engine can sound
 anticipatory consonants without being muted by the host's note boundaries. Existing audio
 takes stay as recorded; render the singer track again to hear this behavior.
+Consonants that anticipate their vowel inside the previous note also use the incoming note's
+velocity, expression and pitch edits. A quiet or bent preceding note does not change them.
 
 A standalone prolonged-sound mark (`ー`) is expanded to the preceding vowel only in the
 outgoing score: `こ・ー・ひ・ー` is sent as `こ・オ・ひ・イ`. Notes, rests, pitches,
@@ -295,8 +297,9 @@ with its note number. HTTP failures include the Engine's explanation, such as th
 refused, instead of only a status code.
 
 Half-width kana, decomposed voiced marks, and surrounding whitespace are normalized in the
-outgoing lyrics too (` ｶﾞ ` becomes `ガ`). Each pitched note still needs one kana mora;
-entering several morae on a single note, such as `ララ`, is rejected by the Engine.
+outgoing lyrics too (` ｶﾞ ` becomes `ガ`). Multi-mora lyrics are divided across the note's
+existing frame duration for the Engine. Extended single moras such as `スィ`, `クォ` and `キェ`
+remain single moras, retaining their consonant instead of being split into extra syllables.
 
 VOICEVOX Engine 0.25.2 can truncate a consonant to half the preceding rest, making a two-frame
 gap leave only about 11 ms for the consonant. Auris predicts consonant lengths with internal
@@ -304,9 +307,11 @@ rests connected to the preceding note. Gaps too short for the predicted consonan
 connected; longer pauses are restored without predicting consonant lengths again. Pitch and
 volume are recalculated for the restored phoneme timeline. The saved notes, vowel onsets and
 total duration stay fixed. Existing takes need to be rendered again to hear this correction.
-One-frame notes receive temporary query frames, removed before synthesis; boundary rests
-receive padding automatically. Zero-length events, invalid MIDI keys, and rests with lyrics
-are reported before transmission.
+If a consonant fills a short preceding note completely, Auris reserves one frame for that
+note's vowel. A one-frame note directly before a consonant cannot fit both sounds on this
+grid and is reported with its note number; lengthen that note. Boundary rests receive padding
+automatically. Zero-length events, invalid MIDI keys, and rests with lyrics are also reported
+before transmission.
 
 The connection's output sample rate must divide into whole samples per Engine frame. Use
 24000 or 48000 Hz for the standard 93.75 fps Engine; 44100 Hz cannot represent this grid exactly
