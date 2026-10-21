@@ -202,6 +202,10 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             search_documentation::DESCRIPTION,
         ),
         definition::<check_spec::Args>(check_spec::NAME, check_spec::DESCRIPTION),
+        definition::<configure_plugin_paths::Args>(
+            configure_plugin_paths::NAME,
+            configure_plugin_paths::DESCRIPTION,
+        ),
         definition::<preview_composition::Args>(
             preview_composition::NAME,
             preview_composition::DESCRIPTION,

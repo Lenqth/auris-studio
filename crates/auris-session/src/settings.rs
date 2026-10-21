@@ -596,6 +596,64 @@ impl Settings {
         }
     }
 
+    /// Loads preferences for a controlled update, refusing malformed or unreadable files.
+    /// A missing file uses defaults; errors never cause existing preferences to be replaced.
+    pub fn load_for_update() -> Result<Self, String> {
+        Self::read_for_update(&Self::path())
+    }
+
+    fn read_for_update(path: &Path) -> Result<Self, String> {
+        let text = match read_config_text(path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self::default());
+            }
+            Err(error) => {
+                return Err(format!(
+                    "could not read settings {}: {error}",
+                    path.display()
+                ));
+            }
+        };
+        serde_json::from_str(&text).map_err(|error| {
+            format!(
+                "could not edit malformed settings {}: {error}",
+                path.display()
+            )
+        })
+    }
+
+    /// Adds/removes up to 64 extra plugin paths atomically in memory.
+    /// Additions must be absolute. Removals use the exact stored path. Duplicate additions
+    /// and already-absent removals are no-ops. No folders are walked or created by this method.
+    pub fn edit_plugin_paths(
+        &mut self,
+        add: &[PathBuf],
+        remove: &[PathBuf],
+    ) -> Result<bool, String> {
+        if add.len().saturating_add(remove.len()) > 64 {
+            return Err("at most 64 plugin path additions/removals are allowed".into());
+        }
+        for path in add {
+            if !path.is_absolute() {
+                return Err(format!("plugin path must be absolute: {}", path.display()));
+            }
+            if remove.contains(path) {
+                return Err("a plugin path cannot be added and removed in the same request".into());
+            }
+        }
+        let mut paths = self.plugin_paths.clone();
+        paths.retain(|path| !remove.contains(path));
+        for path in add {
+            if !paths.contains(path) {
+                paths.push(path.clone());
+            }
+        }
+        let changed = paths != self.plugin_paths;
+        self.plugin_paths = paths;
+        Ok(changed)
+    }
+
     /// Writes the settings, creating the configuration directory if needed.
     pub fn save(&self) -> Result<(), SessionError> {
         let path = Self::path();
@@ -672,6 +730,56 @@ fn home() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plugin_path_edits_are_atomic_idempotent_and_preserve_other_preferences() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("私の音源");
+        let second = root.path().join("Other plugins");
+        let mut settings = Settings::default();
+        let preferences = settings.agent.clone();
+        assert!(
+            settings
+                .edit_plugin_paths(std::slice::from_ref(&first), &[])
+                .unwrap()
+        );
+        assert!(
+            !settings
+                .edit_plugin_paths(std::slice::from_ref(&first), &[])
+                .unwrap()
+        );
+        assert!(
+            settings
+                .edit_plugin_paths(&[second.clone(), PathBuf::from("relative")], &[])
+                .is_err()
+        );
+        assert_eq!(
+            settings.plugin_paths.as_slice(),
+            std::slice::from_ref(&first)
+        );
+        assert!(
+            settings
+                .edit_plugin_paths(std::slice::from_ref(&second), std::slice::from_ref(&first))
+                .unwrap()
+        );
+        assert_eq!(settings.plugin_paths, [second]);
+        assert_eq!(settings.agent, preferences);
+    }
+
+    #[test]
+    fn settings_updates_refuse_malformed_files_instead_of_replacing_preferences() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("settings.json");
+        assert!(Settings::read_for_update(&path).is_ok());
+        std::fs::write(&path, b"{broken preferences").unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(
+            Settings::read_for_update(&path)
+                .unwrap_err()
+                .contains("malformed")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
 
     #[test]
     fn claude_preferences_round_trip_and_older_cli_preferences_keep_their_defaults() {

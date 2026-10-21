@@ -439,7 +439,13 @@ fn record_inventory(entries: &mut Vec<serde_json::Value>, entry: serde_json::Val
     }
 }
 
-fn root_inventory(extra_paths: &[PathBuf]) -> Vec<serde_json::Value> {
+#[derive(Clone, Copy)]
+enum RootInventoryMode {
+    Metadata,
+    Isolated,
+}
+
+fn root_inventory(extra_paths: &[PathBuf], mode: RootInventoryMode) -> Vec<serde_json::Value> {
     let mut entries = Vec::new();
     let mut seen = HashSet::new();
     for (format, paths) in [
@@ -456,10 +462,33 @@ fn root_inventory(extra_paths: &[PathBuf]) -> Vec<serde_json::Value> {
             if !seen.insert((format, path.clone())) {
                 continue;
             }
-            let (status, message) = match path.symlink_metadata() {
-                Ok(_) => ("available", None),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => ("not_found", None),
-                Err(error) => ("unreadable", Some(error.to_string())),
+            if entries.len() >= CATALOG_ERROR_LIMIT {
+                record_inventory(&mut entries, serde_json::json!({}));
+                return entries;
+            }
+            // Isolated discovery delegates filesystem access to its bounded child process too.
+            // A disconnected root must not block the parent while it is reporting that snapshot.
+            let metadata = match mode {
+                RootInventoryMode::Isolated => None,
+                RootInventoryMode::Metadata => Some(path.symlink_metadata()),
+            };
+            let matches_format = path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case(format));
+            let (status, message) = match metadata {
+                None => ("isolated_scan", None),
+                Some(Ok(metadata))
+                    if matches_format
+                        || (metadata.is_dir() && !metadata.file_type().is_symlink()) =>
+                {
+                    ("available", None)
+                }
+                Some(Ok(metadata)) if metadata.file_type().is_symlink() => ("skipped_link", None),
+                Some(Ok(_)) => ("not_directory_or_matching_plugin", None),
+                Some(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                    ("not_found", None)
+                }
+                Some(Err(error)) => ("unreadable", Some(error.to_string())),
             };
             record_inventory(
                 &mut entries,
@@ -557,7 +586,19 @@ fn scan_plugin_roots(
                 continue;
             }
         };
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    if files.errors.len() < CATALOG_ERROR_LIMIT {
+                        files.errors.push(format!(
+                            "{}: {error}",
+                            short_text(&path.to_string_lossy(), 240)
+                        ));
+                    }
+                    continue;
+                }
+            };
             *visited += 1;
             let path = entry.path();
             let bytes = path.as_os_str().len();
@@ -1490,7 +1531,14 @@ impl SoundLibraryJob {
         };
         let mut errors = Vec::new();
         let mut inventory = if self.scan_plugins {
-            root_inventory(&self.extra_paths)
+            root_inventory(
+                &self.extra_paths,
+                if self.isolated_plugin_discovery {
+                    RootInventoryMode::Isolated
+                } else {
+                    RootInventoryMode::Metadata
+                },
+            )
         } else {
             Vec::new()
         };
@@ -1524,7 +1572,7 @@ impl SoundLibraryJob {
                     &mut inventory,
                     serde_json::json!({
                         "kind":"plugin", "path":short_text(&entry.path.to_string_lossy(),512),
-                        "status":if sounds.len() > before { "loaded" } else { "no_instrument" },
+                    "status":if budget.sounds_truncated {"metadata_limit"} else if sounds.len() > before { "loaded" } else { "no_instrument" },
                         "sounds_found":sounds.len()-before
                     }),
                 );
@@ -1577,7 +1625,7 @@ impl SoundLibraryJob {
                     serde_json::json!({
                         "kind":"plugin", "format":if *vst3 {"vst3"} else {"clap"},
                         "path":short_text(&file.to_string_lossy(),512),
-                        "status":if result.is_err() {"load_failed"} else if sounds.len() > before {"loaded"} else {"no_instrument"},
+                    "status":if result.is_err() {"load_failed"} else if budget.sounds_truncated {"metadata_limit"} else if sounds.len() > before {"loaded"} else {"no_instrument"},
                         "sounds_found":sounds.len()-before
                     }),
                 );
@@ -2856,7 +2904,13 @@ mod tests {
         let _serial = serial_test();
         let scratch = Scratch::new("inventory-roots");
         let missing = scratch.join("Missing");
-        let roots = root_inventory(std::slice::from_ref(&missing));
+        let roots = root_inventory(std::slice::from_ref(&missing), RootInventoryMode::Metadata);
+        let isolated = root_inventory(std::slice::from_ref(&missing), RootInventoryMode::Isolated);
+        assert!(
+            isolated
+                .iter()
+                .all(|entry| entry["status"] == "isolated_scan")
+        );
         assert!(
             roots
                 .iter()

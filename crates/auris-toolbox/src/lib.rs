@@ -63,9 +63,11 @@ mod project_files;
 mod recognition;
 mod reports;
 pub use reports::read_report;
+pub mod plugin_paths;
 pub mod replace_notes;
 mod sound_input;
 mod sound_search;
+pub use plugin_paths as configure_plugin_paths;
 pub use sound_search::{instrument_diagnostics, search_instruments, similar_instruments};
 mod track_editing;
 pub use audio_quality::{normalize_mix, verify_render};
@@ -97,6 +99,7 @@ Search replies use zero-based library indices into libraries. instrument_diagnos
 Use setup_tracks for atomic track/sound/clip setup. discover_tools finds names without fetching schemas.
 Use set_instrument_params or replace_notes_batch for bounded atomic edits across several targets; identical retries do not save again.
 Use preview_composition before compose to inspect added ending bars and part-to-track mapping, including merged drums.
+Use configure_plugin_paths to inspect or edit shared extra plugin folders; search again after changing them.
 Large reports return report_id: use read_report with report_path and next_offset to inspect the immutable snapshot without re-running a write.\nMake dependent edits one at a time: wait for each result before using its IDs or paths.
 
 Use search_instruments with a focused query to choose sounds; never fetch the full library by default.

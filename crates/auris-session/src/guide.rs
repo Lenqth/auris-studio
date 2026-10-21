@@ -323,6 +323,9 @@ pub mod architecture {
     //! plugin paths for searching and selecting sounds. Diagnostics page the searched roots,
     //! detected files and load outcomes alongside scan and acoustic measurement failures;
     //! reading them uses the existing snapshot without rescanning or loading plugins.
+    //! `configure_plugin_paths` reads or edits these machine-level roots through
+    //! [`Settings::edit_plugin_paths`](crate::Settings::edit_plugin_paths). It refuses malformed
+    //! settings, saves only changed preferences and requires a fresh sound search afterward.
     //! [`Session::setup_tracks`](crate::Session::setup_tracks)
     //! creates a bounded batch
     //! as one transaction; the saved-project adapter saves once and retains bounded retry receipts.
