@@ -23,7 +23,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
-| AR-06 | Medium | Denial of service | A MIDI file of meter changes takes quadratic time to import (verified) |
 | AR-07 | Medium | DSP | Ping-pong delay does nothing on a centred source (verified) |
 | AR-08 | Medium | Security | Native CLI file reads are approved automatically, in every mode, anywhere on disk |
 | AR-09 | Medium | i18n, macOS | The app launched from Finder ignores the system language |
@@ -36,24 +35,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
 
 ## Findings
-
-### AR-06 — A MIDI file of meter changes takes quadratic time to import (verified)
-
-**Where.** `read_smf_with_limits` calls `SignatureMap::set_point` once per time-signature event
-(`crates/auris-io/src/midi.rs:387-392`). Each call runs `align_to_bars`, which rebuilds the whole
-point list (`crates/auris-core/src/time.rs:495-504`, `657-694`). The budget allows a million
-events per track and four million per file (`midi.rs:59-63`), and parsing has no cancellation
-point.
-
-**Measured.** A probe importing alternating 4/4 and 3/4 bars at one tick per quarter took 92 ms
-for 5 000 meter changes, 0.52 s for 10 000 and 1.48 s for 20 000 (test profile). Extrapolated,
-one million changes, an 8 MB file, take about an hour. A map that size also stays slow
-afterwards: `bar_of`, `spans` and `bar_start` are linear and allocate on every call
-(`time.rs:548-594`), and the UI calls them while painting.
-
-**Direction.** Collect the meter events and build the map once with `from_points` (one sort and
-one alignment pass). Also bound the number of timeline points far below the note budget; no real
-file has more than a few thousand.
 
 ### AR-07 — Ping-pong delay does nothing on a centred source (verified)
 

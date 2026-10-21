@@ -17,6 +17,8 @@ pub enum MidiImportResource {
     AutomationPoints,
     /// Notes, automation, tempo and meter events retained together.
     OutputEvents,
+    /// Changes of meter.
+    MeterChanges,
 }
 
 impl std::fmt::Display for MidiImportResource {
@@ -27,6 +29,7 @@ impl std::fmt::Display for MidiImportResource {
             Self::Notes => "MIDI notes",
             Self::AutomationPoints => "MIDI automation points",
             Self::OutputEvents => "retained MIDI events",
+            Self::MeterChanges => "MIDI meter changes",
         })
     }
 }
