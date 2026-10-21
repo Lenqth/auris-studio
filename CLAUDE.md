@@ -29,8 +29,9 @@ keep them alive:
 * **The keystroke a user sees is not the keystroke that is stored.** `secondary-s` is stored;
   `actions::normalise_keystroke` turns it into what the keyboard reports, for comparing, and
   `actions::menu_keystroke` into ⌘S or Ctrl+S, for reading.
-* **Windows sets no locale variables.** `Language::from_system_locale` is what makes a Japanese
-  Windows install come up in Japanese.
+* **Windows sets no locale variables, and neither does Finder.** `Language::from_system_locale`
+  is what makes a Japanese Windows install, and the Mac application opened from Finder rather
+  than a terminal, come up in Japanese.
 
 The plugin hosts use Windows 0.62 bindings. Windows runs `auris-gpu` on Vulkan.
 

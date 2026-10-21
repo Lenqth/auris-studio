@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-09 | Medium | i18n, macOS | The app launched from Finder ignores the system language |
 | AR-10 | Medium | VST3 | Every class in a multi-class bundle gets the first class's kind |
 | AR-11 | Low-Medium | Security | `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured |
 | AR-12 | Low | VST3 | An editor change during playback overrides automation for one block |
@@ -44,18 +43,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-09 — The app launched from Finder ignores the system language
-
-**Where.** `crates/auris-i18n/src/lib.rs:96-134`.
-
-**What happens.** `from_environment` reads `LC_ALL`, `LC_MESSAGES` and `LANG`, then falls back to
-`from_system_locale`, which answers only on Windows. A macOS app launched from Finder, the Dock or
-Launchpad has none of those variables (launchd sets none), so a Japanese Mac gets English unless
-the app is started from a terminal. This is the bug the Windows branch was written to fix.
-
-**Direction.** Ask `NSLocale.preferredLanguages` (or `CFLocaleCopyPreferredLanguages`) on macOS.
-The `objc2-foundation` crate is already in the dependency graph.
 
 ### AR-10 — Every class in a multi-class bundle gets the first class's kind
 
