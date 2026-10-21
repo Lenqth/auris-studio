@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-10 | Medium | VST3 | Every class in a multi-class bundle gets the first class's kind |
 | AR-11 | Low-Medium | Security | `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured |
 | AR-12 | Low | VST3 | An editor change during playback overrides automation for one block |
 | AR-14 | Low | DSP | `loudness_quantile` panics on a NaN block; one infinite block reads as silence |
@@ -43,20 +42,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-10 — Every class in a multi-class bundle gets the first class's kind
-
-**Where.** `crates/auris-vst3/src/lib.rs:184-224`: inside the per-class map, `kind_of` and
-`category_of` read `detailed.info`, the bundle's first audio class, rather than the class being
-listed (`:191-192`, `:207`). The vendored `ClassInfo` does not carry the per-class subcategories
-needed to do better (`vendor/vst3-host/src/discovery.rs:206-217`).
-
-**What happens.** Shell bundles that expose many classes (WaveShell is the familiar one) list all of
-their instruments as effects, or all of their effects as instruments, according to whichever class
-comes first. A misfiled instrument cannot be placed on an instrument track.
-
-**Direction.** Read `PClassInfo2::subCategories` per class in the vendored discovery, and classify
-from that.
 
 ### AR-11 — `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured
 

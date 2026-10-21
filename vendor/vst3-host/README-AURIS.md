@@ -18,3 +18,7 @@ history without calling the control-thread-only component activation API. The pl
 
 Remove the fork once an upstream release provides an equivalent bus-aware, bounded,
 allocation-free and lock-free owner API.
+
+`get_detailed_plugin_info` also reports each class's own sub-categories (`ClassInfo::sub_categories`,
+from `PClassInfo2`/`PClassInfoW`). The bundle-level category describes only the first audio class,
+which classified every class of a shell bundle such as WaveShell as whatever that first one was.

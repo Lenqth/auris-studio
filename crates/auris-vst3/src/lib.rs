@@ -189,7 +189,11 @@ pub fn plugins_in(path: &Path) -> Result<Vec<Vst3PluginInfo>, Vst3Error> {
         .iter()
         .filter(|class| class.category.contains("Audio Module Class"))
         .map(|class| {
-            let kind = kind_of(&detailed.info.category, detailed.info.has_midi_input);
+            let (kind, category) = class_kind(
+                &class.sub_categories,
+                &detailed.info.category,
+                detailed.info.has_midi_input,
+            );
             Vst3PluginInfo {
                 class_id: class.class_id.clone(),
                 name: if class.name.is_empty() {
@@ -204,7 +208,7 @@ pub fn plugins_in(path: &Path) -> Result<Vec<Vst3PluginInfo>, Vst3Error> {
                     class.version.clone()
                 },
                 kind,
-                category: category_of(&detailed.info.category, kind),
+                category,
                 has_gui: detailed.info.has_gui,
             }
         })
@@ -1387,6 +1391,24 @@ fn unit_of(parameter: &Parameter) -> ParamUnit {
     }
 }
 
+/// One class's kind and browser group, from its own sub-categories when the factory gave them.
+///
+/// A bundle can export instruments and effects side by side, and `bundle_category` and
+/// `bundle_midi_input` describe only its first audio class. A class that names itself is taken at
+/// its word, without the MIDI-input guess, which also belongs to that first class.
+fn class_kind(
+    sub_categories: &str,
+    bundle_category: &str,
+    bundle_midi_input: bool,
+) -> (PluginKind, PluginCategory) {
+    let (category, midi_input) = match sub_categories.trim().is_empty() {
+        true => (bundle_category, bundle_midi_input),
+        false => (sub_categories, false),
+    };
+    let kind = kind_of(category, midi_input);
+    (kind, category_of(category, kind))
+}
+
 fn kind_of(category: &str, midi_input: bool) -> PluginKind {
     let lower = category.to_ascii_lowercase();
     if lower.contains("instrument")
@@ -1517,6 +1539,29 @@ fn deliver(channels: &[Vec<f32>], target: &mut AudioBuffer, frames: usize, overw
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_class_of_a_shell_bundle_is_classified_by_its_own_sub_categories() {
+        // The bundle-level category is the first class's: an instrument, with MIDI input.
+        let bundle = ("Instrument|Synth", true);
+        assert_eq!(
+            class_kind("Fx|Delay", bundle.0, bundle.1),
+            (PluginKind::Effect, PluginCategory::Delay)
+        );
+        assert_eq!(
+            class_kind("Fx|Analyzer", bundle.0, bundle.1),
+            (PluginKind::Effect, PluginCategory::Utility)
+        );
+        assert_eq!(
+            class_kind("Instrument|Sampler", "Fx|Dynamics", false),
+            (PluginKind::Instrument, PluginCategory::Sampler)
+        );
+        // A class that says nothing still falls back to what the bundle says.
+        assert_eq!(
+            class_kind("", bundle.0, bundle.1),
+            (PluginKind::Instrument, PluginCategory::Synth)
+        );
+    }
     use std::sync::atomic::{AtomicUsize, Ordering};
     #[test]
     fn ids_are_namespaced() {
