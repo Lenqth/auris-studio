@@ -31,6 +31,7 @@
 //! now share.
 
 mod accompany;
+mod composition_inspection;
 mod composition_preview;
 pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
 mod batch_editing;

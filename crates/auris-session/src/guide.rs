@@ -1321,6 +1321,13 @@ pub mod composition {
     //! form length, added ending bars, authored-part mapping and merged drum tracks from the
     //! same generated draft, including vocal preparation. The `preview_composition` tool runs
     //! this before saving or loading instruments; source availability is checked by `compose`.
+    //! Newly composed projects also keep an optional comparison baseline: effective static
+    //! controls, instrument selections, timeline maps and authored-note digests with recipes.
+    //! [`Session::inspect_composition_state`](crate::Session::inspect_composition_state) reads
+    //! current values and identifies later edits without regenerating notes or rewriting
+    //! `song_spec`. Older projects retain their current state and report comparison unavailable.
+    //! Mixer/effect settings, automation, audio takes and opaque plugin state remain in the
+    //! `.auris` document; the comparison report explicitly lists its narrower scope.
     //! Electric guitars are DI sources: Rock presets supply driven closed-cabinet amplifiers
     //! for lead/rhythm and clean amplification for contrasting parts. Pop and city-pop use
     //! lighter amplification and restrained chorus; synthwave's guitar arpeggio adds synced delay.

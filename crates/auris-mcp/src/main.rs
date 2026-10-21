@@ -313,7 +313,7 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::transcribe_mixture::run(&args)).await
     }
-    /// Reads the original song specification and the current key, chords, tempo, meter, sections and clip recipes. The specification is provenance; later manual edits are represented by the current state, not by that original text. Large results return an immutable report_id snapshot; use read_report for details instead of repeating analysis or edits.
+    /// Read the original specification, current instruments/controls/timeline/recipes and tracked changes since composition. Legacy projects report comparison unavailable. The .auris project holds final edits; large reports use read_report.
     #[tool(input_schema = tool_schema("inspect_composition"))]
     async fn inspect_composition(
         &self,

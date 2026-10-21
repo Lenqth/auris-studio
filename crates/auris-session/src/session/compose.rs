@@ -590,6 +590,8 @@ impl Session {
         }
         self.replace_project(project);
         self.install_shipped_fonts();
+        let (baseline, _) = self.composition_snapshot();
+        self.project.composition_baseline = Some(baseline);
         // A balance job must be captured after the fonts are installed, so it measures the
         // instruments the new piece will actually play.
         self.dirty = true;
