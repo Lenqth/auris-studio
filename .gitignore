@@ -61,3 +61,6 @@ vendor/vst3-host/Cargo.lock
 
 # Optional local music-model checkpoints, exports and Python environments.
 /models/
+
+# Local evaluation recordings, projects and diagnostic files survive cargo clean.
+/.local-evaluations/

@@ -31,6 +31,8 @@ use crate::ui::widgets::{
 
 pub(crate) mod controls;
 mod conversations;
+#[cfg(test)]
+mod transcription_eval;
 
 /// Maximum transcript rows retained in the panel.
 const CHAT_CAPACITY: usize = 500;

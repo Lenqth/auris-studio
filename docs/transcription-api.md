@@ -91,3 +91,8 @@ The 48 kHz stereo PCM24 WAV passed encoded-file checks (38.39 s, -11.0 dBFS peak
 no full-scale samples). Its SHA-256 was
 `86f8d72439db88eefeeb0a2e6583ba386da66cff24c34ea1822fbbb41c5f5675`.
 This reuses an existing estimate and tests API integration, not recognition quality.
+
+The subsequent [real Codex application evaluation](codex-live-transcription-evaluation.md)
+exercises original export, independent analysis, generic import, rendered inspection
+and Undo/Redo with actual model inference, and compares two frozen DSP methods with
+Basic Pitch.
