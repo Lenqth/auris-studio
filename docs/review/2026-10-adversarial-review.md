@@ -24,7 +24,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | ID | Severity | Area | Finding |
 |----|----------|------|---------|
 | AR-08 | Low | Security | Codex's native reads are not confined to the project folder |
-| AR-12 | Low | VST3 | An editor change during playback overrides automation for one block |
 | AR-14 | Low | DSP | `loudness_quantile` panics on a NaN block; one infinite block reads as silence |
 | AR-15 | Low | Agent | The Codex path check is case-sensitive about `.exe` |
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
@@ -41,19 +40,6 @@ read-only sandbox does not restrict *where* it reads. Nothing in Auris sees thos
 
 **Direction.** Only Codex can confine them. Until it can, say so where the Codex backend is
 chosen.
-
-### AR-12 — An editor change during playback overrides automation for one block
-
-**Where.** `crates/auris-vst3/src/lib.rs:999-1015`, called at `:1154`, which runs after the engine
-has written automation through `set_param` (`crates/auris-engine/src/graph/automation.rs`).
-
-**What happens.** When the control instance publishes any parameter change, a turned knob or a
-preset, `sync_control_parameters` copies the whole snapshot over the renderer's values. That
-includes parameters automation set a moment earlier, so automated parameters jump to the editor's
-stale value for one block.
-
-**Direction.** Copy only the indices whose snapshot value changed since the renderer last saw it,
-or let automated parameters win.
 
 ### AR-14 — `loudness_quantile` panics on a NaN block; one infinite block reads as silence
 

@@ -862,6 +862,8 @@ struct Bridge {
     prepare: PrepareContext,
     sidechain: bool,
     values: Vec<f32>,
+    /// The control snapshot as this renderer last read it. See [`adopt_changed_parameters`].
+    seen: Vec<f32>,
     dirty_parameters: Vec<bool>,
     parameter_point_counts: Vec<u8>,
     latency: usize,
@@ -961,6 +963,7 @@ impl Bridge {
             prepare: shared.prepare,
             sidechain: shared.sidechain,
             parameter_point_counts: vec![0; values.len()],
+            seen: values.clone(),
             values,
             dirty_parameters,
             latency,
@@ -1005,16 +1008,13 @@ impl Bridge {
         if revision == self.snapshot_revision {
             return;
         }
-        for index in 0..self.values.len() {
-            let Some(value) = self.snapshot.value(index) else {
-                continue;
-            };
-            if value.to_bits() == self.values[index].to_bits() {
-                continue;
-            }
-            self.values[index] = value;
-            self.dirty_parameters[index] = true;
-        }
+        let snapshot = &self.snapshot;
+        adopt_changed_parameters(
+            |index| snapshot.value(index),
+            &mut self.seen,
+            &mut self.values,
+            &mut self.dirty_parameters,
+        );
         self.snapshot_revision = revision;
     }
 
@@ -1254,6 +1254,33 @@ impl Bridge {
             return;
         };
         deliver(main.channels.as_slice(), buffer, frames, overwrite);
+    }
+}
+
+/// Takes into a renderer only the control values that changed since it last looked.
+///
+/// The snapshot holds every parameter, and a knob turned in the editor bumps its revision once
+/// for all of them. Copying the whole snapshot then overwrote whatever automation had written
+/// this block with the editor's stale view of it — a jump on every automated parameter whenever
+/// any other one was touched. `seen` is the snapshot as this renderer last read it.
+fn adopt_changed_parameters(
+    snapshot: impl Fn(usize) -> Option<f32>,
+    seen: &mut [f32],
+    values: &mut [f32],
+    dirty: &mut [bool],
+) {
+    for index in 0..values.len() {
+        let Some(value) = snapshot(index) else {
+            continue;
+        };
+        if value.to_bits() == seen[index].to_bits() {
+            continue;
+        }
+        seen[index] = value;
+        if value.to_bits() != values[index].to_bits() {
+            values[index] = value;
+            dirty[index] = true;
+        }
     }
 }
 
@@ -1539,6 +1566,35 @@ fn deliver(channels: &[Vec<f32>], target: &mut AudioBuffer, frames: usize, overw
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_editor_change_moves_only_the_parameter_it_changed() {
+        // Automation has written parameter 0 this block; the editor then turned parameter 1.
+        let snapshot = [0.2f32, 0.9, 0.5];
+        let mut seen = vec![0.2f32, 0.4, 0.5];
+        let mut values = vec![0.75f32, 0.4, 0.5];
+        let mut dirty = vec![true, false, false];
+        adopt_changed_parameters(
+            |index| snapshot.get(index).copied(),
+            &mut seen,
+            &mut values,
+            &mut dirty,
+        );
+        assert_eq!(values, [0.75, 0.9, 0.5], "the automated value stands");
+        assert_eq!(dirty, [true, true, false]);
+        assert_eq!(seen, snapshot);
+
+        // When the editor moves the automated parameter itself, the editor wins until the lane
+        // writes again.
+        let snapshot = [0.3f32, 0.9, 0.5];
+        adopt_changed_parameters(
+            |index| snapshot.get(index).copied(),
+            &mut seen,
+            &mut values,
+            &mut dirty,
+        );
+        assert_eq!(values[0], 0.3);
+    }
 
     #[test]
     fn each_class_of_a_shell_bundle_is_classified_by_its_own_sub_categories() {
