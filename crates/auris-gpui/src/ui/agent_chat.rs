@@ -929,6 +929,12 @@ pub(crate) struct AgentChat {
     bound_project: Option<PathBuf>,
     /// Reference files selected by the user for the next message.
     attachments: Vec<PathBuf>,
+    /// Every file the user attached in this window, whichever conversation it was for.
+    ///
+    /// A saved draft's attachments are restored only from this set. A transcript is a file in the
+    /// project folder, which travels with a project, and a planted one could otherwise put any
+    /// readable path on the next message for the user to send without noticing.
+    attached_here: std::collections::HashSet<PathBuf>,
     attachment_error: Option<String>,
     /// Actual painted bounds used by the window's shared file-drop router.
     pub(crate) drop_bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
@@ -1005,6 +1011,7 @@ impl Default for AgentChat {
             turn_project: None,
             bound_project: None,
             attachments: Vec::new(),
+            attached_here: Default::default(),
             attachment_error: None,
             drop_bounds: Default::default(),
             produced_project: None,
@@ -1590,6 +1597,7 @@ impl AurisApp {
                     Some(self.t(Key::AgentAttachmentLimit).to_owned());
                 break;
             }
+            self.agent_chat.attached_here.insert(path.clone());
             self.agent_chat.attachments.push(path.clone());
         }
         cx.notify();
@@ -2097,6 +2105,12 @@ impl AurisApp {
             self.agent_chat.link = None;
             return;
         }
+        // Typed here, so it is something the user asked for. Restored turns are not, which is
+        // why automatic review reads this list rather than the transcript.
+        self.agent_chat
+            .controls
+            .typed_requests
+            .push(message.text.clone());
         self.agent_chat.push_entry(ChatEntry::You(message.text));
         self.agent_chat.loaded_history = None;
         // Sending is an explicit return to the live exchange. A reader who scrolls away again

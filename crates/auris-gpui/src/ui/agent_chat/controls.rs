@@ -15,6 +15,12 @@ pub(super) struct Controls {
     pub(super) pending: Option<Pending>,
     pub(super) review: Option<(u64, auris_agent::approval_review::ReviewJob)>,
     pub(super) permits: Vec<(serde_json::Value, u64)>,
+    /// What the user typed into this conversation in this window, oldest first.
+    ///
+    /// Automatic review judges an operation against these and nothing else. A restored transcript
+    /// is a file that travels with the project, so the "requests" in it are whatever its author
+    /// wrote and cannot stand for the person at the keyboard.
+    pub(super) typed_requests: Vec<String>,
     pub(super) rules_open: bool,
     pub(super) compacting: bool,
     pub(super) mode_menu: bool,
@@ -166,6 +172,24 @@ pub(super) fn slash_matches(value: &str) -> Vec<SlashMatch> {
         .collect()
 }
 
+/// The requests an automatic reviewer may weigh an operation against: the newest ones the user
+/// typed in this window, as many as fit the review's evidence budget.
+fn review_requests(typed: &[String]) -> Vec<String> {
+    const BUDGET: usize = 32 * 1024;
+    let mut used = 0usize;
+    let mut newest: Vec<String> = typed
+        .iter()
+        .rev()
+        .take_while(|request| {
+            used = used.saturating_add(request.len());
+            used <= BUDGET
+        })
+        .cloned()
+        .collect();
+    newest.reverse();
+    newest
+}
+
 impl AurisApp {
     /// Opens or closes the permission rules and reveals their start when they become visible.
     fn set_agent_rules_open(&mut self, open: bool) {
@@ -280,18 +304,7 @@ impl AurisApp {
                     revision: self.session.revision(),
                 });
                 if decision == Decision::Review {
-                    let requests = self
-                        .agent_chat
-                        .entries
-                        .iter()
-                        .filter_map(|entry| {
-                            if let ChatEntry::You(text) = entry {
-                                Some(text.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
+                    let requests = review_requests(&self.agent_chat.controls.typed_requests);
                     let pending = self.agent_chat.controls.pending.as_ref().unwrap();
                     let result = auris_agent::approval_review::start(
                         self.agent_chat.preferences(),
@@ -776,6 +789,19 @@ impl AurisApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn automatic_review_weighs_the_newest_typed_requests_within_its_budget() {
+        let typed = vec![
+            "first".to_string(),
+            "x".repeat(20 * 1024),
+            "y".repeat(20 * 1024),
+            "last".to_string(),
+        ];
+        let requests = review_requests(&typed);
+        assert_eq!(requests, ["y".repeat(20 * 1024), "last".to_string()]);
+        assert!(review_requests(&[]).is_empty());
+    }
 
     #[gpui::test]
     fn auto_review_is_an_explicit_mode_and_permissions_keep_their_own_menu_row(
