@@ -171,6 +171,10 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         definition::<create_project::Args>(create_project::NAME, create_project::DESCRIPTION),
         definition::<import_audio::Args>(import_audio::NAME, import_audio::DESCRIPTION),
         definition::<import_midi::Args>(import_midi::NAME, import_midi::DESCRIPTION),
+        definition::<import_transcription::Args>(
+            import_transcription::NAME,
+            import_transcription::DESCRIPTION,
+        ),
         definition::<export_midi::Args>(export_midi::NAME, export_midi::DESCRIPTION),
         definition::<capabilities::Args>(capabilities::NAME, capabilities::DESCRIPTION),
         definition::<effects::Args>(effects::NAME, effects::DESCRIPTION),

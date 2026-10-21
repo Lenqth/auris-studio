@@ -16,6 +16,8 @@ an editable piano track through the normal permission and Undo paths. This draft
 is independent of the monophonic YIN and optional MuScriptor workflows below.
 The [piano-cover evaluation](piano-transcription-evaluation.md) records the composer/audio-pair
 benchmark, confidence-gated decoding, existing-score results and remaining omissions.
+Agents with local analysis tools can also export the original attachment and import
+an external note draft through the [recognizer-independent API](transcription-api.md).
 Longer-term model and compute tradeoffs are tracked in the
 [compute assessment](music-analysis-compute.md).
 

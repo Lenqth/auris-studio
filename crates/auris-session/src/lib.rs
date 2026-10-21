@@ -45,7 +45,7 @@
 pub mod agent_policy;
 mod audio_attachment;
 pub mod audio_inspection;
-pub use audio_attachment::prepare_audio_attachment;
+pub use audio_attachment::{AudioAttachmentCopy, copy_audio_attachment, prepare_audio_attachment};
 pub mod audio_review;
 pub mod conversations;
 mod export_inspection;
@@ -93,6 +93,8 @@ pub use auris_analysis::audio::{
     AudioAnalysis, AudioChordSegment, AudioOptions, TempoAnalysis, TempoCandidate, TranscribedNote,
 };
 pub use auris_analysis::basic_pitch::PianoTranscription;
+pub use auris_analysis::transcription::{NoteTranscription, TranscriptionSource};
+mod transcription;
 pub use auris_analysis::chords::{
     ChordCandidate, ChordOptions, ChordReading, ChordState, SymbolicChordSegment,
 };
@@ -163,6 +165,7 @@ pub use settings::{
     WindowPlacement, config_dir,
 };
 pub use singer_portrait::{SingerPortraitError, SingerPortraitSource, load_singer_portrait};
+pub use transcription::read_transcription_file;
 pub use voice_setup::{
     DiffSingerSetup, LeapSingerCheck, LeapSingerSetup, VoiceSetupError, VoicevoxCatalog,
     VoicevoxConnection, VoicevoxSetup, VoicevoxSpeakerChoice, VoicevoxStyle,

@@ -87,6 +87,15 @@ pub enum Command {
         /// Insertion position in zero-based quarter-note beats.
         at_beat: f64,
     },
+    /// Import an externally computed note draft as a new piano track. Source seconds and overlapping notes are preserved. Provenance is caller-declared, not a claim of faithful recognition. One Undo, unsaved; review with read_notes/inspect_audio.
+    ImportTranscription {
+        /// Recognizer-independent validated events, method provenance and limitations.
+        transcription: crate::NoteTranscription,
+        /// Nonempty new track and clip name, at most 256 bytes.
+        name: String,
+        /// Insertion beat, finite and within 0..1000000.
+        at_beat: f64,
+    },
     /// Read or edit the live mixer DAG through stable node identities.
     MixerGraph {
         /// The validated graph operation; persistence belongs to the frontend.
@@ -477,6 +486,22 @@ impl Session {
                 Ok(serde_json::json!({"track":track.0,"clip":clip.0,"notes":count,
                     "model_sha256":transcription.model_sha256,"source_seconds":transcription.seconds,
                     "status":"Added an editable piano transcription draft. Review missed/extra notes and timing. Changes are unsaved and undoable; use inspect_audio/read_notes to review."}).to_string())
+            }
+            Command::ImportTranscription {
+                transcription,
+                name,
+                at_beat,
+            } => {
+                if !at_beat.is_finite() || !(0.0..=1_000_000.0).contains(&at_beat) {
+                    return Err("at_beat must be finite and within 0..1000000".into());
+                }
+                let (track, clip) = self
+                    .import_transcription(&transcription, Ticks::from_beats(at_beat), &name)
+                    .map_err(error)?;
+                Ok(serde_json::json!({"track":track.0,"clip":clip.0,"notes":transcription.notes.len(),
+                    "source":transcription.source,"source_seconds":transcription.seconds,
+                    "limitations":transcription.limitations,"provenance_verified":false,
+                    "unsaved":true,"status":"Added an editable piano note draft. Review extra/missing notes and timing; one Undo removes it."}).to_string())
             }
             Command::MixerGraph { operation } => self
                 .apply_mixer_graph(&operation)

@@ -3,6 +3,83 @@
 use crate::{AnalysisControl, SessionError};
 use std::{io::Cursor, path::Path};
 
+/// A private analysis copy whose temporary file is removed when its owner drops it.
+pub struct AudioAttachmentCopy {
+    file: tempfile::NamedTempFile,
+    /// Number of exact original bytes copied.
+    pub bytes: u64,
+    /// SHA-256 of the copied original bytes, not a decoded/resampled representation.
+    pub sha256: String,
+}
+
+impl AudioAttachmentCopy {
+    /// Local analysis path; this is separate from the host's immutable snapshot.
+    pub fn path(&self) -> &Path {
+        self.file.path()
+    }
+}
+
+/// Copy an attached original on a worker, retaining its format and bounded memory.
+///
+/// The caller owns access and lifetime. No resampling or channel conversion occurs.
+/// At most 512 MiB are copied in cancellable chunks; errors remove the partial copy.
+pub fn copy_audio_attachment(
+    path: &Path,
+    control: &AnalysisControl,
+) -> Result<AudioAttachmentCopy, SessionError> {
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+    let failure = |message: &str| SessionError::MusicAnalysis(message.into());
+    let check = || {
+        if control.is_cancelled() {
+            Err(failure("Audio reference export cancelled"))
+        } else {
+            Ok(())
+        }
+    };
+    check()?;
+    let mut source = std::fs::File::open(path).map_err(|e| failure(&e.to_string()))?;
+    const LIMIT: u64 = 512 * 1024 * 1024;
+    let metadata = source.metadata().map_err(|e| failure(&e.to_string()))?;
+    if !metadata.is_file() || metadata.len() > LIMIT {
+        return Err(failure(
+            "audio reference must be a regular file at most 512 MiB",
+        ));
+    }
+    let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("wav");
+    let mut file = tempfile::Builder::new()
+        .prefix("auris-analysis-")
+        .suffix(&format!(".{extension}"))
+        .tempfile()
+        .map_err(|e| failure(&e.to_string()))?;
+    let mut hash = Sha256::new();
+    let mut bytes = 0;
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        check()?;
+        let count = source
+            .read(&mut buffer)
+            .map_err(|e| failure(&e.to_string()))?;
+        if count == 0 {
+            break;
+        }
+        bytes += count as u64;
+        if bytes > LIMIT {
+            return Err(failure("audio reference exceeds 512 MiB"));
+        }
+        file.write_all(&buffer[..count])
+            .map_err(|e| failure(&e.to_string()))?;
+        hash.update(&buffer[..count]);
+    }
+    file.flush().map_err(|e| failure(&e.to_string()))?;
+    check()?;
+    Ok(AudioAttachmentCopy {
+        file,
+        bytes,
+        sha256: hex::encode(hash.finalize()),
+    })
+}
+
 /// Prepares a full-length 16 kHz PCM16 WAV for an audio-capable model on a worker thread.
 ///
 /// Preserves mono/stereo channels and source timing; no excerpt is silently selected. The
@@ -83,6 +160,25 @@ mod tests {
         }
         writer.finalize().unwrap();
         file
+    }
+
+    #[test]
+    fn analysis_copy_preserves_original_bytes_and_cannot_modify_the_snapshot() {
+        let source = wav(2, 48000, 48000);
+        let original = std::fs::read(source.path()).unwrap();
+        let copy = copy_audio_attachment(source.path(), &Default::default()).unwrap();
+        assert_ne!(copy.path(), source.path());
+        assert_eq!(std::fs::read(copy.path()).unwrap(), original);
+        assert_eq!(copy.bytes, original.len() as u64);
+        assert_eq!(copy.sha256.len(), 64);
+        let path = copy.path().to_owned();
+        std::fs::write(&path, b"changed by external analysis").unwrap();
+        assert_eq!(std::fs::read(source.path()).unwrap(), original);
+        drop(copy);
+        assert!(!path.exists());
+        let control = AnalysisControl::default();
+        control.cancel();
+        assert!(copy_audio_attachment(source.path(), &control).is_err());
     }
 
     #[test]

@@ -280,8 +280,19 @@ pub mod architecture {
     //! using the bundled Apache-2.0 Basic Pitch ONNX model, and asks the same live permission
     //! gate to apply the exact note draft. [`Session::create_piano_cover`](crate::Session::create_piano_cover)
     //! maps source seconds through the current tempo map and adds a physical-piano track/clip
-    //! as one undo transaction. No source file path, model download or saved-project edit is
-    //! exposed to the model. Notes remain estimates; this is transcription, not listening.
+    //! as one undo transaction. Notes remain estimates; this is transcription, not listening.
+    //! An alternative recognizer uses [`Session::import_transcription`](crate::Session::import_transcription)
+    //! with a backend-independent note draft: bounded source seconds, pitches, relative strength,
+    //! claimed method/model/artifact provenance and limitations. Validation does not pretend that
+    //! caller-provided provenance verifies musical accuracy. The legacy Basic Pitch draft still
+    //! verifies its own model hash. Both paths share the note-to-document mapping and transaction.
+    //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
+    //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
+    //! exposes the internal snapshot. One current copy per attachment is retained; re-export
+    //! replaces the previous path, and attachment expiry removes it.
+    //! `import_transcription` accepts an inline draft or a bounded local JSON file; file reading
+    //! is authorized before I/O, then the exact validated draft crosses the canonical edit/revision
+    //! gate. No worker mutates the session. Saved-project MCP offers the same session import command.
     //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
     //! residual activity outside their attack/release guards. Weak sustained predictions alone
     //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo

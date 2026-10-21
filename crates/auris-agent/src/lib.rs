@@ -295,6 +295,8 @@ without command or action wrappers. Use the numeric IDs returned by inspection a
 For a song request, choose the harmony, melody, rhythm and arrangement yourself.
 For a new composition, use edit_harmony to write the chosen key and Roman-numeral chord progression into the document before writing the notes. Audible chord notes alone do not populate the project's harmony map. Update an existing progression only when the requested edit calls for it; edit_harmony never regenerates existing notes.
 For a vocal song, add_track kind singer, add_clip and add_notes create the score. list_voices discovers local voice paths; set_singer_voice selects a voice and optional named speaker. inspect_singer reads back the selected voice, offered speakers and take state. write_lyrics uses the singer clip ID and optional zero-based storage index from read_notes; verify the filled count and lyrics. Then sing creates the actual playback take on a worker; inspect_singer must report a current take before claiming vocals are finished. Missing voices, unavailable synthesis servers and failed/cancelled synthesis are errors, never completed vocals. These live operations leave the document unsaved and are undoable.
+
+For alternative audio transcription, export_audio_attachment returns a separate exact-original local file plus its byte hash. Analyze it with local tools/code when available; delivery is not listening. Import your complete source-second note JSON with import_transcription, inline or by absolute local path. Declare the real method/model/program hash and uncertainty; never impersonate Basic Pitch or invent notes from filenames/tempo/chords. Supply every note's relative strength; if dynamics were not measured, disclose uniform dynamics in limitations. Provenance claims are not verification. create_piano_cover remains the bundled local recognizer shortcut. Read back notes and inspect_audio before claiming a finished cover.
 Use search_instruments with focused query words (default 10 results), then set_instrument with the returned id. Use similar_instruments for acoustic alternatives; while status is indexing, continue other work and retry later. Do not fetch the whole library by default. IDs include SoundFont sounds and advertised CLAP/VST3 presets; never invent IDs. Use add_track, add_clip and add_notes to write your music.
 Batch a short phrase into one add_notes call. Each note has pitch, start_beat,
 duration_beats and velocity. start_beat is its position; duration_beats is its length.
@@ -2307,6 +2309,8 @@ mod tests {
         assert!(names.contains(&"search_instruments"));
         assert!(names.contains(&"similar_instruments"));
         assert!(names.contains(&"instrument_diagnostics"));
+        assert!(names.contains(&"export_audio_attachment"));
+        assert!(names.contains(&"import_transcription"));
         for name in [
             "edit_harmony",
             "list_voices",
@@ -2319,7 +2323,7 @@ mod tests {
         }
         assert_eq!(
             names.len(),
-            30 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            32 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
             assert!(names.contains(name), "{name}");
@@ -2361,12 +2365,18 @@ mod tests {
                 .unwrap();
             assert_eq!(exposed.parameters, expected.parameters);
         }
-        let schema = actual
-            .iter()
-            .map(|tool| tool.parameters.to_string())
-            .collect::<String>();
-        for field in ["output", "project", "path", "stems", "midi_output"] {
-            assert!(!schema.contains(&format!("\"{field}\":")));
+        for tool in &actual {
+            let schema = tool.parameters.to_string();
+            for field in ["output", "project", "path", "stems", "midi_output"] {
+                if field == "path" && tool.name == "import_transcription" {
+                    continue;
+                }
+                assert!(
+                    !schema.contains(&format!("\"{field}\":")),
+                    "{}: {field}",
+                    tool.name
+                );
+            }
         }
     }
 

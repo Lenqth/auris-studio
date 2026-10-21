@@ -58,6 +58,7 @@ pub mod mixer_graph;
 mod project_files;
 mod recognition;
 mod reports;
+mod transcription;
 pub use reports::read_report;
 pub mod replace_notes;
 mod sound_input;
@@ -81,6 +82,7 @@ pub use recognition::{
     analyze_audio, analyze_chords, analyze_instruments, transcribe_audio, transcribe_mixture,
 };
 pub use track_editing::{convert_track_to_audio, routing, set_instrument_param, set_track_state};
+pub use transcription::import_transcription;
 
 /// What a model is told before it has called anything.
 ///
@@ -387,6 +389,7 @@ pub const WRITES_PROJECTS: &[&str] = &[
     create_project::NAME,
     import_audio::NAME,
     import_midi::NAME,
+    import_transcription::NAME,
     routing::NAME,
     set_track_state::NAME,
     convert_track_to_audio::NAME,

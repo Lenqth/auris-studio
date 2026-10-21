@@ -125,6 +125,10 @@ but not replacing the current recognizer with this algorithm across all recordin
 An agent still needs a reliable audio-analysis implementation and suitable access
 to the source, along with a backend-independent note-draft import boundary.
 
+The API limitations above describe the experiment revision. The subsequent
+[transcription API](transcription-api.md) provides original-attachment export and
+recognizer-independent draft import; it does not change these recognition scores.
+
 ## Reproduce
 
 Use a uv environment with numpy/scipy for the harness and scorer. Sign in through

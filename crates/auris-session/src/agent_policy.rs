@@ -87,6 +87,8 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.write_lyrics",
     "edit_project.sing",
     "edit_project.create_piano_cover",
+    "edit_project.import_transcription",
+    "export_audio_attachment",
     "edit_project.read_mixer_graph",
     "edit_project.connect_mixer",
     "edit_project.disconnect_mixer",
