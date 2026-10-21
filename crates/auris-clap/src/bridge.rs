@@ -48,7 +48,7 @@ const EVENT_HEADROOM: usize = 256;
 /// [`Bridge::dropped_input_events`] instead of allocating more host storage.
 pub(crate) const MAX_PREPARED_EVENT_ROOM: usize = 4_096;
 
-/// Prepared input-event room, including one slot for every parameter that may be dirty at once.
+/// Prepared input-event room, including all dirty parameters and a pending note reset.
 ///
 /// [`PrepareContext`] is public and its count may originate in a decoded document or another
 /// host. Saturation prevents wraparound and the explicit ceiling prevents that numerical boundary
@@ -57,6 +57,7 @@ pub(crate) const MAX_PREPARED_EVENT_ROOM: usize = 4_096;
 fn prepared_event_room(parameter_count: usize, max_block_events: usize) -> usize {
     parameter_count
         .saturating_add(max_block_events.max(EVENT_HEADROOM))
+        .saturating_add(1)
         .min(MAX_PREPARED_EVENT_ROOM)
 }
 
@@ -120,6 +121,8 @@ pub(crate) struct Bridge {
     /// playhead is not usable for it: a cycle sends the playhead backwards, and a plugin is
     /// entitled to treat that as impossible.
     steady_time: u64,
+    /// A reset must also end notes: some plugins reset only their processing clock.
+    pending_note_reset: bool,
     processing_failed: bool,
 }
 
@@ -170,6 +173,7 @@ impl Bridge {
             max_frames: frames,
             latency,
             steady_time: 0,
+            pending_note_reset: false,
             processing_failed: false,
         }
     }
@@ -250,6 +254,7 @@ impl Bridge {
 
     pub(crate) fn reset(&mut self) {
         self.processor.reset();
+        self.pending_note_reset = self.language.is_some();
         self.steady_time = 0;
         for port in self.input.iter_mut().chain(self.output.iter_mut()) {
             for channel in port {
@@ -299,6 +304,7 @@ impl Bridge {
             event_room,
             dropped_input_events,
             steady_time,
+            pending_note_reset,
             processing_failed,
             ..
         } = self;
@@ -333,7 +339,10 @@ impl Bridge {
                     })
                     .count()
             });
-            let required = dirty_count.saturating_add(note_count);
+            let reset_notes = *pending_note_reset && language.is_some();
+            let required = dirty_count
+                .saturating_add(note_count)
+                .saturating_add(usize::from(reset_notes));
 
             // A caller that skipped or understated preparation must not turn an input burst into
             // a vector growth on the audio thread. Do not send a partial gesture: losing a late
@@ -343,14 +352,19 @@ impl Bridge {
             if overflowed {
                 *processing_failed = true;
                 add_dropped_events(dropped_input_events, required);
-                if let Some(language) = *language {
-                    // EVENT_HEADROOM keeps room for this event even for an unprepared caller.
-                    let _ = push_note(
-                        outgoing,
-                        NoteEvent::AllSoundOff { frame: 0 },
-                        language,
-                        *event_room,
-                    );
+            }
+            if (overflowed || reset_notes)
+                && let Some(language) = *language
+            {
+                // Send before new notes so a seek can chase voices in the same block.
+                // EVENT_HEADROOM keeps room even for an unprepared caller.
+                if push_note(
+                    outgoing,
+                    NoteEvent::AllSoundOff { frame: 0 },
+                    language,
+                    *event_room,
+                ) {
+                    *pending_note_reset = false;
                 }
             }
             // Parameters before notes: an automated cutoff belongs to the block it was written
@@ -657,9 +671,9 @@ mod tests {
 
     #[test]
     fn hostile_event_counts_are_capped_instead_of_wrapping_or_requesting_huge_storage() {
-        assert_eq!(prepared_event_room(7, 2_048), 2_055);
+        assert_eq!(prepared_event_room(7, 2_048), 2_056);
         assert_eq!(prepared_event_room(7, 4_096), MAX_PREPARED_EVENT_ROOM);
-        assert_eq!(prepared_event_room(7, 0), EVENT_HEADROOM + 7);
+        assert_eq!(prepared_event_room(7, 0), EVENT_HEADROOM + 8);
         assert_eq!(prepared_event_room(1, usize::MAX), MAX_PREPARED_EVENT_ROOM);
         assert_eq!(
             prepared_event_room(usize::MAX, EVENT_HEADROOM),
