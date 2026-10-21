@@ -122,3 +122,6 @@ A useful next experiment is a controller choosing analysis tools and turning the
 into a playable arrangement, with recognition, arranging and iterative correction evaluated
 separately. The present results provide no evidence for removing the recognizer and trusting
 unverified note JSON from these local connections.
+
+The [Codex follow-up](codex-transcription-experiment.md) evaluates direct input and
+an agent that writes its own audio-analysis code on the same recordings.
