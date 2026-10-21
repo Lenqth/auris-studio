@@ -19,6 +19,15 @@ transactions and byte-index string slicing. Two findings were confirmed by runni
 Nothing here was checked on a Mac. The macOS findings (AR-03, AR-04, AR-09) are reasoned from
 the code, Apple's documented behaviour and `std::path` semantics.
 
+## Status
+
+Seventeen findings were filed. Sixteen are fixed on `fix/adversarial-review-2026-10`, one commit
+each, citing its number. AR-04 and AR-16 share a commit, and AR-08 is fixed for Claude Code only;
+its Codex half is the one entry left below. The macOS fixes (AR-04, AR-09, and the
+open-document half of AR-16) have not been run on a Mac, though AR-09's Foundation call was
+type-checked against `aarch64-apple-darwin`. The first things to try there are recording from the
+release bundle opened in Finder, and double-clicking a project.
+
 ## Summary
 
 | ID | Severity | Area | Finding |
