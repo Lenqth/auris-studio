@@ -113,6 +113,15 @@ impl AurisMcp {
     ) -> Result<CallToolResult, ErrorData> {
         blocking(move || toolbox::replace_notes_batch::run(&args)).await
     }
+
+    /// Preview actual bar count, ending bars and part-to-track mapping without loading instruments or saving.
+    #[tool(input_schema = tool_schema("preview_composition"))]
+    async fn preview_composition(
+        &self,
+        Parameters(args): Parameters<toolbox::preview_composition::Args>,
+    ) -> Result<CallToolResult, ErrorData> {
+        blocking(move || toolbox::preview_composition::run(&args)).await
+    }
     /// Find tool names by text and optional task group, without full schemas. Fetch tool_help for one result. Startup AURIS_MCP_TOOL_GROUPS controls which groups are callable.
     #[tool(input_schema = tool_schema("discover_tools"))]
     async fn discover_tools(

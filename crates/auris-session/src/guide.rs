@@ -1317,6 +1317,10 @@ pub mod composition {
     //! in the project before loudness balancing. Native instrument controls are not applied
     //! to a substituted SoundFont or hosted source. Drum writers share a kit only when their
     //! source, initial controls and insert chains agree.
+    //! [`Session::composition_preview`](crate::Session::composition_preview) reports the actual
+    //! form length, added ending bars, authored-part mapping and merged drum tracks from the
+    //! same generated draft, including vocal preparation. The `preview_composition` tool runs
+    //! this before saving or loading instruments; source availability is checked by `compose`.
     //! Electric guitars are DI sources: Rock presets supply driven closed-cabinet amplifiers
     //! for lead/rhythm and clean amplification for contrasting parts. Pop and city-pop use
     //! lighter amplification and restrained chorus; synthwave's guitar arpeggio adds synced delay.

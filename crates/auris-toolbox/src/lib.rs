@@ -39,6 +39,8 @@ use auris_session::{Session, SessionError, SessionOptions};
 
 mod audio_quality;
 mod audition;
+pub mod composition_preview;
+pub use composition_preview as preview_composition;
 mod batch_editing;
 pub use batch_editing::{replace_notes_batch, set_instrument_params};
 #[path = "capabilities.rs"]
@@ -94,6 +96,7 @@ Use project_id from create_project/open_project in later project arguments; abso
 Search replies use zero-based library indices into libraries. instrument_diagnostics pages scan/measurement failures.
 Use setup_tracks for atomic track/sound/clip setup. discover_tools finds names without fetching schemas.
 Use set_instrument_params or replace_notes_batch for bounded atomic edits across several targets; identical retries do not save again.
+Use preview_composition before compose to inspect added ending bars and part-to-track mapping, including merged drums.
 Large reports return report_id: use read_report with report_path and next_offset to inspect the immutable snapshot without re-running a write.\nMake dependent edits one at a time: wait for each result before using its IDs or paths.
 
 Use search_instruments with a focused query to choose sounds; never fetch the full library by default.
@@ -494,7 +497,7 @@ pub mod check_spec {
     pub const DESCRIPTION: &str = "Validates a specification without composing anything. A \
         rejected spec answers with every complaint at once, line numbers where they exist; a \
         valid one answers with the full document, every default filled in — the cheap way to \
-        see what a draft actually means.";
+        see what a draft actually means. Use preview_composition to inspect actual bar count and merged tracks before compose.";
 
     /// The three-field spec triangle, unchanged.
     pub use crate::SpecArgs as Args;

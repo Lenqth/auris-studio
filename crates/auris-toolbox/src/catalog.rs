@@ -202,6 +202,10 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             search_documentation::DESCRIPTION,
         ),
         definition::<check_spec::Args>(check_spec::NAME, check_spec::DESCRIPTION),
+        definition::<preview_composition::Args>(
+            preview_composition::NAME,
+            preview_composition::DESCRIPTION,
+        ),
         definition::<compose::Args>(compose::NAME, compose::DESCRIPTION),
         definition::<render::Args>(render::NAME, render::DESCRIPTION),
         definition::<verify_render::Args>(verify_render::NAME, verify_render::DESCRIPTION),
