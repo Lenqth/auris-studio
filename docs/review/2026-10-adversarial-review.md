@@ -29,7 +29,6 @@ the code, Apple's documented behaviour and `std::path` semantics.
 | AR-10 | Medium | VST3 | Every class in a multi-class bundle gets the first class's kind |
 | AR-11 | Low-Medium | Security | `OPENAI_API_KEY` is sent to whatever OpenAI-compatible URL is configured |
 | AR-12 | Low | VST3 | An editor change during playback overrides automation for one block |
-| AR-13 | Low | Performance | Every tempo conversion walks the whole tempo map, including on the audio thread |
 | AR-14 | Low | DSP | `loudness_quantile` panics on a NaN block; one infinite block reads as silence |
 | AR-15 | Low | Agent | The Codex path check is case-sensitive about `.exe` |
 | AR-17 | Low | Latent | Two transactions can be left open by an early `?` |
@@ -121,19 +120,6 @@ stale value for one block.
 
 **Direction.** Copy only the indices whose snapshot value changed since the renderer last saw it,
 or let automated parameters win.
-
-### AR-13 — Every tempo conversion walks the whole tempo map, including on the audio thread
-
-**Where.** `TempoMap::ticks_to_seconds`/`seconds_to_ticks` are linear in the number of points
-(`crates/auris-core/src/time.rs:878-923`). They are called per note when scheduling
-(`crates/auris-engine/src/graph/schedule.rs:204-215`), twice per rendered segment on the audio
-thread (`graph/mod.rs:807-850`), and per click by the metronome (`metronome.rs:115-133`).
-
-**What happens.** A MIDI import with a dense tempo map (a rubato performance, or AR-06's budget
-used for tempo events) slows every graph rebuild and eats into the realtime budget.
-
-**Direction.** Cache cumulative seconds per point and binary-search, which makes both directions
-logarithmic.
 
 ### AR-14 — `loudness_quantile` panics on a NaN block; one infinite block reads as silence
 
