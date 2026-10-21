@@ -616,10 +616,8 @@ pub struct HarmonyPaint {
 
 /// Draws the chords, and the key changes, across `bounds`.
 ///
-/// Each chord is a block from where it starts to where it ends, labelled with the numeral and —
-/// when the block is wide enough to hold both — the chord that numeral means where it sits. A
-/// cleared stretch has no event and so draws as bare background, which is the honest picture of
-/// it.
+/// Each chord is a block from where it starts to where it ends, labelled with its sounding chord
+/// name. A cleared stretch has no event and so draws as bare background.
 pub fn harmony_lane(
     window: &mut Window,
     cx: &mut App,
@@ -655,7 +653,7 @@ pub fn harmony_lane(
         rounded_rect(window, block, px(3.0), fill);
         // The handle is the visible half of the gesture: without something drawn at the edge,
         // being able to drag a chord there is a fact only the manual knows. Only where the
-        // numeral is actually written — a chord split in two by a key change has one position,
+        // chord starts — a chord split in two by a key change has one position,
         // and a handle on the far half would move music that starts off to the left of it.
         let movable = harmony.handles.contains(&event.start);
         if movable {
@@ -674,13 +672,6 @@ pub fn harmony_lane(
             );
         }
 
-        // The numeral is what is stored and what transposes, so it leads; the sounding chord
-        // follows only when there is room for it, since it is a readout rather than the truth.
-        let text = if width >= px(96.0) {
-            format!("{} · {}", event.numeral, event.name())
-        } else {
-            event.numeral.to_string()
-        };
         clipped(window, block, |window| {
             label(
                 window,
@@ -689,7 +680,7 @@ pub fn harmony_lane(
                     block.origin.x + if movable { CHORD_HANDLE } else { px(0.0) } + px(4.0),
                     block.origin.y + (block.size.height - px(13.0)) / 2.0,
                 ),
-                text,
+                event.name(),
                 px(10.0),
                 theme.text_on(fill),
             );
@@ -698,9 +689,8 @@ pub fn harmony_lane(
 
     let (start, end) = view.visible_range(bounds.size.width);
     // What key the view is scrolled into, pinned at the left edge. A song that modulates once in
-    // bar 40 would otherwise show no key at all everywhere except bar 40, and reading a numeral
-    // needs the key it is read against. Anything at or after the left edge is drawn where it
-    // belongs by the loop below.
+    // bar 40 would otherwise show no key at all everywhere except bar 40. Anything at or after
+    // the left edge is drawn where it belongs by the loop below.
     if let Some(current) = harmony.keys.iter().rev().find(|change| change.tick < start) {
         let text = current.key.to_text();
         key_badge(
