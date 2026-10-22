@@ -1,0 +1,747 @@
+{
+  "date": "2026-10-22",
+  "backend": "built-in Codex via real GPUI host",
+  "model": "gpt-6.1-sol",
+  "production_commit": "d37db398e7565fc056c01f9643dc6cef3bac58ca",
+  "baseline_record": "tools/eval/references/agent-argument-errors-validation-2026-10-22.json",
+  "audio_critic": "gemma4:e2b",
+  "prompt_manifest": "tools/eval/references/codex-composition-scenarios.json",
+  "prompt_manifest_sha256": "1b27bd969682b1b76de7bbf36a07e1a3a187db566664cdebb572f22fd7be5e04",
+  "evidence_root": "target/eval/clipping-fix-2026-10-22",
+  "policy": "Bypass on fresh synthetic fixtures",
+  "cases": [
+    {
+      "case": "arrange_and_undo",
+      "elapsed_seconds": 303.789778,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 81.5867744,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 3,
+            "edit_timeline": 2,
+            "edit_harmony": 5,
+            "search_instruments": 3,
+            "rename_track": 1,
+            "add_track": 3,
+            "set_instrument": 3,
+            "add_clip": 4,
+            "mixer_graph": 2,
+            "read_notes": 3,
+            "edit_notes": 2,
+            "inspect_audio": 2,
+            "set_loop": 1,
+            "normalize_mix": 1,
+            "listen": 1
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 117.1916945,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 3,
+            "read_notes": 5,
+            "inspect_audio": 8,
+            "edit_harmony": 15,
+            "add_clip": 12,
+            "edit_notes": 1,
+            "set_loop": 1,
+            "listen": 2,
+            "automation": 3
+          }
+        },
+        {
+          "turn": 3,
+          "elapsed_seconds": 64.4793192,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "read_notes": 5,
+            "inspect_audio": 4,
+            "listen": 2,
+            "edit_notes": 1
+          }
+        },
+        {
+          "turn": 4,
+          "elapsed_seconds": 9.7782489,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "history": 2
+          }
+        },
+        {
+          "turn": 5,
+          "elapsed_seconds": 30.7519545,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          }
+        }
+      ],
+      "tool_calls": 109,
+      "read_notes_calls": 13,
+      "errors": [],
+      "read_notes_response_bytes": 240723,
+      "export_peak_protection": [
+        [
+          {
+            "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/arrange_and_undo/result.wav",
+            "encoded": {
+              "sample_rate": 48000,
+              "channels": 2,
+              "bit_depth": 24,
+              "seconds": 34.28570833333333,
+              "frames": 1645714,
+              "lufs": -18.469179153442383,
+              "peak_db": -1.286644697189331,
+              "true_peak_db": -1.241620659828186,
+              "full_scale_samples": 0,
+              "ending_rms_db": -28.8601016998291,
+              "sha256": "0acb59702b57c5a95838b82b562c3e98f8bd8eabff713773168a92b120f1a794"
+            },
+            "attenuation_db": 0.0,
+            "source_true_peak_db": -1.2416212558746338,
+            "ceiling_db": -1.0
+          }
+        ]
+      ],
+      "verify_render_results": [
+        {
+          "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/arrange_and_undo/result.wav",
+          "verdict": "PASS",
+          "loudness_ok": true,
+          "peak_ok": true,
+          "ending_ok": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 34.28570833333333,
+            "frames": 1645714,
+            "lufs": -18.469179153442383,
+            "peak_db": -1.286644697189331,
+            "true_peak_db": -1.241620659828186,
+            "full_scale_samples": 0,
+            "ending_rms_db": -28.8601016998291,
+            "sha256": "0acb59702b57c5a95838b82b562c3e98f8bd8eabff713773168a92b120f1a794"
+          }
+        }
+      ],
+      "objective_checks": {
+        "same_prompts": true,
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "encoded_true_peak_at_or_below_minus_one": true,
+        "midi_reimport_has_notes": true,
+        "no_argument_or_tool_errors": true,
+        "original_four_bar_clips_exact": true,
+        "only_chorus_drum_clips_changed": true,
+        "undo_restored_entire_document": true,
+        "undo_used_history": true,
+        "undo_did_not_rewrite_notes": true
+      },
+      "midi_notes": 674,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 34.28570833333333,
+        "frames": 1645714,
+        "lufs": -18.469179153442383,
+        "peak_db": -1.286644697189331,
+        "true_peak_db": -1.241620659828186,
+        "full_scale_samples": 0,
+        "ending_rms_db": -28.8601016998291,
+        "sha256": "0acb59702b57c5a95838b82b562c3e98f8bd8eabff713773168a92b120f1a794"
+      },
+      "undo_tools": [
+        "inspect_project",
+        "history",
+        "history",
+        "inspect_project"
+      ],
+      "changed_chorus_clips": [
+        16,
+        20
+      ],
+      "independent_pcm_check": {
+        "frames": 1645714,
+        "full_scale_samples": 0,
+        "peak_dbfs": -1.2866445710518275,
+        "sha256": "0acb59702b57c5a95838b82b562c3e98f8bd8eabff713773168a92b120f1a794"
+      }
+    },
+    {
+      "case": "blank_bgm",
+      "elapsed_seconds": 118.6456965,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 100.0574411,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 4,
+            "edit_timeline": 2,
+            "edit_harmony": 2,
+            "search_instruments": 4,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_track": 3,
+            "add_clip": 4,
+            "mixer_graph": 2,
+            "inspect_instrument": 1,
+            "read_notes": 3,
+            "cli_command": 1,
+            "search_documentation": 1,
+            "edit_notes": 1,
+            "set_loop": 1,
+            "inspect_audio": 2,
+            "listen": 1,
+            "normalize_mix": 1
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 18.5838491,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "preview": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          }
+        }
+      ],
+      "tool_calls": 44,
+      "read_notes_calls": 3,
+      "errors": [],
+      "read_notes_response_bytes": 17852,
+      "export_peak_protection": [
+        [
+          {
+            "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/blank_bgm/result.wav",
+            "encoded": {
+              "sample_rate": 48000,
+              "channels": 2,
+              "bit_depth": 24,
+              "seconds": 19.2,
+              "frames": 921600,
+              "lufs": -19.9999942779541,
+              "peak_db": -3.382780075073242,
+              "true_peak_db": -3.382780075073242,
+              "full_scale_samples": 0,
+              "ending_rms_db": -23.288602828979492,
+              "sha256": "2682509d1f20eed50d29896b8e76e1cb2b0c9724d79cfbe9eeb6f51a7a71d20f"
+            },
+            "attenuation_db": 0.0,
+            "source_true_peak_db": -3.3827805519104004,
+            "ceiling_db": -1.5
+          }
+        ]
+      ],
+      "verify_render_results": [
+        {
+          "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/blank_bgm/result.wav",
+          "verdict": "PASS",
+          "loudness_ok": true,
+          "peak_ok": true,
+          "ending_ok": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -19.9999942779541,
+            "peak_db": -3.382780075073242,
+            "true_peak_db": -3.382780075073242,
+            "full_scale_samples": 0,
+            "ending_rms_db": -23.288602828979492,
+            "sha256": "2682509d1f20eed50d29896b8e76e1cb2b0c9724d79cfbe9eeb6f51a7a71d20f"
+          }
+        }
+      ],
+      "objective_checks": {
+        "same_prompts": true,
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "encoded_true_peak_at_or_below_minus_one": true,
+        "midi_reimport_has_notes": true,
+        "no_argument_or_tool_errors": true,
+        "tempo_100": true,
+        "loop_eight_bars": true,
+        "four_populated_parts": true
+      },
+      "midi_notes": 180,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 19.2,
+        "frames": 921600,
+        "lufs": -19.9999942779541,
+        "peak_db": -3.382780075073242,
+        "true_peak_db": -3.382780075073242,
+        "full_scale_samples": 0,
+        "ending_rms_db": -23.288602828979492,
+        "sha256": "2682509d1f20eed50d29896b8e76e1cb2b0c9724d79cfbe9eeb6f51a7a71d20f"
+      },
+      "independent_pcm_check": {
+        "frames": 921600,
+        "full_scale_samples": 0,
+        "peak_dbfs": -3.382779840544412,
+        "sha256": "2682509d1f20eed50d29896b8e76e1cb2b0c9724d79cfbe9eeb6f51a7a71d20f"
+      }
+    },
+    {
+      "case": "folk_six_eight",
+      "elapsed_seconds": 197.4674631,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 132.8710376,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 3,
+            "read_notes": 5,
+            "inspect_audio": 3,
+            "search_instruments": 4,
+            "mixer_graph": 5,
+            "instrument_diagnostics": 1,
+            "inspect_performance": 2,
+            "search_documentation": 2,
+            "edit_harmony": 3,
+            "add_track": 3,
+            "set_instrument": 3,
+            "add_clip": 3,
+            "edit_notes": 2,
+            "listen": 2
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 46.9082764,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "inspect_performance": 2,
+            "read_notes": 2,
+            "inspect_audio": 2,
+            "listen": 2,
+            "set_performance": 2,
+            "search_documentation": 1
+          }
+        },
+        {
+          "turn": 3,
+          "elapsed_seconds": 17.6870863,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          }
+        }
+      ],
+      "tool_calls": 59,
+      "read_notes_calls": 7,
+      "errors": [],
+      "read_notes_response_bytes": 45312,
+      "export_peak_protection": [
+        [
+          {
+            "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/folk_six_eight/result.wav",
+            "encoded": {
+              "sample_rate": 48000,
+              "channels": 2,
+              "bit_depth": 24,
+              "seconds": 16.0,
+              "frames": 768000,
+              "lufs": -27.895702362060547,
+              "peak_db": -16.439193725585938,
+              "true_peak_db": -16.43016242980957,
+              "full_scale_samples": 0,
+              "ending_rms_db": -61.102535247802734,
+              "sha256": "e29d7f2140c1e16a6e554acae442bc4b6f1e29e945e8a12112d3c79c21ea1e88"
+            },
+            "attenuation_db": 0.0,
+            "source_true_peak_db": -16.430164337158203,
+            "ceiling_db": -3.0
+          }
+        ]
+      ],
+      "verify_render_results": [
+        {
+          "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/folk_six_eight/result.wav",
+          "verdict": "PASS",
+          "loudness_ok": true,
+          "peak_ok": true,
+          "ending_ok": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -27.895702362060547,
+            "peak_db": -16.439193725585938,
+            "true_peak_db": -16.43016242980957,
+            "full_scale_samples": 0,
+            "ending_rms_db": -61.102535247802734,
+            "sha256": "e29d7f2140c1e16a6e554acae442bc4b6f1e29e945e8a12112d3c79c21ea1e88"
+          }
+        }
+      ],
+      "objective_checks": {
+        "same_prompts": true,
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "encoded_true_peak_at_or_below_minus_one": true,
+        "midi_reimport_has_notes": true,
+        "no_argument_or_tool_errors": true,
+        "original_clip_including_cc1_exact": true,
+        "meter_and_tempo_exact": true,
+        "only_one_guitar_track_changed": true,
+        "all_authored_data_preserved_in_performance_turn": true,
+        "other_project_fields_preserved": true,
+        "inapplicable_stroke_explained": true
+      },
+      "midi_notes": 142,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 16.0,
+        "frames": 768000,
+        "lufs": -27.895702362060547,
+        "peak_db": -16.439193725585938,
+        "true_peak_db": -16.43016242980957,
+        "full_scale_samples": 0,
+        "ending_rms_db": -61.102535247802734,
+        "sha256": "e29d7f2140c1e16a6e554acae442bc4b6f1e29e945e8a12112d3c79c21ea1e88"
+      },
+      "performance_measurement": {
+        "representation": "First loop pass, selected scope, stages in order using the playback performer. Note events only: pitch curves, timbre and volume contours are not measured; unchanged note events do not imply inaudibility of those controls.",
+        "sampled_authored_notes": 45,
+        "note_limit": 2048,
+        "stage_limit": 32,
+        "complete": true,
+        "truncated": false,
+        "stages": [
+          {
+            "stage": "expression",
+            "measured": true,
+            "input_notes": 45,
+            "eligible_chord_groups": 0,
+            "changed_onsets": 19,
+            "changed_durations": 0,
+            "changed_velocities": 45,
+            "changed_pitches": 0,
+            "added_notes": 0,
+            "removed_notes": 0,
+            "note_events_unchanged": false,
+            "warnings": []
+          }
+        ]
+      },
+      "performance_reply": [
+        "ギターの演奏設定だけで、タイミングと強弱に小さな揺れを付けます。今のギターは主に単音のアルペジオなので、ストローク設定の効く範囲も確認します。ギターと元の旋律の音符は変更しません。\n",
+        "演奏時だけタイミングと強弱をわずかに揺らす設定を加えました。ストローク設定は、同時に鳴る和音がないため効果がありませんでした。音符を変えない条件を優先し、効果のないストローク設定は外して、揺れの設定だけ残します。\n",
+        "ギターだけに、後から調整できる演奏設定で小さなタイミング・強弱の揺れを加えました。ギターと元の旋律の音符は変更していません。\n\nストロークは同時発音の和音がないため適用できず、アルペジオを維持しました。別の音声批評モデルでも変更前後を比較しましたが、改善の断定は避けています。変更は未保存です。"
+      ],
+      "independent_pcm_check": {
+        "frames": 768000,
+        "full_scale_samples": 0,
+        "peak_dbfs": -16.43919324868916,
+        "sha256": "e29d7f2140c1e16a6e554acae442bc4b6f1e29e945e8a12112d3c79c21ea1e88"
+      }
+    },
+    {
+      "case": "regenerate_phrase",
+      "elapsed_seconds": 169.1760561,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 75.7899033,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 4,
+            "edit_timeline": 2,
+            "edit_harmony": 2,
+            "search_instruments": 5,
+            "rename_track": 1,
+            "add_track": 2,
+            "cli_command": 1,
+            "search_documentation": 1,
+            "set_instrument": 2,
+            "generate_phrase": 3,
+            "read_notes": 2,
+            "inspect_audio": 3,
+            "mixer_graph": 2,
+            "inspect_performance": 6,
+            "edit_recipe": 3,
+            "normalize_mix": 1,
+            "listen": 1
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 53.668911,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "edit_recipe": 6,
+            "read_notes": 7,
+            "inspect_performance": 1,
+            "inspect_audio": 2,
+            "listen": 2,
+            "search_documentation": 2
+          }
+        },
+        {
+          "turn": 3,
+          "elapsed_seconds": 39.7159478,
+          "failure": null,
+          "tool_counts": {
+            "inspect_project": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 3
+          }
+        }
+      ],
+      "tool_calls": 71,
+      "read_notes_calls": 9,
+      "errors": [
+        {
+          "kind": "tool",
+          "name": "edit_recipe",
+          "args": "{\n  \"clips\": [\n    5\n  ],\n  \"operation\": {\n    \"kind\": \"patch\",\n    \"settings\": {\n      \"density\": 0.4,\n      \"gate\": 1.2,\n      \"seed\": 43\n    }\n  }\n}",
+          "ok": false,
+          "detail": "gate must be finite within 0..1"
+        }
+      ],
+      "read_notes_response_bytes": 68036,
+      "export_peak_protection": [
+        [
+          {
+            "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/regenerate_phrase/result.wav",
+            "encoded": {
+              "sample_rate": 48000,
+              "channels": 2,
+              "bit_depth": 24,
+              "seconds": 20.0,
+              "frames": 960000,
+              "lufs": -17.406570434570312,
+              "peak_db": -12.924158096313477,
+              "true_peak_db": -12.924158096313477,
+              "full_scale_samples": 0,
+              "ending_rms_db": -23.958091735839844,
+              "sha256": "aee6be660687abc65013bd0f3bfdfb209ccb0b88c65f37a672fb9ccc959a9f52"
+            },
+            "attenuation_db": 0.0,
+            "source_true_peak_db": -12.924158096313477,
+            "ceiling_db": -1.0
+          }
+        ]
+      ],
+      "verify_render_results": [
+        {
+          "path": "C:/Users/uthree/Develop/auris-studio/target/eval/clipping-fix-2026-10-22/regenerate_phrase/result.wav",
+          "verdict": "PASS",
+          "loudness_ok": true,
+          "peak_ok": true,
+          "ending_ok": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -17.406570434570312,
+            "peak_db": -12.924158096313477,
+            "true_peak_db": -12.924158096313477,
+            "full_scale_samples": 0,
+            "ending_rms_db": -23.958091735839844,
+            "sha256": "aee6be660687abc65013bd0f3bfdfb209ccb0b88c65f37a672fb9ccc959a9f52"
+          }
+        }
+      ],
+      "objective_checks": {
+        "same_prompts": true,
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "encoded_true_peak_at_or_below_minus_one": true,
+        "midi_reimport_has_notes": true,
+        "no_argument_or_tool_errors": false,
+        "accompaniment_tracks_exact": true,
+        "non_clip_lead_metadata_and_other_project_fields_exact": true,
+        "lead_recipe_retained": true,
+        "lead_note_count_reduced": true,
+        "lead_mean_duration_increased": true
+      },
+      "midi_notes": 120,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 20.0,
+        "frames": 960000,
+        "lufs": -17.406570434570312,
+        "peak_db": -12.924158096313477,
+        "true_peak_db": -12.924158096313477,
+        "full_scale_samples": 0,
+        "ending_rms_db": -23.958091735839844,
+        "sha256": "aee6be660687abc65013bd0f3bfdfb209ccb0b88c65f37a672fb9ccc959a9f52"
+      },
+      "lead": {
+        "clip": 5,
+        "before_notes": 28,
+        "after_notes": 24,
+        "before_mean_ticks": 917.5,
+        "after_mean_ticks": 1206.4583333333333
+      },
+      "independent_pcm_check": {
+        "frames": 960000,
+        "full_scale_samples": 0,
+        "peak_dbfs": -12.924157980466177,
+        "sha256": "aee6be660687abc65013bd0f3bfdfb209ccb0b88c65f37a672fb9ccc959a9f52"
+      }
+    }
+  ],
+  "evaluation_executable_sha256": "6d9804b4b184a22cd9fd81817c4147336abc33dd650e5549ec43aefe0711d3f8",
+  "totals": {
+    "prompts": 13,
+    "tool_calls": 283,
+    "read_notes_calls": 32,
+    "tool_errors": 1,
+    "all_encoded_wav_checks_passed": true,
+    "all_verify_render_verdicts_passed": true
+  },
+  "model_run_exit_codes": {
+    "arrange_and_undo": 0,
+    "blank_bgm": 0,
+    "folk_six_eight": 0,
+    "regenerate_phrase": 0
+  },
+  "frozen_regression": {
+    "snapshot": "target/eval/argument-errors-2026-10-22/arrange_and_undo/project-04.json",
+    "snapshot_sha256": "7b747f4b9e2412bbb8c068bd7f5ddf3b95cc48e4f50e58a2e5f017c23158ef38",
+    "before": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "bit_depth": 24,
+      "seconds": 34.28570833333333,
+      "frames": 1645714,
+      "lufs": -16.64350128173828,
+      "peak_db": 0.0,
+      "true_peak_db": 0.0,
+      "full_scale_samples": 2,
+      "ending_rms_db": -45.332157135009766,
+      "sha256": "df55e9dc5d7d83ed6a3e66398b8d58395c33db677010ce6f3cfedde5e436aa2d"
+    },
+    "after": {
+      "document_unchanged": true,
+      "files": [
+        {
+          "attenuation_db": -1.0586698055267334,
+          "ceiling_db": -1.0,
+          "encoded": {
+            "bit_depth": 24,
+            "channels": 2,
+            "ending_rms_db": -46.39082717895508,
+            "frames": 1645714,
+            "full_scale_samples": 0,
+            "lufs": -17.702171325683594,
+            "peak_db": -1.0000042915344238,
+            "sample_rate": 48000,
+            "seconds": 34.28570833333333,
+            "sha256": "05c8e0d0998c2a397257b0b52bc641ac2eedf8c25114b16819d6c779d811a5af",
+            "true_peak_db": -1.0000042915344238
+          },
+          "path": "C:\\Users\\uthree\\Develop\\auris-studio\\target\\eval\\clipping-fix-2026-10-22\\frozen-project.wav",
+          "source_true_peak_db": 0.058665093034505844
+        }
+      ]
+    },
+    "independent_pcm_checks": [
+      {
+        "phase": "before",
+        "frames": 1645714,
+        "sample_rate": 48000,
+        "bit_depth": 24,
+        "full_scale_samples": 2,
+        "peak_dbfs": 0.0,
+        "sha256": "df55e9dc5d7d83ed6a3e66398b8d58395c33db677010ce6f3cfedde5e436aa2d"
+      },
+      {
+        "phase": "after",
+        "frames": 1645714,
+        "sample_rate": 48000,
+        "bit_depth": 24,
+        "full_scale_samples": 0,
+        "peak_dbfs": -1.0000043562586107,
+        "sha256": "05c8e0d0998c2a397257b0b52bc641ac2eedf8c25114b16819d6c779d811a5af"
+      }
+    ],
+    "project_unchanged_assertion_passed": true,
+    "original_red_log": "target/clipping-original-red.log",
+    "fixed_log": "target/clipping-original-fixed.log",
+    "fixed_wav": "target/eval/clipping-fix-2026-10-22/frozen-project.wav"
+  },
+  "validation": {
+    "non_ui_workspace_tests": {
+      "passed": 3222,
+      "failed": 0,
+      "ignored": 19,
+      "log": "target/clipping-final-tests.log"
+    },
+    "agent_ui_tests": {
+      "passed": 103,
+      "failed": 0,
+      "ignored": 6,
+      "log": "target/clipping-agent-ui-tests.log"
+    },
+    "full_gpui_suite_rerun": false,
+    "retained_project_regression_passed": true,
+    "fmt_check": true,
+    "diff_check": true,
+    "clippy_workspace_all_targets": true,
+    "desktop_and_mcp_build": true
+  },
+  "limits": [
+    "One run per natural-language scenario, not statistical reliability or aesthetic evaluation.",
+    "True peak uses the existing 4x interpolation estimate, not a certified meter.",
+    "Fresh compositions differ between runs; deterministic retained-project reproduction establishes the clipping fix.",
+    "Recipe regeneration recovered one unrelated gate=1.2 argument refusal; this is not an argument-error-free run.",
+    "Native fresh mixes already had sufficient headroom and used 0 dB output attenuation; the retained-project and numerical overload regressions exercised attenuation.",
+    "Bypass policy on synthetic unsaved fixtures; no user project or saved agent configuration changed.",
+    "Delivery captures are subject to the existing 512 MiB per-buffer allocation/inspection limit."
+  ]
+}

@@ -92,6 +92,10 @@ This is a separate observed mixing/export outcome, not a recurrence of any of th
 four argument mistakes. It remains unresolved by this argument-contract change.
 No musical-quality or universal model-reliability claim follows from this trial.
 
+The WAV clipping was subsequently reproduced from the retained project and fixed
+in the [output-headroom follow-up](agent-export-clipping.md). Its separate same-prompt
+Codex rerun passed all four encoded-WAV delivery checks.
+
 ## Code validation
 
 - `cargo test --workspace --exclude auris-gpui`: 3,220 passed, 18 ignored.
