@@ -745,15 +745,31 @@ impl SongDoc {
                 }
             }
             if !spec.charts.contains_key(&section.chords) {
-                errors.push(SpecError::about(format!(
-                    "section `{name}` plays `{}`, which is not a chart; there is {}",
-                    section.chords,
-                    spec.charts
-                        .keys()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )));
+                let known = spec
+                    .charts
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                // A section's `chords` is a name. Chords written there are the likely mistake,
+                // and the bare "not a chart" left a writer searching the documentation for why.
+                let written_out = section.chords.trim() == "?"
+                    || section.chords.contains('|')
+                    || Chart::parse(&section.chords).is_some();
+                errors.push(SpecError::about(if written_out {
+                    format!(
+                        "section `{name}`: `chords` names a chart rather than spelling one out. \
+                         Put the progression in the [harmony] table and name it here: \
+                         [harmony] {name} = \"{}\", then [section.{name}] chords = \"{name}\". \
+                         Charts so far: {known}",
+                        section.chords.trim()
+                    )
+                } else {
+                    format!(
+                        "section `{name}` plays `{}`, which is not a chart; there is {known}",
+                        section.chords
+                    )
+                }));
             }
             for part in section.parts.iter().chain(section.tweaks.keys()) {
                 if !part_names.contains(&part.as_str()) {
@@ -1773,6 +1789,24 @@ mod tests {
         let errors =
             SongSpec::parse("form = [\"verse\"]\n[section.verse]\nchords = \"nope\"").unwrap_err();
         assert!(errors[0].message.contains("not a chart"), "{:?}", errors[0]);
+
+        // Chords spelled out where a name belongs get told where they go instead.
+        let errors = SongSpec::parse(
+            "form = [\"verse\"]\n[section.verse]\nchords = \"| i | bVII | bVI | V |\"",
+        )
+        .unwrap_err();
+        let message = &errors[0].message;
+        assert!(
+            message.contains("[harmony] verse = \"| i | bVII | bVI | V |\""),
+            "{message}"
+        );
+        assert!(message.contains("chords = \"verse\""), "{message}");
+        // And the advice is good: following it to the letter gives a valid document.
+        SongSpec::parse(
+            "form = [\"verse\"]\n[harmony]\nverse = \"| i | bVII | bVI | V |\"\n\
+             [section.verse]\nchords = \"verse\"",
+        )
+        .unwrap();
 
         let errors =
             SongSpec::parse("form = [\"verse\"]\n[section.verse]\nparts = [\"nope\"]").unwrap_err();
