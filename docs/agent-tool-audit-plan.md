@@ -1,7 +1,9 @@
 # Agent tool audit and consolidation plan
 
 Audit date: 2026-10-22. Source revision: `2b5abb48`.
-Status: implementation plan; this document does not change the public catalog.
+Status: implemented. The [validation account](agent-tool-validation.md) and
+[machine-readable results](../tools/eval/references/agent-tool-validation-2026-10-22.json)
+describe the resulting contracts, checks and real-agent trials.
 
 Use one name, one argument contract and one implementation for each capability
 across saved-project MCP and the built-in agents. Backward compatibility is not
@@ -13,7 +15,7 @@ Keep saved-project persistence and live-document ownership behind thin execution
 adapters serving the same contract. Do not translate old names, units or selectors.
 Keep operations with different purposes distinct.
 
-## Current inventory
+## Inventory at audit time
 
 | Surface | Auris tools | Qualification |
 | --- | ---: | --- |
@@ -25,7 +27,9 @@ The raw live definition builder has 45 entries. These counts exclude native CLI
 shell/file tools and describe the implementation before consolidation. The rebuilt
 `evaluate_agent_surface` example and source inspection supply the
 [inventory and findings](../tools/eval/references/agent-tool-audit-2026-10-22.json).
-No new real-model selection benchmark or token-savings measurement was performed.
+The audit itself did not include a real-model selection benchmark or token-savings
+measurement. Implementation validation subsequently exercised real agents and
+recorded current schema sizes; byte counts are not provider token measurements.
 
 ## Final consolidation targets
 
@@ -33,7 +37,7 @@ Go directly to these contracts. Do not introduce temporary intermediate tools.
 Use a tagged operation enum for closely related domain operations, with a precise
 schema for each variant; do not introduce a generic command executor.
 
-| Current entry points | Single destination | Contract |
+| Previous entry points | Single destination | Contract |
 | --- | --- | --- |
 | Saved `edit_notes`, `replace_notes`, `replace_notes_batch`; live `add_note`, `add_notes`, `remove_notes`, `replace_notes` | `edit_notes` | `patch` adds/removes/updates notes; `replace` replaces complete note lists. A bounded batch accepts one or several clips with one Undo/save boundary. |
 | Saved `mixer`, `effects`, `set_effect`, `routing`, `set_level`, `set_track_state`, `mixer_graph`; live fader/state tools and the eleven graph tools | `mixer_graph` | Typed read, strip, routing, send and effect operations using shared graph commands. Partial strip updates include gain, pan, mute and solo. |
@@ -107,7 +111,7 @@ schema for each variant; do not introduce a generic command executor.
 Reuse existing session commands through the common contracts. Internal getters
 and UI-only actions do not each need a tool.
 
-| Priority | Current gap | Planned capability |
+| Priority | Gap identified | Delivered capability |
 | --- | --- | --- |
 | P0 | Live agents cannot export the unsaved mix or MIDI | Audio preview/export, MIDI export and encoded-file verification from the current snapshot, with staging and cancellation |
 | P0 | No live clip move/copy/split/resize/remove/freeze | Shared `edit_clip`; distinguish recipe freezing from baking performance |
