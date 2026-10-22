@@ -48,6 +48,8 @@ Later strength edits preserve that snapshot; changing the source does not recapt
 
 These tools share the live catalog and permission checks across native model APIs,
 Codex and Claude Code. Read-only and Plan modes permit inspection and refuse edits.
+See the [real backend validation](agent-performance-validation.md) for the completed
+Codex trial and the Claude authentication blocker.
 
 ## Live harmony and vocals
 
