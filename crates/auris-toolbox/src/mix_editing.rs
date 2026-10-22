@@ -279,24 +279,13 @@ pub mod automation {
                     Target::Effect { slot: number } => Some(slot(&session, track, number)?),
                     _ => None,
                 };
-                for i in 0..65_536 {
-                    let target = if let Some(slot) = effect {
-                        ParamTarget::Effect {
-                            track,
-                            slot,
-                            param: ParamId(i),
-                        }
-                    } else {
-                        ParamTarget::Instrument {
-                            track: track.ok_or("the master has no instrument")?,
-                            param: ParamId(i),
-                        }
-                    };
-                    if session.descriptor_for(target).is_none() {
-                        break;
-                    }
-                    targets.push(target);
-                }
+                // Listed the way a plugin panel lists them, so a hosted plugin is asked for the
+                // values its preset loaded rather than the defaults it was built with.
+                let params = match effect {
+                    Some(slot) => session.effect_params(track, slot),
+                    None => session.instrument_params(track.ok_or("the master has no instrument")?),
+                };
+                targets.extend(params.into_iter().map(|(target, _)| target));
             }
         }
         let param = match &args.operation {

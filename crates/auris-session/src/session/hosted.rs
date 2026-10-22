@@ -2691,6 +2691,77 @@ mod tests {
     }
 
     #[test]
+    fn listing_a_hosted_instruments_parameters_reads_the_patch_it_holds() {
+        // What a model reading parameters over MCP was shown: a track switched to a "Supersaw
+        // Lead" preset listed one unison voice, the plugin's default, while the instrument played
+        // the preset and a write reported the preset's value as the one it replaced. Walking the
+        // descriptors one by one never asked the plugin; listing them is what does.
+        let (mut session, file) = session_with_instrument();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        // On the project rather than through the command, so the patch is in place before the
+        // plugin is built — which is how a saved project, or a freshly chosen preset, arrives.
+        assert!(session.project.set_hosted_instrument(
+            track,
+            "clap:studio.auris.test.tone",
+            AssetPath::external(&file),
+        ));
+        session
+            .project
+            .track_mut(track)
+            .and_then(|track| track.kind.as_instrument_mut())
+            .unwrap()
+            .instrument_state
+            .set_hosted_bytes(&0.25f32.to_le_bytes());
+        session.rebuild_graph();
+
+        let params = session.instrument_params(track);
+        let (target, descriptor) = params
+            .iter()
+            .find(|(_, descriptor)| descriptor.name == "Level")
+            .cloned()
+            .expect("the fixture's level is listed");
+        assert_ne!(
+            descriptor.default, 0.25,
+            "or a default could be mistaken for an answer"
+        );
+        assert_eq!(
+            session.param_value(target, &descriptor),
+            0.25,
+            "the patch's value, which is in the plugin and nowhere else"
+        );
+    }
+
+    #[test]
+    fn listing_a_hosted_effects_parameters_reads_the_patch_it_holds() {
+        let (mut session, file) = session_with_fixture();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let slot = session
+            .project
+            .add_hosted_effect(
+                Some(track),
+                "clap:studio.auris.test.gain",
+                AssetPath::external(&file),
+            )
+            .unwrap();
+        session.project.tracks[0].mixer.effects[0]
+            .state
+            .set_hosted_bytes(&0.25f32.to_le_bytes());
+        session.rebuild_graph();
+
+        let (target, descriptor) = session.effect_params(Some(track), slot)[0].clone();
+        assert_eq!(
+            target,
+            crate::param::ParamTarget::Effect {
+                track: Some(track),
+                slot,
+                param: ParamId(0),
+            },
+            "each listed descriptor comes with the target that reaches it"
+        );
+        assert_eq!(session.param_value(target, &descriptor), 0.25);
+    }
+
+    #[test]
     fn a_preset_loaded_inside_a_plugin_puts_the_unsaved_mark_back() {
         // A plugin's own window is a way of editing the project that the session never sees. The
         // plugin says so by setting one flag, and until that flag was read the title bar said
