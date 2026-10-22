@@ -1365,7 +1365,7 @@ the original specification separately from the current harmony, tempo, sections 
 recipes. `edit_harmony` changes a specified bar range while leaving notes and the mix intact;
 `regenerate_clips` explicitly updates the parts that should follow it. `edit_recipe` changes one
 clip's density, intensity, rhythm, octave or groove, retaining its seed and unspecified
-controls. Hand-edited notes need an explicit replacement flag. `edit_clip` moves, duplicates,
+controls; without a clip number it makes the same change to every generated clip on the track. Hand-edited notes need an explicit replacement flag. `edit_clip` moves, duplicates,
 splits, resizes, removes, mutes or freezes a note clip. `analyze_music` measures stored notes'
 pitch range, density and exact bar-pattern repetition; these are descriptive measurements,
 not an aesthetic score.
