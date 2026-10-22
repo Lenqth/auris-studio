@@ -1299,7 +1299,8 @@ mod tests {
             let before = spec.total_bars();
             spec.sections.get_mut("verse").unwrap().lyrics = lyrics.into();
             let composition = auris_compose::compose(&spec);
-            let report = session.compose(&composition).unwrap();
+            // This checks symbolic lyric placement, independent of render-based mix balancing.
+            let report = session.compose_without_balance(&composition).unwrap();
             let expected = session.measure_lyrics(lyrics, spec.meter).notes;
             let singer = session
                 .project()

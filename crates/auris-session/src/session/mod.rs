@@ -337,7 +337,7 @@ pub struct Session {
     fonts: SharedSoundFonts,
     /// Separates discovery handles belonging to different unsaved sessions.
     sound_scope: String,
-    pub(crate) listening: crate::audio_audition::ListeningHistory,
+    pub(crate) listening: crate::audio_audition::ListeningContext,
     /// Decoded fonts, kept by the path they were read from as well as their document ids.
     ///
     /// [`Self::fonts`] is emptied whenever the document is replaced, because it is keyed by ids

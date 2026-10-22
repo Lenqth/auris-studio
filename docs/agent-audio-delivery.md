@@ -57,3 +57,11 @@ a multi-stem publication failure reports any files already published.
 `verify_render` takes `path`, optional `target_lufs`, `ceiling_db` (default -1),
 `tolerance_lu` (default 1) and `ending_rms_max_db`. It measures the encoded WAV
 without rendering the project again. Its PASS/FAIL verdict is separate from listening.
+
+## Inspection and audition
+
+`inspect_audio` returns the same measurements and PNG through saved MCP and the live
+host. `preview` uses a 24 kHz protected PCM16 WAV; its reported attenuation applies
+only to the audition. The mix and exported delivery settings remain unchanged.
+`listen` takes a returned opaque `audition_id` in `compare_to` on every backend and
+compares raw excerpts using a common protective gain. See [agent workflows](agent-workflows.md).

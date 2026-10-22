@@ -29,7 +29,7 @@ const REMOVED_TOOLS: &[&str] = &[
 
 pub(crate) fn definitions() -> Vec<ToolDefinition> {
     live_agent::definitions().into_iter().filter(|tool| {
-        !matches!(tool.name.as_str(), "capabilities" | "discover_tools" | "tool_help" | "search_documentation" | "export_audio_attachment" | "read_report" | "transcribe_audio" | "inspect_audio" | "listen")
+        !matches!(tool.name.as_str(), "capabilities" | "discover_tools" | "tool_help" | "search_documentation" | "export_audio_attachment" | "read_report" | "transcribe_audio")
     }).map(|tool| {
         let name = tool.name;
         let mut parameters = tool.parameters;
@@ -48,6 +48,13 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                     serde_json::from_value::<live_agent::transcription_import::Args>(args).map_err(|e|format!("Invalid arguments: {e}"))?.command(&auris_session::AnalysisControl::cancelled_by(crate::cancellation::current().flag_handle()))?
                 } else { live_agent::command(&action, &args)?.ok_or("Unknown session tool")? };
                 let mut session = crate::opened(&project)?;
+                if let auris_session::live_agent::Command::InspectAudio {start_bar,bars,track}=command {
+                    let report=session.audio_inspection_job(start_bar,bars,track)?.run(crate::cancellation::current().flag())?;
+                    return serde_json::to_string(&report).map_err(|e|e.to_string());
+                }
+                if let auris_session::live_agent::Command::Listen {start_bar,bars,focus,compare_to}=command {
+                    return crate::saved_listening::run(&mut session,start_bar,bars,focus.as_deref(),compare_to.as_deref());
+                }
                 let before = command.is_mutating().then(||session.project().clone());
                 let text = if command.needs_worker() {
                     let cancellation=crate::cancellation::current();
@@ -80,6 +87,61 @@ mod tests {
     use super::*;
     use auris_session::prelude::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn saved_creation_ids_are_direct_inputs_to_the_shared_editors() {
+        let directory = tempfile::tempdir().unwrap();
+        let call = |name, args| {
+            serde_json::from_str::<Value>(
+                &crate::runtime::call_saved(&crate::ToolGroups::default(), name, args).unwrap(),
+            )
+            .unwrap()
+        };
+        let created = call(
+            "create_project",
+            json!({"output":directory.path().join("Manual.auris"),"tempo":10,"meter":"6/8"}),
+        );
+        assert_eq!(created["tempo"].as_f64(), Some(10.0));
+        assert!(created["tracks"][0]["track"].is_u64());
+        let clip = call(
+            "add_clip",
+            json!({"project":created["project_id"],"track":created["tracks"][0]["track"],"name":"Phrase","start_bar":1,"bars":1}),
+        );
+        let read = call(
+            "read_notes",
+            json!({"project":created["project_id"],"clip":clip["clip"]}),
+        );
+        assert_eq!(read["total"], 0);
+        assert_eq!(read["ticks_per_quarter"], 960);
+    }
+
+    #[test]
+    fn saved_inspection_uses_the_common_range_and_never_saves() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Inspection.auris");
+        let mut session = crate::headless().unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks(3840))
+            .unwrap();
+        session
+            .replace_notes(clip, vec![Note::new(60, Ticks::ZERO, Ticks(997))])
+            .unwrap();
+        session.save(&path).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let result = crate::runtime::call_saved(
+            &crate::ToolGroups::default(),
+            "inspect_audio",
+            json!({"project":path,"start_bar":1,"bars":1}),
+        )
+        .unwrap();
+        let report: auris_session::audio_inspection::Inspection =
+            serde_json::from_str(&result).unwrap();
+        let visual = crate::audio_inspection::present(&report).unwrap();
+        assert!(!visual.png.is_empty());
+        assert!(report.columns > 0);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
 
     #[test]
     fn saved_and_live_contracts_match_and_removed_names_have_no_dispatch() {

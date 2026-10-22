@@ -65,6 +65,7 @@ enum Work {
         folder: Option<PathBuf>,
         options: OfflineOptions,
         settings: WavExportSettings,
+        audition_root: Option<PathBuf>,
     },
     Midi {
         job: crate::MidiExportJob,
@@ -102,6 +103,7 @@ enum Outcome {
             PathBuf,
             auris_io::StagedAudioExport,
             crate::ExportInspection,
+            Option<f32>,
         )>,
     ),
     Midi(crate::MidiExportResult),
@@ -200,6 +202,7 @@ impl FileJob {
                 folder,
                 options,
                 settings,
+                audition_root,
             } => {
                 if let Some(folder) = &folder {
                     guard
@@ -224,14 +227,53 @@ impl FileJob {
                         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                     }
                     let mut progress = RenderProgress::default().cancelled_by(cancelled);
-                    let encoded = job
-                        .stage_audio_export(&path, &settings.into(), &options, track, &mut progress)
+                    let mut attenuation_db = None;
+                    let encoded = if let Some(root) = &audition_root {
+                        let directory = path.parent().ok_or("Missing preview directory")?;
+                        if !directory
+                            .canonicalize()
+                            .map_err(|e| e.to_string())?
+                            .starts_with(root.canonicalize().map_err(|e| e.to_string())?)
+                        {
+                            return Err(
+                                "Preview directory must stay inside the project folder".into()
+                            );
+                        }
+                        let mut audio = job
+                            .render(&options, &mut progress)
+                            .map_err(|e| e.to_string())?;
+                        let gain = crate::audio_audition::protect_preview(&mut audio)?;
+                        attenuation_db = Some(if gain < 1.0 { 20.0 * gain.log10() } else { 0.0 });
+                        check()?;
+                        let mut writer = auris_io::AudioExportWriter::create(
+                            &path,
+                            audio.channel_count(),
+                            audio.frame_count(),
+                            &settings.into(),
+                        )
                         .map_err(|e| e.to_string())?;
+                        writer.write(&audio).map_err(|e| e.to_string())?;
+                        writer.finish_staged().map_err(|e| e.to_string())?
+                    } else {
+                        job.stage_audio_export(
+                            &path,
+                            &settings.into(),
+                            &options,
+                            track,
+                            &mut progress,
+                        )
+                        .map_err(|e| e.to_string())?
+                    };
                     check()?;
                     let inspection =
                         crate::inspect_export(encoded.staged_path()).map_err(|e| e.to_string())?;
+                    if audition_root.is_some()
+                        && (inspection.peak_db >= 0.0 || inspection.true_peak_db > -0.99)
+                    {
+                        return Err("Encoded audition exceeds its peak ceiling".into());
+                    }
                     check()?;
-                    staged.push((path, encoded, inspection));
+                    staged.push((path, encoded, inspection, attenuation_db));
                 }
                 Outcome::Audio(staged)
             }
@@ -364,6 +406,7 @@ impl Session {
                     folder,
                     options,
                     settings,
+                    audition_root: None,
                 }
             }
             Command::Preview { range } => {
@@ -399,7 +442,12 @@ impl Session {
                     targets: vec![(path, None)],
                     folder: None,
                     options,
-                    settings: WavExportSettings::default(),
+                    settings: WavExportSettings {
+                        sample_rate: 24_000,
+                        bit_depth: WavBitDepth::Int16,
+                        ..Default::default()
+                    },
+                    audition_root: self.project_folder().map(std::path::Path::to_owned),
                 }
             }
             Command::ExportMidi { output } => {
@@ -508,7 +556,7 @@ impl Session {
                 )
             }
             Outcome::Audio(staged) => {
-                for (path, _, _) in &staged {
+                for (path, _, _, _) in &staged {
                     self.export_guard()
                         .check_file(path)
                         .map_err(|e| e.to_string())?;
@@ -517,11 +565,11 @@ impl Session {
                     }
                 }
                 let mut files = Vec::with_capacity(staged.len());
-                for (path, encoded, inspection) in staged {
+                for (path, encoded, inspection, attenuation_db) in staged {
                     encoded.publish_noclobber().map_err(|e| {
                         format!("Publication failed: {e}; already published: {files:?}")
                     })?;
-                    files.push(serde_json::json!({"path":path,"encoded":inspection}));
+                    files.push(serde_json::json!({"path":path,"encoded":inspection,"audition_attenuation_db":attenuation_db}));
                 }
                 Ok(serde_json::json!({"files":files,"document_unchanged":true}).to_string())
             }
@@ -532,6 +580,34 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overloaded_preview_attenuates_only_the_audition_and_preserves_the_document() {
+        let mut live = fixture();
+        let track = live.project().tracks[0].id;
+        live.set_track_instrument(track, "auris.synth.fm2").unwrap();
+        live.set_param(crate::ParamTarget::TrackGain(track), 30.0);
+        let original = live.project().clone();
+        let cancelled = AtomicBool::new(false);
+        let job = live
+            .begin_agent_file_job(Command::Preview {
+                range: BarRange {
+                    start_bar: 1,
+                    bars: 1,
+                },
+            })
+            .unwrap();
+        let result = job.run(&cancelled).unwrap();
+        let response: serde_json::Value =
+            serde_json::from_str(&live.continue_agent_file_job(result, &cancelled).unwrap())
+                .unwrap();
+        let file = &response["files"][0];
+        assert!(file["audition_attenuation_db"].as_f64().unwrap() < 0.0);
+        assert_eq!(file["encoded"]["sample_rate"], 24000);
+        assert_eq!(file["encoded"]["full_scale_samples"], 0);
+        assert!(file["encoded"]["true_peak_db"].as_f64().unwrap() <= -0.99);
+        assert_eq!(live.project(), &original);
+    }
 
     #[test]
     fn audio_and_midi_import_append_without_replacing_music_and_undo_once() {

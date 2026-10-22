@@ -433,10 +433,11 @@ async fn conversation(
             continue;
         }
         let (said, attachments) = crate::parse_say(&line)?;
-        let prompt = format!(
-            "{context}\n[Current Auris permission policy: {}]\n{said}",
-            wire["policy"]
-        );
+        let policy_context =
+            serde_json::from_value::<auris_session::agent_policy::Policy>(wire["policy"].clone())
+                .map(|policy| crate::toolbox::live_agent::permission_context(&policy))
+                .unwrap_or_default();
+        let prompt = format!("{context}\n{policy_context}\n{said}");
         let content = match crate::attachments::cli_input(prompt, attachments, bridge, true).await {
             Ok(content) => content,
             Err(message) => {

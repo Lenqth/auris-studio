@@ -90,7 +90,9 @@ impl ServerHandler for AurisMcp {
         let result = REQUEST_CANCELLATION
             .scope(
                 cancellation,
-                blocking(move || toolbox::runtime::call_saved(&groups, &call_name, call_args)),
+                blocking_tool(name == "inspect_audio", move || {
+                    toolbox::runtime::call_saved(&groups, &call_name, call_args)
+                }),
             )
             .await
             .map(rmcp::model::CallToolResponse::Complete);
@@ -165,6 +167,29 @@ async fn blocking(
     finished(run_blocking(work).await?)
 }
 
+/// The image presenter is shared with the live host; transport only supplies MCP content blocks.
+async fn blocking_tool(
+    inspection: bool,
+    work: impl FnOnce() -> Result<String, String> + Send + 'static,
+) -> Result<CallToolResult, ErrorData> {
+    if !inspection {
+        return blocking(work).await;
+    }
+    match run_blocking(work).await? {
+        Err(error) => finished(Err(error)),
+        Ok(text) => match serde_json::from_str(&text)
+            .map_err(|e| e.to_string())
+            .and_then(|report| toolbox::audio_inspection::present(&report))
+        {
+            Ok(report) => Ok(CallToolResult::success(vec![
+                ContentBlock::text(report.text),
+                ContentBlock::image(report.png, "image/png"),
+            ])),
+            Err(error) => finished(Err(error)),
+        },
+    }
+}
+
 /// Runs one synchronous toolbox call with the current MCP cancellation state installed on its
 /// pooled worker thread.
 async fn run_blocking<T: Send + 'static>(
@@ -230,6 +255,41 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn shared_saved_inspection_is_delivered_as_measurements_and_a_png() {
+        use auris_session::{Session, SessionOptions, prelude::*};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Inspect.auris");
+        {
+            let mut session = Session::new(SessionOptions::headless()).unwrap();
+            let track = session.add_default_instrument_track("Lead").unwrap();
+            let clip = session
+                .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks(3840))
+                .unwrap();
+            session
+                .replace_notes(clip, vec![Note::new(60, Ticks::ZERO, Ticks(997))])
+                .unwrap();
+            session.save(&path).unwrap();
+        }
+        let original = std::fs::read(&path).unwrap();
+        let project = path.clone();
+        let result = blocking_tool(true, move || {
+            toolbox::runtime::call_saved(
+                &toolbox::ToolGroups::default(),
+                "inspect_audio",
+                serde_json::json!({"project":project,"start_bar":1,"bars":1}),
+            )
+        })
+        .await
+        .unwrap();
+        let content = serde_json::to_value(result).unwrap();
+        assert_ne!(content["isError"], true);
+        assert_eq!(content["content"][0]["type"], "text");
+        assert_eq!(content["content"][1]["type"], "image");
+        assert_eq!(content["content"][1]["mimeType"], "image/png");
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+
+    #[tokio::test]
     async fn manual_catalog_is_compact_and_disabled_tools_are_not_callable() {
         let (server_transport, client_transport) = tokio::io::duplex(8192);
         let server = tokio::spawn(async move {
@@ -275,13 +335,14 @@ mod tests {
         assert_ne!(help.is_error, Some(true));
         let payload: serde_json::Value =
             serde_json::from_str(&help.content[0].as_text().unwrap().text).unwrap();
-        assert_eq!(
-            payload["parameters"],
-            full.iter()
-                .find(|t| t.name == "edit_notes")
-                .unwrap()
-                .parameters
-        );
+        let mut expected = full
+            .iter()
+            .find(|t| t.name == "edit_notes")
+            .unwrap()
+            .parameters
+            .clone();
+        toolbox::compact_parameters(&mut expected);
+        assert_eq!(payload["parameters"], expected);
         client.cancel().await.unwrap();
         server.await.unwrap();
     }

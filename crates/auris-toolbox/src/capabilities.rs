@@ -1,31 +1,6 @@
 //! Asset availability, distinguished from registered plugin names.
 use super::*;
 
-pub(super) fn playback_warnings(session: &Session) -> String {
-    session
-        .playback_readiness()
-        .into_iter()
-        .filter_map(|r| {
-            let reason = match r.state {
-                PlaybackState::Ready => return None,
-                PlaybackState::MissingSoundfont => {
-                    "sampler has no playable SoundFont preset; this track is silent"
-                }
-                PlaybackState::MissingInstrument => {
-                    "instrument is unavailable; this track is silent"
-                }
-                PlaybackState::GuideVoice => {
-                    "temporary synthesized guide voice; run sing with a voice to produce vocals"
-                }
-                PlaybackState::StaleVocal => {
-                    "vocal take is stale; run sing again to match the current notes and voice"
-                }
-            };
-            Some(format!("Note: {}: {reason}.\n", r.name))
-        })
-        .collect()
-}
-
 /// Discovers installed sound and voice resources and project playback readiness.
 pub mod capabilities {
     use super::*;
@@ -55,7 +30,7 @@ pub mod capabilities {
                     "phoneme_timing":info.capabilities.phoneme_timing
                 }
             }));
-            serde_json::json!({"track":format!("id:{}",track.id.0),"voice":voice})
+            serde_json::json!({"track":track.id.0,"voice":voice})
         }).collect();
         let audio_reviewer = match auris_session::audio_review::AudioReviewOptions::from_env() {
             Ok(options) => serde_json::json!({"tool":"listen","model":options.model,

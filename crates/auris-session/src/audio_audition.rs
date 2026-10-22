@@ -17,7 +17,8 @@ use std::sync::{
 const RETAINED_EXCERPTS: usize = 4;
 
 #[derive(Default)]
-pub(crate) struct ListeningHistory {
+/// Opaque bounded raw-audio history that a saved-project host may retain between calls.
+pub struct ListeningContext {
     owner: Arc<()>,
     excerpts: VecDeque<Arc<Excerpt>>,
 }
@@ -101,6 +102,12 @@ fn protective_gain(audio: &AudioBuffer) -> Result<f32, String> {
         .min(1.0))
 }
 
+pub(crate) fn protect_preview(audio: &mut AudioBuffer) -> Result<f32, String> {
+    let gain = protective_gain(audio)?;
+    audio.apply_gain(gain);
+    Ok(gain)
+}
+
 fn encode_audition(
     path: &Path,
     audio: &AudioBuffer,
@@ -162,6 +169,11 @@ pub fn write_audition_wav(
 }
 
 impl Session {
+    /// Transfer listening history without changing the document, paths or Undo state.
+    pub fn swap_listening_context(&mut self, context: &mut ListeningContext) {
+        std::mem::swap(&mut self.listening, context);
+    }
+
     /// Snapshots the unsaved mix for actual audio feedback. Does not edit, save or add Undo.
     ///
     /// `compare_to` is an opaque ID from an earlier successful call in this document.

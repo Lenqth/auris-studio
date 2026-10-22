@@ -56,20 +56,13 @@ pub fn tool_group(name: &str) -> &'static str {
         | "analyze_chords"
         | "analyze_instruments"
         | "transcribe_audio"
-        | "transcribe_mixture"
         | "import_transcription" => "transcription",
         "write_lyrics" | "sing" | "list_voices" | "inspect_singer" | "set_singer_voice"
         | "edit_vocal_notes" => "vocals",
         "mixer_graph"
-        | "effects"
         | "automation"
-        | "mixer"
-        | "set_level"
         | "normalize_mix"
-        | "set_effect"
         | "section_gain"
-        | "routing"
-        | "set_instrument_param"
         | "set_instrument_params"
         | "convert_track_to_audio" => "mix",
         "spec_reference"
@@ -77,7 +70,6 @@ pub fn tool_group(name: &str) -> &'static str {
         | "preview_composition"
         | "compose"
         | "edit_recipe"
-        | "regenerate_clips"
         | "teach_progression"
         | "forget_progression"
         | "list_progressions"
@@ -100,8 +92,6 @@ pub fn tool_group(name: &str) -> &'static str {
         | "inspect_performance"
         | "set_performance"
         | "edit_notes"
-        | "replace_notes"
-        | "replace_notes_batch"
         | "edit_harmony"
         | "set_drum_assignment" => "manual",
         _ => "common",
@@ -312,6 +302,7 @@ mod tests {
         assert_eq!(page["next_offset"], 10);
         let error = tool_help::run(&tool_help::Args {
             name: "x".repeat(10000),
+            operation: None,
         })
         .unwrap_err();
         assert!(error.len() < 256);

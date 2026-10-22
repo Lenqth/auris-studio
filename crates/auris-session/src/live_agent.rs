@@ -785,7 +785,7 @@ impl Session {
                     TrackKind::Audio => self.add_audio_track(name),
                     TrackKind::Bus => self.add_bus_track(name),
                 };
-                Ok(format!("Added track ID {}", id.0))
+                Ok(serde_json::json!({"track":id.0,"unsaved":true}).to_string())
             }
             Command::RenameTrack { track, name } => {
                 if name.trim().is_empty() {
@@ -834,7 +834,7 @@ impl Session {
                 let id = self
                     .add_midi_clip(TrackId(track), name, start, length)
                     .map_err(error)?;
-                Ok(format!("Added clip ID {}", id.0))
+                Ok(serde_json::json!({"track":track,"clip":id.0,"start_tick":start.raw(),"length_ticks":length.raw(),"unsaved":true}).to_string())
             }
             Command::GeneratePhrase {
                 track,

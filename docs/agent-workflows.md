@@ -16,8 +16,10 @@ The execution registry supplies names, descriptions, schemas and dispatch togeth
 
 Live backends include `search_internet` only with a nonempty `BRAVE_SEARCH_API_KEY`.
 It uses the common host, runtime discovery/help and network permission gate in
-Claude, Codex and rig. Full field descriptions remain in tool_help; transmitted
-schemas omit explanatory field prose while retaining every validation constraint.
+Claude, Codex and rig. Transmitted schemas and default `tool_help` responses omit
+explanatory field prose while retaining every validation constraint. Request
+`tool_help` with `name` and `operation` (for example `mixer_graph`, `set_strip`)
+for the selected operation's full field explanations and examples.
 
 ## Exact authored notes
 
@@ -188,7 +190,7 @@ the clip's global stack. For a reference groove, first set
 Capture uses the reference clip's performed first pass on a sixteenth-note grid.
 Later strength edits preserve that snapshot; changing the source does not recapture it.
 
-These tools share the live catalog and permission checks across native model APIs,
+These tools share the canonical catalog across saved MCP and live native model APIs,
 Codex and Claude Code. Read-only and Plan modes permit inspection and refuse edits.
 See the [real backend validation](agent-performance-validation.md) for completed
 Codex and Claude trials, including actual rendering and Undo/Redo checks.
@@ -330,28 +332,27 @@ OpenAI-compatible endpoint.
 
 ## Listen, revise, listen again
 
-The initial [live composition audit](agent-listening-loop-audit.md) found a missing
-live audio path. The live operation above addresses that integration; this section
-describes the separate saved-project MCP workflow, whose `compare_to` is a WAV path.
+Saved-project MCP and live agents use the same listening command, source rendering,
+protected WAV encoding and immutable comparison IDs. The controller chooses edits;
+a separate audio critic receives actual audio and cannot modify the project.
 
-The controller and the listener can be different models. Qwen/Ornith can choose
-editing tools while `listen` sends the rendered WAV to an audio-capable critic.
-The critic returns observations and has no tools that can modify the project.
+1. Read `inspect_project`, `mixer_graph` and the relevant notes or controls.
+2. Call `listen` with explicit `start_bar`, `bars` and optional `focus`. Saved calls
+   add `project`. The result includes `audition_id`, measurements and the critic's
+   review. It does not establish that the controller personally heard the file.
+3. Make one supported local correction, or preserve the music when the evidence
+   does not justify a change. Keep a checkpoint when a comparison may need restoring.
+4. Read back the edit, then call `listen` on the same range with `compare_to` set
+   to the first `audition_id`. Both excerpts use the same protective attenuation;
+   the original raw excerpt stays immutable. Tempo/meter or range changes require
+   a new baseline.
+5. Keep, refine or restore the edit according to the evidence, and stop when the
+   requested result is met or a human judgment is needed.
 
-1. Inspect the existing song with `describe`, `inspect_composition` and `mixer`.
-2. Call `listen` with `project`, `start_bar:1`, `bars:4` and an optional `focus`.
-   It returns `audio_path`, the critic model, its review, and separate measurements.
-3. Decide whether the observations support one specific local edit. Leave the mix
-   unchanged when no correction is warranted or the critic cannot judge it. For a
-   supported correction, keep a named checkpoint and use local note, clip,
-   instrument, routing, effect or gain edits.
-4. After editing, read back the affected state, then call `listen` on the same bars. Pass the earlier
-   `audio_path` as `compare_to` for an A/B review. Both actual audio files are attached.
-   Saved-file previews can have different protective attenuation; inspect their
-   measurements before interpreting absolute level differences. Live comparisons
-   above instead share one attenuation for both immutable excerpts.
-5. Keep, refine or restore the change according to the evidence. Stop when the
-   requested result is met or the remaining uncertainty needs human judgment.
+Each live document retains its latest four excerpts. Saved MCP retains those same
+bounded contexts for two projects in the current server process; eviction/restart
+expires their IDs. Reads, reviews and previews do not save or alter faders. Use
+`preview` for a playable local file; its attenuation applies only to that audition.
 
 Keep `focus` concise and about the sound, such as "Describe the melody's prominence
 relative to the accompaniment." Omit it to use the default instrumentation and

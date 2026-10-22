@@ -5314,13 +5314,15 @@ mod tests {
     }
 
     #[gpui::test]
-    fn live_agent_piano_cover_respects_read_only_and_keyboard_undo(cx: &mut gpui::TestAppContext) {
+    fn live_transcription_import_respects_read_only_and_keyboard_undo(
+        cx: &mut gpui::TestAppContext,
+    ) {
         let (app, cx) = crate::harness::open(cx);
         let before = app.update(cx, |this,_| {
             let before = this.project().clone();
-            let command = serde_json::json!({"action":"create_piano_cover","name":"Piano cover","at_beat":0.0,
-                "transcription":{"model_sha256":"2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec","seconds":1.0,
-                "notes":[{"pitch":60,"start":0.0,"end":1.0,"strength":0.7}]}});
+            let command = serde_json::json!({"action":"import_transcription","name":"Piano cover","at_tick":0,
+                "draft":{"kind":"piano","transcription":{"source":{"method":"external"},"seconds":1.0,
+                "notes":[{"pitch":60,"start":0.0,"end":1.0,"strength":0.7}]}}});
             this.settings.agent.policy = Default::default();
             this.settings.agent.policy.mode = Mode::ReadOnly;
             assert!(this.agent_edit(command.clone()).is_err());

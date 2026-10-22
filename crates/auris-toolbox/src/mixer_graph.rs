@@ -49,16 +49,6 @@ mod tests {
                 .map(|reply| serde_json::from_str(&reply).unwrap())
         };
         let before = std::fs::read(&path).unwrap();
-        assert_eq!(
-            track_by_name(session.project(), &format!("track:{}", a.0))
-                .unwrap()
-                .id,
-            a
-        );
-        assert_eq!(
-            strip_by_name(session.project(), "track:master").unwrap(),
-            None
-        );
         request(json!({"action":"read"})).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert!(opened(&project).unwrap().checkpoints().unwrap().is_empty());

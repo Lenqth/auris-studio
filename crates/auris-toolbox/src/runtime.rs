@@ -52,7 +52,13 @@ pub fn call_live_reference_in(
                     .iter()
                     .find(|d| d.name == request.name)
                     .ok_or_else(|| format!("Unknown live tool: {}", request.name))?;
-                Ok(json!({"name":definition.name,"description":definition.description,"parameters":definition.parameters}).to_string())
+                crate::catalog::tool_help::reference(
+                    &request,
+                    &definition.name,
+                    &definition.description,
+                    &definition.parameters,
+                    true,
+                )
             }
             "discover_tools" => {
                 let request: crate::discover_tools::Args =

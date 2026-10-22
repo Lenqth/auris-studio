@@ -7,13 +7,6 @@ fn analysis_control() -> AnalysisControl {
     AnalysisControl::cancelled_by(cancellation::current().flag_handle())
 }
 
-fn beats(value: f64) -> Result<Ticks, String> {
-    if !value.is_finite() || !(0.0..=1_000_000.0).contains(&value) {
-        return Err("beat positions must be finite and within 0..1000000".into());
-    }
-    Ok(Ticks::from_beats(value))
-}
-
 /// Optional local instrument-presence tagging without project edits.
 pub mod analyze_instruments {
     use super::*;
@@ -53,18 +46,19 @@ pub mod analyze_chords {
     pub const DESCRIPTION: &str = "Recognizes chords from written notes on the CPU without rendering or models. Reports absolute-tick intervals, alternate chord symbols and unknown/silent regions. Known percussion is excluded. Apply explicitly replaces recognized harmony and clears silence while preserving unknown intervals and outside harmony; saves a checkpoint. Large results return an immutable report_id snapshot; use read_report for details instead of repeating analysis or edits.";
     /// Track selection, time range and optional acceptance.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+    #[serde(deny_unknown_fields)]
     pub struct Args {
         /// Absolute project path.
         pub project: String,
-        /// Track names or id:number selectors; empty selects all pitched tracks.
+        /// Stable numeric track IDs; empty selects all pitched tracks.
         #[serde(default)]
-        pub tracks: Vec<String>,
-        /// Zero-based quarter-note beat at which to start; defaults to zero.
-        pub from_beat: Option<f64>,
-        /// Exclusive zero-based end beat; defaults to the project end.
-        pub to_beat: Option<f64>,
-        /// Window size in quarter-note beats; defaults to one.
-        pub window_beats: Option<f64>,
+        pub tracks: Vec<u64>,
+        /// Nonnegative absolute start tick; defaults to zero.
+        pub from_tick: Option<i64>,
+        /// Exclusive absolute end tick; defaults to the project end.
+        pub to_tick: Option<i64>,
+        /// Positive analysis window in ticks; defaults to one quarter note (960).
+        pub window_ticks: Option<i64>,
         /// Explicitly accept recognized candidates and save; false only reports.
         #[serde(default)]
         pub apply: bool,
@@ -72,20 +66,19 @@ pub mod analyze_chords {
     /// Analyzes one immutable selection and optionally accepts its recognized harmony.
     pub fn run(args: &Args) -> Result<String, String> {
         let mut session = opened(&args.project)?;
-        let tracks = args
-            .tracks
-            .iter()
-            .map(|t| track_by_name(session.project(), t).map(|t| t.id))
-            .collect::<Result<Vec<_>, _>>()?;
-        let from = beats(args.from_beat.unwrap_or(0.0))?;
+        let tracks: Vec<_> = args.tracks.iter().copied().map(TrackId).collect();
+        let from = Ticks(args.from_tick.unwrap_or(0));
         let to = args
-            .to_beat
-            .map(beats)
-            .transpose()?
+            .to_tick
+            .map(Ticks)
             .unwrap_or_else(|| session.project().end_tick());
-        let options = ChordOptions {
-            window: beats(args.window_beats.unwrap_or(1.0))?,
-        };
+        let window = Ticks(args.window_ticks.unwrap_or(Ticks::QUARTER.0));
+        if from < Ticks::ZERO || to <= from || window <= Ticks::ZERO {
+            return Err(
+                "Use nonnegative from_tick, to_tick > from_tick and positive window_ticks".into(),
+            );
+        }
+        let options = ChordOptions { window };
         let report = session
             .chord_analysis_job(&tracks, from, to, options)
             .and_then(|j| j.run(&analysis_control()))
@@ -187,10 +180,10 @@ mod tests {
         let original = std::fs::read(&project).unwrap();
         let chord_args = analyze_chords::Args {
             project: project.display().to_string(),
-            tracks: vec![],
-            from_beat: None,
-            to_beat: None,
-            window_beats: None,
+            tracks: vec![track.0],
+            from_tick: Some(13),
+            to_tick: None,
+            window_ticks: None,
             apply: false,
         };
         let chord_json: serde_json::Value =

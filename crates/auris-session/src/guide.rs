@@ -63,11 +63,11 @@
 //! [`crate::Session::replace_notes`] validates a complete note sequence before replacing
 //! only the authored notes of one clip. Clip timing, curves, transforms and recipe survive.
 //! The operation records one Undo step; identical sequences are no-ops, including an empty
-//! sequence on an empty clip. The live agent exposes this through the existing replacement
-//! permission policy with clip-relative quarter-note times and no filesystem access.
-//! MCP's toolbox translates song-relative bar/beat inputs, optionally read from a bounded
-//! JSON file, and checkpoints only changed documents. File paths refer to the MCP server;
-//! the source JSON is input, not a retained asset. Both doors share pitch notation parsing.
+//! sequence on an empty clip. Agent `edit_notes` uses clip-relative integer ticks, numeric
+//! MIDI pitches and original storage indices checked against a content revision. Patches and
+//! replacements share an atomic batch across up to sixteen clips. Large batches can be read
+//! once from bounded JSON input before authorizing the exact draft. The source is not an asset.
+//! Saved MCP checkpoints changed documents; live execution creates one unsaved Undo step.
 //!
 //! # Reusable sounds
 //!
@@ -310,16 +310,13 @@ pub mod architecture {
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
-    //! attachment IDs. `create_piano_cover` resolves only these IDs, transcribes on a worker
-    //! using the bundled Apache-2.0 Basic Pitch ONNX model, and asks the same live permission
-    //! gate to apply the exact note draft. [`Session::create_piano_cover`](crate::Session::create_piano_cover)
-    //! maps source seconds through the current tempo map and adds a physical-piano track/clip
-    //! as one undo transaction. Notes remain estimates; this is transcription, not listening.
-    //! An alternative recognizer uses [`Session::import_transcription`](crate::Session::import_transcription)
-    //! with a backend-independent note draft: bounded source seconds, pitches, relative strength,
-    //! claimed method/model/artifact provenance and limitations. Validation does not pretend that
-    //! caller-provided provenance verifies musical accuracy. The legacy Basic Pitch draft still
-    //! verifies its own model hash. Both paths share the note-to-document mapping and transaction.
+    //! attachment IDs. `transcribe_audio` recognizes an attachment or authorized local file
+    //! on a worker using explicit YIN, Basic Pitch or MuScriptor selection. Recognition returns
+    //! an immutable bounded draft and never changes the score. `import_transcription` explicitly
+    //! accepts that draft, inline recognized events or a bounded JSON file. Source seconds map
+    //! through the current tempo map, and the complete import creates one Undo transaction.
+    //! Notes remain estimates; provenance and model hashes do not verify musical accuracy.
+    //! MuScriptor requires its separate model prerequisites and acknowledgement on every call.
     //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
     //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
     //! exposes the internal snapshot. One current copy per attachment is retained; re-export
@@ -370,8 +367,8 @@ pub mod architecture {
     //! The desktop owns [`agent_policy::Policy`](crate::agent_policy::Policy): every live tool
     //! asks it for a decision, and live edits are checked again immediately before execution.
     //! Deny rules override every mode; plan mode forbids mutations even with an allow rule.
-    //! One-time approvals bind the exact command to the current document revision. Standalone MCP keeps
-    //! its independent file-based tool catalog and does not consult this policy.
+    //! One-time approvals bind the exact command to the current document revision. Standalone MCP
+    //! adapts the shared command catalog to saved projects and does not consult this live policy.
     //! Auto-review mode delegates operations needing confirmation to a separate conversation
     //! with the selected backend/model and no execution tools. It receives human requests and
     //! exact operation evidence, never authority from the executing model. Deny rules run first;
@@ -441,8 +438,12 @@ pub mod architecture {
     //!
     //! Audio review is a separate session service, [`audio_review`](crate::audio_review): it
     //! sends actual WAV excerpts to an audio-capable model through an OpenAI-compatible API.
-    //! The toolbox's `listen` tool renders a short excerpt, optionally attaches an earlier
-    //! preview for comparison, and returns the critic's observations to the controlling model.
+    //! The common `listen` command renders a short excerpt, optionally attaches a retained
+    //! immutable audition for comparison, and returns the critic's observations to the controlling
+    //! model. Saved calls retain an opaque listening context across fresh sessions; both adapters
+    //! share bounded excerpt retention and protective gain. Numeric inspection presents measurements
+    //! and a spectrogram without sending audio to a critic. Short preview files receive protective
+    //! attenuation independently of ordinary delivery renders and never change project gain.
     //! MCP clients can therefore repeat listen, localized edit and listen,
     //! even when the controlling model accepts only text. The critic has no editing tools.
     //! An accepted upload is not proof of accurate hearing: observations remain fallible,
@@ -764,8 +765,8 @@ pub mod architecture {
     //! [`GraphAction`](crate::mixer_graph::commands::GraphAction) is the shared saved-file and
     //! live-agent graph contract. Stable `track:N`, `track:master` and `effect:N` identities
     //! survive renaming and reordering. Reads page nodes in processing order and include their
-    //! outgoing edges. The toolbox exposes `mixer_graph` to MCP; rig receives flat tools from
-    //! the same operation schema. The live permission policy classifies graph reads separately
+    //! outgoing edges. All agent transports expose `mixer_graph` with the same tagged operation
+    //! schema. The live permission policy classifies graph reads separately
     //! from edits and connection/effect removal. Persistence stays with the caller: live edits
     //! are undoable and unsaved, while MCP checkpoints actual changes once.
     //!

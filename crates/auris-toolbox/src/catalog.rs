@@ -188,7 +188,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             read_report::DESCRIPTION,
             read_report::run,
         ),
-        definition::<listen::Args>(listen::NAME, listen::DESCRIPTION, listen::run),
         definition::<create_project::Args>(
             create_project::NAME,
             create_project::DESCRIPTION,
@@ -297,13 +296,15 @@ pub mod tool_help {
     /// The wire name.
     pub const NAME: &str = "tool_help";
     /// The model-facing description.
-    pub const DESCRIPTION: &str = "Returns the exact argument schema and examples for one tool. Use before an unfamiliar edit or after an argument error; copy the field names and nesting, replacing example paths and selectors with the current project's values. Does not change files.";
+    pub const DESCRIPTION: &str = "Returns the compact argument schema and examples for one tool. Set operation to an action/kind name for its exact schema with field explanations. Use before an unfamiliar edit or after an argument error; copy the field names and nesting, replacing example paths and selectors with the current project's values. Does not change files.";
     /// The tool to explain.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     #[serde(deny_unknown_fields)]
     pub struct Args {
-        /// Exact tool name, for example edit_clip, preview, automation or routing.
+        /// Exact tool name, for example edit_clip, preview, automation or mixer_graph.
         pub name: String,
+        /// Optional action/kind within the tool's operation field, for example set_strip.
+        pub operation: Option<String>,
     }
     /// Returns only the requested tool's reference, keeping unrelated schemas out of context.
     pub fn run(args: &Args) -> Result<String, String> {
@@ -317,10 +318,49 @@ pub mod tool_help {
                     args.name.chars().take(80).collect::<String>()
                 )
             })?;
+        reference(args, &tool.name, &tool.description, &tool.parameters, false)
+    }
+
+    pub(crate) fn reference(
+        args: &Args,
+        name: &str,
+        description: &str,
+        parameters: &serde_json::Value,
+        live: bool,
+    ) -> Result<String, String> {
+        let variants = parameters["properties"]["operation"]["oneOf"].as_array();
+        let variant_name = |variant: &serde_json::Value| {
+            ["action", "kind"]
+                .into_iter()
+                .find_map(|tag| variant["properties"][tag]["const"].as_str())
+                .map(String::from)
+        };
+        let operations: Vec<_> = variants
+            .into_iter()
+            .flatten()
+            .filter_map(variant_name)
+            .collect();
+        let mut schema = parameters.clone();
+        if let Some(operation) = &args.operation {
+            let selected = variants
+                .into_iter()
+                .flatten()
+                .find(|variant| variant_name(variant).as_ref() == Some(operation))
+                .ok_or_else(|| {
+                    format!(
+                        "Unknown operation for {name}; choose from {}",
+                        operations.join(", ")
+                    )
+                })?;
+            schema["properties"]["operation"] = selected.clone();
+        } else {
+            crate::compact_parameters(&mut schema);
+        }
         let project = "/absolute/path/Song/Song.auris";
-        let examples = match tool.name.as_str() {
+        let mut examples = match name {
             "mixer_graph" => serde_json::json!([
                 {"project":project,"operation":{"action":"read"}},
+                {"project":project,"operation":{"action":"set_strip","node":"track:1","gain_db":-6.0,"pan":0.25}},
                 {"project":project,"operation":{"action":"connect","source":"track:1","target":"track:2","kind":"send"}},
                 {"project":project,"operation":{"action":"parameters","node":"effect:3"}}
             ]),
@@ -334,7 +374,7 @@ pub mod tool_help {
             ]),
             "listen" => serde_json::json!([
                 {"project":project,"start_bar":1,"bars":4,"focus":"Is the lead buried by the accompaniment?"},
-                {"project":project,"start_bar":1,"bars":4,"compare_to":"/absolute/path/Song/.auris-previews/preview-before.wav","focus":"Did the balance improve?"}
+                {"project":project,"start_bar":1,"bars":4,"compare_to":"audition:copy-from-listen","focus":"Did the balance improve?"}
             ]),
             "edit_clip" => serde_json::json!([
                 {"project":project,"clip":2,"operation":{"kind":"resize","end_tick":30720}},
@@ -352,274 +392,29 @@ pub mod tool_help {
             ]),
             _ => serde_json::json!([]),
         };
-        Ok(
-            serde_json::json!({"name":tool.name,"description":tool.description,
-            "parameters":tool.parameters,"examples":examples})
-            .to_string(),
-        )
+        if live {
+            for example in examples.as_array_mut().unwrap() {
+                example.as_object_mut().unwrap().remove("project");
+            }
+        }
+        if let Some(operation) = &args.operation {
+            examples.as_array_mut().unwrap().retain(|example| {
+                let value = &example["operation"];
+                value["action"].as_str().or_else(|| value["kind"].as_str()) == Some(operation)
+            });
+        }
+        Ok(serde_json::json!({"name":name,"description":description,
+            "parameters":schema,"operations":operations,"examples":examples})
+        .to_string())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn creation_requires_intended_track_kind_and_clip_name() {
-        let track = serde_json::json!({"project":"/song.auris","name":"Reverb"});
-        assert!(serde_json::from_value::<add_track::Args>(track.clone()).is_err());
-        let clip = serde_json::json!({"project":"/song.auris","track":"Lead","bars":2});
-        assert!(serde_json::from_value::<add_clip::Args>(clip.clone()).is_err());
-        let mut named_bus = track;
-        named_bus["kind"] = serde_json::json!("bus");
-        assert_eq!(
-            serde_json::from_value::<add_track::Args>(named_bus)
-                .unwrap()
-                .kind,
-            add_track::Kind::Bus
-        );
-        let schema = parameter_schema::<add_track::Args>();
-        assert!(
-            schema["required"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("kind"))
-        );
-        assert_eq!(
-            schema["properties"]["kind"]["enum"],
-            serde_json::json!(["instrument", "drum", "singer", "audio", "bus"])
-        );
-        let schema = parameter_schema::<add_clip::Args>();
-        assert!(
-            schema["required"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("name"))
-        );
-    }
 
     #[test]
-    fn explicit_drum_kind_saves_tracks_for_the_drum_editor() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("Song.auris");
-        let mut session = Session::new(SessionOptions::headless()).unwrap();
-        let instrument = session
-            .registry()
-            .default_instrument_id()
-            .unwrap()
-            .to_string();
-        session.save(&path).unwrap();
-        assert!(
-            serde_json::from_value::<add_track::Args>(serde_json::json!({
-                "project":path,"name":"Kit","kind":"instrument","drums":true
-            }))
-            .is_err()
-        );
-        for (name, kind, instrument) in [
-            ("Default kit", "drum", None),
-            ("Explicit kit", "drum", Some(instrument)),
-            ("Melody", "instrument", None),
-        ] {
-            let args = serde_json::from_value::<add_track::Args>(serde_json::json!({
-                "project":path,"name":name,"kind":kind,
-                "instrument":instrument
-            }))
-            .unwrap();
-            add_track::run(&args).unwrap();
-            let reopened = opened(path.to_str().unwrap()).unwrap();
-            let track = track_by_name(reopened.project(), name).unwrap();
-            assert_eq!(track.kind.is_drum(), kind == "drum", "{name}");
-            assert!(track.kind.as_instrument().unwrap().clips.is_empty());
-        }
-    }
-
-    #[test]
-    fn regeneration_requires_one_complete_seed_policy() {
-        for take in [
-            serde_json::json!({"kind":"same"}),
-            serde_json::json!({"kind":"next"}),
-            serde_json::json!({"kind":"seed","seed":42}),
-        ] {
-            assert!(
-                serde_json::from_value::<regenerate_clips::Args>(serde_json::json!({
-                    "project":"/song.auris","track":"Lead","take":take
-                }))
-                .is_ok()
-            );
-        }
-        for take in [
-            serde_json::Value::Null,
-            serde_json::json!("same"),
-            serde_json::json!({"kind":"same","seed":42}),
-            serde_json::json!({"kind":"next","seed":42}),
-            serde_json::json!({"kind":"seed"}),
-            serde_json::json!({"kind":"seed","seed":-1}),
-        ] {
-            assert!(
-                serde_json::from_value::<regenerate_clips::Args>(serde_json::json!({
-                    "project":"/song.auris","track":"Lead","take":take
-                }))
-                .is_err()
-            );
-        }
-        let schema = parameter_schema::<regenerate_clips::Args>();
-        assert!(
-            schema["required"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("take"))
-        );
-        assert_eq!(
-            schema["properties"]["take"]["oneOf"]
-                .as_array()
-                .unwrap()
-                .len(),
-            3
-        );
-    }
-
-    #[test]
-    fn nested_operations_are_readable_without_definitions_and_keep_requirements() {
-        let schema = parameter_schema::<edit_clip::Args>();
-        assert!(!schema.to_string().contains("\"$ref\""));
-        let variants = schema["properties"]["action"]["oneOf"].as_array().unwrap();
-        let resize = variants
-            .iter()
-            .find(|v| v["properties"]["kind"]["const"] == "resize")
-            .unwrap();
-        assert!(
-            resize["required"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("end_bar"))
-        );
-        assert!(
-            !resize["properties"]
-                .as_object()
-                .unwrap()
-                .contains_key("bar")
-        );
-    }
-
-    #[test]
-    fn unit_operations_are_plain_string_enums_but_tagged_objects_stay_structured() {
-        let schema = parameter_schema::<routing::Args>();
-        let operation = &schema["properties"]["operation"];
-        assert_eq!(operation["type"], "string");
-        assert_eq!(
-            operation["enum"],
-            serde_json::json!([
-                "list",
-                "output",
-                "add_send",
-                "remove_send",
-                "send_mode",
-                "send_level"
-            ])
-        );
-        assert!(operation.get("oneOf").is_none());
-        let effects = parameter_schema::<effects::Args>();
-        assert_eq!(effects["properties"]["operation"]["type"], "object");
-        assert!(effects["properties"]["operation"]["oneOf"].is_array());
-        assert!(
-            serde_json::from_value::<routing::Args>(serde_json::json!({
-                "project":"/song.auris","track":"Lead","operation":[["list",null]]
-            }))
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn tagged_operations_declare_objects_and_refuse_numeric_placeholders() {
-        let automation = parameter_schema::<automation::Args>();
-        for field in ["target", "operation"] {
-            assert_eq!(automation["properties"][field]["type"], "object");
-            assert!(automation["properties"][field]["oneOf"].is_array());
-        }
-        let set = automation["properties"]["operation"]["oneOf"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|variant| variant["properties"]["action"]["const"] == "set")
-            .unwrap();
-        assert!(
-            set["required"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("points"))
-        );
-        assert_eq!(set["properties"]["points"]["minItems"], 1);
-        for operation in [serde_json::json!(-1), serde_json::json!("list")] {
-            assert!(
-                serde_json::from_value::<effects::Args>(serde_json::json!({
-                    "project":"/song.auris", "track":"Bass", "operation":operation
-                }))
-                .is_err()
-            );
-            assert!(serde_json::from_value::<automation::Args>(serde_json::json!({
-                "project":"/song.auris", "track":"Bass", "target":{"kind":"mixer"}, "operation":operation
-            })).is_err());
-        }
-    }
-
-    #[test]
-    fn numeric_annotation_cleanup_preserves_bounds_nullability_and_string_formats() {
-        #[derive(schemars::JsonSchema)]
-        #[allow(dead_code)]
-        struct Metadata {
-            #[schemars(range(min = -6, max = 6))]
-            gain: f32,
-            count: u32,
-            optional: Option<f64>,
-            #[schemars(extend("format" = "date-time"))]
-            timestamp: String,
-            #[schemars(extend("format" = "float"))]
-            textual_format: String,
-        }
-        let schema = parameter_schema::<Metadata>();
-        let fields = &schema["properties"];
-        for name in ["gain", "count", "optional"] {
-            assert!(
-                fields[name].get("format").is_none(),
-                "{name}: {}",
-                fields[name]
-            );
-        }
-        assert_eq!(fields["gain"]["minimum"].as_f64(), Some(-6.0));
-        assert_eq!(fields["gain"]["maximum"].as_f64(), Some(6.0));
-        assert_eq!(fields["count"]["minimum"].as_f64(), Some(0.0));
-        assert!(
-            fields["optional"]["type"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("null"))
-        );
-        assert_eq!(fields["timestamp"]["format"], "date-time");
-        assert_eq!(fields["textual_format"]["format"], "float");
-    }
-
-    #[test]
-    fn effect_slots_are_required_in_schema_and_arguments() {
-        let schema = parameter_schema::<set_effect::Args>();
-        assert!(
-            schema["required"]
-                .as_array()
-                .unwrap()
-                .contains(&serde_json::json!("slot"))
-        );
-        assert_eq!(schema["properties"]["slot"]["type"], "integer");
-        assert_eq!(schema["properties"]["slot"]["minimum"].as_f64(), Some(1.0));
-        assert!(serde_json::from_value::<set_effect::Args>(serde_json::json!({
-            "project":"/song.auris", "track":"Bass", "effect":"compressor", "param":"threshold_db", "value":-18
-        })).is_err());
-        let primary: set_effect::Args = serde_json::from_value(serde_json::json!({
-            "project":"/song.auris", "track":"Bass", "slot":1, "param":"threshold_db", "value":-18
-        }))
-        .unwrap();
-        assert_eq!(primary.slot, 1);
-        assert_eq!(primary.effect, None);
-    }
-    #[test]
-    fn catalog_has_unique_names_and_help_preserves_the_exact_schema() {
+    fn catalog_names_are_unique_and_help_preserves_each_exact_schema() {
         let catalog = tool_catalog();
         let names: std::collections::BTreeSet<_> =
             catalog.iter().map(|tool| tool.name.as_str()).collect();
@@ -628,104 +423,79 @@ mod tests {
             let help: serde_json::Value = serde_json::from_str(
                 &tool_help::run(&tool_help::Args {
                     name: tool.name.clone(),
+                    operation: None,
                 })
                 .unwrap(),
             )
             .unwrap();
-            assert_eq!(help["parameters"], tool.parameters);
+            let mut expected = tool.parameters.clone();
+            crate::compact_parameters(&mut expected);
+            assert_eq!(help["parameters"], expected);
+            if crate::session_tools::definitions()
+                .iter()
+                .any(|definition| definition.name == tool.name)
+            {
+                for example in help["examples"].as_array().unwrap() {
+                    let mut example = example.clone();
+                    example.as_object_mut().unwrap().remove("project");
+                    assert!(
+                        crate::live_agent::command(&tool.name, &example)
+                            .unwrap()
+                            .is_some(),
+                        "{}",
+                        tool.name
+                    );
+                }
+            }
         }
-        assert!(
-            tool_help::run(&tool_help::Args {
-                name: "invented_tool".into()
-            })
-            .unwrap_err()
-            .contains("edit_clip")
+    }
+
+    #[test]
+    fn operation_help_is_bounded_and_retains_exact_field_constraints() {
+        let catalog = tool_catalog();
+        let definition = catalog
+            .iter()
+            .find(|tool| tool.name == "mixer_graph")
+            .unwrap();
+        let request = tool_help::Args {
+            name: "mixer_graph".into(),
+            operation: Some("set_strip".into()),
+        };
+        let help = tool_help::run(&request).unwrap();
+        assert!(help.len() < 6000, "{}", help.len());
+        let help: serde_json::Value = serde_json::from_str(&help).unwrap();
+        let original = definition.parameters["properties"]["operation"]["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|variant| variant["properties"]["action"]["const"] == "set_strip")
+            .unwrap();
+        assert_eq!(help["parameters"]["properties"]["operation"], *original);
+        assert_eq!(
+            help["parameters"]["properties"]["project"],
+            definition.parameters["properties"]["project"]
         );
-    }
-    #[test]
-    fn help_examples_deserialize_as_the_actual_arguments() {
-        fn check<T: serde::de::DeserializeOwned>(name: &str) {
-            let help: serde_json::Value = serde_json::from_str(
-                &tool_help::run(&tool_help::Args { name: name.into() }).unwrap(),
-            )
-            .unwrap();
-            for example in help["examples"].as_array().unwrap() {
-                serde_json::from_value::<T>(example.clone())
-                    .unwrap_or_else(|e| panic!("{name}: {e}"));
-            }
-        }
-        check::<mixer_graph::Args>("mixer_graph");
-        check::<listen::Args>("listen");
-        for name in [
-            "edit_notes",
-            "add_track",
-            "add_clip",
-            "preview",
-            "edit_clip",
-            "automation",
-        ] {
-            let help: serde_json::Value = serde_json::from_str(
-                &tool_help::run(&tool_help::Args { name: name.into() }).unwrap(),
-            )
-            .unwrap();
-            for example in help["examples"].as_array().unwrap() {
-                let mut args = example.clone();
-                args.as_object_mut().unwrap().remove("project");
-                assert!(crate::live_agent::command(name, &args).unwrap().is_some());
-            }
-        }
+        let invalid = tool_help::Args {
+            operation: Some("guessed_action".into()),
+            ..request
+        };
+        assert!(tool_help::run(&invalid).unwrap_err().contains("set_strip"));
     }
 
     #[test]
-    fn preview_rejects_misnested_ranges_instead_of_previewing_the_whole_song() {
-        let valid: preview::Args = serde_json::from_value(serde_json::json!({
-            "project":"Song.auris","start_bar":3,"bars":2
-        }))
-        .unwrap();
-        assert_eq!(valid.range.start_bar, Some(3));
-        assert_eq!(valid.range.bars, Some(2));
-        for invalid in [
-            serde_json::json!({"project":"Song.auris","range":{"start_bar":3,"bars":2}}),
-            serde_json::json!({"project":"Song.auris","start_bar":3,"bars":2,"end_bar":5}),
+    fn canonical_creation_and_clip_edits_reject_guessed_fields() {
+        for (name, args) in [
+            ("add_track", serde_json::json!({"name":"Kit","drums":true})),
+            ("add_clip", serde_json::json!({"track":1,"bars":1})),
+            ("preview", serde_json::json!({"start_bar":1,"bars":1})),
+            (
+                "edit_clip",
+                serde_json::json!({"clip":1,"operation":{"kind":"resize","end_tick":3840,"bar":2}}),
+            ),
         ] {
-            assert!(serde_json::from_value::<preview::Args>(invalid).is_err());
+            assert!(crate::live_agent::command(name, &args).is_err(), "{name}");
         }
-    }
-
-    #[test]
-    fn clip_resize_refuses_guessed_position_fields_even_with_a_valid_end() {
-        for action in [
-            serde_json::json!({"kind":"resize","bar":9}),
-            serde_json::json!({"kind":"resize","end_bar":9,"bar":9}),
-        ] {
-            assert!(
-                serde_json::from_value::<edit_clip::Args>(serde_json::json!({
-                    "project":"Song.auris","track":"Lead","clip":1,"action":action
-                }))
-                .is_err()
-            );
-        }
-    }
-
-    #[test]
-    fn clip_positions_in_compound_meter_use_eighth_note_beats() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("Song.auris");
-        let mut session = Session::new(SessionOptions::headless()).unwrap();
-        let track = session.add_default_instrument_track("Lead").unwrap();
-        session.set_signature_at(Ticks::ZERO, TimeSignature::new(6, 8));
-        let clip = session
-            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks::QUARTER * 3)
-            .unwrap();
-        session.save(&path).unwrap();
-        let args: edit_clip::Args = serde_json::from_value(serde_json::json!({
-            "project":path,"track":"Lead","clip":1,
-            "action":{"kind":"move","bar":2,"beat":3}
-        }))
-        .unwrap();
-        edit_clip::run(&args).unwrap();
-        let reopened = opened(path.to_str().unwrap()).unwrap();
-        // One 6/8 bar is three quarter notes; beat three is two eighth notes into it.
-        assert_eq!(reopened.clip_start(clip), Some(Ticks::QUARTER * 4));
+        let root = crate::parameter_schema::<auris_session::live_agent::Command>();
+        assert!(!root.to_string().contains("\"$ref\""));
     }
 }

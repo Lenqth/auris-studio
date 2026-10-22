@@ -19,6 +19,8 @@ struct Evaluation {
     provider: Option<String>,
     url: Option<String>,
     api_key_env: Option<String>,
+    context_tokens: Option<u32>,
+    thinking: Option<bool>,
 }
 
 fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
@@ -66,6 +68,8 @@ fn installed_agent_edits_and_exports_the_unsaved_document(cx: &mut gpui::TestApp
             provider:config.provider.clone().unwrap_or_else(||"openai".into()),
             url:config.url.clone().unwrap_or_default(),
             api_key_env:config.api_key_env.clone().unwrap_or_default(),
+            context_tokens:config.context_tokens,
+            thinking:config.thinking,
             // Explicitly isolated test fixture: delivery writes only new paths in its evidence folder.
             policy:Policy{mode:Mode::Bypass,..Default::default()},
             ..Default::default()
@@ -161,7 +165,7 @@ fn installed_agent_edits_and_exports_the_unsaved_document(cx: &mut gpui::TestApp
             check.import_midi(&midi).ok().map(|report|report.notes)
         };
         for (name,project) in [("project-before.json",&before),("project-after.json",&after)] { fs::write(config.output.join(name),serde_json::to_vec_pretty(project).unwrap()).unwrap(); }
-        json!({"backend":config.backend,"model":config.model,"elapsed_seconds":started.elapsed().as_secs_f64(),"failure":failure,
+        json!({"backend":config.backend,"model":config.model,"context_tokens":config.context_tokens,"thinking":config.thinking,"elapsed_seconds":started.elapsed().as_secs_f64(),"failure":failure,
             "policy":"explicit bypass for isolated generated fixture; current application host and permission path",
             "exact_requested_edit":exact_requested_edit,"undo_steps":undo_steps,"undo_restored":undo_restored,"redo_restored":redo_restored,
             "unsaved":this.session.path().is_none(),"midi_notes":midi_notes,"encoded":measurements,

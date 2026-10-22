@@ -2,6 +2,30 @@
 use auris_session::live_agent::Command;
 use serde_json::Value;
 
+/// Describe only the selected permission mode, consistently for every live transport.
+pub fn permission_context(policy: &auris_session::agent_policy::Policy) -> String {
+    use auris_session::agent_policy::Mode;
+    let behavior = match policy.mode {
+        Mode::ReadOnly => "Inspect the document; document changes are denied.",
+        Mode::Plan => "Investigate and present a plan; document changes are denied.",
+        Mode::Edit => {
+            "Ordinary document edits are enabled. Removal, replacement and file/network actions may require confirmation."
+        }
+        Mode::AutoReview => {
+            "Ordinary document edits are enabled. Actions needing confirmation are independently reviewed first."
+        }
+        Mode::Bypass => {
+            "Document editing and file output are enabled. Confirmation is skipped; deny rules remain enforced."
+        }
+    };
+    format!(
+        "[Current Auris permission mode: {}. {behavior} Deny rules: {:?}; allow rules: {:?}.]",
+        policy.mode.name(),
+        policy.deny,
+        policy.allow
+    )
+}
+
 /// A small, flat tool definition derived from the live command contract.
 pub struct Definition {
     /// Provider-facing operation name.
@@ -219,7 +243,7 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
                 return error.to_string();
             };
             let hint = argument_hint(&definition.parameters, args, "arguments")
-                .unwrap_or_else(|| format!("Expected arguments: {}", definition.parameters));
+                .unwrap_or_else(|| format!("Use tool_help with name {tool} for exact arguments"));
             format!("Invalid arguments for {tool}: {hint}. {error}")
         })
 }
@@ -233,7 +257,30 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
             .iter()
             .all(|branch| argument_hint(branch, value, path).is_some())
     {
-        return Some(format!("{path} must match one of {}", schema["anyOf"]));
+        return Some(format!(
+            "{path} has an invalid argument type; use tool_help for its schema"
+        ));
+    }
+    if let Some(branches) = schema.get("oneOf").and_then(Value::as_array) {
+        for tag in ["action", "kind"] {
+            let choices = branches
+                .iter()
+                .map(|branch| branch["properties"][tag]["const"].as_str())
+                .collect::<Option<Vec<_>>>();
+            if let Some(choices) = choices.filter(|choices| !choices.is_empty()) {
+                if let Some(index) = value
+                    .get(tag)
+                    .and_then(Value::as_str)
+                    .and_then(|selected| choices.iter().position(|choice| *choice == selected))
+                {
+                    return argument_hint(&branches[index], value, path);
+                }
+                return Some(format!(
+                    "{path}.{tag} must be one of {}; use a flat tagged object",
+                    choices.join(", ")
+                ));
+            }
+        }
     }
     if let Some(kind) = schema.get("type") {
         let matches = |kind: &Value| match kind.as_str() {
@@ -267,8 +314,7 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
             for field in required.iter().filter_map(Value::as_str) {
                 if !object.contains_key(field) {
                     return Some(format!(
-                        "{path}.{field} is required; expected {}",
-                        schema["properties"][field]
+                        "{path}.{field} is required; use tool_help for exact fields"
                     ));
                 }
             }
@@ -313,6 +359,49 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalid_nested_operations_return_field_guidance_without_dumping_schemas() {
+        let error = command(
+            "mixer_graph",
+            &serde_json::json!({"operation":{"set_strip":{"track":2,"gain_db":-6}}}),
+        )
+        .unwrap_err();
+        assert!(error.contains("arguments.operation.action"), "{error}");
+        assert!(error.contains("set_strip"), "{error}");
+        assert!(error.len() < 1000, "{}", error.len());
+        let missing = command("mixer_graph", &serde_json::json!({})).unwrap_err();
+        assert!(
+            missing.contains("arguments.operation is required"),
+            "{missing}"
+        );
+        assert!(missing.len() < 300, "{}", missing.len());
+    }
+
+    #[test]
+    fn permission_context_explains_only_the_selected_mode() {
+        use auris_session::agent_policy::{Mode, Policy};
+        for mode in [
+            Mode::ReadOnly,
+            Mode::Plan,
+            Mode::Edit,
+            Mode::AutoReview,
+            Mode::Bypass,
+        ] {
+            let text = permission_context(&Policy {
+                mode,
+                ..Default::default()
+            });
+            assert!(text.contains(mode.name()));
+            assert_eq!(
+                text.contains("document changes are denied"),
+                matches!(mode, Mode::ReadOnly | Mode::Plan)
+            );
+            if matches!(mode, Mode::Edit | Mode::AutoReview | Mode::Bypass) {
+                assert!(!text.contains("read-only"));
+            }
+        }
+    }
 
     #[test]
     fn performance_edits_publish_bounded_units_and_partial_typed_settings() {

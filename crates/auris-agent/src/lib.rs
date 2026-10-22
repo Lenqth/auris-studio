@@ -1242,10 +1242,8 @@ async fn json_conversation(
                 serde_json::from_value::<auris_session::agent_policy::Policy>(policy.clone())
         {
             said = format!(
-                "[User-selected permission mode: {}. In read-only mode inspect without changing the document. In plan mode investigate and present a plan without changes. Deny rules: {:?}; allow rules: {:?}.]\n{said}",
-                policy.mode.name(),
-                policy.deny,
-                policy.allow
+                "{}\n{said}",
+                toolbox::live_agent::permission_context(&policy)
             );
         }
         let references = match check_attachments(options.provider, &audio) {
