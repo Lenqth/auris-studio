@@ -94,6 +94,10 @@ recipe values (`quarter` subdivision and `h h` rhythm). These did not corrupt th
 document. The recipe case took more calls than before; the result does not establish
 that every composition request is faster or error-free.
 
+The four argument refusals were subsequently investigated and addressed in the
+[argument-contract follow-up](agent-argument-errors.md), with a separate same-prompt
+rerun and an explicitly recorded audio-delivery failure.
+
 An intermediate validation exposed ambiguous partial root input-alternative schemas:
 all three controllers initially encoded edit objects as JSON strings. The final
 tagged input uses the same explicit discriminator pattern as other tools and
