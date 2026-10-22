@@ -14,8 +14,24 @@ impl ToolHost {
         Self { bridge }
     }
 
+    pub(crate) fn search_available() -> bool {
+        std::env::var("BRAVE_SEARCH_API_KEY").is_ok_and(|key| !key.trim().is_empty())
+    }
+
+    pub(crate) fn catalog() -> Vec<toolbox::live_agent::Definition> {
+        let mut catalog = toolbox::live_agent::definitions();
+        if Self::search_available() {
+            catalog.push(toolbox::live_agent::Definition {
+                name: toolbox::internet_search::NAME.into(),
+                description: toolbox::internet_search::DESCRIPTION.into(),
+                parameters: toolbox::parameter_schema::<toolbox::internet_search::Args>(),
+            });
+        }
+        catalog
+    }
+
     pub(crate) fn definitions() -> Vec<toolbox::live_agent::Definition> {
-        toolbox::live_agent::definitions()
+        Self::catalog()
             .into_iter()
             .map(|mut tool| {
                 toolbox::compact_parameters(&mut tool.parameters);
@@ -26,16 +42,7 @@ impl ToolHost {
     }
 
     pub(crate) fn contains(name: &str) -> bool {
-        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES
-            .get_or_init(|| {
-                Self::definitions()
-                    .into_iter()
-                    .map(|tool| tool.name)
-                    .collect()
-            })
-            .iter()
-            .any(|tool| tool == name)
+        Self::catalog().iter().any(|tool| tool.name == name)
     }
 
     pub(crate) async fn call(&self, name: &str, args: Value) -> Result<Value, String> {
@@ -44,9 +51,21 @@ impl ToolHost {
         if !Self::contains(name) {
             return Err(format!("Unknown live tool: {name}"));
         }
-        if let Some(result) = toolbox::runtime::call_live_reference(name, args.clone()) {
+        if toolbox::runtime::live_references()
+            .iter()
+            .any(|tool| tool.name == name)
+        {
             permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
+            let result = toolbox::runtime::call_live_reference_in(name, args, &Self::catalog())
+                .expect("registered reference tool");
             return result.map(|text| json!({"event":"edit_result","ok":true,"text":text}));
+        }
+        if name == toolbox::internet_search::NAME {
+            let request: toolbox::internet_search::Args =
+                serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
+            permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
+            let text = crate::search_internet(&request).await?;
+            return Ok(json!({"event":"edit_result","ok":true,"text":text}));
         }
         if name == "edit_notes" && args["source"].is_string() {
             let request: toolbox::score_input::Args =

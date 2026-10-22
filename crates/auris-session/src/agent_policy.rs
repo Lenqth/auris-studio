@@ -259,7 +259,15 @@ impl Policy {
 
     /// Set one exact operation to default, allowed or denied. Removes the opposite exact rule.
     pub fn set_rule(&mut self, operation: &str, allow: Option<bool>) -> Result<(), String> {
-        if !OPERATIONS.contains(&operation) && !["*", "edit_project.*"].contains(&operation) {
+        if !OPERATIONS.contains(&operation)
+            && !["*", "edit_project.*"].contains(&operation)
+            && !(allow.is_none()
+                && self
+                    .allow
+                    .iter()
+                    .chain(&self.deny)
+                    .any(|name| name == operation))
+        {
             return Err("Unknown operation name".into());
         }
         self.allow.retain(|name| name != operation);
@@ -276,6 +284,28 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_rules_fail_closed_until_explicitly_deleted() {
+        let mut policy = Policy {
+            allow: vec!["edit_project.add_notes".into()],
+            ..Default::default()
+        };
+        let operation = Operation::parse(
+            "search_documentation",
+            &serde_json::json!({"query":"notes"}),
+        )
+        .unwrap();
+        assert!(matches!(policy.decide(&operation), Decision::Deny(_)));
+        assert!(
+            policy
+                .set_rule("edit_project.add_notes", Some(true))
+                .is_err()
+        );
+        policy.set_rule("edit_project.add_notes", None).unwrap();
+        assert_eq!(policy.decide(&operation), Decision::Allow);
+        assert!(policy.set_rule("invented", None).is_err());
+    }
 
     #[test]
     fn listening_is_a_read_with_network_confirmation_and_deny_rules() {

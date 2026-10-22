@@ -257,6 +257,20 @@ mod tests {
         }
     }
     #[test]
+    fn compact_schema_preserves_named_description_fields_and_literal_payloads() {
+        let literal = serde_json::json!({"description":"literal user data"});
+        let mut schema = serde_json::json!({"type":"object","description":"schema prose","properties":{"description":{"type":"string","description":"field prose"},"payload":{"const":literal}},"required":["description"]});
+        compact_parameters(&mut schema);
+        assert!(schema.get("description").is_none());
+        assert_eq!(
+            schema["properties"]["description"],
+            serde_json::json!({"type":"string"})
+        );
+        assert_eq!(schema["properties"]["payload"]["const"], literal);
+        assert_eq!(schema["required"], serde_json::json!(["description"]));
+    }
+
+    #[test]
     fn compact_schemas_keep_all_validation_and_required_units() {
         for tool in tool_catalog() {
             let mut original = tool.parameters.clone();

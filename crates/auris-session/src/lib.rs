@@ -161,6 +161,7 @@ pub use session::{
     MUSCRIPTOR_NOTICE, MixtureAnalysis, MixtureNote, MixtureOptions, transcribe_mixture_file,
 };
 pub use session::{MusicalClipAnalysis, RenderedSpectrogramJob, SpectrogramJob};
+pub use session::{PreparedAudioSource, prepare_audio_source};
 pub use session::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
 pub use session::{TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
 pub use session::{TrackConversion, TrackConversionJob};

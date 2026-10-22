@@ -59,6 +59,7 @@ pub mod setup_tracks;
 pub use project_handles::open_project;
 mod drums;
 mod editing;
+pub mod internet_search;
 mod listening;
 mod mix_editing;
 pub mod mixer_graph;

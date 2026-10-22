@@ -676,11 +676,15 @@ impl Session {
     pub(crate) fn adopt_agent_audio(
         &mut self,
         file: tempfile::NamedTempFile,
-        buffer: AudioBuffer,
+        prepared: super::PreparedAudioSource,
         name: String,
         start: Ticks,
         bytes: u64,
     ) -> Result<String, String> {
+        if self.engine.sample_rate() != prepared.render_rate {
+            return Err("Audio device changed during import preparation".into());
+        }
+        let buffer = &prepared.buffer;
         let filename = file
             .path()
             .file_name()
@@ -706,7 +710,7 @@ impl Session {
             let _ = std::fs::remove_file(path);
             return Err("Could not place audio clip".into());
         };
-        self.install_source(source, Arc::new(buffer));
+        self.install_prepared_audio(source, prepared);
         self.end_transaction();
         self.invalidate_graph();
         Ok(serde_json::json!({"track":track.0,"clip":clip.0,"source":source.0,"revision":self.agent_document_revision()?}).to_string())

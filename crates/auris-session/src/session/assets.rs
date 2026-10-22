@@ -33,6 +33,37 @@ use super::Session;
 /// individual drum hits at normal zoom levels.
 const WAVEFORM_BUCKET: u32 = 256;
 
+/// Decoded audio with waveform and render-rate conversion prepared away from the UI.
+pub struct PreparedAudioSource {
+    pub(super) buffer: Arc<AudioBuffer>,
+    render: Arc<AudioBuffer>,
+    pub(super) render_rate: f64,
+    waveform: Arc<WaveformPeaks>,
+}
+
+/// Prepare the expensive parts of importing one source without accessing a session.
+pub fn prepare_audio_source(
+    buffer: AudioBuffer,
+    render_rate: f64,
+) -> Result<PreparedAudioSource, SessionError> {
+    if buffer.frame_count() == 0 {
+        return Err(SessionError::MusicAnalysis("Audio source is empty".into()));
+    }
+    let buffer = Arc::new(buffer);
+    let waveform = Arc::new(compute_peaks(None, &buffer, WAVEFORM_BUCKET));
+    let render = source_at_rate(SourceId(0), &buffer, render_rate).ok_or_else(|| {
+        SessionError::MusicAnalysis(
+            "Could not convert the imported audio to the device rate".into(),
+        )
+    })?;
+    Ok(PreparedAudioSource {
+        buffer,
+        render,
+        render_rate,
+        waveform,
+    })
+}
+
 /// File-backed project state decoded without touching a live session.
 pub(super) struct PreparedAssets {
     source_locations: Vec<(SourceId, AssetPath, PathBuf)>,
@@ -122,6 +153,12 @@ pub(super) fn prepare_project_assets(
 }
 
 impl Session {
+    /// Install a worker-prepared source using only short ownership handoffs.
+    pub(super) fn install_prepared_audio(&mut self, id: SourceId, prepared: PreparedAudioSource) {
+        self.waveforms.insert(id, prepared.waveform);
+        self.render_bank.insert(id, prepared.render);
+        self.bank.insert(id, prepared.buffer);
+    }
     /// Installs assets already read by [`prepare_project_assets`].
     pub(super) fn install_prepared_assets(&mut self, assets: PreparedAssets) -> Vec<PathBuf> {
         let PreparedAssets {

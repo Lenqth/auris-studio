@@ -34,6 +34,8 @@ mod conversations;
 #[cfg(test)]
 mod performance_eval;
 #[cfg(test)]
+mod tool_surface_eval;
+#[cfg(test)]
 mod transcription_eval;
 
 /// Maximum transcript rows retained in the panel.

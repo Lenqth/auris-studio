@@ -51,6 +51,7 @@ enum Work {
         name: String,
         at: Ticks,
         rate: f64,
+        render_rate: f64,
     },
     ImportMidi {
         job: crate::MidiImportJob,
@@ -89,7 +90,7 @@ pub struct FileResult {
 enum Outcome {
     ImportedAudio {
         file: tempfile::NamedTempFile,
-        buffer: auris_core::AudioBuffer,
+        prepared: crate::PreparedAudioSource,
         folder: PathBuf,
         name: String,
         at: Ticks,
@@ -147,6 +148,7 @@ impl FileJob {
                 name,
                 at,
                 rate,
+                render_rate,
             } => {
                 use std::io::{Read, Write};
                 let mut input = std::fs::File::open(&path).map_err(|e| e.to_string())?;
@@ -179,10 +181,12 @@ impl FileJob {
                 }
                 file.flush().map_err(|e| e.to_string())?;
                 let buffer = crate::decode_audio(file.path(), rate).map_err(|e| e.to_string())?;
+                let prepared =
+                    crate::prepare_audio_source(buffer, render_rate).map_err(|e| e.to_string())?;
                 check()?;
                 Outcome::ImportedAudio {
                     file,
-                    buffer,
+                    prepared,
                     folder,
                     name,
                     at,
@@ -303,6 +307,7 @@ impl Session {
                     name,
                     at: Ticks(at_tick),
                     rate: self.project().sample_rate,
+                    render_rate: self.sample_rate(),
                 }
             }
             Command::ImportMidi { path, at_tick } => {
@@ -480,18 +485,16 @@ impl Session {
             Outcome::ImportedMidi(result, at) => self.append_agent_midi(*result, at),
             Outcome::ImportedAudio {
                 file,
-                buffer,
+                prepared,
                 folder,
                 name,
                 at,
                 bytes,
             } => {
-                if self.project_folder() != Some(folder.as_path())
-                    || buffer.sample_rate() != self.project().sample_rate
-                {
+                if self.project_folder() != Some(folder.as_path()) {
                     return Err("Document folder/rate changed during audio import".into());
                 }
-                self.adopt_agent_audio(file, buffer, name, at, bytes)
+                self.adopt_agent_audio(file, prepared, name, at, bytes)
             }
             Outcome::Verified(text) => Ok(text),
             Outcome::Midi(result) => {

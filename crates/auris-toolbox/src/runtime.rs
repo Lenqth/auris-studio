@@ -22,6 +22,15 @@ pub fn live_references() -> Vec<crate::live_agent::Definition> {
 
 /// Read a live reference without opening or changing a saved project.
 pub fn call_live_reference(name: &str, args: Value) -> Option<Result<String, String>> {
+    call_live_reference_in(name, args, &crate::live_agent::definitions())
+}
+
+/// Read reference metadata against exactly the host's available execution catalog.
+pub fn call_live_reference_in(
+    name: &str,
+    args: Value,
+    catalog: &[crate::live_agent::Definition],
+) -> Option<Result<String, String>> {
     let run = || -> Result<String, String> {
         let invalid = |e: serde_json::Error| format!("Invalid arguments for {name}: {e}");
         match name {
@@ -33,19 +42,15 @@ pub fn call_live_reference(name: &str, args: Value) -> Option<Result<String, Str
             }
             "capabilities" => {
                 let _: Empty = serde_json::from_value(args).map_err(invalid)?;
-                let names: Vec<_> = crate::live_agent::definitions()
-                    .into_iter()
-                    .filter(|d| d.name != "list_instruments")
-                    .map(|d| d.name)
-                    .collect();
+                let names: Vec<_> = catalog.iter().map(|d| d.name.as_str()).collect();
                 Ok(json!({"context":"open_document","tools":names}).to_string())
             }
             "tool_help" => {
                 let request: crate::tool_help::Args =
                     serde_json::from_value(args).map_err(invalid)?;
-                let definition = crate::live_agent::definitions()
-                    .into_iter()
-                    .find(|d| d.name == request.name && d.name != "list_instruments")
+                let definition = catalog
+                    .iter()
+                    .find(|d| d.name == request.name)
                     .ok_or_else(|| format!("Unknown live tool: {}", request.name))?;
                 Ok(json!({"name":definition.name,"description":definition.description,"parameters":definition.parameters}).to_string())
             }
@@ -66,14 +71,13 @@ pub fn call_live_reference(name: &str, args: Value) -> Option<Result<String, Str
                     return Err("Unknown task group".into());
                 }
                 let query = request.query.unwrap_or_default().to_lowercase();
-                let definitions: Vec<_> = crate::live_agent::definitions()
-                    .into_iter()
+                let definitions: Vec<_> = catalog
+                    .iter()
                     .filter(|d| {
-                        d.name != "list_instruments"
-                            && request
-                                .group
-                                .as_deref()
-                                .is_none_or(|g| tool_group(&d.name) == g)
+                        request
+                            .group
+                            .as_deref()
+                            .is_none_or(|g| tool_group(&d.name) == g)
                             && query.split_whitespace().all(|word| {
                                 format!("{} {}", d.name, d.description)
                                     .to_lowercase()
@@ -108,6 +112,21 @@ pub fn call_saved(groups: &ToolGroups, name: &str, args: Value) -> Result<String
         ));
     }
     match name {
+        "capabilities" => {
+            let request: crate::capabilities::Args =
+                serde_json::from_value(args).map_err(|e| format!("Invalid arguments: {e}"))?;
+            let mut value: Value = serde_json::from_str(&crate::capabilities::run(&request)?)
+                .map_err(|e| e.to_string())?;
+            value["tools"] = json!(
+                catalog
+                    .iter()
+                    .filter(|tool| groups.allows(&tool.name))
+                    .map(|tool| tool.name.as_str())
+                    .collect::<Vec<_>>()
+            );
+            value["context"] = "saved_project".into();
+            Ok(value.to_string())
+        }
         "discover_tools" => discover_saved(
             groups,
             serde_json::from_value(args).map_err(|e| format!("Invalid arguments: {e}"))?,
@@ -169,6 +188,52 @@ fn discover_saved(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optional_host_tools_are_shared_by_capabilities_discovery_and_full_help() {
+        for enabled in [false, true] {
+            let mut catalog = crate::live_agent::definitions();
+            if enabled {
+                catalog.push(crate::live_agent::Definition {
+                    name: crate::internet_search::NAME.into(),
+                    description: crate::internet_search::DESCRIPTION.into(),
+                    parameters: crate::parameter_schema::<crate::internet_search::Args>(),
+                });
+            }
+            let capabilities: Value = serde_json::from_str(
+                &call_live_reference_in("capabilities", json!({}), &catalog)
+                    .unwrap()
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                capabilities["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|name| name == "search_internet"),
+                enabled
+            );
+            let discovery: Value = serde_json::from_str(
+                &call_live_reference_in(
+                    "discover_tools",
+                    json!({"query":"search_internet"}),
+                    &catalog,
+                )
+                .unwrap()
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                discovery["tools"].as_array().unwrap().len(),
+                usize::from(enabled)
+            );
+            let help =
+                call_live_reference_in("tool_help", json!({"name":"search_internet"}), &catalog)
+                    .unwrap();
+            assert_eq!(help.is_ok(), enabled);
+        }
+    }
 
     #[test]
     fn live_discovery_help_and_capabilities_use_the_live_definitions() {

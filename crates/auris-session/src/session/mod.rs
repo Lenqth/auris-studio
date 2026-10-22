@@ -93,6 +93,7 @@ mod fixtures;
 
 pub use accompany::{AccompanyReport, DEFAULT_PARTS};
 pub use analysis::{MixAnalysis, SectionLoudness, TrackLoudness};
+pub use assets::{PreparedAudioSource, prepare_audio_source};
 pub use autosave::{
     AUTOSAVE_INTERVAL, AutosaveJob, AutosaveResult, AutosaveState, DiscardRecoveryJob,
     DiskWatchJob, DiskWatchResult, RECOVERY_DIR_VAR, RecoveryCleanupJob, RecoveryJob,

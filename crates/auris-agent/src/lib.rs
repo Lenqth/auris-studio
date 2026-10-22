@@ -23,8 +23,7 @@ use rig::agent::{
     OutcomeEvent,
 };
 use rig::completion::Message;
-use rig::prelude::*;
-use rig::tool::{ToolContext, ToolExecutionError, ToolOutput};
+use rig::tool::{ToolExecutionError, ToolOutput};
 use rig::{Agent, AgentBuilder};
 use rig_core::message::ToolResultContent;
 use rig_core::providers::ollama;
@@ -376,12 +375,6 @@ impl std::fmt::Display for ToolFailed {
 
 impl std::error::Error for ToolFailed {}
 
-/// The argument schema, exactly as the MCP door serves it: the same `schemars` derive on the
-/// same type in `auris-toolbox`.
-fn schema<T: schemars::JsonSchema>() -> serde_json::Value {
-    toolbox::parameter_schema::<T>()
-}
-
 mod worker;
 use worker::Bridge;
 pub use worker::{
@@ -411,53 +404,7 @@ fn edit_reply(response: serde_json::Value) -> Result<String, ToolFailed> {
     }
 }
 
-/// Arguments to the agent-only internet search tool.
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct InternetSearchArgs {
-    /// Non-blank public internet query, at most 400 characters and 50 whitespace-separated words.
-    #[schemars(length(min = 1, max = 400))]
-    query: String,
-    /// Maximum results to return. Omitted or null defaults to 5; supplied values are clamped to 1..10.
-    limit: Option<usize>,
-}
-
-/// Public internet search for the rig agent.
-///
-/// This does not live in [`auris_toolbox`]: it is a capability of the agent that dials out,
-/// not a command over the Auris session, and the MCP host is expected to provide its own web
-/// access when it wants one.
-struct InternetSearch;
-
-impl Tool for InternetSearch {
-    const NAME: &'static str = "search_internet";
-    type Args = InternetSearchArgs;
-    type Output = String;
-    type Error = ToolFailed;
-
-    fn description(&self) -> String {
-        "Searches the public internet for current or external information. The query is sent to \
-         the Brave Search API and the answer contains result titles, URLs, and snippets; use \
-         `search_documentation` instead for Auris Studio's own behavior."
-            .to_string()
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        schema::<Self::Args>()
-    }
-
-    fn map_error(&self, error: ToolFailed) -> ToolExecutionError {
-        ToolExecutionError::other(error.0)
-    }
-
-    async fn call(
-        &self,
-        _context: &mut ToolContext,
-        args: Self::Args,
-    ) -> Result<String, ToolFailed> {
-        search_internet(&args).await.map_err(ToolFailed)
-    }
-}
+use toolbox::internet_search::Args as InternetSearchArgs;
 
 const INTERNET_SEARCH_PATIENCE: std::time::Duration = std::time::Duration::from_secs(20);
 
@@ -560,7 +507,7 @@ fn strip_markup(text: &str) -> String {
 
 /// File-free editing and reference tools for the rig agent.
 fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
-    let mut builder = builder.preamble(preamble()).tool(InternetSearch);
+    let mut builder = builder.preamble(preamble()).dynamic_tools(Vec::new());
     for definition in host::ToolHost::definitions() {
         let tool_name = definition.name.clone();
         let bridge = bridge.clone();
@@ -573,8 +520,11 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
                 let name = tool_name.clone();
                 Box::pin(async move {
                     if bridge.is_none()
-                        && let Some(result) =
-                            toolbox::runtime::call_live_reference(&name, args.clone())
+                        && let Some(result) = toolbox::runtime::call_live_reference_in(
+                            &name,
+                            args.clone(),
+                            &host::ToolHost::catalog(),
+                        )
                     {
                         return result
                             .map(ToolOutput::text)
@@ -2286,6 +2236,10 @@ mod tests {
         let names: std::collections::BTreeSet<_> =
             actual.iter().map(|tool| tool.name.as_str()).collect();
         assert_eq!(names.len(), actual.len());
+        assert_eq!(
+            names.contains("search_internet"),
+            host::ToolHost::search_available()
+        );
         for expected in host::ToolHost::definitions() {
             let tool = actual
                 .iter()
@@ -2301,7 +2255,6 @@ mod tests {
             "generate_phrase",
             "tool_help",
             "search_documentation",
-            "search_internet",
         ] {
             assert!(names.contains(name), "{name}");
         }
@@ -2319,7 +2272,7 @@ mod tests {
         ] {
             assert!(!names.contains(name), "{name}");
         }
-        assert_eq!(actual.len(), toolbox::live_agent::definitions().len() + 1);
+        assert_eq!(actual.len(), host::ToolHost::definitions().len());
     }
 
     #[test]
@@ -2341,7 +2294,7 @@ mod tests {
         assert!(serde_json::from_value::<InternetSearchArgs>(extra.clone()).is_err());
         assert!(serde_json::from_value::<toolbox::search_documentation::Args>(extra).is_err());
         assert_eq!(
-            schema::<InternetSearchArgs>()["properties"]["query"]["maxLength"],
+            toolbox::parameter_schema::<InternetSearchArgs>()["properties"]["query"]["maxLength"],
             400
         );
     }

@@ -14,6 +14,11 @@ help explains that their group must be enabled. All backends have documentation
 search. Network search availability depends on the backend and permission policy.
 The execution registry supplies names, descriptions, schemas and dispatch together.
 
+Live backends include `search_internet` only with a nonempty `BRAVE_SEARCH_API_KEY`.
+It uses the common host, runtime discovery/help and network permission gate in
+Claude, Codex and rig. Full field descriptions remain in tool_help; transmitted
+schemas omit explanatory field prose while retaining every validation constraint.
+
 ## Exact authored notes
 
 Add a track with an explicit kind and name, then `add_clip` with its numeric track,
