@@ -38,12 +38,12 @@ pub mod inspect_composition {
         let project = session.project();
         let tracks: Vec<_> = project.tracks.iter().map(|track| {
             let clips: Vec<_> = track.kind.note_clips().map(Vec::as_slice).unwrap_or_default().iter().map(|clip| {
-                serde_json::json!({"id": clip.id.0, "name": clip.name,
+                serde_json::json!({"clip": clip.id.0, "name": clip.name,
                     "start_bar": project.signatures.bar_of(clip.start), "start_tick": clip.start.raw(),
                     "length_ticks": clip.length.raw(), "notes": clip.notes.len(),
                     "recipe": clip.recipe, "hand_edited": session.clip_hand_edited(clip.id)})
             }).collect();
-            serde_json::json!({"track": track.name, "id": track.id.0, "clips": clips})
+            serde_json::json!({"name": track.name, "track": track.id.0, "clips": clips})
         }).collect();
         reports::publish(serde_json::json!({
             "original_specification": project.song_spec,

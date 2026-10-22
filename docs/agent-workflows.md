@@ -25,6 +25,10 @@ for the selected operation's full field explanations and examples.
 
 Add a track with an explicit kind and name, then `add_clip` with its numeric track,
 intended clip name, one-based `start_bar` and duration `bars`. Read the clip with
+the returned `clip` address, not the owning `track`. `inspect_project` uses
+`tracks[].track` and `tracks[].clips[].clip`, matching creation results and tool
+arguments. These are distinct numeric addresses; no positional track numbering
+or implicit track-to-clip conversion is performed. Use
 `read_notes` before editing. Supply `clips:[{"clip":2},{"clip":3,"offset":128}]`
 for one to eight distinct clip pages. The response has one top-level content
 `revision` and a `clips` array. Each page contains up to 128 notes, exact ticks,
@@ -172,7 +176,12 @@ recipe and stored notes, so it can be edited or regenerated through the usual cl
 
 `edit_recipe` reads, patches or regenerates 1..16 explicit clip IDs. A `patch`
 changes only supplied recipe settings; `regenerate` selects the same, next or an
-explicit seed. Both regenerate stored notes. Hand-edited notes require explicit
+explicit seed. Both regenerate stored notes. `subdivision` is one of `eighth`, `sixteenth`,
+`eighth-triplet`, `sixteenth-triplet`; it sets the grid, not held note duration.
+`rhythm` repeats grid steps: `x` hit, `X` accent, `o` ghost, `.`/`~`/`-` rest, with optional
+spaces, tabs and `|` separators (for example `x...x...`). Empty clears the pattern.
+Use `density` and `gate` for note count and held length. Enum and rhythm constraints
+remain in compact schemas sent to every backend. Hand-edited notes require
 `replace_hand_edits:true`; otherwise the complete batch is refused. Optional
 `drum_voice` selects a single drum lane. `set_drum_assignment` changes a drum role's
 MIDI note without rewriting notes or other mappings.

@@ -26,10 +26,12 @@ pub struct RecipePatch {
     /// Exact groove name from the recipe inspector.
     pub groove: Option<String>,
     /// eighth, sixteenth, eighth-triplet or sixteenth-triplet.
-    pub subdivision: Option<String>,
+    #[schemars(with = "Option<String>", extend("enum" = ["eighth","sixteenth","eighth-triplet","sixteenth-triplet",null]))]
+    pub subdivision: Option<Subdivision>,
     /// Space-separated relative scale steps; empty clears the authored motif.
     pub motif: Option<String>,
-    /// x hit, X accent, o ghost and . rest; empty clears authored rhythm.
+    /// x hit, X accent, o ghost and ./~/- rest; empty clears authored rhythm.
+    #[schemars(length(max = 4096), regex(pattern = r"^[xXo.~ \t|-]*$"))]
     pub rhythm: Option<String>,
     /// Explicit take seed; omitted preserves the current seed.
     pub seed: Option<u64>,
@@ -116,8 +118,8 @@ impl RecipePatch {
             }
             recipe.groove = value.clone();
         }
-        if let Some(value) = &self.subdivision {
-            recipe.subdivision = Subdivision::parse(value).ok_or("Unknown subdivision")?;
+        if let Some(value) = self.subdivision {
+            recipe.subdivision = value;
         }
         if let Some(value) = &self.motif {
             if value.len() > 4096 {
@@ -138,7 +140,7 @@ impl RecipePatch {
             } else {
                 Some(
                     Pattern::parse(value)
-                        .ok_or("Rhythm uses x,X,o and .")?
+                        .ok_or("settings.rhythm uses x (hit), X (accent), o (ghost), ./~/- (rest), with spaces, tabs or | as separators; e.g. x...x...; empty clears it. These are grid steps, not note-duration names. Include at least one step.")?
                         .to_text(),
                 )
             };
@@ -237,6 +239,63 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recipe_grid_values_are_typed_and_rhythm_uses_grid_steps() {
+        for subdivision in Subdivision::ALL {
+            let patch: RecipePatch = serde_json::from_value(serde_json::json!({
+                "subdivision": subdivision.name(), "rhythm": "X... | x.o."
+            }))
+            .unwrap();
+            let mut recipe = ClipRecipe::new(ClipPreset::Lead, 41);
+            patch.apply(&mut recipe).unwrap();
+            assert_eq!(recipe.subdivision, subdivision);
+            assert_eq!(recipe.rhythm.as_deref(), Some("X~~~x~o~"));
+            assert_eq!(
+                serde_json::to_value(&patch).unwrap()["subdivision"],
+                subdivision.name()
+            );
+        }
+        assert!(
+            serde_json::from_value::<RecipePatch>(serde_json::json!({"subdivision":"quarter"}))
+                .is_err()
+        );
+        let mut session = Session::new(crate::SessionOptions::headless()).unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .generate_clip(
+                track,
+                Ticks::ZERO,
+                Ticks::QUARTER * 16,
+                ClipRecipe::new(ClipPreset::Lead, 41),
+            )
+            .unwrap();
+        let before = session.project().clone();
+        let patch = |rhythm: &str| Operation::Patch {
+            settings: RecipePatch {
+                density: Some(0.2),
+                rhythm: Some(rhythm.into()),
+                ..Default::default()
+            },
+            replace_hand_edits: false,
+        };
+        let error = session
+            .agent_edit_recipe(vec![clip.0], None, patch("h h"))
+            .unwrap_err();
+        assert!(error.contains("grid steps"), "{error}");
+        assert_eq!(session.project(), &before);
+        session
+            .agent_edit_recipe(vec![clip.0], None, patch("x...x..."))
+            .unwrap();
+        assert_eq!(
+            session.clip_recipe(clip).unwrap().rhythm.as_deref(),
+            Some("x~~~x~~~")
+        );
+        session
+            .agent_edit_recipe(vec![clip.0], None, patch(""))
+            .unwrap();
+        assert!(session.clip_recipe(clip).unwrap().rhythm.is_none());
+    }
 
     #[test]
     fn recipe_batches_keep_seeds_protect_hand_edits_and_undo_together() {

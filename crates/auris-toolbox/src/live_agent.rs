@@ -361,6 +361,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn recipe_constraints_survive_the_native_controller_schema() {
+        let mut tool = definitions()
+            .into_iter()
+            .find(|t| t.name == "edit_recipe")
+            .unwrap();
+        crate::tool_exposure::compact_parameters(&mut tool.parameters);
+        let patch = tool.parameters["properties"]["operation"]["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["properties"]["kind"]["const"] == "patch")
+            .unwrap();
+        let settings = &patch["properties"]["settings"]["properties"];
+        assert_eq!(
+            settings["subdivision"]["enum"],
+            serde_json::json!([
+                "eighth",
+                "sixteenth",
+                "eighth-triplet",
+                "sixteenth-triplet",
+                null
+            ])
+        );
+        assert_eq!(settings["rhythm"]["pattern"], "^[xXo.~ \\t|-]*$");
+        assert_eq!(settings["rhythm"]["maxLength"], 4096);
+        let description = crate::tool_exposure::concise_description(&tool.description);
+        assert!(description.contains("Rhythm must use repeating grid steps"));
+        assert!(description.contains("density and gate, not subdivision"));
+    }
+
+    #[test]
     fn invalid_nested_operations_return_field_guidance_without_dumping_schemas() {
         let error = command(
             "mixer_graph",

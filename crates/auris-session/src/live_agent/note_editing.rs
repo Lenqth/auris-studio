@@ -110,7 +110,18 @@ impl Session {
             let (_, clip) = self
                 .project()
                 .midi_clip(ClipId(request.clip))
-                .ok_or("Unknown MIDI clip ID")?;
+                .ok_or_else(|| {
+                    let prefix = if self.project().track(TrackId(request.clip)).is_some() {
+                        format!("{} is a track ID, not a MIDI clip ID", request.clip)
+                    } else {
+                        format!("Unknown MIDI clip ID {}", request.clip)
+                    };
+                    let available: Vec<_> = self.project().tracks.iter()
+                        .flat_map(|track| track.kind.note_clips().into_iter().flatten()
+                            .map(move |clip| serde_json::json!({"track":track.id.0,"clip":clip.id.0})))
+                        .take(8).collect();
+                    format!("{prefix}; MIDI clip addresses (first 8): {}. Copy tracks[].clips[].clip from inspect_project, not tracks[].track.", serde_json::json!(available))
+                })?;
             if request.offset > clip.notes.len() {
                 return Err("Offset exceeds the note count".into());
             }
@@ -242,6 +253,38 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspection_and_wrong_track_id_distinguish_the_clip_address() {
+        let mut session = Session::new(crate::SessionOptions::headless()).unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks::QUARTER)
+            .unwrap();
+        let before = session.project().clone();
+        let inspected: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_command(super::super::Command::Inspect {})
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(inspected["tracks"][0]["track"], track.0);
+        assert_eq!(inspected["tracks"][0]["clips"][0]["clip"], clip.0);
+        assert!(inspected["tracks"][0].get("id").is_none());
+        assert!(inspected["tracks"][0]["clips"][0].get("id").is_none());
+        let error = session
+            .agent_read_notes(&[NoteRead {
+                clip: track.0,
+                offset: 0,
+            }])
+            .unwrap_err();
+        assert!(
+            error.contains(&format!("{} is a track ID", track.0)),
+            "{error}"
+        );
+        assert!(error.contains(&format!("\"clip\":{}", clip.0)), "{error}");
+        assert_eq!(session.project(), &before);
+    }
 
     #[test]
     fn multi_clip_reads_share_a_revision_and_page_original_indices_without_editing() {

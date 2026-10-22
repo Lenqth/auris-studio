@@ -100,7 +100,7 @@ pub enum Command {
         /// Required for writes; copied from the latest read.
         expected_revision: Option<String>,
     },
-    /// Inspect, partially edit or explicitly regenerate 1..16 generated clips. Writes preserve other clips and mix state; hand-edited generated notes require explicit replacement permission. Recipe controls change stored notes; performance controls are separate.
+    /// Inspect, partially edit or explicitly regenerate 1..16 generated clips. Writes preserve other clips and mix state; hand-edited generated notes require explicit replacement permission. Recipe controls change stored notes; performance controls are separate. Subdivision is a grid, not note duration: eighth, sixteenth, eighth-triplet or sixteenth-triplet. Rhythm must use repeating grid steps: x hit, X accent, o ghost, dot/tilde/hyphen rest (example x...x...); empty clears it. Adjust note count and held duration with density and gate, not subdivision.
     EditRecipe {
         /// Unique stable generated clip IDs.
         #[schemars(length(min = 1, max = 16))]
@@ -336,7 +336,7 @@ pub enum Command {
         #[schemars(length(min = 1, max = 16))]
         edits: Vec<note_editing::NoteEdit>,
     },
-    /// Read 1..8 clip pages in one call, for example {"clips":[{"clip":1},{"clip":2,"offset":128}]}. Returns one shared revision and clips containing up to 128 notes each with exact clip-relative ticks, normalized velocity 0..1 and original zero-based storage indices. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
+    /// Read 1..8 MIDI clip pages in one call. Copy each clip from inspect_project tracks[].clips[].clip or add_clip's clip result, never tracks[].track or add_track's track result. Track IDs and clip IDs are different addresses. Each request is {clip:<returned clip ID>,offset:0}; offset defaults to zero. Returns one shared revision and clips containing up to 128 notes each with exact clip-relative ticks, normalized velocity 0..1 and original zero-based storage indices. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
     ReadNotes {
         /// Up to eight distinct clip pages; omitted offset starts at zero.
         #[schemars(length(min = 1, max = 8))]
@@ -715,11 +715,11 @@ impl Session {
                     .iter()
                     .map(|track| {
                         let clips: Vec<_> = if let Some(clips)=track.kind.note_clips() {
-                            clips.iter().map(|clip|serde_json::json!({"id":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":clip.length.raw(),"note_count":clip.notes.len()})).collect()
+                            clips.iter().map(|clip|serde_json::json!({"clip":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":clip.length.raw(),"note_count":clip.notes.len()})).collect()
                         } else if let Some(audio)=track.kind.as_audio() {
-                            audio.clips.iter().map(|clip|serde_json::json!({"id":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":project.audio_clip_length_ticks(clip).raw(),"gain_db":clip.gain_db,"source_bpm":clip.source_bpm,"follows_tempo":clip.follows_tempo,"fade_in_frames":clip.fade_in_frames,"fade_out_frames":clip.fade_out_frames,"source_frames":clip.length_frames,"source_sample_rate":project.audio_sources.get(&clip.source).map(|source|source.sample_rate),"fade_in_curve":clip.fade_in_curve,"fade_out_curve":clip.fade_out_curve})).collect()
+                            audio.clips.iter().map(|clip|serde_json::json!({"clip":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":project.audio_clip_length_ticks(clip).raw(),"gain_db":clip.gain_db,"source_bpm":clip.source_bpm,"follows_tempo":clip.follows_tempo,"fade_in_frames":clip.fade_in_frames,"fade_out_frames":clip.fade_out_frames,"source_frames":clip.length_frames,"source_sample_rate":project.audio_sources.get(&clip.source).map(|source|source.sample_rate),"fade_in_curve":clip.fade_in_curve,"fade_out_curve":clip.fade_out_curve})).collect()
                         } else { Vec::new() };
-                        serde_json::json!({"id":track.id.0, "name":track.name,
+                        serde_json::json!({"track":track.id.0, "name":track.name,
                         "kind":track.kind.label(), "mixer":mixer_summary(&track.mixer), "clips":clips,"drum_assignments":self.drum_assignments(track.id),
                         "instrument":track.kind.as_instrument().map(|inner| &inner.instrument_id),
                         "soundfont_preset":self.track_preset(track.id)})

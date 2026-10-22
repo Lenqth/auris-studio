@@ -312,7 +312,7 @@ For alternative audio transcription, export_audio_attachment returns a separate 
 Use search_instruments with request {\"mode\":\"text\",\"query\":\"piano\"} for focused search.
 The same request supports mode similar with id, or mode browse with bounded pagination. Continue other work while acoustic status is indexing.
 Copy returned sound_id exactly; use add_track, add_clip and edit_notes to write music.
-Use read_notes with clips:[{clip:1},{clip:2,offset:128}] to batch up to eight clip pages under one top-level revision; follow each clips entry's next_offset. Use edit_notes with that expected_revision and input {kind:inline,edits:[...]} containing typed patch or replace objects. Velocity is normalized 0..1 (for example 0.75), never MIDI 0..127.
+Read inspect_project tracks[].clips[].clip or add_clip's clip result for MIDI clip addresses; tracks[].track and add_track's track result identify tracks, not clips. Use read_notes clips entries containing those returned clip values and optional offset to batch up to eight clip pages under one top-level revision; follow each clips entry's next_offset. Use edit_notes with that expected_revision and input {kind:inline,edits:[...]} containing typed patch or replace objects. Velocity is normalized 0..1 (for example 0.75), never MIDI 0..127.
 Note timing uses exact clip-relative integer start_tick/length_ticks, not beats. Use the returned ticks_per_quarter.
 For file input use input {kind:file,source_path:absolute_local_path}; the JSON file contains an array of clip edits. Do not put provenance text in source_path or JSON strings inside inline edits. expected_revision is always top-level.
 For a new phrase, add_clip then read_notes for its revision before writing notes. Keep calls bounded.
