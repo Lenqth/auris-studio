@@ -1,9 +1,9 @@
 # Live performance edit validation
 
-On 2026-10-22, the built-in Codex backend completed a real performance edit through
-the application's agent panel. Claude Code stopped before any tool call because
-its OAuth session had expired and could not be refreshed. A catalog connection
-alone does not verify Claude's inference or editing behavior.
+On 2026-10-22, the built-in Codex and Claude Code backends both completed real
+performance edits through the application's agent panel, including independent
+readback, audio rendering and Undo/Redo checks. Claude's successful trial followed
+the user's renewal of its expired OAuth session.
 
 ## Scope and results
 
@@ -20,9 +20,9 @@ source data, then inspect the resulting settings.
 | Backend | Outcome | Evidence |
 | --- | --- | --- |
 | Codex CLI 0.163.0, `gpt-6.1-sol` | Passed in 25.00 seconds | Read/edit/readback completed; one successful edit; score and curves preserved; Undo and Redo restored the complete projects |
-| Claude Code 2.1.304, `sonnet` | Authentication blocked | `OAuth session expired and could not be refreshed`; zero tool calls |
+| Claude Code 2.1.304, `sonnet` | Passed in 9.44 seconds after reauthentication | Read/edit/readback completed; one successful edit; score and curves preserved; Undo and Redo restored the complete projects |
 
-Codex applied swing 62% on sixteenths, gate 0.5, transpose +12 semitones,
+Both applied swing 62% on sixteenths, gate 0.5, transpose +12 semitones,
 expression velocity variation 0.3, strum spread 30 ms and vibrato depth 0.2
 semitones. Readback matched all six controls. Expression timing, swell, group and
 seed, strum direction and the authored automatic volume contour were retained.
@@ -38,11 +38,27 @@ unchanged:
 | Note lengths (ticks) | 960 each | 480 each |
 | Second attack (ticks) | 240 | 298 |
 
-The host rendered the same two-second stereo range before and after the edit.
+The host rendered the same two-second stereo range before and after each edit.
+Each backend produced the same final document and render measurements.
 Both 96,000-frame renders were audible, with sample peaks of 0.167717 and
 0.202802. Their sample difference had RMS 0.0377444. This verifies a change in
 actual rendered audio, not a human judgment of musical quality. Codex additionally
 called `inspect_audio` because its application instructions request it.
+
+### Earlier Claude attempts
+
+The first Claude attempt stopped before any tool call with
+`OAuth session expired and could not be refreshed`. After reauthentication, its
+first edit applied all six requested values and passed the source, audio and
+Undo/Redo checks, but omitted a separate post-edit `inspect_performance` call.
+That trial failed the independent-readback criterion and remains recorded as
+`readback_missing` in the evidence.
+
+The harness now permits one explicit read-only follow-up in the same conversation
+if an agent ends after editing without that inspection. It still requires a
+successful separate inspection, exact values, one edit and the original numeric
+and preservation checks. The final successful Claude trial needed no follow-up;
+both successful backends completed the full sequence in their first turn.
 
 The compact evidence is
 [`agent-performance-2026-10-22.json`](../tools/eval/references/agent-performance-2026-10-22.json).

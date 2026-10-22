@@ -36,6 +36,50 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
         .collect()
 }
 
+fn performance_readback(entries: &[Value]) -> (bool, bool) {
+    let Some(index) = entries
+        .iter()
+        .position(|e| e["name"] == "set_performance" && e["ok"] == true)
+    else {
+        return (false, false);
+    };
+    let inspected = |entries: &[Value]| {
+        entries
+            .iter()
+            .any(|e| e["name"] == "inspect_performance" && e["ok"] == true)
+    };
+    (
+        inspected(&entries[..index]),
+        inspected(&entries[index + 1..]),
+    )
+}
+
+#[test]
+fn performance_readback_requires_successful_inspection_after_the_edit() {
+    let inspect = json!({"name":"inspect_performance","ok":true});
+    let edit = json!({"name":"set_performance","ok":true});
+    for (entries, expected) in [
+        (vec![], (false, false)),
+        (vec![inspect.clone()], (false, false)),
+        (vec![inspect.clone(), edit.clone()], (true, false)),
+        (
+            vec![
+                inspect.clone(),
+                edit.clone(),
+                json!({"name":"inspect_performance","ok":false}),
+            ],
+            (true, false),
+        ),
+        (
+            vec![inspect.clone(), edit.clone(), inspect.clone()],
+            (true, true),
+        ),
+        (vec![edit, inspect], (false, true)),
+    ] {
+        assert_eq!(performance_readback(&entries), expected);
+    }
+}
+
 fn render(session: &mut Session) -> AudioBuffer {
     let options = session
         .render_range_options(Ticks::ZERO, Ticks::QUARTER * 4, false)
@@ -106,6 +150,7 @@ fn installed_cli_edits_performance_in_the_window(cx: &mut gpui::TestAppContext) 
     let started = Instant::now();
     let mut last_snapshot = Instant::now() - Duration::from_secs(3);
     let mut failure = None;
+    let mut requested_readback = false;
     loop {
         app.update(cx, |this, cx| this.drain_agent(cx));
         cx.run_until_parked();
@@ -148,6 +193,24 @@ fn installed_cli_edits_performance_in_the_window(cx: &mut gpui::TestAppContext) 
             break;
         }
         if finished {
+            let needs_readback = app.read_with(cx, |this, _| {
+                let entries = transcript(&this.agent_chat.entries);
+                !performance_readback(&entries).1
+                    && entries
+                        .iter()
+                        .any(|e| e["name"] == "set_performance" && e["ok"] == true)
+            });
+            if needs_readback && !requested_readback {
+                requested_readback = true;
+                app.update(cx, |this, _| {
+                    this.agent_chat.input = TextField::new(format!(
+                        "先ほどの変更を保持したまま、クリップ ID {} に対して inspect_performance を実行して、6項目の現在値を読み戻してください。set_performance の応答だけでなく、独立した再読取を確認します。追加の編集や保存は不要です。",
+                        clip.0
+                    ));
+                    this.agent_send();
+                });
+                continue;
+            }
             break;
         }
         if started.elapsed() > Duration::from_secs(config.timeout_seconds) {
@@ -174,9 +237,7 @@ fn installed_cli_edits_performance_in_the_window(cx: &mut gpui::TestAppContext) 
         let mut squared_difference = 0.0;
         for (a,b) in samples { squared_difference += f64::from(a-b).powi(2); }
         let rms_difference = (squared_difference / (after_audio.frame_count()*after_audio.channel_count()) as f64).sqrt();
-        let set_index = entries.iter().position(|e| e["name"]=="set_performance" && e["ok"]==true);
-        let inspected_before = set_index.is_some_and(|i|entries[..i].iter().any(|e|e["name"]=="inspect_performance" && e["ok"]==true));
-        let inspected_after = set_index.is_some_and(|i|entries[i+1..].iter().any(|e|e["name"]=="inspect_performance" && e["ok"]==true));
+        let (inspected_before, inspected_after) = performance_readback(&entries);
         let edit_count = entries.iter().filter(|e|e["name"]=="set_performance" && e["ok"]==true).count();
         let shape_before: Vec<_> = before.midi_clip(clip).unwrap().1.transforms.iter().filter_map(|s|match s {NoteTransform::Pitch{settings}=>Some(&settings.volume_contour),_=>None}).collect();
         let shape_after: Vec<_> = target.transforms.iter().filter_map(|s|match s {NoteTransform::Pitch{settings}=>Some(&settings.volume_contour),_=>None}).collect();
@@ -191,7 +252,7 @@ fn installed_cli_edits_performance_in_the_window(cx: &mut gpui::TestAppContext) 
         }
         json!({"backend":config.backend,"model":config.model,"elapsed_seconds":started.elapsed().as_secs_f64(),
             "failure":failure,"policy":"edit; actual application permission pipeline",
-            "settings":settings,"inspected_before":inspected_before,"inspected_after":inspected_after,
+            "settings":settings,"inspected_before":inspected_before,"inspected_after":inspected_after,"readback_followup":requested_readback,
             "successful_edit_calls":edit_count,"source_preserved":source_preserved,"contour_preserved":contour_preserved,
             "dirty":dirty,"unsaved":this.session.path().is_none(),"undo_restored":undo_restored,"redo_restored":redo_restored,
             "performed_notes":performed,"audio":{"frames":after_audio.frame_count(),"before_peak":before_audio.peak(),
