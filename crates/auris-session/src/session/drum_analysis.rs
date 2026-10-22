@@ -11,7 +11,7 @@ use std::time::Instant;
 use auris_core::plugin::{
     Instrument, NoteEvent, Parameterized, PluginState, PrepareContext, ProcessContext,
 };
-use auris_core::project::{DrumMap, DrumRole, TrackKind, notes_digest};
+use auris_core::project::{DrumMap, DrumRole, MidiClip, TrackKind, notes_digest};
 use auris_core::{AudioBuffer, SoundFontId, TrackId};
 use auris_dsp::drum_analysis::{
     AcousticCharacter, DrumAcoustics, analyze_drum_audio, drum_role_fitness,
@@ -420,39 +420,8 @@ impl Session {
         let mut next = original.clone();
         report.proposed_map.store(&mut next.instrument_state);
         if remap_generated {
-            for clip in &mut next.clips {
-                let Some(recipe) = &mut clip.recipe else {
-                    continue;
-                };
-                if !recipe.preset.is_drums() {
-                    continue;
-                }
-                let was_unedited =
-                    recipe.text_digest == 0 || recipe.text_digest == notes_digest(&clip.notes);
-                let roles: BTreeMap<String, DrumRole> = if recipe.drum_voices.is_empty() {
-                    auris_compose::roles_of(recipe.preset)
-                        .iter()
-                        .filter_map(|role| Some((role.name().to_string(), role.drum_role()?)))
-                        .collect()
-                } else {
-                    recipe
-                        .drum_voices
-                        .iter()
-                        .map(|voice| (voice.name.clone(), voice.role))
-                        .collect()
-                };
-                for note in &mut clip.notes {
-                    if let Some(role) = roles.get(&note.drum_voice) {
-                        note.pitch = *report.proposed_map.voices.get(role).ok_or_else(|| {
-                            failure("a generated voice has no acceptable measured assignment")
-                        })?;
-                    }
-                }
-                auris_compose::apply_drum_map(recipe, &report.proposed_map);
-                if was_unedited {
-                    recipe.text_digest = notes_digest(&clip.notes);
-                }
-            }
+            remap_generated_drums(&mut next.clips, &report.proposed_map)
+                .map_err(|_| failure("a generated voice has no acceptable measured assignment"))?;
         }
         if &next == original {
             return Ok(false);
@@ -462,6 +431,47 @@ impl Session {
         self.invalidate_graph();
         Ok(true)
     }
+}
+
+/// Moves explicitly tagged generated drum notes, and the recipes that wrote them, onto `map`.
+///
+/// A note is moved only when it carries the name of a voice its clip's recipe wrote; untagged
+/// notes keep their pitches. A recipe whose notes were never hand-edited stays unedited. Refuses,
+/// naming the role, when a generated voice plays a role `map` does not assign — the clips may
+/// then be partly moved, so callers work on a copy.
+pub(super) fn remap_generated_drums(clips: &mut [MidiClip], map: &DrumMap) -> Result<(), DrumRole> {
+    for clip in clips {
+        let Some(recipe) = &mut clip.recipe else {
+            continue;
+        };
+        if !recipe.preset.is_drums() {
+            continue;
+        }
+        let was_unedited =
+            recipe.text_digest == 0 || recipe.text_digest == notes_digest(&clip.notes);
+        let roles: BTreeMap<String, DrumRole> = if recipe.drum_voices.is_empty() {
+            auris_compose::roles_of(recipe.preset)
+                .iter()
+                .filter_map(|role| Some((role.name().to_string(), role.drum_role()?)))
+                .collect()
+        } else {
+            recipe
+                .drum_voices
+                .iter()
+                .map(|voice| (voice.name.clone(), voice.role))
+                .collect()
+        };
+        for note in &mut clip.notes {
+            if let Some(role) = roles.get(&note.drum_voice) {
+                note.pitch = *map.voices.get(role).ok_or(*role)?;
+            }
+        }
+        auris_compose::apply_drum_map(recipe, map);
+        if was_unedited {
+            recipe.text_digest = notes_digest(&clip.notes);
+        }
+    }
+    Ok(())
 }
 
 /// The source's opaque state with musical assignments omitted, without cloning the payload.
