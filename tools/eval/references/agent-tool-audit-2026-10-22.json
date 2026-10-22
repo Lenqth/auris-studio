@@ -1,0 +1,200 @@
+{
+  "audit_date": "2026-10-22",
+  "source_revision": "2b5abb48cc92ff50bd15e19e55754f7708fe0ba6",
+  "collection": "cargo run -p auris-toolbox --example evaluate_agent_surface, followed by source inspection of ToolHost and armed",
+  "scope": "Auris-owned tool definitions; native CLI shell/file tools excluded; saved MCP all task groups",
+  "counts": {
+    "saved_mcp": 71,
+    "embedded_cli_live_mcp": 44,
+    "rig_desktop": 46,
+    "raw_live_definition_builder": 45
+  },
+  "saved_tools": [
+    "open_project",
+    "setup_tracks",
+    "instrument_diagnostics",
+    "discover_tools",
+    "read_report",
+    "listen",
+    "create_project",
+    "import_audio",
+    "import_midi",
+    "import_transcription",
+    "export_midi",
+    "capabilities",
+    "effects",
+    "mixer_graph",
+    "automation",
+    "analyze_music",
+    "analyze_chords",
+    "analyze_audio",
+    "analyze_instruments",
+    "transcribe_audio",
+    "transcribe_mixture",
+    "inspect_composition",
+    "edit_harmony",
+    "edit_recipe",
+    "edit_clip",
+    "checkpoints",
+    "spec_reference",
+    "search_documentation",
+    "check_spec",
+    "configure_plugin_paths",
+    "preview_composition",
+    "compose",
+    "render",
+    "verify_render",
+    "preview",
+    "describe",
+    "analyze",
+    "analyze_drum_kit",
+    "set_drum_assignment",
+    "mixer",
+    "set_level",
+    "normalize_mix",
+    "set_effect",
+    "section_gain",
+    "regenerate_clips",
+    "teach_progression",
+    "forget_progression",
+    "list_progressions",
+    "list_presets",
+    "list_instruments",
+    "search_instruments",
+    "similar_instruments",
+    "add_track",
+    "add_part",
+    "set_instrument",
+    "rename_track",
+    "remove_track",
+    "add_clip",
+    "notes",
+    "edit_notes",
+    "replace_notes",
+    "accompany",
+    "write_lyrics",
+    "sing",
+    "tool_help",
+    "routing",
+    "set_track_state",
+    "convert_track_to_audio",
+    "set_instrument_param",
+    "set_instrument_params",
+    "replace_notes_batch"
+  ],
+  "embedded_cli_live_tools": [
+    "inspect_performance",
+    "set_performance",
+    "edit_harmony",
+    "list_voices",
+    "inspect_singer",
+    "set_singer_voice",
+    "write_lyrics",
+    "sing",
+    "create_piano_cover",
+    "import_transcription",
+    "inspect_project",
+    "instrument_diagnostics",
+    "inspect_audio",
+    "listen",
+    "search_instruments",
+    "similar_instruments",
+    "read_notes",
+    "add_track",
+    "rename_track",
+    "remove_track",
+    "set_instrument",
+    "set_level",
+    "normalize_mix",
+    "set_track_state",
+    "add_clip",
+    "generate_phrase",
+    "add_note",
+    "add_notes",
+    "replace_notes",
+    "set_tempo",
+    "set_loop",
+    "remove_notes",
+    "set_mixer_track",
+    "read_mixer_graph",
+    "connect_mixer",
+    "disconnect_mixer",
+    "add_mixer_effect",
+    "remove_mixer_effect",
+    "move_mixer_effect",
+    "enable_mixer_effect",
+    "set_mixer_send",
+    "mixer_effect_parameters",
+    "set_mixer_effect_parameter",
+    "export_audio_attachment"
+  ],
+  "rig_desktop_extra_tools": [
+    "search_documentation",
+    "search_internet"
+  ],
+  "desktop_hidden_legacy_tool": "list_instruments",
+  "phase_one_consolidations": [
+    {
+      "surface": "live",
+      "canonical": "add_notes",
+      "aliases": [
+        "add_note"
+      ]
+    },
+    {
+      "surface": "live",
+      "canonical": "set_mixer_track",
+      "aliases": [
+        "set_level",
+        "set_track_state"
+      ]
+    },
+    {
+      "surface": "saved",
+      "canonical": "set_instrument_params",
+      "aliases": [
+        "set_instrument_param"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "catalog-help",
+      "evidence": [
+        "crates/auris-agent/src/lib.rs:armed",
+        "crates/auris-agent/src/host.rs:ToolHost::definitions",
+        "crates/auris-agent/src/backends/mod.rs:cli_preamble"
+      ],
+      "finding": "CLI instructions recommend search_documentation, which is added only to rig and absent from ToolHost."
+    },
+    {
+      "id": "discovery-groups",
+      "evidence": [
+        "crates/auris-toolbox/src/tool_exposure.rs:discover_tools::run",
+        "crates/auris-mcp/src/main.rs:list_tools and call_tool"
+      ],
+      "finding": "Saved discovery searches the full catalog while list/call use startup ToolGroups."
+    },
+    {
+      "id": "note-readback",
+      "evidence": [
+        "crates/auris-toolbox/src/lib.rs:notes::run and trimmed",
+        "crates/auris-session/src/live_agent.rs:ReadNotes and RemoveNotes"
+      ],
+      "finding": "Saved note reads round values to two decimal places and use time-order ordinals; live reads use ticks and storage indices."
+    },
+    {
+      "id": "routing-not-equivalent",
+      "evidence": [
+        "crates/auris-toolbox/src/track_editing.rs:routing",
+        "crates/auris-session/src/mixer_graph/commands.rs:GraphAction::Connect"
+      ],
+      "finding": "Legacy output replacement and configured send creation need atomic equivalents before graph-only exposure."
+    }
+  ],
+  "evaluation_limits": [
+    "No new real-model choice benchmark",
+    "No measured token savings",
+    "No public callable removed or added in this planning change"
+  ]
+}
