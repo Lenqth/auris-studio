@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::SessionError;
 
 /// Measurements of the actual decoded WAV file, including its ending and identity.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct ExportInspection {
     /// Sample rate stored in the WAV header.
     pub sample_rate: u32,

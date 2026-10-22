@@ -700,7 +700,7 @@ struct AgentLink {
     inspection: Option<PendingInspection>,
     listening: Option<PendingListening>,
     sound_search: Option<PendingSoundSearch>,
-    vocal: Option<PendingVocal>,
+    job: Option<PendingAgentJob>,
 }
 
 /// Identity of the document for which an asynchronous panel operation was started.
@@ -770,22 +770,22 @@ struct PendingSoundSearch {
     receiver: Receiver<Result<String, String>>,
 }
 
-struct PendingVocal {
+struct PendingAgentJob {
     revision: u64,
     operation: auris_session::agent_policy::Operation,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    receiver: Receiver<Result<auris_session::live_agent::VocalResult, String>>,
+    receiver: Receiver<Result<auris_session::live_agent::AgentResult, String>>,
 }
 
-impl PendingVocal {
+impl PendingAgentJob {
     fn poll(
         &self,
         revision: u64,
         same_document: bool,
         policy: &auris_session::agent_policy::Policy,
-    ) -> Option<Result<auris_session::live_agent::VocalResult, String>> {
+    ) -> Option<Result<auris_session::live_agent::AgentResult, String>> {
         let error = if self.revision != revision || !same_document {
-            Some("The document changed during the vocal operation; retry it".to_string())
+            Some("The document changed during the agent operation; retry it".to_string())
         } else if let auris_session::agent_policy::Decision::Deny(reason) =
             policy.decide(&self.operation)
         {
@@ -801,36 +801,36 @@ impl PendingVocal {
         match self.receiver.try_recv() {
             Ok(result) => Some(result),
             Err(std::sync::mpsc::TryRecvError::Empty) => None,
-            Err(_) => Some(Err("Vocal worker stopped unexpectedly".into())),
+            Err(_) => Some(Err("Agent worker stopped unexpectedly".into())),
         }
     }
 }
 
-impl Drop for PendingVocal {
+impl Drop for PendingAgentJob {
     fn drop(&mut self) {
         self.cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
-fn spawn_agent_vocal(
-    job: auris_session::live_agent::VocalJob,
+fn spawn_agent_job(
+    job: auris_session::live_agent::AgentJob,
     revision: u64,
     operation: auris_session::agent_policy::Operation,
-) -> Result<PendingVocal, String> {
+) -> Result<PendingAgentJob, String> {
     let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let worker_cancel = cancel.clone();
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::Builder::new()
-        .name("auris-agent-vocal".into())
+        .name("auris-agent-job".into())
         .spawn(move || {
             let result =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.run(&worker_cancel)))
-                    .unwrap_or_else(|_| Err("Vocal worker stopped unexpectedly".into()));
+                    .unwrap_or_else(|_| Err("Agent worker stopped unexpectedly".into()));
             let _ = sender.send(result);
         })
         .map_err(|e| e.to_string())?;
-    Ok(PendingVocal {
+    Ok(PendingAgentJob {
         revision,
         operation,
         cancel,
@@ -1682,7 +1682,7 @@ fn spawn_link(
         inspection: None,
         listening: None,
         sound_search: None,
-        vocal: None,
+        job: None,
     })
 }
 
@@ -1697,7 +1697,7 @@ impl AurisApp {
         self.agent_chat
             .link
             .as_ref()
-            .is_some_and(|link| link.vocal.is_some())
+            .is_some_and(|link| link.job.is_some())
     }
 
     /// Attach dropped reference files without importing them into the song.
@@ -2359,7 +2359,7 @@ impl AurisApp {
         Ok(())
     }
 
-    fn start_agent_vocal(&mut self, command: &serde_json::Value) -> Result<(), String> {
+    fn start_agent_job(&mut self, command: &serde_json::Value) -> Result<(), String> {
         if self.agent_chat.bound_project.as_deref() != self.session.path() {
             return Err("The open document changed; start a new conversation".into());
         }
@@ -2369,10 +2369,10 @@ impl AurisApp {
             .link
             .as_ref()
             .ok_or("The agent stopped")?
-            .vocal
+            .job
             .is_some()
         {
-            return Err("A vocal operation is already running".into());
+            return Err("An agent operation is already running".into());
         }
         let operation = auris_session::agent_policy::Operation::parse(
             "edit_project",
@@ -2384,21 +2384,21 @@ impl AurisApp {
         }
         let job = self
             .session
-            .begin_agent_vocal(command, self.settings.clone())?;
-        let pending = spawn_agent_vocal(job, self.session.revision(), operation)?;
+            .begin_agent_job(command, self.settings.clone())?;
+        let pending = spawn_agent_job(job, self.session.revision(), operation)?;
         self.agent_chat
             .link
             .as_mut()
             .ok_or("The agent stopped")?
-            .vocal = Some(pending);
+            .job = Some(pending);
         Ok(())
     }
 
-    fn poll_agent_vocal(&mut self, cx: &mut gpui::Context<Self>) {
+    fn poll_agent_job(&mut self, cx: &mut gpui::Context<Self>) {
         let Some(link) = self.agent_chat.link.as_mut() else {
             return;
         };
-        let Some(pending) = link.vocal.take() else {
+        let Some(pending) = link.job.take() else {
             return;
         };
         let Some(result) = pending.poll(
@@ -2406,24 +2406,25 @@ impl AurisApp {
             self.agent_chat.bound_project.as_deref() == self.session.path(),
             &self.settings.agent.policy,
         ) else {
-            link.vocal = Some(pending);
+            link.job = Some(pending);
             return;
         };
         let revision = self.session.revision();
-        let result = result.and_then(|result| self.session.continue_agent_vocal(result));
+        let result =
+            result.and_then(|result| self.session.continue_agent_job(result, &pending.cancel));
         let response = match result {
-            Ok(auris_session::live_agent::VocalStep::Work(job)) => {
-                match spawn_agent_vocal(*job, revision, pending.operation.clone()) {
+            Ok(auris_session::live_agent::AgentStep::Work(job)) => {
+                match spawn_agent_job(job, revision, pending.operation.clone()) {
                     Ok(next) => {
                         if let Some(link) = self.agent_chat.link.as_mut() {
-                            link.vocal = Some(next);
+                            link.job = Some(next);
                         }
                         return;
                     }
                     Err(error) => Err(error),
                 }
             }
-            Ok(auris_session::live_agent::VocalStep::Done(text)) => Ok(text),
+            Ok(auris_session::live_agent::AgentStep::Done(text)) => Ok(text),
             Err(error) => Err(error),
         };
         if let Some(link) = self.agent_chat.link.as_mut() {
@@ -2590,7 +2591,7 @@ impl AurisApp {
         self.poll_agent_inspection();
         self.poll_agent_listening();
         self.poll_agent_sound_search();
-        self.poll_agent_vocal(cx);
+        self.poll_agent_job(cx);
         if self.poll_agent_review() {
             cx.notify();
         }
@@ -2610,11 +2611,10 @@ impl AurisApp {
                 continue;
             }
             if let AgentEvent::Edit { command } = event {
-                if matches!(
-                    command["action"].as_str(),
-                    Some("list_voices" | "set_singer_voice" | "sing")
-                ) {
-                    if let Err(error) = self.start_agent_vocal(&command)
+                if serde_json::from_value::<auris_session::live_agent::Command>(command.clone())
+                    .is_ok_and(|command| command.needs_worker())
+                {
+                    if let Err(error) = self.start_agent_job(&command)
                         && let Some(link) = &self.agent_chat.link
                     {
                         let _ = link.send(
@@ -4748,7 +4748,7 @@ mod tests {
                 &serde_json::json!({"command":{"action":"sing","track":1}}),
             )
             .unwrap();
-            let pending = PendingVocal {
+            let pending = PendingAgentJob {
                 revision: 1,
                 operation,
                 cancel: cancel.clone(),
@@ -4776,7 +4776,7 @@ mod tests {
             &serde_json::json!({"command":{"action":"sing","track":1}}),
         )
         .unwrap();
-        let pending = PendingVocal {
+        let pending = PendingAgentJob {
             revision: 1,
             operation,
             cancel: cancel.clone(),

@@ -12,7 +12,7 @@ Choose an integrated loudness target and a true-peak ceiling for each delivery. 
 the agent comparison experiments used -23 LUFS and -1 dBTP. Those are experiment settings,
 not defaults for every song. Use `analyze` to measure the current saved project. On the live
 rig path, `inspect_audio` measures a short excerpt; `normalize_mix` measures the entire
-arrangement even though rig cannot export a WAV.
+arrangement. Every live backend can export that unsaved snapshot.
 
 `normalize_mix` applies one shared offset to source faders, preserving their differences,
 then renders the full mix again. It does not change the master fader or authored notes. A
@@ -31,6 +31,29 @@ limit for an intentional loop or hard cut. A full-scale sample count above zero 
 possible integer saturation; inspect and adjust before delivering the file. `verify_render`
 never changes the WAV.
 
-The live rig agent edits the open document and has no file-export command. It can use
-`normalize_mix` and `inspect_audio`; use MCP `render` and `verify_render` when the request
-requires a finished WAV. Both paths use the same session normalization logic.
+## Export the unsaved document
+
+The built-in Claude, Codex and native API agents share `render`, `preview`,
+`export_midi` and `verify_render` with saved-project MCP. Saved calls add only
+`project`; live calls need no save or project path. For a WAV mix:
+
+```json
+{"destination":{"kind":"mix","path":"/absolute/new-mix.wav"},"bit_depth":24}
+```
+
+Use destination `{"kind":"stems","folder":"/absolute/new-stems"}` for stems.
+An optional `range` is `{"start_bar":1,"bars":4}`; omit it for the whole arrangement.
+`include_tail` defaults to false. `preview` requires a range of at most 120 seconds
+and creates a protected 24 kHz WAV under the document's preview folder.
+`export_midi` takes an absolute `output` path for the current instrumental score.
+
+Encoding, rendering and encoded-file measurement run off the UI thread. Private
+stages are published only after document ownership, revision, cancellation and
+asset guards are checked. Existing output files are refused. A stale or stopped
+operation drops its stages and leaves existing files untouched. Export does not
+save or change the score. Results identify published files and exact byte hashes;
+a multi-stem publication failure reports any files already published.
+
+`verify_render` takes `path`, optional `target_lufs`, `ceiling_db` (default -1),
+`tolerance_lu` (default 1) and `ending_rms_max_db`. It measures the encoded WAV
+without rendering the project again. Its PASS/FAIL verdict is separate from listening.

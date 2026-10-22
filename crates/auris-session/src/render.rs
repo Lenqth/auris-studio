@@ -559,7 +559,35 @@ impl RenderJob {
         options: &OfflineOptions,
         progress: &mut RenderProgress<'_>,
     ) -> Result<ExportSummary, SessionError> {
-        let mut render = self.offline_render(None, options)?;
+        let (writer, summary) =
+            self.render_audio_writer(None, path, settings, options, progress)?;
+        writer.finish_with_commit(|| progress.begin_commit())?;
+        progress.report(1.0);
+        Ok(summary)
+    }
+
+    /// Encode privately without publishing; the owning session validates the staged result.
+    pub fn stage_audio_export(
+        &mut self,
+        path: &Path,
+        settings: &AudioExportSettings,
+        options: &OfflineOptions,
+        track: Option<TrackId>,
+        progress: &mut RenderProgress<'_>,
+    ) -> Result<auris_io::StagedAudioExport, SessionError> {
+        let (writer, _) = self.render_audio_writer(track, path, settings, options, progress)?;
+        Ok(writer.finish_staged()?)
+    }
+
+    fn render_audio_writer(
+        &mut self,
+        track: Option<TrackId>,
+        path: &Path,
+        settings: &AudioExportSettings,
+        options: &OfflineOptions,
+        progress: &mut RenderProgress<'_>,
+    ) -> Result<(AudioExportWriter, ExportSummary), SessionError> {
+        let mut render = self.offline_render(track, options)?;
         let rendered_rate = render.sample_rate();
         let settings = AudioExportSettings {
             sample_rate: rendered_rate.round().max(1.0) as u32,
@@ -579,14 +607,15 @@ impl RenderJob {
             Err(OfflineStreamError::Render(error)) => return Err(error.into()),
             Err(OfflineStreamError::Sink(error)) => return Err(error.into()),
         }
-        writer.finish_with_commit(|| progress.begin_commit())?;
-        progress.report(1.0);
-        Ok(ExportSummary {
-            seconds: frames as f64 / rendered_rate,
-            frames: frames as u64,
-            channels: RENDER_CHANNELS,
-            peak_db: gain_to_db(peak),
-        })
+        Ok((
+            writer,
+            ExportSummary {
+                seconds: frames as f64 / rendered_rate,
+                frames: frames as u64,
+                channels: RENDER_CHANNELS,
+                peak_db: gain_to_db(peak),
+            },
+        ))
     }
 
     /// Renders and writes a WAV file.

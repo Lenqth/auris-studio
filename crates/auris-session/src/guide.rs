@@ -6,6 +6,8 @@
 //! content revisions. The single mixer_graph entry point dispatches typed graph operations.
 //! Arrangement, authored controller curves, timeline and performance commands live in the session;
 //! saved execution adds persistence, while the desktop retains document ownership and Undo.
+//! Detached agent jobs share a worker/owner continuation for vocals and file delivery. Export
+//! workers stage and inspect encoded bytes; only the unchanged owner publishes those files.
 //!
 //!
 //! The workspace has no root crate — `cargo doc` on it produces a list of crates and no

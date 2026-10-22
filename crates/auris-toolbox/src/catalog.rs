@@ -493,8 +493,7 @@ pub mod tool_help {
                 {"project":project,"track":"Lead","clip":1,"action":{"kind":"copy","destination":"Flute","bar":9,"transpose":12}}
             ]),
             "preview" => serde_json::json!([
-                {"project":project,"start_bar":1,"bars":4},
-                {"project":project,"section":"chorus","instance":1}
+                {"project":project,"range":{"start_bar":1,"bars":4}}
             ]),
             "effects" => serde_json::json!([
                 {"project":project,"track":"Bass","operation":{"action":"list"}},
@@ -832,11 +831,10 @@ mod tests {
             }
         }
         check::<edit_clip::Args>("edit_clip");
-        check::<preview::Args>("preview");
         check::<automation::Args>("automation");
         check::<mixer_graph::Args>("mixer_graph");
         check::<listen::Args>("listen");
-        for name in ["edit_notes", "add_track", "add_clip"] {
+        for name in ["edit_notes", "add_track", "add_clip", "preview"] {
             let help: serde_json::Value = serde_json::from_str(
                 &tool_help::run(&tool_help::Args { name: name.into() }).unwrap(),
             )

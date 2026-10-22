@@ -41,9 +41,21 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                     serde_json::from_value::<crate::score_input::Args>(args).map_err(|e|format!("Invalid arguments: {e}"))?.command()?
                 } else { live_agent::command(&action, &args)?.ok_or("Unknown session tool")? };
                 let mut session = crate::opened(&project)?;
-                let before = session.project().clone();
-                let text = session.agent_command_with_plugin_paths(command, &crate::sound_search::configured_plugin_paths())?;
-                if session.project() != &before { crate::save_checkpointed(&mut session)?; }
+                let before = command.is_mutating().then(||session.project().clone());
+                let text = if command.needs_worker() {
+                    let cancellation=crate::cancellation::current();
+                    let mut job=session.begin_agent_job(command,auris_session::Settings::load())?;
+                    loop {
+                        let result=job.run(cancellation.flag())?;
+                        match session.continue_agent_job(result,cancellation.flag())? {
+                            auris_session::live_agent::AgentStep::Done(text)=>break text,
+                            auris_session::live_agent::AgentStep::Work(next) => job = next,
+                        }
+                    }
+                } else {
+                    session.agent_command_with_plugin_paths(command,&crate::sound_search::configured_plugin_paths())?
+                };
+                if before.as_ref().is_some_and(|before|session.project() != before) { crate::save_checkpointed(&mut session)?; }
                 Ok(text)
             }),
         }

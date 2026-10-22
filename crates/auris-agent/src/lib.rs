@@ -327,8 +327,10 @@ All routing must remain a DAG. Re-read the graph after edits.
 After changing a sound, inspect_audio again: retained faders do not guarantee retained loudness.
 Set an explicit loudness and true-peak goal. normalize_mix moves all source faders together
 and reports the measured result; a peak or fader limit can leave it short of the goal.
-The live rig tools do not export a WAV. For saved WAV delivery, the separate MCP path has
-render and verify_render; never claim a delivery target passed from live inspection alone.
+For delivery, render takes destination {\"kind\":\"mix\",\"path\":\"/absolute/new.wav\"} or {\"kind\":\"stems\",\"folder\":\"/absolute/new-stems\"}.
+Use preview with range {\"start_bar\":1,\"bars\":4} for a short protected audition. export_midi writes the current score to output.
+Files use immutable document snapshots, are encoded/measured on a worker and publish only if current; existing files are refused.
+Use verify_render with path and explicit delivery target/ceiling/ending limits. Inspect its PASS/FAIL verdict before claiming success.
 Track kind is one lowercase string, for example {\"name\":\"Drums\",\"kind\":\"drum\"}.
 Use instrument for melody/harmony and drum for percussion. Do not wrap kind in an array.
 For set_instrument use sound_id with the exact returned ID, never a program number. Search results use library indices into the libraries array; instrument_diagnostics reads failures on demand.

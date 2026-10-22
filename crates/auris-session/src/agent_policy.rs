@@ -106,6 +106,10 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.inspect",
     "edit_project.inspect_audio",
     "edit_project.listen",
+    "edit_project.render",
+    "edit_project.preview",
+    "edit_project.export_midi",
+    "edit_project.verify_render",
     "edit_project.read_notes",
     "edit_project.edit_notes",
     "edit_project.edit_clip",
@@ -159,26 +163,15 @@ impl Operation {
                     confirm: operation.requires_confirmation(),
                 });
             }
-            let mutating = !matches!(&parsed, crate::live_agent::Command::EditTimeline { operation } if operation.is_read_only())
-                && !matches!(&parsed, crate::live_agent::Command::EditClipCurve { operation, .. } if operation.is_read_only())
-                && !matches!(
-                    parsed,
-                    crate::live_agent::Command::Inspect {}
-                        | crate::live_agent::Command::InspectInstrument { .. }
-                        | crate::live_agent::Command::InspectPerformance { .. }
-                        | crate::live_agent::Command::ListVoices { .. }
-                        | crate::live_agent::Command::InspectSinger { .. }
-                        | crate::live_agent::Command::InspectAudio { .. }
-                        | crate::live_agent::Command::Listen { .. }
-                        | crate::live_agent::Command::ReadNotes { .. }
-                        | crate::live_agent::Command::SearchInstruments { .. }
-                        | crate::live_agent::Command::InstrumentDiagnostics { .. }
-                );
+            let mutating = parsed.is_mutating();
             let confirm = matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
                 || matches!(&parsed, crate::live_agent::Command::EditNotes { edits, .. } if edits.iter().any(crate::live_agent::note_editing::NoteEdit::requires_confirmation))
                 || matches!(
                     parsed,
                     crate::live_agent::Command::Listen { .. }
+                        | crate::live_agent::Command::Render { .. }
+                        | crate::live_agent::Command::ExportMidi { .. }
+                        | crate::live_agent::Command::VerifyRender { .. }
                         | crate::live_agent::Command::RemoveTrack { .. }
                         | crate::live_agent::Command::Compose { replace: true, .. }
                 );

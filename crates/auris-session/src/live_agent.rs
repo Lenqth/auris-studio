@@ -2,6 +2,9 @@
 
 use crate::{Session, prelude::*};
 pub mod document_editing;
+pub mod file_jobs;
+mod jobs;
+pub use jobs::{AgentJob, AgentResult, AgentStep};
 mod harmony;
 pub mod note_editing;
 pub mod performance;
@@ -25,6 +28,41 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. Existing outputs are never replaced. No project save or document edit; cancellation/stale documents discard private stages.
+    Render {
+        /// Explicit mix file or stem folder destination.
+        destination: file_jobs::AudioDestination,
+        /// Omit for the whole arrangement; bar ranges are one-based.
+        range: Option<file_jobs::BarRange>,
+        /// 16, 24 (default), or 32 float bits per sample.
+        bit_depth: Option<u16>,
+        /// Include effect tails; defaults to false.
+        #[serde(default)]
+        include_tail: bool,
+    },
+    /// Create a protected 24 kHz WAV audition of 1..120 seconds from the current snapshot. Returns a playable file under the document's preview folder. Does not imply listening.
+    Preview {
+        /// Explicit one-based bar range within the arrangement.
+        range: file_jobs::BarRange,
+    },
+    /// Export the current unsaved instrumental score to a new MIDI file without saving the project. Existing files are refused.
+    ExportMidi {
+        /// Absolute new local MIDI file path.
+        output: String,
+    },
+    /// Measure an existing encoded WAV and return PASS/FAIL against supplied delivery limits. A failed verdict is an unfinished delivery, not a successful listening check.
+    VerifyRender {
+        /// Absolute local WAV path to inspect.
+        path: String,
+        /// Optional target loudness, -60..-6 LUFS.
+        target_lufs: Option<f32>,
+        /// True-peak ceiling, -12..0 dBTP; default -1.
+        ceiling_db: Option<f32>,
+        /// Allowed loudness error, 0..12 LU; default 1.
+        tolerance_lu: Option<f32>,
+        /// Optional final half-second RMS limit, -120..0 dBFS.
+        ending_rms_max_db: Option<f32>,
+    },
     /// Read or edit positioned tempo/meter changes without moving existing notes. Read returns native bounds and the current document revision.
     EditTimeline {
         /// Explicit read, set or removal operation with absolute ticks.
@@ -319,6 +357,45 @@ pub enum Command {
     },
 }
 
+impl Command {
+    /// Whether this operation can change the document; file output alone does not change it.
+    pub fn is_mutating(&self) -> bool {
+        match self {
+            Self::MixerGraph { operation } => !operation.is_read_only(),
+            Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
+            Self::EditTimeline { operation } => !operation.is_read_only(),
+            Self::Inspect {}
+            | Self::InspectInstrument { .. }
+            | Self::InspectPerformance { .. }
+            | Self::ListVoices { .. }
+            | Self::InspectSinger { .. }
+            | Self::InspectAudio { .. }
+            | Self::Listen { .. }
+            | Self::ReadNotes { .. }
+            | Self::SearchInstruments { .. }
+            | Self::InstrumentDiagnostics { .. }
+            | Self::Render { .. }
+            | Self::Preview { .. }
+            | Self::ExportMidi { .. }
+            | Self::VerifyRender { .. } => false,
+            _ => true,
+        }
+    }
+    /// Whether execution requires detached work and an owner-side continuation.
+    pub fn needs_worker(&self) -> bool {
+        matches!(
+            self,
+            Self::ListVoices { .. }
+                | Self::SetSingerVoice { .. }
+                | Self::Sing { .. }
+                | Self::Render { .. }
+                | Self::Preview { .. }
+                | Self::ExportMidi { .. }
+                | Self::VerifyRender { .. }
+        )
+    }
+}
+
 /// Types of empty tracks the agent can add.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -470,13 +547,17 @@ impl Session {
             }
             command @ (Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }
-            | Command::Sing { .. }) => {
+            | Command::Sing { .. }
+            | Command::Render { .. }
+            | Command::Preview { .. }
+            | Command::ExportMidi { .. }
+            | Command::VerifyRender { .. }) => {
                 let cancelled = std::sync::atomic::AtomicBool::new(false);
-                let mut job = self.begin_agent_vocal(command, crate::Settings::load())?;
+                let mut job = self.begin_agent_job(command, crate::Settings::load())?;
                 loop {
-                    match self.continue_agent_vocal(job.run(&cancelled)?)? {
-                        VocalStep::Work(next) => job = *next,
-                        VocalStep::Done(text) => return Ok(text),
+                    match self.continue_agent_job(job.run(&cancelled)?, &cancelled)? {
+                        AgentStep::Work(next) => job = next,
+                        AgentStep::Done(text) => return Ok(text),
                     }
                 }
             }

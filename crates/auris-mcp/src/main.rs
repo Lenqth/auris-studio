@@ -323,7 +323,7 @@ mod tests {
         let result = client
             .call_tool(
                 rmcp::model::CallToolRequestParams::new("preview").with_arguments(
-                    serde_json::json!({"project":path,"start_bar":1,"bars":1})
+                    serde_json::json!({"project":path,"range":{"start_bar":1,"bars":1}})
                         .as_object()
                         .unwrap()
                         .clone(),
@@ -341,7 +341,12 @@ mod tests {
             .unwrap()
             .path();
         assert!(wav.is_absolute());
-        assert!(text.contains(&wav.display().to_string()), "{text}");
+        let metadata: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(
+            std::path::Path::new(metadata["files"][0]["path"].as_str().unwrap()),
+            wav
+        );
+        assert_eq!(metadata["files"][0]["encoded"]["sample_rate"], 24000);
         assert!(text.len() < 2048);
         let bytes = std::fs::read(wav).unwrap();
         assert!(bytes.starts_with(b"RIFF"));

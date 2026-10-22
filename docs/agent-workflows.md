@@ -102,6 +102,18 @@ source-fader move is appropriate. It preserves relative balance and can stop sho
 at fader or peak limits. Sound replacement preserves faders but can change output
 level substantially, so remeasure. Audio file delivery never establishes listening.
 
+## Audio and MIDI delivery
+
+`render` exports the current snapshot to destination kind `mix` with an absolute
+path or kind `stems` with an absolute folder. Optional range uses start_bar/bars;
+bit_depth is 16, 24 (default), or 32 float. `preview` makes a protected 24 kHz WAV
+of a required range, up to 120 seconds. `export_midi` writes the score to output.
+`verify_render` measures an existing path against loudness/peak/ending limits.
+All backends use the same contracts; saved calls add project. Work runs off the UI
+thread and private stages publish only for an unchanged, uncancelled document.
+Existing output files are refused. No project save or Undo step is added by export.
+See [Audio delivery](agent-audio-delivery.md) for examples and measured verdicts.
+
 ## Generated phrases
 
 Use `generate_phrase` to add a generated MIDI clip to an existing instrument or drum track.
