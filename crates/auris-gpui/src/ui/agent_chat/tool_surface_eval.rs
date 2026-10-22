@@ -27,7 +27,9 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
     entries
         .iter()
         .filter_map(|entry| match entry {
-            ChatEntry::You(text) => Some(json!({"kind":"user","text":text})),
+            ChatEntry::You { text, attachments } => {
+                Some(json!({"kind":"user","text":text,"attachments":attachments}))
+            }
             ChatEntry::Agent(text) => Some(json!({"kind":"assistant","text":text})),
             ChatEntry::Error(text) => Some(json!({"kind":"error","text":text})),
             ChatEntry::Tool {

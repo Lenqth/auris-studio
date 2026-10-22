@@ -2003,6 +2003,7 @@ new のオプション
         en: "Remove attachment: {name}",
         ja: "添付ファイルを削除：{name}"
     }
+    AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
     AgentControlsScroll {
         en: "Scroll for more Agent controls",
         ja: "スクロールして他のエージェント操作を表示"

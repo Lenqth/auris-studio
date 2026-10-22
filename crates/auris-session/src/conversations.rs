@@ -56,6 +56,9 @@ pub enum ConversationContent {
     User {
         /// Request text.
         text: String,
+        /// Display-only references sent with this message, never restored as attachment access.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<PathBuf>,
     },
     /// Visible assistant output.
     Assistant {
@@ -306,7 +309,7 @@ impl ConversationStore {
             .ok_or("Conversation revision exhausted")?;
         if info.title.is_empty()
             && let Some(text) = transcript.messages.iter().find_map(|m| match &m.content {
-                ConversationContent::User { text } => Some(text),
+                ConversationContent::User { text, .. } => Some(text),
                 _ => None,
             })
         {
@@ -317,9 +320,8 @@ impl ConversationStore {
             .iter()
             .rev()
             .find_map(|m| match &m.content {
-                ConversationContent::User { text } | ConversationContent::Assistant { text } => {
-                    Some(preview(text, 100))
-                }
+                ConversationContent::User { text, .. }
+                | ConversationContent::Assistant { text } => Some(preview(text, 100)),
                 _ => None,
             })
             .unwrap_or_default();
@@ -405,7 +407,10 @@ impl ConversationStore {
                             id: transcript.messages.len() as u64,
                             model: String::new(),
                             content: if user {
-                                ConversationContent::User { text: text.into() }
+                                ConversationContent::User {
+                                    text: text.into(),
+                                    attachments: Vec::new(),
+                                }
                             } else {
                                 ConversationContent::Assistant { text: text.into() }
                             },
@@ -417,7 +422,7 @@ impl ConversationStore {
                 .messages
                 .iter()
                 .find_map(|m| match &m.content {
-                    ConversationContent::User { text } => Some(preview(text, 60)),
+                    ConversationContent::User { text, .. } => Some(preview(text, 60)),
                     _ => None,
                 })
                 .unwrap_or_default();
@@ -542,6 +547,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn user_messages_retain_attachment_metadata_and_read_text_only_history() {
+        let old: ConversationContent =
+            serde_json::from_str(r#"{"kind":"user","text":"Listen to this"}"#).unwrap();
+        assert_eq!(
+            old,
+            ConversationContent::User {
+                text: "Listen to this".into(),
+                attachments: Vec::new()
+            }
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let store = ConversationStore::for_project(directory.path());
+        let conversation = store.create().unwrap();
+        let mut transcript = conversation.transcript;
+        let content = ConversationContent::User {
+            text: "Listen to these references".into(),
+            attachments: vec![
+                PathBuf::from("References/歌.wav"),
+                PathBuf::from("References/score.png"),
+            ],
+        };
+        transcript.messages.push(ConversationMessage {
+            id: 0,
+            model: String::new(),
+            content: content.clone(),
+        });
+        store.save(&conversation.info.id, &transcript).unwrap();
+        assert_eq!(
+            store
+                .load(&conversation.info.id)
+                .unwrap()
+                .transcript
+                .messages[0]
+                .content,
+            content
+        );
+    }
+
+    #[test]
     fn conversations_keep_independent_history_and_reject_stale_writers() {
         let dir = tempfile::tempdir().unwrap();
         let store = ConversationStore::for_project(dir.path());
@@ -553,6 +597,7 @@ mod tests {
             model: "test-model".into(),
             content: ConversationContent::User {
                 text: "Keep the bass".into(),
+                attachments: Vec::new(),
             },
         });
         store.rename(&first.info.id, "Bass work").unwrap();

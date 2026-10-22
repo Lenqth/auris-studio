@@ -30,7 +30,9 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
     entries
         .iter()
         .map(|entry| match entry {
-            ChatEntry::You(text) => json!({"kind":"user","text":text}),
+            ChatEntry::You { text, attachments } => {
+                json!({"kind":"user","text":text,"attachments":attachments})
+            }
             ChatEntry::Agent(text) => json!({"kind":"assistant","text":text}),
             ChatEntry::Reasoning(text) => json!({"kind":"reasoning","text":text}),
             ChatEntry::Status(text) | ChatEntry::RestoredContext(text) => {

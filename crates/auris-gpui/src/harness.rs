@@ -861,7 +861,7 @@ mod tests {
                 "sending does not require saving the score"
             );
             assert!(this.agent_chat.entries.iter().any(|entry| matches!(entry,
-                crate::ui::agent_chat::ChatEntry::You(text) if text == "make it louder")));
+                crate::ui::agent_chat::ChatEntry::You { text, .. } if text == "make it louder")));
         });
     }
 

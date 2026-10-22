@@ -183,10 +183,15 @@ fn log_preview(text: &str) -> String {
 }
 
 /// One line of the conversation, as the panel shows it.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ChatEntry {
     /// What the person said.
-    You(String),
+    You {
+        /// Message text.
+        text: String,
+        /// The files sent with this message, retained as display-only references.
+        attachments: Vec<PathBuf>,
+    },
     /// What the model answered.
     Agent(String),
     /// The model's reasoning log, collapsed until explicitly opened.
@@ -212,6 +217,16 @@ pub(crate) enum ChatEntry {
     Error(String),
     /// A note from the panel itself, translated when drawn.
     Note(Key),
+}
+
+impl ChatEntry {
+    /// A text-only user entry, including older restored turns without file metadata.
+    fn user(text: String) -> Self {
+        Self::You {
+            text,
+            attachments: Vec::new(),
+        }
+    }
 }
 
 /// Preserve message boundaries while coalescing adjacent tool calls for presentation.
@@ -1195,7 +1210,7 @@ impl AgentChat {
             self.push_entry(ChatEntry::RestoredContext(summary));
         }
         for (user, answer) in turns {
-            self.push_entry(ChatEntry::You(user));
+            self.push_entry(ChatEntry::user(user));
             self.push_entry(ChatEntry::Agent(answer));
         }
         self.jump_to_latest();
@@ -1405,7 +1420,7 @@ impl AgentChat {
             } else {
                 AgentPanelStatus::Failed
             }),
-            ChatEntry::You(_)
+            ChatEntry::You { .. }
             | ChatEntry::Note(
                 Key::AgentConversationReset | Key::AgentStopped | Key::AgentSendCancelled,
             ) => Some(AgentPanelStatus::Idle),
@@ -1504,12 +1519,12 @@ impl AgentChat {
             }
             AgentEvent::History { summary, turns } => {
                 let current = match self.entries.last() {
-                    Some(ChatEntry::You(text)) => Some(text.clone()),
+                    Some(entry @ ChatEntry::You { .. }) => Some(entry.clone()),
                     _ => None,
                 };
                 self.replace_history(summary, turns);
                 if let Some(current) = current {
-                    self.push_entry(ChatEntry::You(current));
+                    self.push_entry(current);
                     self.jump_to_latest();
                 }
             }
@@ -2243,7 +2258,10 @@ impl AurisApp {
             .controls
             .typed_requests
             .push(message.text.clone());
-        self.agent_chat.push_entry(ChatEntry::You(message.text));
+        self.agent_chat.push_entry(ChatEntry::You {
+            text: message.text,
+            attachments: message.attachments,
+        });
         self.agent_chat.loaded_history = None;
         // Sending is an explicit return to the live exchange. A reader who scrolls away again
         // before the reply arrives will still stop following on that next transcript change.
@@ -3543,7 +3561,7 @@ impl AurisApp {
             || matches!(entry, ChatEntry::Tool { args, detail, .. } if !args.is_empty() || !detail.is_empty())
             || matches!(entry, ChatEntry::RestoredContext(detail) if !detail.is_empty());
         let (colour, text): (gpui::Hsla, String) = match entry {
-            ChatEntry::You(text) => (theme.accent_text, text.clone()),
+            ChatEntry::You { text, .. } => (theme.accent_text, text.clone()),
             ChatEntry::Agent(text) => (theme.text, text.clone()),
             ChatEntry::Reasoning(reasoning) => (
                 theme.text_muted,
@@ -3568,7 +3586,7 @@ impl AurisApp {
             ChatEntry::Error(message) => (theme.danger, message.clone()),
             ChatEntry::Note(key) => (note_colour(*key, theme), self.t(*key).to_string()),
         };
-        let bordered = matches!(entry, ChatEntry::You(_));
+        let bordered = matches!(entry, ChatEntry::You { .. });
         let details = match entry {
             ChatEntry::Reasoning(text) if opened => vec![(None, text.clone())],
             ChatEntry::Tool { args, detail, .. } if opened => {
@@ -3649,7 +3667,41 @@ impl AurisApp {
             .child(body)
             .when_some(
                 match entry {
-                    ChatEntry::Agent(text) | ChatEntry::You(text) => Some(text.clone()),
+                    ChatEntry::You { attachments, .. } if !attachments.is_empty() => Some(attachments),
+                    _ => None,
+                },
+                |this, attachments| {
+                    this.child(
+                        div()
+                            .id(("agent-message-attachments", index))
+                            .debug_selector(move || format!("agent-message-attachments-{index}"))
+                            .w_full()
+                            .min_w_0()
+                            .mt_1()
+                            .flex()
+                            .flex_col()
+                            .gap_0p5()
+                            .text_color(theme.text_muted)
+                            .child(div().text_color(theme.text_faint).child(self.t(Key::AgentAttachedFiles)))
+                            .children(attachments.iter().enumerate().map(|(attachment_index, path)| {
+                                let full_path = path.to_string_lossy().into_owned();
+                                // A saved conversation may have originated on another platform.
+                                let name = full_path.rsplit(['/', '\\']).next().unwrap_or(&full_path)
+                                    .replace(['\r', '\n'], " ");
+                                div()
+                                    .id(("agent-message-attachment", attachment_index))
+                                    .debug_selector(move || format!("agent-message-attachment-{index}-{attachment_index}"))
+                                    .w_full()
+                                    .min_w_0()
+                                    .child(div().w_full().min_w_0().truncate().child(name))
+                                    .tooltip(crate::ui::tooltip::keyed_tip(full_path, "", theme))
+                            })),
+                    )
+                },
+            )
+            .when_some(
+                match entry {
+                    ChatEntry::Agent(text) | ChatEntry::You { text, .. } => Some(text.clone()),
                     _ => None,
                 },
                 |this, text| {
@@ -5030,7 +5082,7 @@ mod tests {
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();
-            this.agent_chat.entries = vec![ChatEntry::You(request.into())];
+            this.agent_chat.entries = vec![ChatEntry::user(request.into())];
         });
         crate::harness::paint(&app, cx);
         let message = cx.debug_bounds("agent-line-0").unwrap();
@@ -5112,7 +5164,7 @@ mod tests {
         app.update(cx, |this, _| {
             // A fresh identity avoids the Markdown renderer's asynchronous update debounce.
             this.agent_chat.entries = vec![
-                ChatEntry::You("再生してみて。".into()),
+                ChatEntry::user("再生してみて。".into()),
                 ChatEntry::Agent(answer.repeat(40)),
                 ChatEntry::Tool {
                     name: "preview".into(),
@@ -5522,7 +5574,7 @@ mod tests {
                 this.agent_chat.entries,
                 vec![
                     ChatEntry::RestoredContext("Earlier choices are reference context.".into()),
-                    ChatEntry::You("current request".into()),
+                    ChatEntry::user("current request".into()),
                     ChatEntry::Agent("current answer".into())
                 ]
             );
@@ -5785,7 +5837,11 @@ mod tests {
     #[test]
     fn resumed_history_keeps_the_message_just_submitted() {
         let mut chat = AgentChat::default();
-        chat.push_entry(ChatEntry::You("continue".into()));
+        let current = ChatEntry::You {
+            text: "continue".into(),
+            attachments: vec![PathBuf::from("reference.wav")],
+        };
+        chat.push_entry(current.clone());
         chat.absorb(
             AgentEvent::History {
                 summary: String::new(),
@@ -5797,9 +5853,9 @@ mod tests {
         assert_eq!(
             chat.entries,
             vec![
-                ChatEntry::You("old request".into()),
+                ChatEntry::user("old request".into()),
                 ChatEntry::Agent("old answer".into()),
-                ChatEntry::You("continue".into())
+                current
             ]
         );
     }
@@ -5811,7 +5867,7 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.agent_chat.entries = vec![
-                ChatEntry::You("Project A secret".into()),
+                ChatEntry::user("Project A secret".into()),
                 ChatEntry::Agent("Project A answer".into()),
             ];
             this.agent_chat.input = TextField::new("draft for the next project");
@@ -6042,7 +6098,7 @@ mod tests {
             tool(),
             ChatEntry::Agent("answer".into()),
             tool(),
-            ChatEntry::You("next request".into()),
+            ChatEntry::user("next request".into()),
             tool(),
             tool(),
             tool(),
@@ -6995,6 +7051,60 @@ mod tests {
             .expect("remove affordance remains visible");
         assert!(chip.left() >= panel.left() && chip.right() <= panel.right());
         assert!(remove.left() >= chip.left() && remove.right() <= chip.right());
+    }
+
+    #[gpui::test]
+    fn sent_attachments_remain_visible_inside_a_narrow_transcript_at_multiple_scales(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.panels
+                .set_size(crate::dock::Dock::Right, crate::dock::PanelLayout::MIN_SIDE);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models_error = Some("offline fixture".into());
+            this.agent_chat.entries = vec![
+                ChatEntry::You {
+                    text: "Compare the references".into(),
+                    attachments: vec![
+                        PathBuf::from(format!(
+                            "C:\\References\\{}.wav",
+                            "長い録音ファイル名".repeat(20)
+                        )),
+                        PathBuf::from("/References/score.png"),
+                    ],
+                },
+                ChatEntry::user("A message without attachments".into()),
+            ];
+        });
+        for (scheme, language, font_size) in [
+            ("midnight", auris_i18n::Language::English, 16.0),
+            ("daylight", auris_i18n::Language::Japanese, 24.0),
+        ] {
+            app.update(cx, |this, _| {
+                this.theme = Theme::named(scheme);
+                this.language = language;
+            });
+            cx.update(|window, _| window.set_rem_size(px(font_size)));
+            crate::harness::resize(&app, cx, gpui::size(px(720.0), px(720.0)));
+            let panel = cx.debug_bounds("agent-panel").unwrap();
+            let group = cx.debug_bounds("agent-message-attachments-0").unwrap();
+            for selector in [
+                "agent-message-attachment-0-0",
+                "agent-message-attachment-0-1",
+            ] {
+                let row = cx.debug_bounds(selector).unwrap();
+                assert_eq!(row.left(), group.left());
+                assert_eq!(row.right(), group.right());
+                assert!(row.left() >= panel.left() && row.right() <= panel.right());
+            }
+            assert!(cx.debug_bounds("agent-message-attachments-1").is_none());
+            assert!(cx.debug_bounds("agent-attachment-remove-0").is_none());
+        }
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.attachments.is_empty())
+        });
     }
 
     #[gpui::test]

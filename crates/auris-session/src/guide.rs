@@ -31,6 +31,9 @@
 //! owns bounded model memory and provider execution. Readable transcripts and composer drafts
 //! survive model-memory compaction. Resuming a conversation continues against the current score,
 //! never the score that existed when a historical message was written.
+//! Each user message retains its attachment references as display metadata, so the transcript
+//! can identify sent files after reopening. These references never repopulate the next draft
+//! or authorize file access; only files explicitly attached in the current window can do that.
 //!
 //! Storage runs on background threads. Stable locks serialize metadata edits, transcript revisions
 //! reject stale windows, and runtime memory generation tombstones prevent deleted conversations
