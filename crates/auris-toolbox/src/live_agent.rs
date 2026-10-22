@@ -223,6 +223,8 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         | "set_track_state"
         | "add_clip"
         | "generate_phrase"
+        | "inspect_performance"
+        | "set_performance"
         | "add_note"
         | "remove_notes"
         | "replace_notes"
@@ -343,6 +345,35 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn performance_edits_publish_bounded_units_and_partial_typed_settings() {
+        let tools = definitions();
+        let schema = &tools
+            .iter()
+            .find(|t| t.name == "set_performance")
+            .unwrap()
+            .parameters;
+        let settings = &schema["properties"]["settings"]["properties"];
+        assert_eq!(settings["gate"]["minimum"], 0.05);
+        assert_eq!(settings["swing_percent"]["minimum"], 50);
+        assert_eq!(settings["swing_percent"]["maximum"], 75);
+        assert_eq!(settings["reset"]["maxItems"], 12);
+        let parsed = command(
+            "set_performance",
+            &serde_json::json!({"clip":2,"settings":{"gate":0.5,"expression":{"delay_ms":-12}}}),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(matches!(parsed, Command::SetPerformance { .. }));
+        assert!(
+            command(
+                "set_performance",
+                &serde_json::json!({"clip":2,"settings":{"pitch":{"unknown":1}}}),
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn generated_phrases_are_available_as_flat_live_commands() {
@@ -654,6 +685,14 @@ mod tests {
                 serde_json::json!({"track":1,"part":"lead","start_bar":3,"bars":4,"seed":42}),
             ),
             (
+                "inspect_performance",
+                serde_json::json!({"clip":1,"drum_voice":null}),
+            ),
+            (
+                "set_performance",
+                serde_json::json!({"clip":1,"drum_voice":null,"settings":auris_session::live_agent::performance::PerformancePatch::default()}),
+            ),
+            (
                 "add_notes",
                 serde_json::json!({"clip":1,"notes":[{"pitch":60,"start_beat":0.0,"duration_beats":1.0,"velocity":0.5}]}),
             ),
@@ -722,7 +761,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            32 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            34 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))

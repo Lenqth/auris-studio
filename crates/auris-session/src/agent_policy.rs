@@ -114,6 +114,8 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.set_track_state",
     "edit_project.add_clip",
     "edit_project.generate_phrase",
+    "edit_project.inspect_performance",
+    "edit_project.set_performance",
     "edit_project.add_note",
     "edit_project.add_notes",
     "edit_project.replace_notes",
@@ -156,6 +158,7 @@ impl Operation {
             let mutating = !matches!(
                 parsed,
                 crate::live_agent::Command::Inspect {}
+                    | crate::live_agent::Command::InspectPerformance { .. }
                     | crate::live_agent::Command::ListVoices { .. }
                     | crate::live_agent::Command::InspectSinger { .. }
                     | crate::live_agent::Command::InspectAudio { .. }
@@ -290,6 +293,7 @@ mod tests {
         for command in [
             serde_json::json!({"action":"edit_harmony","start_bar":1,"bars":4,"chords":"| I | V |"}),
             serde_json::json!({"action":"generate_phrase","track":1,"part":"lead","start_bar":1,"bars":4}),
+            serde_json::json!({"action":"set_performance","clip":1,"settings":{"swing_percent":62}}),
             serde_json::json!({"action":"set_singer_voice","track":1,"voice":"/voice/test.voicevox.json"}),
             serde_json::json!({"action":"write_lyrics","clip":2,"text":"さくら"}),
             serde_json::json!({"action":"sing","track":1}),
@@ -318,6 +322,7 @@ mod tests {
         }
         for command in [
             serde_json::json!({"action":"list_voices"}),
+            serde_json::json!({"action":"inspect_performance","clip":1}),
             serde_json::json!({"action":"inspect_singer","track":1}),
         ] {
             let operation =

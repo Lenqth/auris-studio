@@ -20,28 +20,7 @@ impl Session {
             .midi_clip(target)
             .ok_or(SessionError::UnknownClip(target.0))?;
         let mut stack = destination.transforms.clone();
-        let (_, reference) = self
-            .project
-            .midi_clip(source)
-            .ok_or(SessionError::UnknownClip(source.0))?;
-        let notes = performed_notes(
-            reference.playable_notes().collect(),
-            &reference.transforms,
-            PerformanceContext {
-                bpm: self.project.tempo_map.bpm_at(reference.start),
-                pass: 0,
-                start: reference.start,
-                length: reference.length,
-                signatures: &self.project.signatures,
-            },
-        );
-        let template = GrooveTemplate::capture(
-            &reference.name,
-            &notes,
-            reference.length,
-            Subdivision::Sixteenth,
-        )
-        .ok_or(SessionError::EmptyGroove)?;
+        let template = self.clip_groove_template(source)?;
         if let Some(stage) = stack
             .iter_mut()
             .find(|t| matches!(t, NoteTransform::Groove { .. }))
@@ -64,6 +43,35 @@ impl Session {
         let result = self.set_clip_transforms(target, stack);
         self.end_transaction();
         result
+    }
+
+    /// Captures the same portable snapshot for UI and live-agent performance edits.
+    pub(crate) fn clip_groove_template(
+        &self,
+        source: ClipId,
+    ) -> Result<GrooveTemplate, SessionError> {
+        let (_, reference) = self
+            .project
+            .midi_clip(source)
+            .ok_or(SessionError::UnknownClip(source.0))?;
+        let notes = performed_notes(
+            reference.playable_notes().collect(),
+            &reference.transforms,
+            PerformanceContext {
+                bpm: self.project.tempo_map.bpm_at(reference.start),
+                pass: 0,
+                start: reference.start,
+                length: reference.length,
+                signatures: &self.project.signatures,
+            },
+        );
+        GrooveTemplate::capture(
+            &reference.name,
+            &notes,
+            reference.length,
+            Subdivision::Sixteenth,
+        )
+        .ok_or(SessionError::EmptyGroove)
     }
 }
 

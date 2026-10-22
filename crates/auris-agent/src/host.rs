@@ -187,6 +187,84 @@ impl ToolHost {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn performance_tools_use_the_shared_live_permission_and_undo_path() {
+        for (name, args, mutating) in [
+            ("inspect_performance", json!({"clip":2}), false),
+            (
+                "set_performance",
+                json!({"clip":2,"settings":{"gate":0.5,"swing_percent":62}}),
+                true,
+            ),
+        ] {
+            for allowed in [false, true] {
+                let (bridge, commands, events) = crate::worker::test_bridge();
+                let host = ToolHost::new(bridge);
+                let mut song = auris_session::Session::new(
+                    auris_session::SessionOptions::headless().with_balance(false),
+                )
+                .unwrap();
+                let track = song.add_default_instrument_track("Lead").unwrap();
+                let clip = song
+                    .add_midi_clip(
+                        track,
+                        "Phrase",
+                        auris_session::prelude::Ticks::ZERO,
+                        auris_session::prelude::Ticks::QUARTER * 4,
+                    )
+                    .unwrap();
+                let mut args = args.clone();
+                args["clip"] = json!(clip.0);
+                let before = song.project().clone();
+                let call = host.call(name, args);
+                let owner = async {
+                    let request = next_event(&events).await;
+                    assert_eq!(request["event"], "permission");
+                    let operation = auris_session::agent_policy::Operation::parse(
+                        request["tool"].as_str().unwrap(),
+                        &request["args"],
+                    )
+                    .unwrap();
+                    assert_eq!(operation.mutating, mutating);
+                    commands
+                        .send(
+                            json!({"event":"permission_result","id":request["id"],"ok":allowed})
+                                .to_string(),
+                        )
+                        .unwrap();
+                    if allowed {
+                        let request = next_event(&events).await;
+                        assert_eq!(request["event"], "edit");
+                        let text = song
+                            .agent_command(
+                                serde_json::from_value(request["command"].clone()).unwrap(),
+                            )
+                            .unwrap();
+                        let state: Value = serde_json::from_str(&text).unwrap();
+                        assert_eq!(
+                            state["settings"]["gate"],
+                            if mutating { json!(0.5) } else { json!(1.0) }
+                        );
+                        commands
+                            .send(json!({"event":"edit_result","ok":true,"text":text}).to_string())
+                            .unwrap();
+                        if mutating {
+                            song.undo();
+                        }
+                    }
+                    assert_eq!(song.project(), &before);
+                };
+                let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    tokio::join!(call, owner)
+                })
+                .await
+                .unwrap();
+                assert_eq!(result.is_ok(), allowed);
+                assert!(events.try_recv().is_err());
+            }
+        }
+    }
+
     async fn next_event(events: &std::sync::mpsc::Receiver<Value>) -> Value {
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {

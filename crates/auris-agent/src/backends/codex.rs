@@ -962,6 +962,11 @@ mod tests {
             .find(|server| server["name"] == "auris_live")
             .unwrap();
         assert!(live["tools"].get("generate_phrase").is_some(), "{status}");
+        assert!(
+            live["tools"].get("inspect_performance").is_some(),
+            "{status}"
+        );
+        assert!(live["tools"].get("set_performance").is_some(), "{status}");
         rpc.stop().await;
     }
 

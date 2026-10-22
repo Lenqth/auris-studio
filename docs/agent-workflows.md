@@ -20,6 +20,35 @@ Existing clips are preserved, one Undo removes the new phrase, and the document 
 unsaved. The same tool is available to native model APIs, Codex and Claude Code through
 their shared live catalog and permission checks. Read-only and Plan modes refuse generation.
 
+## Non-destructive performance
+
+Call `inspect_performance` with a MIDI `clip` ID before changing its Performance controls.
+Use `set_performance` with a partial `settings` object, for example
+`{"clip":2,"settings":{"swing_percent":62,"gate":0.8,"expression":{"timing":0.15}}}`.
+Only supplied fields change. Within a family, the first matching stage is edited in place;
+other stages retain their order. Stored notes, generation recipes, authored controller curves
+and automatic volume contour shapes remain intact. Each changed call is one Undo step;
+repeating the current settings adds no history. The result reads back the updated settings.
+
+The controls include humanize, swing/grid, gate, mute, brush, slide, transpose, lean,
+octave copies, expression, strum, ghost notes, automatic pitch and reference groove.
+Ratios use 0..1; swing uses 50..75 percent. Time controls use milliseconds except
+`lean_ticks` (960 ticks per quarter note); pitch depths and transpose use semitones.
+The tool schema supplies each field's range and enum values. Pitch and octave gestures
+require a melodic instrument clip. To remove stages explicitly, pass a `reset` array,
+for example `{"clip":2,"settings":{"reset":["swing","expression"]}}`.
+
+Pass an exact `drum_voice` name from the inspector to edit one writer in a drum kit,
+for example `{"clip":3,"drum_voice":"Hat","settings":{"expression":{"velocity":0.2}}}`.
+Global performance and other drum writers are preserved. Omitting `drum_voice` edits
+the clip's global stack. For a reference groove, first set
+`{"groove":{"reference_clip":4,"timing":0.8,"velocity":0.3}}` inside `settings`.
+Capture uses the reference clip's performed first pass on a sixteenth-note grid.
+Later strength edits preserve that snapshot; changing the source does not recapture it.
+
+These tools share the live catalog and permission checks across native model APIs,
+Codex and Claude Code. Read-only and Plan modes permit inspection and refuse edits.
+
 ## Live harmony and vocals
 
 For a new song, write its musical decisions into the document with `edit_harmony`, for example

@@ -2,6 +2,7 @@
 
 use crate::{Session, prelude::*};
 mod harmony;
+pub mod performance;
 mod vocals;
 pub use vocals::{VocalJob, VocalResult, VocalStep};
 fn sound_search_limit() -> usize {
@@ -22,6 +23,22 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Read one MIDI clip's non-destructive performance, stage order and editable settings. Optional drum_voice addresses one named writer in a drum kit; omit it for the whole clip. Notes, curves and generation recipes are unchanged. Use this before set_performance and read back afterward.
+    InspectPerformance {
+        /// Stable MIDI clip ID from inspect_project or read_notes.
+        clip: u64,
+        /// Exact drum writer name from the clip's notes or recipe; omit for the whole clip.
+        drum_voice: Option<String>,
+    },
+    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Values use explicit units: ratios 0..1, swing 50..75 percent, milliseconds and semitones. Omitted fields, other stages, stored notes, authored curves and recipes are preserved. settings.reset explicitly removes selected stage families. Optional drum_voice scopes edits to one drum writer. More specific expression/ghost fields override humanize/brush. All edits validate before one Undo step; identical retries are no-ops and the document remains unsaved.
+    SetPerformance {
+        /// Stable MIDI clip ID.
+        clip: u64,
+        /// Exact drum writer name; omit to edit the whole clip's performance.
+        drum_voice: Option<String>,
+        /// Partial settings; omit every field that should stay unchanged.
+        settings: Box<performance::PerformancePatch>,
+    },
     /// Write the document's key, Roman-numeral chord progression and/or section label across a bounded bar range. For a new song, write its harmony and named form (intro, verse, chorus, bridge, outro as appropriate) before adding notes. Changes metadata only; existing notes and mix are preserved. One Undo reverts the edit; changes remain unsaved.
     EditHarmony {
         /// First bar, 1-based.
@@ -435,6 +452,14 @@ impl Session {
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::InspectPerformance { clip, drum_voice } => {
+                self.agent_inspect_performance(ClipId(clip), drum_voice.as_deref())
+            }
+            Command::SetPerformance {
+                clip,
+                drum_voice,
+                settings,
+            } => self.agent_set_performance(ClipId(clip), drum_voice.as_deref(), *settings),
             Command::EditHarmony {
                 start_bar,
                 bars,

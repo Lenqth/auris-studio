@@ -998,6 +998,77 @@ pub fn with_ghost_settings(stack: &[NoteTransform], settings: GhostNotes) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_agent_parameters_match_the_existing_performance_controls() {
+        use crate::ui::pitch_performance::PitchDial;
+        use auris_session::{Session, SessionOptions, live_agent::Command};
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        let stack = vec![
+            NoteTransform::Humanize {
+                amount: 0.2,
+                seed: 9,
+            },
+            NoteTransform::Stroke {
+                spread_ms: 23.0,
+                direction: StrokeDirection::HighToLow,
+            },
+            NoteTransform::Brush { amount: 0.3 },
+            NoteTransform::Gate { amount: 0.8 },
+        ];
+        for (dial, fraction, settings) in [
+            (
+                PerformDial::Swing,
+                0.4,
+                serde_json::json!({"swing_percent":60}),
+            ),
+            (PerformDial::Gate, 0.5, serde_json::json!({"gate":0.5})),
+            (
+                PerformDial::Humanize,
+                0.4,
+                serde_json::json!({"humanize":0.4}),
+            ),
+            (
+                PerformDial::ExpressionTiming,
+                0.4,
+                serde_json::json!({"expression":{"timing":0.4}}),
+            ),
+            (
+                PerformDial::StrumUpVelocity,
+                0.6,
+                serde_json::json!({"strum":{"up_velocity":0.6}}),
+            ),
+            (PerformDial::Brush, 0.4, serde_json::json!({"brush":0.4})),
+            (
+                PerformDial::GhostDensity,
+                0.6,
+                serde_json::json!({"ghost":{"density":0.6}}),
+            ),
+            (
+                PerformDial::Pitch(PitchDial::Vibrato),
+                0.2,
+                serde_json::json!({"pitch":{"vibrato":0.2}}),
+            ),
+            (
+                PerformDial::Pitch(PitchDial::OctaveAbove),
+                0.5,
+                serde_json::json!({"octave_above":0.5}),
+            ),
+        ] {
+            session.set_clip_transforms(clip, stack.clone()).unwrap();
+            let expected = with_dial(&stack, dial, fraction, clip.0);
+            let command: Command = serde_json::from_value(
+                serde_json::json!({"action":"set_performance","clip":clip.0,"settings":settings}),
+            )
+            .unwrap();
+            session.agent_command(command).unwrap();
+            assert_eq!(session.clip_transforms(clip).unwrap(), expected, "{dial:?}");
+        }
+    }
     use crate::harness::{choose, click, drag, paint, with_a_clip};
     use gpui::{TestAppContext, point, px};
 

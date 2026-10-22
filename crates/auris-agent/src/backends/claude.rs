@@ -755,7 +755,7 @@ mod tests {
         }
         assert!(
             validate_tools(
-                &json!({"tools":["mcp__auris_live__add_track", "mcp__auris_live__generate_phrase"]})
+                &json!({"tools":["mcp__auris_live__add_track", "mcp__auris_live__generate_phrase", "mcp__auris_live__inspect_performance", "mcp__auris_live__set_performance"]})
             )
             .is_ok()
         );

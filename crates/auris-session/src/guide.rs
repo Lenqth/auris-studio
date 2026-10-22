@@ -2394,6 +2394,14 @@ pub mod harmony {
     //! shows that result by itself, including each loop pass. Both performed views refresh during
     //! parameter gestures. A document revision invalidates the preview cache, including on undo and
     //! redo.
+    //! The live agent reads this layer with `inspect_performance` and applies typed, partial
+    //! `set_performance` edits to its first matching stages. Unspecified controls, stage order,
+    //! seeds, stored notes, recipes and authored curves are retained. Explicit stage-family resets
+    //! remain non-destructive. An optional named drum writer scopes changes inside its
+    //! `ForDrumVoice` stage; other writers and global stages are preserved. Validation precedes
+    //! a separate Undo transaction per call, and identical retries record no step. Reference
+    //! grooves share the UI's snapshot capture path. Native model APIs, Codex and Claude Code
+    //! expose the same typed commands and permissions.
     //! Every wander draws from a seed
     //! the transform stores, through the same named streams the composer draws from
     //! ([`auris_core::rng`]), and it draws per loop pass — a repeated bar is loose differently
