@@ -3539,6 +3539,33 @@ impl AurisApp {
             .into_any_element()
     }
 
+    /// Opens a historical reference only after an explicit user activation.
+    fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let checked_path = path.clone();
+            let url = cx
+                .background_executor()
+                .spawn(async move {
+                    url::Url::from_file_path(&checked_path)
+                        .ok()
+                        .filter(|_| checked_path.is_file())
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(url) = url {
+                    cx.open_url(url.as_str());
+                } else {
+                    this.agent_chat.push_entry(ChatEntry::Error(
+                        this.t(Key::AgentAttachmentUnavailable)
+                            .replace("{path}", &path.to_string_lossy()),
+                    ));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     /// One transcript row. A tool row with an answer opens to the whole of it when activated —
     /// by pointer or keyboard — so the loop's log stays where the loop is shown.
     fn chat_row(
@@ -3667,7 +3694,9 @@ impl AurisApp {
             .child(body)
             .when_some(
                 match entry {
-                    ChatEntry::You { attachments, .. } if !attachments.is_empty() => Some(attachments),
+                    ChatEntry::You { attachments, .. } if !attachments.is_empty() => {
+                        Some(attachments)
+                    }
                     _ => None,
                 },
                 |this, attachments| {
@@ -3682,20 +3711,45 @@ impl AurisApp {
                             .flex_col()
                             .gap_0p5()
                             .text_color(theme.text_muted)
-                            .child(div().text_color(theme.text_faint).child(self.t(Key::AgentAttachedFiles)))
-                            .children(attachments.iter().enumerate().map(|(attachment_index, path)| {
-                                let full_path = path.to_string_lossy().into_owned();
-                                // A saved conversation may have originated on another platform.
-                                let name = full_path.rsplit(['/', '\\']).next().unwrap_or(&full_path)
-                                    .replace(['\r', '\n'], " ");
+                            .child(
                                 div()
-                                    .id(("agent-message-attachment", attachment_index))
-                                    .debug_selector(move || format!("agent-message-attachment-{index}-{attachment_index}"))
+                                    .text_color(theme.text_faint)
+                                    .child(self.t(Key::AgentAttachedFiles)),
+                            )
+                            .children(attachments.iter().enumerate().map(
+                                |(attachment_index, path)| {
+                                    let full_path = path.to_string_lossy().into_owned();
+                                    // A saved conversation may have originated on another platform.
+                                    let name = full_path
+                                        .rsplit(['/', '\\'])
+                                        .next()
+                                        .unwrap_or(&full_path)
+                                        .replace(['\r', '\n'], " ");
+                                    let path = path.clone();
+                                    let tip = self
+                                        .t(Key::AgentOpenAttachment)
+                                        .replace("{path}", &full_path);
+                                    button_enabled(
+                                        SharedString::from(format!(
+                                            "agent-message-attachment-{index}-{attachment_index}"
+                                        )),
+                                        "",
+                                        ButtonStyle::Ghost,
+                                        ButtonState::available(false, true),
+                                        theme.accent,
+                                        theme,
+                                        cx.listener(move |this, _, _, cx| {
+                                            this.open_agent_attachment(path.clone(), cx);
+                                        }),
+                                    )
                                     .w_full()
                                     .min_w_0()
-                                    .child(div().w_full().min_w_0().truncate().child(name))
-                                    .tooltip(crate::ui::tooltip::keyed_tip(full_path, "", theme))
-                            })),
+                                    .flex_shrink_0()
+                                    .justify_start()
+                                    .child(div().min_w_0().truncate().child(name))
+                                    .tooltip(crate::ui::tooltip::keyed_tip(tip, "", theme))
+                                },
+                            )),
                     )
                 },
             )
@@ -7104,6 +7158,90 @@ mod tests {
         }
         app.read_with(cx, |this, _| {
             assert!(this.agent_chat.attachments.is_empty())
+        });
+    }
+
+    #[gpui::test]
+    fn transcript_attachments_open_the_selected_file_by_pointer_and_keyboard(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let folder = tempfile::tempdir().unwrap();
+        let paths = vec![
+            folder.path().join("参考 #1 %.wav"),
+            folder.path().join("score & notes.txt"),
+        ];
+        for path in &paths {
+            std::fs::write(path, b"fixture").unwrap();
+        }
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models_error = Some("offline fixture".into());
+            this.agent_chat.entries = vec![ChatEntry::You {
+                text: "References".into(),
+                attachments: paths.clone(),
+            }];
+        });
+        crate::harness::paint(&app, cx);
+        assert_eq!(cx.opened_url(), None);
+        crate::harness::click("agent-message-attachment-0-0", cx);
+        cx.run_until_parked();
+        assert_eq!(
+            cx.opened_url(),
+            Some(url::Url::from_file_path(&paths[0]).unwrap().into())
+        );
+
+        // Pointer focus stays on the first file; Tab reaches the next file's button.
+        cx.simulate_keystrokes("tab");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        cx.run_until_parked();
+        assert_eq!(
+            cx.opened_url(),
+            Some(url::Url::from_file_path(&paths[1]).unwrap().into())
+        );
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.attachments.is_empty());
+            assert!(this.agent_chat.attached_here.is_empty());
+            assert_eq!(this.agent_chat.entries.len(), 1);
+        });
+    }
+
+    #[gpui::test]
+    fn missing_or_relative_transcript_attachments_report_an_error_without_opening(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let folder = tempfile::tempdir().unwrap();
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.language = auris_i18n::Language::Japanese;
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models_error = Some("offline fixture".into());
+            this.agent_chat.entries = vec![ChatEntry::You {
+                text: "References".into(),
+                attachments: vec![
+                    folder.path().join("missing.wav"),
+                    PathBuf::from("relative.txt"),
+                ],
+            }];
+        });
+        crate::harness::paint(&app, cx);
+        for selector in [
+            "agent-message-attachment-0-0",
+            "agent-message-attachment-0-1",
+        ] {
+            crate::harness::click(selector, cx);
+            cx.run_until_parked();
+        }
+        assert_eq!(cx.opened_url(), None);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.entries.len(), 3);
+            assert!(this.agent_chat.entries[1..].iter().all(|entry| matches!(entry,
+                ChatEntry::Error(message) if message.starts_with("添付ファイルを開けません：")
+            )));
         });
     }
 

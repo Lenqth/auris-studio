@@ -1199,6 +1199,9 @@ mod tests {
     fn new_conversation_preserves_tools_and_draft_without_changing_music(
         cx: &mut gpui::TestAppContext,
     ) {
+        let folder = tempfile::tempdir().unwrap();
+        let reference = folder.path().join("bass.wav");
+        std::fs::write(&reference, b"fixture").unwrap();
         let (app, cx) = open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
@@ -1210,10 +1213,7 @@ mod tests {
             this.agent_chat.entries = vec![
                 ChatEntry::You {
                     text: "Bass phrase".into(),
-                    attachments: vec![
-                        PathBuf::from("References/bass.wav"),
-                        PathBuf::from("References/譜面.png"),
-                    ],
+                    attachments: vec![reference.clone(), PathBuf::from("References/譜面.png")],
                 },
                 ChatEntry::Tool {
                     name: "add_notes".into(),
@@ -1271,6 +1271,18 @@ mod tests {
         });
         assert!(cx.debug_bounds("agent-message-attachment-0-0").is_some());
         assert!(cx.debug_bounds("agent-message-attachment-0-1").is_some());
+        assert_eq!(cx.opened_url(), None);
+        click("agent-message-attachment-0-0", cx);
+        cx.run_until_parked();
+        assert_eq!(
+            cx.opened_url(),
+            Some(url::Url::from_file_path(&reference).unwrap().into())
+        );
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.attachments.is_empty());
+            assert!(this.agent_chat.attached_here.is_empty());
+            assert_eq!(this.project(), &score);
+        });
     }
 
     #[gpui::test]

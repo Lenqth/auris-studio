@@ -2004,6 +2004,14 @@ new のオプション
         ja: "添付ファイルを削除：{name}"
     }
     AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
+    AgentOpenAttachment {
+        en: "Open attachment: {path}",
+        ja: "添付ファイルを開く：{path}"
+    }
+    AgentAttachmentUnavailable {
+        en: "Cannot open attachment: {path}. Check whether the file was moved or deleted.",
+        ja: "添付ファイルを開けません：{path}。移動または削除されていないか確認してください。"
+    }
     AgentControlsScroll {
         en: "Scroll for more Agent controls",
         ja: "スクロールして他のエージェント操作を表示"
