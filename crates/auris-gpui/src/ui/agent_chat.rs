@@ -29,6 +29,8 @@ use crate::ui::widgets::{
     disclosure, menu_picker,
 };
 
+#[cfg(test)]
+mod composition_eval;
 pub(crate) mod controls;
 mod conversations;
 #[cfg(test)]
