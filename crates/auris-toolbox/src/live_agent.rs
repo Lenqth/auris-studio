@@ -68,24 +68,6 @@ pub mod transcription_import {
     }
 }
 
-/// List exact live instrument identifiers without saved-project-only arguments.
-pub fn instruments() -> String {
-    match super::headless() {
-        Ok(session) => {
-            let mut lines =
-                vec!["Instrument IDs for set_instrument's instrument field:".to_string()];
-            lines.extend(
-                session
-                    .registry()
-                    .instruments()
-                    .map(|instrument| format!("{}: {}", instrument.id, instrument.name)),
-            );
-            lines.join("\n")
-        }
-        Err(error) => format!("Cannot list instruments: {error}"),
-    }
-}
-
 /// Small per-action schemas replace the model-facing tagged union. The advanced TOML command
 /// remains an internal command, but is not offered to the model.
 pub fn definitions() -> Vec<Definition> {
@@ -97,7 +79,7 @@ pub fn definitions() -> Vec<Definition> {
             let Some(action) = branch["properties"]["action"]["const"].as_str() else {
                 continue;
             };
-            if matches!(action, "compose" | "mixer_graph") {
+            if action == "compose" {
                 continue;
             }
             if action == piano_cover::NAME {
@@ -129,44 +111,15 @@ pub fn definitions() -> Vec<Definition> {
             if let Some(required) = parameters["required"].as_array_mut() {
                 required.retain(|value| value != "action");
             }
+            if action == "edit_notes" {
+                parameters = super::parameter_schema::<super::score_input::Args>();
+            }
             tools.push(Definition {
                 name: if action == "inspect" {
                     "inspect_project".into()
                 } else {
                     action.into()
                 },
-                description,
-                parameters,
-            });
-        }
-    }
-    let root = super::parameter_schema::<auris_session::mixer_graph::commands::GraphAction>();
-    if let Some(branches) = root["oneOf"].as_array() {
-        for branch in branches {
-            let Some(action) = branch["properties"]["action"]["const"].as_str() else {
-                continue;
-            };
-            let Some((_, name)) = auris_session::mixer_graph::commands::GRAPH_TOOLS
-                .iter()
-                .find(|(key, _)| *key == action)
-            else {
-                continue;
-            };
-            let mut parameters = branch.clone();
-            let description = parameters["description"]
-                .as_str()
-                .unwrap_or(action)
-                .to_owned();
-            parameters.as_object_mut().unwrap().remove("description");
-            parameters["properties"]
-                .as_object_mut()
-                .unwrap()
-                .remove("action");
-            if let Some(required) = parameters["required"].as_array_mut() {
-                required.retain(|value| value != "action");
-            }
-            tools.push(Definition {
-                name: (*name).into(),
                 description,
                 parameters,
             });
@@ -184,58 +137,33 @@ pub fn definitions() -> Vec<Definition> {
 /// Translate a flat tool into a validated canonical command. `None` identifies a reference tool.
 /// Unknown fields and attempts to supply the action discriminator are rejected.
 pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
-    if let Some((action, _)) = auris_session::mixer_graph::commands::GRAPH_TOOLS
-        .iter()
-        .find(|(_, name)| *name == tool)
-    {
-        let mut object = args
-            .as_object()
-            .ok_or("Expected a flat argument object")?
-            .clone();
-        if object.contains_key("action") || object.contains_key("command") {
-            return Err("Pass graph fields directly, without action or command wrappers".into());
+    if tool == "edit_notes" {
+        let args: super::score_input::Args = serde_json::from_value(args.clone())
+            .map_err(|e| format!("Invalid arguments for edit_notes: {e}"))?;
+        if args.source.is_some() {
+            return Err(
+                "File input must be loaded and authorized by the tool host before editing".into(),
+            );
         }
-        object.insert("action".into(), (*action).into());
-        let operation = serde_json::from_value(Value::Object(object)).map_err(|error| {
-            format!(
-                "Invalid arguments for {tool}: {error}; read its tool definition for exact fields"
-            )
-        })?;
-        return Ok(Some(Command::MixerGraph { operation }));
+        return args.command().map(Some);
     }
-    let action = match tool {
-        "inspect_project" => "inspect",
-        "list_instruments"
-        | "instrument_diagnostics"
-        | "search_instruments"
-        | "similar_instruments"
-        | "inspect_audio"
-        | "listen"
-        | "read_notes"
-        | "add_track"
-        | "rename_track"
-        | "remove_track"
-        | "set_instrument"
-        | "add_notes"
-        | "set_tempo"
-        | "set_loop"
-        | "set_level"
-        | "normalize_mix"
-        | "set_track_state"
-        | "add_clip"
-        | "generate_phrase"
-        | "inspect_performance"
-        | "set_performance"
-        | "add_note"
-        | "remove_notes"
-        | "replace_notes"
-        | "edit_harmony"
-        | "list_voices"
-        | "inspect_singer"
-        | "set_singer_voice"
-        | "write_lyrics"
-        | "sing" => tool,
-        _ => return Ok(None),
+    if !definitions()
+        .iter()
+        .any(|definition| definition.name == tool)
+        || super::runtime::live_references()
+            .iter()
+            .any(|definition| definition.name == tool)
+        || matches!(
+            tool,
+            piano_cover::NAME | transcription_import::NAME | audio_attachment::NAME
+        )
+    {
+        return Ok(None);
+    }
+    let action = if tool == "inspect_project" {
+        "inspect"
+    } else {
+        tool
     };
     let mut object = args
         .as_object()
@@ -461,69 +389,6 @@ mod tests {
     }
 
     #[test]
-    fn every_graph_action_has_a_flat_tool_and_canonical_command() {
-        let definitions = definitions();
-        for (action, tool) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
-            let definition = definitions
-                .iter()
-                .find(|definition| definition.name == *tool)
-                .unwrap();
-            assert!(definition.parameters["properties"].get("action").is_none());
-            assert!(definition.parameters["properties"].get("project").is_none());
-            assert!(!definition.description.is_empty());
-            let args = match *action {
-                "read" => serde_json::json!({}),
-                "connect" | "disconnect" => {
-                    serde_json::json!({"source":"track:1","target":"track:2","kind":"send"})
-                }
-                "add_effect" => {
-                    serde_json::json!({"input":"track:1","effect":"auris.fx.compressor"})
-                }
-                "remove_effect" => serde_json::json!({"node":"effect:3"}),
-                "move_effect" => serde_json::json!({"node":"effect:3","position":1}),
-                "enable_effect" => serde_json::json!({"node":"effect:3","enabled":false}),
-                "set_send" => serde_json::json!({"send_id":4,"level_db":-12}),
-                "parameters" => serde_json::json!({"node":"effect:3"}),
-                "set_parameter" => {
-                    serde_json::json!({"node":"effect:3","param":"threshold_db","value":-18})
-                }
-                "set_strip" => serde_json::json!({"node":"track:1","gain_db":-12,"pan":0}),
-                _ => panic!("unhandled graph action"),
-            };
-            let Some(Command::MixerGraph { operation }) = command(tool, &args).unwrap() else {
-                panic!("graph command was not dispatched");
-            };
-            assert_eq!(operation.tool_name(), *tool);
-            let mut wire = serde_json::to_value(&operation).unwrap();
-            wire.as_object_mut().unwrap().remove("action");
-            let Some(Command::MixerGraph {
-                operation: restored,
-            }) = command(tool, &wire).unwrap()
-            else {
-                panic!("graph command did not round-trip");
-            };
-            assert_eq!(
-                serde_json::to_value(&operation).unwrap(),
-                serde_json::to_value(restored).unwrap()
-            );
-            assert_eq!(definition.parameters["additionalProperties"], false);
-            assert!(!definition.parameters.to_string().contains("\"$ref\""));
-            let canonical = serde_json::json!({"command":Command::MixerGraph { operation }});
-            assert!(
-                auris_session::agent_policy::Operation::parse("edit_project", &canonical).is_ok()
-            );
-        }
-        assert!(command("connect_mixer", &serde_json::json!({"action":"connect","source":"track:1","target":"track:2","kind":"send"})).is_err());
-        assert!(
-            command(
-                "connect_mixer",
-                &serde_json::json!({"source":"track:1","target":"track:2","kind":"chain"})
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
     fn track_kind_is_a_string_enum_and_array_errors_explain_the_field() {
         let tool = definitions()
             .into_iter()
@@ -551,177 +416,6 @@ mod tests {
             error.contains("kind") && error.contains("string") && error.contains("drum"),
             "{error}"
         );
-    }
-
-    #[test]
-    fn nested_note_errors_identify_the_index_and_expected_type() {
-        let error = command("add_notes", &serde_json::json!({"clip":1, "notes":[{"pitch":[60], "start_beat":0, "duration_beats":1, "velocity":0.8}]})).unwrap_err();
-        assert!(
-            error.contains("notes[0].pitch") && error.contains("integer"),
-            "{error}"
-        );
-    }
-
-    #[test]
-    fn live_schemas_publish_runtime_limits() {
-        let tools = definitions();
-        let schema = |name: &str| {
-            &tools
-                .iter()
-                .find(|tool| tool.name == name)
-                .unwrap()
-                .parameters
-        };
-        assert_eq!(schema("set_tempo")["properties"]["bpm"]["minimum"], 20.0);
-        assert_eq!(schema("set_tempo")["properties"]["bpm"]["maximum"], 300.0);
-        assert_eq!(schema("add_notes")["properties"]["notes"]["minItems"], 1);
-        assert_eq!(schema("add_notes")["properties"]["notes"]["maxItems"], 256);
-        assert_eq!(
-            schema("add_notes")["properties"]["notes"]["items"]["properties"]["pitch"]["anyOf"][0]
-                ["maximum"],
-            127
-        );
-        assert_eq!(schema("inspect_audio")["properties"]["bars"]["maximum"], 8);
-        for tool in ["add_clip", "set_loop"] {
-            assert_eq!(schema(tool)["properties"]["start_bar"]["minimum"], 1);
-            assert_eq!(schema(tool)["properties"]["bars"]["minimum"], 1);
-            assert_eq!(schema(tool)["properties"]["bars"]["maximum"], 1024);
-        }
-        for (field, min, max) in [("gain_db", -60.0, 12.0), ("pan", -1.0, 1.0)] {
-            assert_eq!(schema("set_level")["properties"][field]["minimum"], min);
-            assert_eq!(schema("set_level")["properties"][field]["maximum"], max);
-        }
-        for (note, start, duration) in [
-            (&schema("add_note")["properties"], "start", "beats"),
-            (
-                &schema("add_notes")["properties"]["notes"]["items"]["properties"],
-                "start_beat",
-                "duration_beats",
-            ),
-        ] {
-            assert_eq!(note["pitch"]["anyOf"][0]["maximum"], 127);
-            assert_eq!(note[start]["minimum"], 0.0);
-            assert_eq!(note[duration]["exclusiveMinimum"], 0);
-            assert_eq!(note["velocity"]["minimum"], 0.0);
-            assert_eq!(note["velocity"]["maximum"], 1.0);
-        }
-    }
-
-    #[test]
-    fn every_live_operation_has_a_round_tripping_flat_contract() {
-        let fixtures = [
-            (
-                "edit_harmony",
-                serde_json::json!({"start_bar":1,"bars":4,"key":null,"chords":"| I | IV | V | I |","section":"Chorus","clear_chords":false}),
-            ),
-            ("list_voices", serde_json::json!({"offset":0})),
-            ("inspect_singer", serde_json::json!({"track":1,"offset":0})),
-            (
-                "set_singer_voice",
-                serde_json::json!({"track":1,"voice":"/voice/test.voicevox.json","speaker":null}),
-            ),
-            (
-                "write_lyrics",
-                serde_json::json!({"clip":1,"text":"あ","from":null}),
-            ),
-            ("sing", serde_json::json!({"track":1,"seed":null})),
-            (
-                "search_instruments",
-                serde_json::json!({"query":"piano","limit":10,"offset":0,"refresh":false,"source":null,"library":null}),
-            ),
-            (
-                "similar_instruments",
-                serde_json::json!({"id":"s:test:1","limit":10,"source":null,"library":null}),
-            ),
-            (
-                "instrument_diagnostics",
-                serde_json::json!({"offset":0,"limit":10}),
-            ),
-            ("inspect_project", serde_json::json!({})),
-            (
-                "inspect_audio",
-                serde_json::json!({"start_bar":1,"bars":1,"track":null}),
-            ),
-            (
-                "listen",
-                serde_json::json!({"start_bar":1,"bars":1,"focus":null,"compare_to":null}),
-            ),
-            (
-                "list_instruments",
-                serde_json::json!({"query":null,"offset":0,"refresh":false}),
-            ),
-            ("read_notes", serde_json::json!({"clip":1,"offset":0})),
-            (
-                "add_track",
-                serde_json::json!({"name":"Drums","kind":"drum"}),
-            ),
-            ("rename_track", serde_json::json!({"track":1,"name":"Bass"})),
-            ("remove_track", serde_json::json!({"track":1})),
-            (
-                "set_instrument",
-                serde_json::json!({"track":1,"sound_id":"auris.synth.drumkit"}),
-            ),
-            (
-                "set_level",
-                serde_json::json!({"track":1,"gain_db":-6.0,"pan":0.0}),
-            ),
-            (
-                "normalize_mix",
-                serde_json::json!({"target_lufs":-23.0,"ceiling_db":-1.0}),
-            ),
-            (
-                "set_track_state",
-                serde_json::json!({"track":1,"mute":false,"solo":false}),
-            ),
-            (
-                "add_clip",
-                serde_json::json!({"track":1,"name":"Phrase","start_bar":1,"bars":4}),
-            ),
-            (
-                "add_note",
-                serde_json::json!({"clip":1,"pitch":60,"start":0.0,"beats":1.0,"velocity":0.5}),
-            ),
-            (
-                "generate_phrase",
-                serde_json::json!({"track":1,"part":"lead","start_bar":3,"bars":4,"seed":42}),
-            ),
-            (
-                "inspect_performance",
-                serde_json::json!({"clip":1,"drum_voice":null}),
-            ),
-            (
-                "set_performance",
-                serde_json::json!({"clip":1,"drum_voice":null,"settings":auris_session::live_agent::performance::PerformancePatch::default()}),
-            ),
-            (
-                "add_notes",
-                serde_json::json!({"clip":1,"notes":[{"pitch":60,"start_beat":0.0,"duration_beats":1.0,"velocity":0.5}]}),
-            ),
-            ("set_tempo", serde_json::json!({"bpm":120.0})),
-            ("set_loop", serde_json::json!({"start_bar":1,"bars":4})),
-            ("remove_notes", serde_json::json!({"clip":1,"indices":[0]})),
-            ("replace_notes", serde_json::json!({"clip":1,"notes":[]})),
-        ];
-        let tools = definitions();
-        assert_eq!(
-            tools.len(),
-            fixtures.len() + 7 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
-        );
-        for (name, args) in fixtures {
-            let tool = tools.iter().find(|tool| tool.name == name).unwrap();
-            let properties = tool.parameters["properties"].as_object().unwrap();
-            assert_eq!(
-                properties.keys().collect::<Vec<_>>(),
-                args.as_object().unwrap().keys().collect::<Vec<_>>(),
-                "{name}"
-            );
-            assert_eq!(tool.parameters["additionalProperties"], false, "{name}");
-            assert!(!tool.parameters.to_string().contains("\"$ref\""), "{name}");
-            let parsed = command(name, &args).unwrap().unwrap();
-            let mut wire = serde_json::to_value(parsed).unwrap();
-            wire.as_object_mut().unwrap().remove("action");
-            assert_eq!(wire, args, "{name}");
-        }
     }
 
     #[test]
@@ -754,30 +448,7 @@ mod tests {
         assert!(
             command("list_instruments", &serde_json::json!({}))
                 .unwrap()
-                .is_some()
-        );
-    }
-    #[test]
-    fn flat_catalog_covers_commands_without_a_tagged_union_or_file_destinations() {
-        let tools = definitions();
-        assert_eq!(
-            tools.len(),
-            38 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
-        );
-        assert!(
-            command("compose_song", &serde_json::json!({}))
-                .unwrap()
                 .is_none()
         );
-        for tool in tools {
-            assert_eq!(tool.parameters["type"], "object");
-            assert!(tool.parameters.get("oneOf").is_none());
-            assert!(tool.parameters["properties"].get("action").is_none());
-            assert!(tool.parameters["properties"].get("command").is_none());
-            assert!(tool.parameters["properties"].get("spec").is_none());
-            if tool.name != transcription_import::NAME {
-                assert!(tool.parameters["properties"].get("path").is_none());
-            }
-        }
     }
 }

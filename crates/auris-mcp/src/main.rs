@@ -45,12 +45,12 @@ impl ServerHandler for AurisMcp {
     ) -> Result<rmcp::model::ListToolsResult, ErrorData> {
         let tools = toolbox::tool_catalog()
             .into_iter()
-            .filter(|t| self.groups.allows(t.name))
+            .filter(|t| self.groups.allows(&t.name))
             .map(|mut t| {
                 toolbox::compact_parameters(&mut t.parameters);
                 rmcp::model::Tool::new(
                     t.name,
-                    toolbox::concise_description(t.description),
+                    toolbox::concise_description(&t.description),
                     t.parameters.as_object().expect("object schema").clone(),
                 )
             })
@@ -264,7 +264,7 @@ mod tests {
         let help = client
             .call_tool(
                 rmcp::model::CallToolRequestParams::new("tool_help").with_arguments(
-                    serde_json::json!({"name":"replace_notes"})
+                    serde_json::json!({"name":"edit_notes"})
                         .as_object()
                         .unwrap()
                         .clone(),
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(
             payload["parameters"],
             full.iter()
-                .find(|t| t.name == "replace_notes")
+                .find(|t| t.name == "edit_notes")
                 .unwrap()
                 .parameters
         );

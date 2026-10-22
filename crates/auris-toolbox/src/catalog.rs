@@ -11,9 +11,9 @@ pub fn argument_error_hint(name: &str, arguments: &serde_json::Value) -> Option<
 /// A model-facing tool definition, shared by both transports.
 pub struct ToolDefinition {
     /// Exact callable name.
-    pub name: &'static str,
+    pub name: String,
     /// Instructions for choosing and using the tool.
-    pub description: &'static str,
+    pub description: String,
     /// JSON Schema for the tool's arguments.
     pub parameters: serde_json::Value,
     /// Validated synchronous execution, shared by saved-project transports.
@@ -149,8 +149,8 @@ fn definition<T: schemars::JsonSchema + serde::de::DeserializeOwned + 'static>(
             "Project path or project_id from create_project/open_project.".into();
     }
     ToolDefinition {
-        name,
-        description,
+        name: name.into(),
+        description: description.into(),
         parameters,
         call: Box::new(move |value| {
             let args = serde_json::from_value(value)
@@ -167,7 +167,7 @@ struct NoArgs {}
 
 /// Complete project-tool catalog. Transport tests compare their registrations to this list.
 pub fn tool_catalog() -> Vec<ToolDefinition> {
-    vec![
+    let mut tools = vec![
         definition::<open_project::Args>(
             open_project::NAME,
             open_project::DESCRIPTION,
@@ -431,7 +431,16 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             replace_notes_batch::DESCRIPTION,
             replace_notes_batch::run,
         ),
-    ]
+    ];
+    let common = crate::session_tools::definitions();
+    tools.retain(|tool| {
+        !crate::session_tools::REMOVED_TOOLS.contains(&tool.name.as_str())
+            && !common
+                .iter()
+                .any(|replacement| replacement.name == tool.name)
+    });
+    tools.extend(common);
+    tools
 }
 
 /// Exact tool arguments, fetched when a model needs to correct a call.
@@ -461,7 +470,7 @@ pub mod tool_help {
                 )
             })?;
         let project = "/absolute/path/Song/Song.auris";
-        let examples = match tool.name {
+        let examples = match tool.name.as_str() {
             "mixer_graph" => serde_json::json!([
                 {"project":project,"operation":{"action":"read"}},
                 {"project":project,"operation":{"action":"connect","source":"track:1","target":"track:2","kind":"send"}},
@@ -470,10 +479,10 @@ pub mod tool_help {
             "add_track" => serde_json::json!([
                 {"project":project,"name":"Reverb","kind":"bus"},
                 {"project":project,"name":"Kit","kind":"drum"},
-                {"project":project,"name":"Lead","kind":"instrument","sound_id":"s:example:1"}
+                {"project":project,"name":"Lead","kind":"instrument"}
             ]),
             "add_clip" => serde_json::json!([
-                {"project":project,"track":"Lead","name":"Manual","start_bar":5,"bars":2}
+                {"project":project,"track":1,"name":"Manual","start_bar":5,"bars":2}
             ]),
             "listen" => serde_json::json!([
                 {"project":project,"start_bar":1,"bars":4,"focus":"Is the lead buried by the accompaniment?"},
@@ -511,7 +520,7 @@ pub mod tool_help {
                 {"project":project,"track":"Lead","clip":1,"take":{"kind":"seed","seed":42}}
             ]),
             "edit_notes" => serde_json::json!([
-                {"project":project,"track":"Lead","clip":1,"add":[{"pitch":"C4","bar":1,"beat":1,"beats":1,"velocity":0.75}]}
+                {"project":project,"expected_revision":"copy-from-read_notes","edits":[{"kind":"patch","clip":1,"add":[{"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}]}]}
             ]),
             "replace_notes" => serde_json::json!([
                 {"project":project,"track":"Lead","clip":1,"source":"/absolute/path/lead.json"},
@@ -789,12 +798,13 @@ mod tests {
     #[test]
     fn catalog_has_unique_names_and_help_preserves_the_exact_schema() {
         let catalog = tool_catalog();
-        let names: std::collections::BTreeSet<_> = catalog.iter().map(|tool| tool.name).collect();
+        let names: std::collections::BTreeSet<_> =
+            catalog.iter().map(|tool| tool.name.as_str()).collect();
         assert_eq!(names.len(), catalog.len());
         for tool in catalog {
             let help: serde_json::Value = serde_json::from_str(
                 &tool_help::run(&tool_help::Args {
-                    name: tool.name.into(),
+                    name: tool.name.clone(),
                 })
                 .unwrap(),
             )
@@ -823,16 +833,20 @@ mod tests {
         }
         check::<edit_clip::Args>("edit_clip");
         check::<preview::Args>("preview");
-        check::<effects::Args>("effects");
-        check::<set_effect::Args>("set_effect");
         check::<automation::Args>("automation");
-        check::<routing::Args>("routing");
         check::<mixer_graph::Args>("mixer_graph");
         check::<listen::Args>("listen");
-        check::<edit_notes::Args>("edit_notes");
-        check::<replace_notes::Args>("replace_notes");
-        check::<add_track::Args>("add_track");
-        check::<add_clip::Args>("add_clip");
+        for name in ["edit_notes", "add_track", "add_clip"] {
+            let help: serde_json::Value = serde_json::from_str(
+                &tool_help::run(&tool_help::Args { name: name.into() }).unwrap(),
+            )
+            .unwrap();
+            for example in help["examples"].as_array().unwrap() {
+                let mut args = example.clone();
+                args.as_object_mut().unwrap().remove("project");
+                assert!(crate::live_agent::command(name, &args).unwrap().is_some());
+            }
+        }
     }
 
     #[test]

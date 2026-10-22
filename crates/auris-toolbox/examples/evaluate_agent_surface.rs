@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
-            "saved_tools": saved.iter().map(|tool| tool.name).collect::<Vec<_>>(),
+            "saved_tools": saved.iter().map(|tool| tool.name.as_str()).collect::<Vec<_>>(),
             "live_tools": live.iter().map(|tool| &tool.name).collect::<Vec<_>>(),
             "live_edit_harmony_resolves_to_command": harmony.is_some(),
             "live_singer_creation": singer_reply,

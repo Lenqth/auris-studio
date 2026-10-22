@@ -1,9 +1,106 @@
-# Live Agent Panel and MCP workflows
+# Agent tools and workflows
 
-The Agent Panel edits the open session through small, flat tools. The rig, Codex CLI
-and Claude Code backends use the same live commands, permissions and Undo history. Start with
-`inspect_project`, then use `add_track`, `set_instrument`, `add_clip` and `add_notes`
-to construct the arrangement. Pass arguments directly without a command or action wrapper.
+Saved-project MCP, the built-in Claude/Codex backends and native API agents share
+canonical session commands, schemas and validation. Saved calls add `project`
+(an absolute path or project_id from open_project/create_project). Live calls act
+on the open document, remain unsaved and use one Undo step. Changed saved calls
+create one checkpoint; reads and unchanged setters do not save.
+
+Call `inspect_project` first for stable numeric track/clip IDs. `discover_tools`
+and `tool_help` describe only enabled tools in the current runtime. Saved MCP
+startup groups come from `AURIS_MCP_TOOL_GROUPS=manual,mix` (or transcription,
+vocals, composition, all). Disabled tools are omitted from discovery and listing;
+help explains that their group must be enabled. All backends have documentation
+search. Network search availability depends on the backend and permission policy.
+The execution registry supplies names, descriptions, schemas and dispatch together.
+
+## Exact authored notes
+
+Add a track with an explicit kind and name, then `add_clip` with its numeric track,
+intended clip name, one-based `start_bar` and duration `bars`. Read the clip with
+`read_notes` before editing. Pages contain up to 128 notes, exact tick/velocity
+values, storage indices and a content revision. Follow next_offset without editing
+between pages. Indices start at zero and are checked against the supplied revision.
+
+`edit_notes` accepts one batch of 1..16 clip edits. A patch addresses original
+indices for updates/removals, then appends new notes. A replacement supplies a
+complete note list; [] clears it. Updates preserve vocal metadata. Both forms
+preserve clip curves, performance, recipes and playback windows.
+
+```json
+{
+  "expected_revision":"<revision from read_notes>",
+  "edits":[{"kind":"patch","clip":2,
+    "update":[{"index":0,"velocity":0.7}],
+    "add":[{"pitch":62,"start_tick":13,"length_ticks":997,"velocity":0.8}]}]
+}
+```
+
+Times are integer clip-relative ticks. `ticks_per_quarter` is returned by reads;
+there is no conversion to rounded meter beats. Notes must fit the clip, have a
+positive tick length, MIDI pitch 0..127 and velocity 0..1. All changes validate
+before a single atomic edit. Stale revisions are refused without changing notes.
+Inline input allows 4096 note changes. For larger scores, supply `source` instead
+of `edits`: an absolute local UTF-8 JSON file containing the same array of clip
+edits, up to 16 MiB and 65536 note changes. The host reads it once and authorizes
+that immutable draft before live execution. Input is never retained as an asset.
+
+## Arrangement, curves and timeline
+
+`edit_clip` takes `clip` and a typed `operation` with `kind`. Move/copy/split/resize
+positions use absolute timeline ticks. Copy preserves the source; optional
+transposition freezes only the copied recipe. Resize changes the playback window
+without regenerating stored MIDI notes. `freeze_recipe` keeps the score and removes
+its recipe; `bake_performance` explicitly commits performance into notes/curves.
+Audio operations expose gain, recording tempo, tempo following, source-frame fades
+and crossfades. Read IDs again after splits, copies or removals.
+
+`edit_clip_curve` reads or edits an authored bend/controller lane. For sustain:
+
+```json
+{"clip":2,"curve":{"kind":"controller","number":64},"operation":{"kind":"read"}}
+```
+
+Copy the returned revision to `expected_revision`, then use `merge`, `replace` or
+`clear`. Points contain `at_tick` and `value`. Controller values are normalized
+0..1; bend uses semitones. Positions must be unique and lie inside the clip.
+Derived performance and other authored lanes are preserved.
+
+`edit_timeline` reads or edits positioned tempo and meter points. Positions use
+absolute ticks and note positions stay unchanged. Read reports native BPM bounds.
+Meter numerator is 1..32 and denominator a power of two within 1..32. Use `set_loop`
+for a one-based bar playback range.
+
+## Sound search, controls and mixing
+
+`search_instruments` takes one `request` object: mode `text` with query, `similar`
+with a reference id, or bounded `browse`. Each supports source/library filters and
+up to 50 results. Text/browse support offset paging. Copy returned IDs into
+`set_instrument` sound_id. IDs are scoped and expire on refresh, changed library
+identity, eviction or restart. Acoustic indexing runs in the background; continue
+other work while indexing and retry later. `instrument_diagnostics` pages existing
+scan and measurement errors without rescanning. A library index in a response is
+not a sound ID.
+
+`inspect_instrument` returns native parameter keys, ranges, choice previews, values
+and automation flags. `set_instrument_params` accepts one bounded `edits` batch
+with numeric track, param and value. One parameter is a one-element batch.
+Duplicate targets and invalid/discrete values are refused atomically. Existing
+parameter automation is preserved and may override static values during playback.
+
+`mixer_graph` is the single mixer entry point in every backend. Pass one `operation`
+object tagged by action. Start with `read` and copy stable track/effect node IDs.
+`set_strip` changes only supplied gain_db, pan, mute or solo fields; track:master
+accepts gain/pan. `set_outputs` replaces destinations atomically; `connect` adds a
+branch. `add_send` sets initial level and pre/post-fader tap in one edit; `set_send`
+uses the returned send ID. `set_sidechain` replaces or clears a detector source.
+Insert actions add/remove/move/enable effects and read/set native parameters.
+All connections must form a DAG. See [Mixer signal flow](mixer-graph.md).
+
+Use numeric audio inspection for measurements, then normalize_mix if a common
+source-fader move is appropriate. It preserves relative balance and can stop short
+at fader or peak limits. Sound replacement preserves faders but can change output
+level substantially, so remeasure. Audio file delivery never establishes listening.
 
 ## Generated phrases
 
@@ -72,7 +169,7 @@ outline do not create section metadata. A short loop can remain one section.
 
 ### Live vocal production
 
-Create a `singer` track and a note clip, then add its melody with `add_notes`.
+Create a `singer` track and a note clip, then add its melody with `edit_notes`.
 `list_voices` discovers installed voice entries in pages of 16; follow `next_offset`.
 Discovery does not validate or download a model. Use a returned absolute `voice` path in
 `set_singer_voice` with the numeric `track` ID. An optional `speaker` selects a named style.
@@ -104,63 +201,6 @@ All these live operations use the same permission gate for rig, Codex and Claude
 Read-only/plan mode can list voices and inspect singers but cannot edit harmony, choose a
 voice, write lyrics, or apply a sung take. Errors are returned to the model, not reported as
 successful song production.
-
-### Track and note editing
-
-`add_track` takes a name and one string kind, for example
-`{"name":"Drums","kind":"drum"}`. Kinds are `instrument`, `drum`, `singer`, `audio`
-and `bus`. Copy the returned numeric track ID into `set_instrument` and `add_clip`;
-instrument IDs are separate strings returned by `list_instruments`. Instrument and drum
-tracks start with a default sound. MIDI clips can be added to instrument, drum and singer
-tracks. Bar positions start at 1 and follow the project meter.
-
-The model chooses the harmony, melody and rhythm and writes notes explicitly.
-`add_notes` accepts up to 256 notes in one undoable edit. For example:
-
-```json
-{"clip":1,"notes":[{"pitch":62,"start_beat":0,"duration_beats":1,"velocity":0.8},{"pitch":65,"start_beat":1,"duration_beats":0.5,"velocity":0.7}]}
-```
-
-Times are quarter-note beats relative to the clip, starting at zero. Invalid batches leave
-the document unchanged. Use `set_tempo` for BPM and `set_loop` for a bar-based playback loop.
-The single-note `add_note` tool uses `start` and `beats`; `add_notes` uses `start_beat`
-and `duration_beats` within each note. Pitch is MIDI 0..127 and velocity is 0..1. Notes must
-fit inside the clip and last at least one tick. `read_notes` returns `start` and `length`
-in ticks: divide by its `ticks_per_quarter` before reusing those times in an addition.
-It pages up to 128 notes; follow `next_offset`, and read again after edits before using
-storage indices with `remove_notes`. `set_level` requires both `gain_db` (-60..12) and
-`pan` (-1..1); `set_track_state` requires both `mute` and `solo`.
-Changes work before the first save and remain unsaved. Preserve existing music and inspect
-again to verify the arrangement before claiming completion.
-
-For routing and processing, use `read_mixer_graph` and copy its stable track/effect node IDs.
-Track nodes include fader controls; inserts still process before the fader. `connect_mixer`
-connects an output, send or sidechain, and rejects cycles across all three kinds of edge.
-Use `add_mixer_effect`, `move_mixer_effect`, `enable_mixer_effect`,
-`mixer_effect_parameters`, `set_mixer_effect_parameter` and `set_mixer_send` for processing.
-Parallel processing uses bus branches. The saved-file MCP tool `mixer_graph` uses the same
-session operations and saves actual changes with a checkpoint. See [Mixer signal flow](mixer-graph.md)
-for the full tool mapping, node IDs and paging contract.
-
-Use `inspect_audio` with `{"start_bar":1,"bars":4}` to inspect the actual rendered mix.
-An optional `track` ID selects solo routing. Each request is limited to eight bars and
-30 seconds. It returns peak/RMS levels, full-scale sample counts, bar-start harmony and
-a bounded authored-note table. The score is before performance transforms and includes
-muted score parts; the rendered mix respects mute/solo. Silence has null dB levels.
-
-For an Ollama model advertising `vision`, the host also supplies an in-memory PNG:
-mel power above, a piano roll below. Use a vision-capable endpoint for OpenAI-compatible
-providers. Text-only Ollama models receive measurements without an image. The last two
-snapshots are retained only during the active turn, with their captured revisions.
-Compare the same range before and after a change; old images do not describe new edits.
-The colour scale is fixed at -90..0 dB, without automatic normalization. This is visual
-analysis with measured evidence, not an audio model listening to the music.
-
-Inspection runs off the UI thread, is cancelled when the conversation closes, and refuses
-results when the document revision changes during the render. No preview files are written.
-
-Permissions map these flat tools to the existing `edit_project.<action>` rules, so saved
-allow/deny rules and exact-command approvals continue to apply.
 
 ### Listen to the unsaved document
 
@@ -301,166 +341,6 @@ The tested AMD Windows audio runtime also had a native crash during a later mode
 reload. A running HTTP service and an earlier successful review do not establish
 restart reliability; inspect `/healthz` and the server log when a request fails.
 
-## Tool arguments and project setup
-
-### Compact MCP catalogs and references
-
-Set the server environment `AURIS_MCP_TOOL_GROUPS=manual,mix` for manual composition
-and mixing. Other groups are `transcription`, `vocals`, and `composition`; shared
-inspection, sound search, rendering, and help remain available. Omit the variable
-or use `all` for the complete catalog. Invalid groups fail startup. Disabled tools
-are excluded from `tools/list` and refused by `tools/call`; restart to change groups.
-`discover_tools` searches names and descriptions, optionally by group, in pages of
-ten. Discovery describes the complete vocabulary, including disabled groups.
-
-MCP publishes concise descriptions while keeping schema constraints. `tool_help`
-returns one tool's complete field descriptions and examples; an unknown name no
-longer returns the whole catalog. This changes presentation, not musical units.
-
-`create_project` also returns `project_id`; `open_project` registers an existing
-document. Put this explicit handle into later `project` arguments. Paths remain
-valid. There is no implicit current document. The last 64 distinct project paths
-are retained; restart and eviction invalidate handles. Reopen the path to recover.
-
-Sound IDs and report IDs are short opaque references with a random process scope
-and serial. Never persist, construct, or reuse them after restart. Sound references
-also expire on library rescan/eviction; search the same project again to recover.
-Each sound's integer `library` indexes that response's `libraries` array, whose
-entries contain `name` and `source`. These indices are page-local, not sound IDs.
-Search replies retain failure counts; `instrument_diagnostics` reads the existing
-scan/measurement diagnostics in pages of at most 16 bounded messages without rescanning.
-
-Both text and similarity search accept `source` (`builtin`, `soundfont`, `clap`,
-`vst3`) and a case-insensitive `library` substring. Filters apply before pagination
-or selecting nearest neighbors. For example, a SoundFont-only request is:
-
-```json
-{"project":"<project_id>","query":"bass","source":"soundfont","limit":5}
-```
-
-`setup_tracks` combines adding tracks, selecting sounds and opening empty clips:
-
-```json
-{
-  "project":"<project_id>",
-  "request_id":"initial-band",
-  "tracks":[
-    {"name":"Lead","kind":"instrument","sound_id":"<search id>",
-     "clip":{"name":"Song","start_bar":1,"bars":32}},
-    {"name":"Drums","kind":"drum",
-     "clip":{"name":"Song","start_bar":1,"bars":32}}
-  ]
-}
-```
-
-The batch holds 1..16 tracks with unique new names; a clip holds 1..1024 bars.
-Failure rolls back the whole document and writes nothing. Success saves once.
-Identical retries with the same `request_id` return the original response while
-the document is unchanged. Receipts retain the last 32 successful requests for
-the server lifetime. Changed arguments or a subsequently edited document require
-inspection before a new request. After receipt eviction/restart, existing names
-are rejected instead of creating duplicates. The session command is a single Undo
-step; the saved-project tool uses the normal checkpoint mechanism.
-
-### Argument recovery
-
-`tool_help` takes an exact saved-project tool `name` and returns its current schema and examples.
-Both transports inline nested argument schemas. Invalid arguments
-produce corrective feedback; unknown fields in clip edits and previews are refused.
-For example, eight bars starting at bar 1 resize with
-`action:{kind:"resize",end_bar:9}`, and a four-bar preview uses top-level
-`start_bar:1,bars:4`. Note beats follow the meter; automation uses absolute
-quarter-note beats starting at zero.
-
-For MCP note input, `bar` is at least 1 and `beat` stays within that bar's meter:
-`1 <= beat < 5` in 4/4 and `1 <= beat < 7` in 6/8. Fractional positions such as
-4.75 in 4/4 are valid; advance `bar` instead of using beat 5. Neither bar 0 nor
-out-of-bar beats are silently corrected. Each note is an object with named fields,
-including in a `replace_notes` source file. Positional arrays are rejected with an example.
-
-Use `search_instruments` with the saved `project` and focused `query` words instead
-of fetching the library. Results default to 10 (maximum 50), with `next_offset` for
-additional matches. Copy a returned `id` into `sound_id` on `add_track` or
-`set_instrument` for the same project. Search covers loaded SoundFonts, built-ins, CLAP provider presets and VST3
-advertised programs/standard `.vstpreset` files. The legacy `list_instruments` now
-returns only a compact built-in summary. Use `kind:"drum"` when adding a kit track.
-For manual composition, add a clip with `add_clip`, then fill it with `replace_notes`;
-`add_part` generates music automatically.
-
-`create_project` starts with one empty instrument track. `import_audio` copies an
-audio file onto a new track in an existing project; `import_midi` creates a new
-project retaining the MIDI clock. `export_midi` writes a new MIDI file. Creation
-and export refuse replacement; always copy the returned actual project path.
-`add_track` requires an explicit `kind` (`instrument`, `drum`, `singer`, `audio`, `bus`),
-and `add_clip` requires a `name`. A track named Reverb is a bus only when its kind
-is `bus`. Read back exact requested names and types along with musical values.
-
-`routing` lists available buses and send IDs, changes a track output, and creates
-or removes sends. Its `send_level` operation adjusts an existing send with `level_db`,
-selected by `destination` or `send_id`. `set_track_state` sets mute
-and solo explicitly, with other tracks' solo states preserved. Discover instrument
-parameters, discrete choices and ranges through `automation` with
-`target:{kind:"instrument"},operation:{action:"read"}`; `set_instrument_param`
-sets a static value and reports when an existing lane overrides it.
-
-## Local musical changes
-
-Composition stores authored motif steps and rhythm patterns in each generated clip's
-recipe. `regenerate_clips` and `edit_recipe` retain them. The required `take` in
-`regenerate_clips` is `{kind:"same"}` to keep each seed, `{kind:"next"}` to advance it,
-or `{kind:"seed",seed:42}` to choose a seed for one clip. `edit_recipe` accepts `motif` (relative
-scale steps such as `0 2 4 2`) and `rhythm` (`x` hit, `X` accent, `o` ghost, `.` rest);
-an empty string clears that authored control. Density, gate, dynamics and subdivision
-remain available for articulation and phrasing.
-
-Regeneration writes a local take in the current composer. Whole-song arrangement
-context can produce different notes from a local take even with the same seed. Freeze
-the clip to preserve an exact take. `edit_clip` with
-`action: {kind: "copy", destination: "Flute", bar: 9, transpose: 12}` copies the stored
-phrase to another note track. The source stays intact; a transposed copy is frozen so
-regeneration cannot undo the transposition. Re-read clip numbers after arrangement edits.
-
-## Effects and automation
-
-`effects` takes a project, track (or `master`) and an `operation` object:
-
-```json
-{"action":"list"}
-{"action":"add","effect":"auris.fx.compressor"}
-{"action":"sidechain","slot":1,"source":"Kick"}
-{"action":"enable","slot":1,"enabled":false}
-{"action":"move","slot":1,"position":2}
-{"action":"remove","slot":2}
-```
-
-List returns registered effect IDs and actual slot positions, enabled states and
-sidechain capability/connections. Slot numbers are 1-based and change when the chain
-is reordered. A null sidechain source disconnects it. Unsupported inputs and routing
-cycles are rejected. Use `set_effect` for static values, in the parameter's own units.
-
-`automation` takes a project, track, target and operation. Targets are
-`{kind:"mixer"}`, `{kind:"instrument"}`, `{kind:"effect",slot:1}` or
-`{kind:"send",destination:"Reverb"}`. Read with `operation:{action:"read"}` and no
-`param` to discover parameter keys, units, ranges, static values and existing lanes.
-Then put the selected key inside the operation, for example on the compressor:
-
-```json
-{
-  "action": "set",
-  "param": "threshold_db",
-  "points": [{"beat":0,"value":-6},{"beat":32,"value":-24}],
-  "curve": "linear",
-  "replace": false
-}
-```
-
-Beats are absolute quarter notes from zero, regardless of meter. Values use native
-parameter units. Set merges points by position; `replace:true` replaces the entire
-lane. `operation:{action:"clear",param:"threshold_db"}` removes it. Linear ramps and held values are supported;
-discrete parameters require hold. A batch validates every point before changing
-anything and is one session undo step. Tools checkpoint and save mutations. Removing
-an effect also removes its lanes. Read and list operations do not trigger project reloads.
-
 ## Ollama configuration and failure recovery
 
 Settings → Agent exposes context size (32K, 64K, 128K, 256K) and thinking (model default,
@@ -591,136 +471,3 @@ threshold (70% or 85%; default 85%), or after 16 completed exchanges. It can be
 turned off in Permissions. Counts are estimates, not tokenizer measurements;
 the existing per-request context guard remains the final budget check. Compression
 never runs in the middle of a tool operation or an approval request.
-
-### Complete note batches
-
-For manual MCP composition, generate a UTF-8 JSON array with a script and pass its
-absolute path to `replace_notes`. The file must be readable on the MCP server.
-The response reports the resulting count without echoing the score. For example:
-
-```json
-{"project":"C:/Music/Song/Song.auris","track":"Lead","clip":1,"source":"C:/Music/lead.json"}
-```
-
-The source file contains notes directly, without an object wrapper:
-
-```json
-[
-  {"pitch":60,"bar":1,"beat":1,"beats":0.5,"velocity":0.8},
-  {"pitch":"D4","bar":1,"beat":1.5,"beats":0.5}
-]
-```
-
-MCP note timing uses song-relative, one-based bars and beats in the current meter.
-`beats` is the held duration, and omitted velocity defaults to 0.75. Pitches accept
-integer MIDI keys, decimal strings, or scientific names: `60`, `"60"`, and `"C4"`
-are equivalent. This also applies to `edit_notes`. Errors identify the zero-based
-array index and offending field with an example. Unknown fields such as `length`
-are rejected; use `beats`.
-
-Supply exactly one of `source` or `notes`. Inline `notes` follows the same format;
-`notes: []` explicitly clears the clip. A batch may contain at most 65,536 notes,
-and a source file at most 16 MiB. UTF-8 BOMs are accepted. The entire batch must
-validate and fit the selected clip before any change is saved. Repeating the same
-sequence creates neither duplicates nor another checkpoint. The source file is
-read once and is not stored as a project asset.
-
-In the live Agent Panel, `replace_notes` takes a stable numeric `clip` ID and an
-inline array of at most 4,096 notes using `start_beat`, `duration_beats`, and
-required `velocity`, just like `add_notes`. These times are zero-based,
-clip-relative quarter-note beats. Prefer short clips and bounded phrases. Live
-replacement uses the existing replacement permission policy and one ordinary Undo
-step; edits remain unsaved. Both interfaces preserve clip length, curves,
-transforms and recipe. Replacing notes discards the old notes, including their
-per-note lyrics and expression; later explicit regeneration can rewrite the score.
-
-### Live instrument library
-
-Prefer `search_instruments` with focused words such as `piano` or `Surge bass`.
-All words must occur in the sound name, library/vendor, or published preset tags,
-case-insensitively. Empty queries are rejected. Results default to 10, with a hard
-maximum of 50; continue with the same query and `next_offset`. Search is performed
-on a worker so native preset discovery does not block the window. Returned IDs go
-into `set_instrument.sound_id`. This includes exact CLAP provider presets and
-VST3 unit programs/standard files, rather than just a plugin's default patch.
-
-`similar_instruments` takes an `id` from that search and `limit` (default 10,
-maximum 50). It excludes the reference and returns other measurable sources by
-Euclidean distance in the full standardized timbre feature space. It shares the
-map's MIDI 48/60/72, velocity 0.45/0.85 reference recordings with a 600 ms hold and
-400 ms release. It does not rank by PCA coordinates, sound names, or musical quality.
-Drum kits are excluded from melodic comparisons; silent and failed sources are
-reported. Only feature vectors are retained, not every preset's audio buffers.
-
-The first similarity request returns `status: indexing` and starts background
-measurement. Continue other work and retry later with the same ID; do not refresh
-while indexing. Completed indexes are reused for that library snapshot. IDs are
-process-local and tied to the project/session; search again after restarting the
-server, replacing libraries, cache eviction, or explicit `refresh: true`. Refresh
-is allowed only at offset 0 and invalidates the old acoustic index and IDs.
-
-CLAP requires the plugin to advertise discovery and preset-load support. VST3
-programs require a published program list, or standard `.vstpreset` files in the
-platform preset folders. A plugin's private browser and proprietary file format
-are not automatically accessible. Missing discovery support is reported; the
-plugin's default patch can still be selected. Native preset selection stores the
-actual plugin state in the project so reopening does not depend on an index handle.
-
-`list_instruments` reads the open session's built-in instruments, loaded SoundFont
-presets and installed CLAP/VST3 instruments, including the Studio settings' additional
-plugin folders. Effects are excluded. Use `query` to search names, libraries or vendors;
-follow `next_offset` with the same query for pages of 50 sounds. Plugin scan failures
-are reported separately. Use `refresh: true` on the first page after installation.
-
-Pass an exact returned `id` as `set_instrument`'s `instrument`, together with the
-numeric track ID from `inspect_project`. This changes the existing track through
-Undo-aware session commands, preserving its clips, notes, mixer and effect chain.
-Old instrument parameter automation is removed when changing instruments. Selecting
-another SoundFont preset on an existing sampler preserves its sampler controls.
-Unknown, unloaded or expired sounds fail without modifying the document. Plugin
-handles expire on rescan; no tool accepts an arbitrary plugin file path. No project
-or audio files are written by live selection. MCP operates on saved project files.
-
-### Bounded score and mixer reads
-
-`notes` returns up to 128 notes per call. Pass the returned `next_offset` with the
-same track and clip. Note numbers remain global in time order; re-read after edits.
-`mixer` pages strips with `offset` and `limit` (default 16, maximum 32), including
-master as the final strip. Gain points, section midpoints, effect parameters and
-choices are limited previews of 16 entries each.
-
-Use `automation` for details. `operation: {"action":"read"}` returns parameter
-summaries, with `next_offset` for the next parameter page. Add an exact `param`
-to read its points and choices. Follow `lane.next_offset` using `offset`, and
-`next_choice_offset` using `choice_offset`. Pages default to 32 and cap at 128.
-Parameter summaries contain point/choice counts without their arrays; set/clear
-returns only the selected key, saved status and resulting point count.
-
-Live `inspect_project` returns effect identity and enabled state, never the
-plugin's opaque restoration state or full saved parameter map.
-
-### Large analysis and composition reports
-
-`describe`, `inspect_composition`, `analyze_music`, `analyze`, and the audio/chord/
-instrument analysis and transcription tools preserve their original result shape
-when the compact response fits in 8 KiB. Larger results return `report_id`, `data`,
-`total`, and `next_offset`. Use `read_report` with that ID; copy a nested
-`report_path` into `path` to select that part of the immutable snapshot. Array
-and object offsets count entries; string offsets count Unicode characters.
-Pages contain at most 32 entries or 1024 string characters and remain within
-8 KiB. A page may return fewer entries to fit the byte budget.
-
-Reading a snapshot does not repeat inference, project edits, or MIDI export.
-Snapshots live in temporary files and expire on server restart or eviction.
-The process retains at most eight reports and evicts older reports when their
-combined size would exceed 128 MiB; a single larger report is kept on its own.
-After expiry, recreate reports with read-only arguments (`apply:false`, without
-MIDI output). After edits, deliberately run the analysis again for current data.
-These limits bound model-facing data, not analysis runtime or temporary storage
-for a single report. Snapshot files are removed when their cache entries drop.
-
-Inline `replace_notes.notes` and `edit_notes.add`/`remove` are limited to 256
-entries. For a larger complete score, generate a JSON array file and pass its
-absolute server path as `replace_notes.source`; the file limit remains 65536
-notes and 16 MiB. Do not split a replacement into multiple replacement calls,
-since each call replaces the previous complete clip.

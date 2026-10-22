@@ -1,5 +1,37 @@
 use super::*;
 
+#[test]
+fn replacement_routes_and_configured_sends_are_atomic_and_undoable() {
+    let mut session = session();
+    let source = session.add_default_instrument_track("Source").unwrap();
+    let bus = session.add_bus_track("Bus");
+    let from = format!("track:{}", source.0);
+    let destination = format!("track:{}", bus.0);
+    let before = session.project().clone();
+    apply(
+        &mut session,
+        json!({"action":"set_outputs","source":from,"targets":[destination]}),
+    )
+    .unwrap();
+    assert_eq!(
+        session.project().track(source).unwrap().outputs,
+        vec![Output::Bus(bus)]
+    );
+    session.undo();
+    assert_eq!(session.project(), &before);
+    let result=apply(&mut session,json!({"action":"add_send","source":from,"target":destination,"level_db":-17.5,"pre_fader":true})).unwrap();
+    assert!(result["result"]["send_id"].is_u64());
+    let send = &session.project().track(source).unwrap().sends[0];
+    assert_eq!(
+        (send.target, send.level_db, send.pre_fader),
+        (bus, -17.5, true)
+    );
+    session.undo();
+    assert_eq!(session.project(), &before);
+    assert!(apply(&mut session,json!({"action":"add_send","source":from,"target":destination,"level_db":-70,"pre_fader":true})).is_err());
+    assert_eq!(session.project(), &before);
+}
+
 fn session() -> Session {
     Session::new(crate::SessionOptions::headless()).unwrap()
 }

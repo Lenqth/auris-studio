@@ -96,17 +96,19 @@ For example, after reading the actual IDs:
 {"project":"/absolute/path/Song/Song.auris","operation":{"action":"connect","source":"track:1","target":"track:2","kind":"send"}}
 ```
 
-The rig agent uses flat tools against the open document:
+The same `mixer_graph` operation object is used by the built-in Claude, Codex and
+native API agents; omit only the saved-project `project` field for live calls.
 
-| Task | Live tool | MCP operation action |
-| --- | --- | --- |
-| Read graph | `read_mixer_graph` | `read` |
-| Fader / pan / mute / solo | `set_mixer_track` | `set_strip` |
-| Connect / disconnect | `connect_mixer` / `disconnect_mixer` | `connect` / `disconnect` |
-| Add / remove inserts | `add_mixer_effect` / `remove_mixer_effect` | `add_effect` / `remove_effect` |
-| Reorder / bypass | `move_mixer_effect` / `enable_mixer_effect` | `move_effect` / `enable_effect` |
-| Send level / tap | `set_mixer_send` | `set_send` |
-| Read / set effect parameters | `mixer_effect_parameters` / `set_mixer_effect_parameter` | `parameters` / `set_parameter` |
+| Task | Operation action |
+| --- | --- |
+| Read graph | `read` |
+| Fader / pan / mute / solo | `set_strip` |
+| Replace outputs / add or remove a branch | `set_outputs` / `connect` / `disconnect` |
+| Create configured send / change level or tap | `add_send` / `set_send` |
+| Replace or clear detector source | `set_sidechain` |
+| Add / remove inserts | `add_effect` / `remove_effect` |
+| Reorder / bypass | `move_effect` / `enable_effect` |
+| Read / set native effect parameters | `parameters` / `set_parameter` |
 
 Both transports use the same session operations and cycle checks. Invalid and
 stale edges are refused before editing. Connecting an output adds a destination

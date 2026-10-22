@@ -7,13 +7,11 @@ use crate::prelude::*;
 fn choir_parameters_and_automation_round_trip_and_render_without_assets() {
     let scratch = Scratch::new("physical-choir");
     let mut live = session();
-    let sounds: serde_json::Value = serde_json::from_str(
-        &live
-            .agent_instrument_list(Some("choir"), 0, false, &[])
-            .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(sounds["sounds"][0]["id"], "auris.physical.choir");
+    assert!(
+        live.registry()
+            .instruments()
+            .any(|instrument| instrument.id == "auris.physical.choir")
+    );
     let track = live
         .add_instrument_track("Choir", "auris.physical.choir")
         .unwrap();

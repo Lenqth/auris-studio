@@ -307,26 +307,23 @@ without command or action wrappers. Use the numeric IDs returned by inspection a
 For a song request, choose the harmony, melody, rhythm and arrangement yourself.
 For a new composition, use edit_harmony to write the chosen key and Roman-numeral chord progression into the document before writing the notes. Audible chord notes alone do not populate the project's harmony map. Update an existing progression only when the requested edit calls for it; edit_harmony never regenerates existing notes.
 Plan the song's form too, and write each section with edit_harmony section, start_bar and bars (section alone is valid). Use meaningful labels such as Intro, Verse, Chorus, Bridge and Outro where musically appropriate, in the user's language if requested. Clip names or a prose outline do not populate the section lane. Cover the intended arrangement with named sections and verify their positions and lengths with inspect_project before claiming a new composition is finished. Keep short loops or explicitly requested single-section pieces simple; preserve existing structure on local edits.
-For a vocal song, add_track kind singer, add_clip and add_notes create the score. list_voices discovers local voice paths; set_singer_voice selects a voice and optional named speaker. inspect_singer reads back the selected voice, offered speakers and take state. write_lyrics uses the singer clip ID and optional zero-based storage index from read_notes; verify the filled count and lyrics. Then sing creates the actual playback take on a worker; inspect_singer must report a current take before claiming vocals are finished. Missing voices, unavailable synthesis servers and failed/cancelled synthesis are errors, never completed vocals. These live operations leave the document unsaved and are undoable.
+For a vocal song, add_track kind singer, add_clip and edit_notes create the score. list_voices discovers local voice paths; set_singer_voice selects a voice and optional named speaker. inspect_singer reads back the selected voice, offered speakers and take state. write_lyrics uses the singer clip ID and optional zero-based storage index from read_notes; verify the filled count and lyrics. Then sing creates the actual playback take on a worker; inspect_singer must report a current take before claiming vocals are finished. Missing voices, unavailable synthesis servers and failed/cancelled synthesis are errors, never completed vocals. These live operations leave the document unsaved and are undoable.
 
 For alternative audio transcription, export_audio_attachment returns a separate exact-original local file plus its byte hash. Analyze it with local tools/code when available; delivery is not listening. Import your complete source-second note JSON with import_transcription, inline or by absolute local path. Declare the real method/model/program hash and uncertainty; never impersonate Basic Pitch or invent notes from filenames/tempo/chords. Supply every note's relative strength; if dynamics were not measured, disclose uniform dynamics in limitations. Provenance claims are not verification. create_piano_cover remains the bundled local recognizer shortcut. Read back notes and inspect_audio before claiming a finished cover.
-Use search_instruments with focused query words (default 10 results), then set_instrument with the returned id. Use similar_instruments for acoustic alternatives; while status is indexing, continue other work and retry later. Do not fetch the whole library by default. IDs include SoundFont sounds and advertised CLAP/VST3 presets; never invent IDs. Use add_track, add_clip and add_notes to write your music.
-Batch a short phrase into one add_notes call. Each note has pitch, start_beat,
-duration_beats and velocity. start_beat is its position; duration_beats is its length.
-For example, two successive quarter notes:
-{\"clip\":1,\"notes\":[{\"pitch\":62,\"start_beat\":0,\"duration_beats\":1,\"velocity\":0.8},
-{\"pitch\":65,\"start_beat\":1,\"duration_beats\":1,\"velocity\":0.8}]}.
-Use short batches of up to 32 notes to keep each response manageable.
-When the user requests automatic phrase generation, use generate_phrase with track, part, start_bar, bars and optional seed. It uses the existing key/chords and meter; write melodic harmony with edit_harmony first. Parts are lead, chords, pad, arp, bass, drums, kick, snare and hat. Use instrument tracks for melodic parts and drum tracks for percussion. The tool adds a new clip with a retained recipe; read its returned clip ID and note count, then read_notes and inspect_audio to check the result. A zero-note clip is not a finished phrase. Use add_notes/replace_notes when writing specific authored notes instead.
+Use search_instruments with request {\"mode\":\"text\",\"query\":\"piano\"} for focused search.
+The same request supports mode similar with id, or mode browse with bounded pagination. Continue other work while acoustic status is indexing.
+Copy returned sound_id exactly; use add_track, add_clip and edit_notes to write music.
+Use edit_notes with expected_revision from read_notes and edits containing kind patch or replace.
+Note timing uses exact clip-relative integer start_tick/length_ticks, not beats. Use the returned ticks_per_quarter.
+For a new phrase, add_clip then read_notes for its revision before writing notes. Keep calls bounded.
+When the user requests automatic phrase generation, use generate_phrase with track, part, start_bar, bars and optional seed. It uses the existing key/chords and meter; write melodic harmony with edit_harmony first. Parts are lead, chords, pad, arp, bass, drums, kick, snare and hat. Use instrument tracks for melodic parts and drum tracks for percussion. The tool adds a new clip with a retained recipe; read its returned clip ID and note count, then read_notes and inspect_audio to check the result. A zero-note clip is not a finished phrase. Use edit_notes when writing specific authored notes instead.
 For non-destructive arrangement and playing feel, use inspect_performance then set_performance with the clip ID and only requested settings. Supported controls include swing, gate, humanize, independent expression, strum, ghosts, pitch gestures, octave copies and captured reference grooves. Inspect provides active stages, units and drum writer names. Use drum_voice only for one named kit writer; omit it for whole-clip edits. Ratios are 0..1, swing is 50..75 percent, times are milliseconds and pitch depths are semitones. Unspecified settings, stored notes, authored curves and recipes are preserved; reset removes only explicitly named stage families. Read back inspect_performance and inspect_audio afterward. Do not replace authored notes to imitate a performance-parameter edit.
-Use multiple tracks for distinct musical parts and set_level to balance them.
-Read read_mixer_graph before routing or effect edits. Track nodes combine the source and fader controls;
-inserts still run before the fader. Copy stable track/effect node IDs instead of effect positions.
-set_mixer_track changes fader/pan/mute/solo by node ID; track:master accepts fader/pan.
-connect_mixer adds output branches without replacing existing destinations, or adds bus sends/sidechains; every connection must remain a DAG. disconnect_mixer removes only the named edge; no outputs means disconnected.
-Parallel effects use add_track kind bus and sends. Use add_mixer_effect, move_mixer_effect,
-enable_mixer_effect and mixer_effect_parameters/set_mixer_effect_parameter for inserts;
-set_mixer_send changes existing send levels and tap points. Re-read the graph after edits.
+Use multiple tracks for distinct musical parts. mixer_graph accepts one operation object with an action tag.
+Start with operation {\"action\":\"read\"}. Copy stable track/effect node IDs.
+set_strip changes only supplied gain_db/pan/mute/solo fields. set_outputs replaces outputs atomically;
+connect adds a branch. add_send creates a configured send; set_sidechain replaces or clears a sidechain.
+Use add_effect/remove_effect/move_effect/enable_effect/parameters/set_parameter for inserts.
+All routing must remain a DAG. Re-read the graph after edits.
 After changing a sound, inspect_audio again: retained faders do not guarantee retained loudness.
 Set an explicit loudness and true-peak goal. normalize_mix moves all source faders together
 and reports the measured result; a peak or fader limit can leave it short of the goal.
@@ -339,8 +336,7 @@ Set the tempo with set_tempo and a loop region with set_loop for loop background
 Preserve existing tracks and notes unless the user explicitly requests their removal.
 Make dependent edits one at a time. Changes are unsaved and undoable. Verify with
 inspect_project before claiming completion. Use read_notes before changing existing notes.
-For adding notes, times are zero-based quarter-note beats relative to the clip. read_notes
-returns ticks; divide by ticks_per_quarter before reusing times. Correct the named field after
+Note timing uses the exact returned tick values and the revision from read_notes. Correct the named field after
 an argument error; never repeat unchanged failed arguments. Use search_documentation
 only when a tool description does not answer an application question.
 Use inspect_audio to check a short rendered passage before and after edits. It returns measured
@@ -563,14 +559,7 @@ fn strip_markup(text: &str) -> String {
 /// File-free editing and reference tools for the rig agent.
 fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
     let mut builder = builder.preamble(preamble()).tool(InternetSearch);
-    let edits_live_document = bridge.is_some();
     for definition in toolbox::live_agent::definitions() {
-        // The legacy unfiltered list opens every installed native provider. Keep its small
-        // built-in-only fallback for the standalone agent, but never offer the synchronous
-        // session implementation to the window bridge; focused search has a bounded worker path.
-        if !offer_live_definition(&definition.name, edits_live_document) {
-            continue;
-        }
         let tool_name = definition.name.clone();
         let bridge = bridge.clone();
         builder = builder.dynamic_tool(rig::tool::DynamicTool::new(
@@ -581,12 +570,6 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
                 let bridge = bridge.clone();
                 let name = tool_name.clone();
                 Box::pin(async move {
-                    if bridge.is_none() && name == "list_instruments" {
-                        return tokio::task::spawn_blocking(toolbox::live_agent::instruments)
-                            .await
-                            .map(ToolOutput::text)
-                            .map_err(|error| ToolExecutionError::other(error.to_string()));
-                    }
                     if bridge.is_none()
                         && let Some(result) =
                             toolbox::runtime::call_live_reference(&name, args.clone())
@@ -620,10 +603,6 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
         ));
     }
     builder.build()
-}
-
-fn offer_live_definition(name: &str, edits_live_document: bool) -> bool {
-    !edits_live_document || name != "list_instruments"
 }
 
 /// Builds the agent for whichever door the options chose.
@@ -1407,10 +1386,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn live_bridge_hides_the_legacy_synchronous_instrument_scan() {
-        assert!(!offer_live_definition("list_instruments", true));
-        assert!(offer_live_definition("search_instruments", true));
-        assert!(offer_live_definition("list_instruments", false));
+    fn live_catalog_has_only_the_shared_instrument_search() {
+        let names = toolbox::live_agent::definitions();
+        assert!(
+            !names
+                .iter()
+                .any(|definition| definition.name == "list_instruments")
+        );
+        assert!(
+            names
+                .iter()
+                .any(|definition| definition.name == "search_instruments")
+        );
     }
 
     #[tokio::test]
@@ -1667,7 +1654,7 @@ mod tests {
     #[test]
     fn denied_tool_result_keeps_the_permission_reason() {
         let kind = rig_core::effect::EffectKind::ToolCall {
-            name: "set_level".into(),
+            name: "mixer_graph".into(),
             args: "{}".into(),
         };
         let report = rig_core::error::ErrorReport::new(
@@ -1919,7 +1906,7 @@ mod tests {
     async fn ollama_output_limit_stops_partial_answers_and_tool_turns() {
         for message in [
             serde_json::json!({"role":"assistant","content":"I have finished the first"}),
-            serde_json::json!({"role":"assistant","content":"","tool_calls":[{"function":{"name":"list_instruments","arguments":{}}}]}),
+            serde_json::json!({"role":"assistant","content":"","tool_calls":[{"function":{"name":"capabilities","arguments":{}}}]}),
         ] {
             let truncated = serde_json::json!({
                 "model":"mock", "created_at":"2026-09-06T00:00:00Z",
@@ -2006,7 +1993,7 @@ mod tests {
 
     #[tokio::test]
     async fn repeated_invalid_calls_stop_before_a_third_execution() {
-        let call = r#"{"role":"assistant","tool_calls":[{"id":"bad","type":"function","function":{"name":"set_level","arguments":"{}"}}]}"#;
+        let call = r#"{"role":"assistant","tool_calls":[{"id":"bad","type":"function","function":{"name":"mixer_graph","arguments":"{}"}}]}"#;
         let (url, seen) = mock_server(vec![completion(call, "tool_calls"); 3]);
         let Command::Run(options) = parse(
             &format!("--provider openai --model mock --url {url}"),
@@ -2036,7 +2023,7 @@ mod tests {
     #[tokio::test]
     async fn unknown_tool_names_get_corrective_feedback_and_can_recover() {
         let bad = r#"{"role":"assistant","tool_calls":[{"id":"bad","type":"function","function":{"name":"list_preset","arguments":"{}"}}]}"#;
-        let corrected = r#"{"role":"assistant","tool_calls":[{"id":"good","type":"function","function":{"name":"list_instruments","arguments":"{}"}}]}"#;
+        let corrected = r#"{"role":"assistant","tool_calls":[{"id":"good","type":"function","function":{"name":"capabilities","arguments":"{}"}}]}"#;
         let done = r#"{"role":"assistant","content":"The instruments are available."}"#;
         let (url, seen) = mock_server(vec![
             completion(bad, "tool_calls"),
@@ -2066,14 +2053,14 @@ mod tests {
         assert_eq!(requests.len(), 3);
         assert!(requests[1].contains("Tool 'list_preset' is unavailable"));
         assert!(requests[1].contains("No tool in this batch was executed"));
-        assert!(requests[2].contains("Instrument IDs for set_instrument"));
+        assert!(requests[2].contains("open_document"));
     }
 
     #[tokio::test]
     async fn unknown_tools_and_skipped_writes_cannot_loop_indefinitely() {
         let outside = std::env::temp_dir().join("auris-agent-outside-workspace.auris");
         let outside_args = serde_json::json!({"project":outside}).to_string();
-        for (tool, args) in [("nonexistent_tool", "{}"), ("set_level", &outside_args)] {
+        for (tool, args) in [("nonexistent_tool", "{}"), ("mixer_graph", &outside_args)] {
             let call = serde_json::json!({
                 "role":"assistant", "tool_calls":[{
                     "id":"repeated", "type":"function",
@@ -2103,19 +2090,19 @@ mod tests {
             assert!(error.contains("failed twice"), "{error}");
             let requests = seen.lock().unwrap();
             assert_eq!(requests.len(), 3);
-            if tool == "set_level" {
+            if tool == "mixer_graph" {
                 assert!(requests[1].contains("unknown field"));
                 assert!(requests[1].contains("project"));
             }
         }
     }
 
-    /// The whole loop against a scripted model: the "model" asks for `list_instruments`, the tool
+    /// The whole loop against a scripted model: the "model" asks for `capabilities`, the tool
     /// really runs, its answer really goes back over the wire, and the final text reaches the
     /// caller. No network, no key, no model — but every seam of this frontend crossed once.
     #[tokio::test]
     async fn the_tool_loop_runs_end_to_end_against_a_scripted_model() {
-        let call = r#"{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"list_instruments","arguments":"{}"}}]}"#;
+        let call = r#"{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"capabilities","arguments":"{}"}}]}"#;
         let done = r#"{"role":"assistant","content":"The instruments are listed above."}"#;
         let with_usage = |response: String, input, output| {
             let mut response: serde_json::Value = serde_json::from_str(&response).unwrap();
@@ -2170,24 +2157,12 @@ mod tests {
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 2);
         assert!(
-            requests[0].contains("\"list_instruments\""),
+            requests[0].contains("\"capabilities\""),
             "the tool is offered to the model: {}",
             requests[0]
         );
         assert!(requests[1].contains("\"tool\""), "{}", requests[1]);
-        let listing = toolbox::live_agent::instruments();
-        let first_instrument = listing
-            .lines()
-            .nth(1)
-            .unwrap()
-            .split_whitespace()
-            .next()
-            .unwrap();
-        assert!(
-            requests[1].contains(first_instrument),
-            "the toolbox's own answer rode back to the model: {}",
-            requests[1]
-        );
+        assert!(requests[1].contains("open_document"));
     }
 
     /// An attached file really crosses the wire: base64 in an `input_audio` content part,
@@ -2299,102 +2274,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rig_exposes_only_live_editing_and_read_only_references() {
+    async fn rig_exposes_the_shared_canonical_live_catalog_and_internet_search() {
         let Command::Run(options) = parse("--provider openai --model mock", &no_env).unwrap()
         else {
             panic!()
         };
         let agent = build_agent(&options).unwrap();
         let actual = agent.tool_definitions(None).await.unwrap();
-        let mut names: Vec<_> = actual.iter().map(|tool| tool.name.as_str()).collect();
-        names.sort_unstable();
-        assert!(!names.contains(&"compose_song"));
-        assert!(names.contains(&"add_notes"));
-        assert!(names.contains(&"generate_phrase"));
-        assert!(names.contains(&"inspect_performance"));
-        assert!(names.contains(&"set_performance"));
-        assert!(names.contains(&"inspect_project"));
-        assert!(names.contains(&"set_level"));
-        assert!(names.contains(&"normalize_mix"));
-        assert!(!names.contains(&"edit_project"));
-        assert!(!names.contains(&"spec_reference"));
-        assert!(!names.contains(&"list_progressions"));
-        assert!(names.contains(&"replace_notes"));
-        assert!(names.contains(&"search_instruments"));
-        assert!(names.contains(&"similar_instruments"));
-        assert!(names.contains(&"instrument_diagnostics"));
-        assert!(names.contains(&"export_audio_attachment"));
-        assert!(names.contains(&"import_transcription"));
-        for name in [
-            "edit_harmony",
-            "list_voices",
-            "inspect_singer",
-            "set_singer_voice",
-            "write_lyrics",
-            "sing",
-        ] {
-            assert!(names.contains(&name), "{name}");
+        let names: std::collections::BTreeSet<_> =
+            actual.iter().map(|tool| tool.name.as_str()).collect();
+        assert_eq!(names.len(), actual.len());
+        for expected in toolbox::live_agent::definitions() {
+            let tool = actual
+                .iter()
+                .find(|tool| tool.name == expected.name)
+                .unwrap();
+            assert_eq!(tool.parameters, expected.parameters);
+            assert_eq!(tool.description, expected.description);
         }
-        assert_eq!(
-            names.len(),
-            39 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
-        );
-        for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
+        for name in [
+            "mixer_graph",
+            "edit_notes",
+            "read_notes",
+            "generate_phrase",
+            "tool_help",
+            "search_documentation",
+            "search_internet",
+        ] {
             assert!(names.contains(name), "{name}");
         }
-        for expected in toolbox::live_agent::definitions() {
-            let exposed = actual
-                .iter()
-                .find(|tool| tool.name == expected.name)
-                .unwrap();
-            assert_eq!(exposed.parameters, expected.parameters, "{}", expected.name);
-            assert_eq!(
-                exposed.description, expected.description,
-                "{}",
-                expected.name
-            );
-        }
-        let catalog = toolbox::tool_catalog();
         for name in [
-            "create_project",
+            "list_instruments",
+            "similar_instruments",
+            "add_note",
+            "add_notes",
+            "remove_notes",
+            "replace_notes",
+            "set_level",
+            "set_track_state",
             "compose",
-            "render",
-            "export_midi",
-            "import_midi",
+            "edit_project",
         ] {
-            assert!(
-                catalog.iter().any(|tool| tool.name == name),
-                "MCP retains {name}"
-            );
-            assert!(!names.contains(&name));
+            assert!(!names.contains(name), "{name}");
         }
-        assert!(names.contains(&"listen"));
-        let listen = actual.iter().find(|tool| tool.name == "listen").unwrap();
-        assert!(listen.parameters["properties"].get("compare_to").is_some());
-        assert!(listen.parameters["properties"].get("project").is_none());
-        for expected in catalog
-            .iter()
-            .filter(|tool| matches!(tool.name, "search_documentation" | "search_internet"))
-        {
-            let exposed = actual
-                .iter()
-                .find(|tool| tool.name == expected.name)
-                .unwrap();
-            assert_eq!(exposed.parameters, expected.parameters);
-        }
-        for tool in &actual {
-            let schema = tool.parameters.to_string();
-            for field in ["output", "project", "path", "stems", "midi_output"] {
-                if field == "path" && tool.name == "import_transcription" {
-                    continue;
-                }
-                assert!(
-                    !schema.contains(&format!("\"{field}\":")),
-                    "{}: {field}",
-                    tool.name
-                );
-            }
-        }
+        assert_eq!(actual.len(), toolbox::live_agent::definitions().len() + 1);
     }
 
     #[test]

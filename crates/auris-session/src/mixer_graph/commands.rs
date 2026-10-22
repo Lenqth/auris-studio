@@ -8,21 +8,6 @@ use crate::{Edit, ParamTarget, Session, prelude::*};
 #[cfg(test)]
 mod tests;
 
-/// Canonical graph actions and their flat live-agent tool names.
-pub const GRAPH_TOOLS: &[(&str, &str)] = &[
-    ("read", "read_mixer_graph"),
-    ("connect", "connect_mixer"),
-    ("disconnect", "disconnect_mixer"),
-    ("add_effect", "add_mixer_effect"),
-    ("remove_effect", "remove_mixer_effect"),
-    ("move_effect", "move_mixer_effect"),
-    ("enable_effect", "enable_mixer_effect"),
-    ("set_send", "set_mixer_send"),
-    ("parameters", "mixer_effect_parameters"),
-    ("set_parameter", "set_mixer_effect_parameter"),
-    ("set_strip", "set_mixer_track"),
-];
-
 /// A connection's role; every role participates in DAG validation.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
@@ -37,10 +22,37 @@ pub enum ConnectionKind {
     Sidechain,
 }
 
-/// One graph operation, using stable node IDs returned by read_mixer_graph.
+/// One graph operation, using stable node IDs returned by mixer_graph read.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GraphAction {
+    /// Replace all output destinations atomically. Empty targets explicitly disconnects the source.
+    SetOutputs {
+        /// Stable source track node.
+        source: String,
+        /// Stable bus track nodes or track:master, at most 64.
+        #[schemars(length(max = 64))]
+        targets: Vec<String>,
+    },
+    /// Create a send with its level and tap in one Undo step. Returns the stable send ID.
+    AddSend {
+        /// Stable source track node.
+        source: String,
+        /// Stable destination bus node.
+        target: String,
+        /// Initial level, -60..0 dB.
+        #[schemars(range(min = -60, max = 0))]
+        level_db: f32,
+        /// True taps after inserts before the fader.
+        pre_fader: bool,
+    },
+    /// Replace or clear an effect's sidechain atomically.
+    SetSidechain {
+        /// Stable effect node.
+        node: String,
+        /// Stable source track node; null clears the sidechain.
+        source: Option<String>,
+    },
     /// Set fader/pan/mute/solo on a stable track node. Supply at least one control; omitted controls stay unchanged. track:master accepts gain_db and pan. Static values may be overridden by automation. The edit is one undo step.
     SetStrip {
         /// Exact track node ID, including track:master.
@@ -64,11 +76,11 @@ pub enum GraphAction {
         /// Node page size, default 32, clamped to 1..64.
         limit: Option<usize>,
     },
-    /// Connect two nodes from read_mixer_graph. source must be a track output; output/send target a bus track node (output also accepts master), sidechain targets an effect. All cycles are refused, including mixed output/send/sidechain paths. Duplicate connections are unchanged. Changes are undoable.
+    /// Connect two nodes from mixer_graph read. source must be a track output; output/send target a bus track node (output also accepts master), sidechain targets an effect. All cycles are refused, including mixed output/send/sidechain paths. Duplicate connections are unchanged. Changes are undoable.
     Connect {
-        /// Exact track node ID or its output_node from read_mixer_graph.
+        /// Exact track node ID or its output_node from mixer_graph read.
         source: String,
-        /// Exact track or effect node ID from read_mixer_graph.
+        /// Exact track or effect node ID from mixer_graph read.
         target: String,
         /// output, send, or sidechain; must match the target port.
         kind: ConnectionKind,
@@ -88,7 +100,7 @@ pub enum GraphAction {
     AddEffect {
         /// Input node ID, including track:master for the master strip.
         input: String,
-        /// Exact available_effects ID returned by read_mixer_graph.
+        /// Exact available_effects ID returned by mixer_graph read.
         effect: String,
     },
     /// Remove an effect node and its automation. Other effect node IDs stay valid.
@@ -131,11 +143,11 @@ pub enum GraphAction {
         /// Page size, default 32, clamped to 1..64.
         limit: Option<usize>,
     },
-    /// Set one static parameter on an effect node using a key from mixer_effect_parameters and its native units. Refuses non-finite or out-of-range values. Automation, if present, still overrides the static value.
+    /// Set one static parameter on an effect node using a key from mixer_graph parameters and its native units. Refuses non-finite or out-of-range values. Automation, if present, still overrides the static value.
     SetParameter {
         /// Exact effect node ID.
         node: String,
-        /// Exact parameter key from mixer_effect_parameters.
+        /// Exact parameter key from mixer_graph parameters.
         param: String,
         /// Value in the parameter's native units.
         value: f32,
@@ -143,20 +155,23 @@ pub enum GraphAction {
 }
 
 impl GraphAction {
-    /// Flat tool name used by the live agent and permission rules.
-    pub fn tool_name(&self) -> &'static str {
+    /// Operation name within the single mixer_graph tool.
+    pub fn operation_name(&self) -> &'static str {
         match self {
-            Self::Read { .. } => "read_mixer_graph",
-            Self::Connect { .. } => "connect_mixer",
-            Self::Disconnect { .. } => "disconnect_mixer",
-            Self::AddEffect { .. } => "add_mixer_effect",
-            Self::RemoveEffect { .. } => "remove_mixer_effect",
-            Self::MoveEffect { .. } => "move_mixer_effect",
-            Self::EnableEffect { .. } => "enable_mixer_effect",
-            Self::SetSend { .. } => "set_mixer_send",
-            Self::Parameters { .. } => "mixer_effect_parameters",
-            Self::SetParameter { .. } => "set_mixer_effect_parameter",
-            Self::SetStrip { .. } => "set_mixer_track",
+            Self::SetOutputs { .. } => "set_outputs",
+            Self::AddSend { .. } => "add_send",
+            Self::SetSidechain { .. } => "set_sidechain",
+            Self::Read { .. } => "read",
+            Self::Connect { .. } => "connect",
+            Self::Disconnect { .. } => "disconnect",
+            Self::AddEffect { .. } => "add_effect",
+            Self::RemoveEffect { .. } => "remove_effect",
+            Self::MoveEffect { .. } => "move_effect",
+            Self::EnableEffect { .. } => "enable_effect",
+            Self::SetSend { .. } => "set_send",
+            Self::Parameters { .. } => "parameters",
+            Self::SetParameter { .. } => "set_parameter",
+            Self::SetStrip { .. } => "set_strip",
         }
     }
 
@@ -167,7 +182,13 @@ impl GraphAction {
 
     /// Whether the ordinary live-agent policy asks before removing content or connections.
     pub fn requires_confirmation(&self) -> bool {
-        matches!(self, Self::Disconnect { .. } | Self::RemoveEffect { .. })
+        matches!(
+            self,
+            Self::Disconnect { .. }
+                | Self::RemoveEffect { .. }
+                | Self::SetOutputs { .. }
+                | Self::SetSidechain { .. }
+        )
     }
 }
 
@@ -191,13 +212,13 @@ impl Session {
             .nodes
             .into_iter()
             .find(|node| node.key() == key)
-            .ok_or_else(|| format!("Unknown mixer node '{key}'; read_mixer_graph again"))
+            .ok_or_else(|| format!("Unknown mixer node '{key}'; mixer_graph read again"))
     }
 
     fn graph_effect(&self, key: &str) -> Result<(Option<TrackId>, EffectSlotId), String> {
         match self.graph_node(key)? {
             MixerNode::Effect(owner, slot) => Ok((owner, slot)),
-            _ => Err("Expected an effect node ID from read_mixer_graph".into()),
+            _ => Err("Expected an effect node ID from mixer_graph read".into()),
         }
     }
 
@@ -237,6 +258,78 @@ impl Session {
         let mut changed = false;
         let mut result = Value::Null;
         match operation {
+            GraphAction::SetOutputs { source, targets } => {
+                if targets.len() > 64 {
+                    return Err("At most 64 output destinations".into());
+                }
+                let MixerNode::Strip(Some(track)) = self.graph_node(source)? else {
+                    return Err("Expected source track node".into());
+                };
+                let outputs = targets
+                    .iter()
+                    .map(|target| {
+                        let (_, destination) =
+                            self.graph_connection(source, target, ConnectionKind::Output)?;
+                        match destination {
+                            MixerNode::Strip(owner) => {
+                                Ok(owner.map_or(Output::Master, Output::Bus))
+                            }
+                            _ => Err("Expected bus or master track node".to_string()),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let revision = self.revision();
+                self.set_track_outputs(track, &outputs).map_err(error)?;
+                changed = self.revision() != revision;
+            }
+            GraphAction::AddSend {
+                source,
+                target,
+                level_db,
+                pre_fader,
+            } => {
+                if !(-60.0..=0.0).contains(level_db) {
+                    return Err("level_db must be finite and within -60..0".into());
+                }
+                let (track, destination) =
+                    self.graph_connection(source, target, ConnectionKind::Send)?;
+                let MixerNode::Strip(Some(bus)) = destination else {
+                    return Err("Expected destination bus node".into());
+                };
+                self.begin_transaction(Edit::ExternalChanges);
+                let applied = self.add_send(track, bus).and_then(|send| {
+                    self.set_send_level(track, send, *level_db)?;
+                    self.set_send_pre_fader(track, send, *pre_fader)?;
+                    Ok(send)
+                });
+                let send = match applied {
+                    Ok(send) => {
+                        self.end_transaction();
+                        send
+                    }
+                    Err(failure) => {
+                        self.revert_transaction();
+                        return Err(error(failure));
+                    }
+                };
+                changed = true;
+                result = json!({"send_id":send.0,"level_db":level_db,"pre_fader":pre_fader});
+            }
+            GraphAction::SetSidechain { node, source } => {
+                let (owner, slot) = self.graph_effect(node)?;
+                let source = source
+                    .as_ref()
+                    .map(|source| {
+                        self.graph_connection(source, node, ConnectionKind::Sidechain)
+                            .map(|(track, _)| track)
+                    })
+                    .transpose()?;
+                changed = self.effect_sidechain(owner, slot) != source;
+                if changed {
+                    self.set_effect_sidechain(owner, slot, source)
+                        .map_err(error)?;
+                }
+            }
             GraphAction::SetStrip {
                 node,
                 gain_db,
@@ -374,7 +467,7 @@ impl Session {
                                 .contains(&target.map_or(Output::Master, Output::Bus))
                         }) {
                             return Err(
-                                "This output edge no longer exists; read_mixer_graph again".into(),
+                                "This output edge no longer exists; mixer_graph read again".into(),
                             );
                         }
                         changed = true;
@@ -394,7 +487,7 @@ impl Session {
                             .map(|send| send.id)
                             .collect();
                         if sends.len() != 1 {
-                            return Err("Expected exactly one matching send edge; use send_id from read_mixer_graph".into());
+                            return Err("Expected exactly one matching send edge; use send_id from mixer_graph read".into());
                         }
                         self.remove_send(from, sends[0]).map_err(error)?;
                         changed = true;
@@ -403,7 +496,7 @@ impl Session {
                         let (owner, slot) = self.graph_effect(target)?;
                         if self.effect_sidechain(owner, slot) != Some(from) {
                             return Err(
-                                "This sidechain edge no longer exists; read_mixer_graph again"
+                                "This sidechain edge no longer exists; mixer_graph read again"
                                     .into(),
                             );
                         }
@@ -474,7 +567,7 @@ impl Session {
                             .find(|send| send.id.0 == *send_id)
                             .map(|send| (track.id, send.clone()))
                     })
-                    .ok_or("Unknown send_id; read_mixer_graph again")?;
+                    .ok_or("Unknown send_id; mixer_graph read again")?;
                 changed = level_db.is_some_and(|value| value != send.level_db)
                     || pre_fader.is_some_and(|value| value != send.pre_fader);
                 if changed {
@@ -503,7 +596,7 @@ impl Session {
                 let (target, descriptor) = parameters
                     .iter()
                     .find(|(_, descriptor)| descriptor.key.as_ref() == param)
-                    .ok_or("Unknown parameter key; use mixer_effect_parameters")?;
+                    .ok_or("Unknown parameter key; use mixer_graph parameters")?;
                 if !value.is_finite() || !(descriptor.min..=descriptor.max).contains(value) {
                     return Err(
                         "value must be finite and within the parameter's native range".into(),

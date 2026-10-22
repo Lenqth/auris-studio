@@ -16,9 +16,6 @@ impl ToolHost {
 
     pub(crate) fn definitions() -> Vec<toolbox::live_agent::Definition> {
         toolbox::live_agent::definitions()
-            .into_iter()
-            .filter(|definition| definition.name != "list_instruments")
-            .collect()
     }
 
     pub(crate) fn contains(name: &str) -> bool {
@@ -43,6 +40,29 @@ impl ToolHost {
         if let Some(result) = toolbox::runtime::call_live_reference(name, args.clone()) {
             permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
             return result.map(|text| json!({"event":"edit_result","ok":true,"text":text}));
+        }
+        if name == "edit_notes" && args["source"].is_string() {
+            let request: toolbox::score_input::Args =
+                serde_json::from_value(args).map_err(|e| e.to_string())?;
+            permissions::authorize(
+                Some(&self.bridge),
+                "cli_file_read",
+                &json!({"path":request.source,"purpose":"Read exact note edits"}).to_string(),
+            )
+            .await?;
+            let command = tokio::task::spawn_blocking(move || request.command())
+                .await
+                .map_err(|e| e.to_string())??;
+            permissions::authorize(
+                Some(&self.bridge),
+                "edit_project",
+                &json!({"command":command}).to_string(),
+            )
+            .await?;
+            return self
+                .bridge
+                .exchange(json!({"event":"edit","command":command}))
+                .await;
         }
         if name == toolbox::live_agent::audio_attachment::NAME {
             let args: toolbox::live_agent::audio_attachment::Args =

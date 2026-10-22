@@ -29,6 +29,31 @@ use crate::history::Edit;
 use super::Session;
 
 impl Session {
+    /// Resize a playback window while preserving authored MIDI notes and generation recipes.
+    /// Audio windows use the ordinary validated trim command.
+    pub fn resize_clip_window(&mut self, clip: ClipId, end: Ticks) -> Result<(), SessionError> {
+        let Some((_, midi)) = self.project.midi_clip(clip) else {
+            return self.resize_clip(clip, end);
+        };
+        if end <= midi.start {
+            return Err(SessionError::InvalidNotes(
+                "end_tick must be after the clip start".into(),
+            ));
+        }
+        let mut candidate = midi.clone();
+        candidate.length = end - midi.start;
+        candidate.looped_note_instances()?;
+        if candidate.length == midi.length {
+            return Ok(());
+        }
+        self.record(Edit::ExternalChanges);
+        *self
+            .project
+            .midi_clip_mut(clip)
+            .ok_or(SessionError::UnknownClip(clip.0))? = candidate;
+        self.invalidate_graph();
+        Ok(())
+    }
     /// Writes a point on one of a clip's curves, replacing whatever was at that instant.
     ///
     /// Kept in time order here rather than wherever a curve is read, because everything that

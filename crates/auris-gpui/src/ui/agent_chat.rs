@@ -2439,31 +2439,14 @@ impl AurisApp {
     }
 
     fn start_agent_sound_search(&mut self, command: &serde_json::Value) -> Result<(), String> {
-        use auris_session::{SoundSearch, live_agent::Command};
+        use auris_session::live_agent::Command;
         if self.agent_chat.bound_project.as_deref() != self.session.path() {
             return Err("The open document changed; start a new conversation".into());
         }
         self.check_agent_edit(command)?;
         let (request, refresh) =
             match serde_json::from_value(command.clone()).map_err(|e| e.to_string())? {
-                Command::SearchInstruments {
-                    query,
-                    limit,
-                    offset,
-                    refresh,
-                    filter,
-                } => (
-                    SoundSearch::Text {
-                        query,
-                        limit,
-                        offset,
-                        filter,
-                    },
-                    refresh,
-                ),
-                Command::SimilarInstruments { id, limit, filter } => {
-                    (SoundSearch::Similar { id, limit, filter }, false)
-                }
+                Command::SearchInstruments { request, refresh } => (request, refresh),
                 _ => return Err("Expected a sound search command".into()),
             };
         let job = self.session.sound_library_job(&self.settings.plugin_paths);
@@ -2641,10 +2624,7 @@ impl AurisApp {
                     }
                     continue;
                 }
-                if matches!(
-                    command["action"].as_str(),
-                    Some("search_instruments" | "similar_instruments")
-                ) {
+                if matches!(command["action"].as_str(), Some("search_instruments")) {
                     if let Err(error) = self.start_agent_sound_search(&command)
                         && let Some(link) = &self.agent_chat.link
                     {

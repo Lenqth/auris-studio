@@ -89,43 +89,44 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.create_piano_cover",
     "edit_project.import_transcription",
     "export_audio_attachment",
-    "edit_project.read_mixer_graph",
-    "edit_project.connect_mixer",
-    "edit_project.disconnect_mixer",
-    "edit_project.add_mixer_effect",
-    "edit_project.remove_mixer_effect",
-    "edit_project.move_mixer_effect",
-    "edit_project.enable_mixer_effect",
-    "edit_project.set_mixer_send",
-    "edit_project.mixer_effect_parameters",
-    "edit_project.set_mixer_effect_parameter",
-    "edit_project.set_mixer_track",
+    "edit_project.mixer_graph.read",
+    "edit_project.mixer_graph.set_outputs",
+    "edit_project.mixer_graph.add_send",
+    "edit_project.mixer_graph.set_sidechain",
+    "edit_project.mixer_graph.connect",
+    "edit_project.mixer_graph.disconnect",
+    "edit_project.mixer_graph.add_effect",
+    "edit_project.mixer_graph.remove_effect",
+    "edit_project.mixer_graph.move_effect",
+    "edit_project.mixer_graph.enable_effect",
+    "edit_project.mixer_graph.set_send",
+    "edit_project.mixer_graph.parameters",
+    "edit_project.mixer_graph.set_parameter",
+    "edit_project.mixer_graph.set_strip",
     "edit_project.inspect",
     "edit_project.inspect_audio",
     "edit_project.listen",
     "edit_project.read_notes",
+    "edit_project.edit_notes",
+    "edit_project.edit_clip",
+    "edit_project.edit_clip_curve",
+    "edit_project.edit_timeline",
     "edit_project.compose",
     "edit_project.add_track",
     "edit_project.rename_track",
     "edit_project.remove_track",
     "edit_project.set_instrument",
-    "edit_project.set_level",
+    "edit_project.inspect_instrument",
+    "edit_project.set_instrument_params",
     "edit_project.normalize_mix",
-    "edit_project.set_track_state",
     "edit_project.add_clip",
     "edit_project.generate_phrase",
     "edit_project.inspect_performance",
     "edit_project.set_performance",
-    "edit_project.add_note",
-    "edit_project.add_notes",
-    "edit_project.replace_notes",
     "edit_project.set_tempo",
     "edit_project.set_loop",
-    "edit_project.remove_notes",
-    "list_instruments",
     "search_instruments",
     "instrument_diagnostics",
-    "similar_instruments",
     "list_presets",
     "list_progressions",
     "spec_reference",
@@ -153,41 +154,36 @@ impl Operation {
             let action = command["action"].as_str().ok_or("Missing action")?;
             if let crate::live_agent::Command::MixerGraph { operation } = &parsed {
                 return Ok(Self {
-                    name: format!("edit_project.{}", operation.tool_name()),
+                    name: format!("edit_project.mixer_graph.{}", operation.operation_name()),
                     mutating: !operation.is_read_only(),
                     confirm: operation.requires_confirmation(),
                 });
             }
-            let mutating = !matches!(
-                parsed,
-                crate::live_agent::Command::Inspect {}
-                    | crate::live_agent::Command::InspectPerformance { .. }
-                    | crate::live_agent::Command::ListVoices { .. }
-                    | crate::live_agent::Command::InspectSinger { .. }
-                    | crate::live_agent::Command::InspectAudio { .. }
-                    | crate::live_agent::Command::Listen { .. }
-                    | crate::live_agent::Command::ReadNotes { .. }
-                    | crate::live_agent::Command::ListInstruments { .. }
-                    | crate::live_agent::Command::SearchInstruments { .. }
-                    | crate::live_agent::Command::InstrumentDiagnostics { .. }
-                    | crate::live_agent::Command::SimilarInstruments { .. }
-            );
-            let confirm = matches!(
-                parsed,
-                crate::live_agent::Command::Listen { .. }
-                    | crate::live_agent::Command::RemoveTrack { .. }
-                    | crate::live_agent::Command::RemoveNotes { .. }
-                    | crate::live_agent::Command::ReplaceNotes { .. }
-                    | crate::live_agent::Command::Compose { replace: true, .. }
-            );
+            let mutating = !matches!(&parsed, crate::live_agent::Command::EditTimeline { operation } if operation.is_read_only())
+                && !matches!(&parsed, crate::live_agent::Command::EditClipCurve { operation, .. } if operation.is_read_only())
+                && !matches!(
+                    parsed,
+                    crate::live_agent::Command::Inspect {}
+                        | crate::live_agent::Command::InspectInstrument { .. }
+                        | crate::live_agent::Command::InspectPerformance { .. }
+                        | crate::live_agent::Command::ListVoices { .. }
+                        | crate::live_agent::Command::InspectSinger { .. }
+                        | crate::live_agent::Command::InspectAudio { .. }
+                        | crate::live_agent::Command::Listen { .. }
+                        | crate::live_agent::Command::ReadNotes { .. }
+                        | crate::live_agent::Command::SearchInstruments { .. }
+                        | crate::live_agent::Command::InstrumentDiagnostics { .. }
+                );
+            let confirm = matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
+                || matches!(&parsed, crate::live_agent::Command::EditNotes { edits, .. } if edits.iter().any(crate::live_agent::note_editing::NoteEdit::requires_confirmation))
+                || matches!(
+                    parsed,
+                    crate::live_agent::Command::Listen { .. }
+                        | crate::live_agent::Command::RemoveTrack { .. }
+                        | crate::live_agent::Command::Compose { replace: true, .. }
+                );
             Ok(Self {
-                name: if matches!(
-                    action,
-                    "list_instruments"
-                        | "search_instruments"
-                        | "instrument_diagnostics"
-                        | "similar_instruments"
-                ) {
+                name: if matches!(action, "search_instruments" | "instrument_diagnostics") {
                     action.into()
                 } else {
                     format!("edit_project.{action}")
@@ -214,6 +210,14 @@ impl Operation {
 impl Policy {
     /// Enforce deny rules first, then the mode, allow rules, and ordinary defaults.
     pub fn decide(&self, operation: &Operation) -> Decision {
+        if let Some(unknown) = self.allow.iter().chain(&self.deny).find(|rule| {
+            !OPERATIONS.contains(&rule.as_str())
+                && !["*", "edit_project.*"].contains(&rule.as_str())
+        }) {
+            return Decision::Deny(format!(
+                "Unknown permission operation '{unknown}'; update the permission rules before using agent tools"
+            ));
+        }
         let matches = |rules: &[String]| {
             rules.iter().any(|rule| {
                 rule == "*"

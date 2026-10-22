@@ -2,6 +2,10 @@
 //! Saved-project MCP registers and dispatches through the toolbox execution registry.
 //! Runtime discovery and help use the same enabled tool set as execution.
 //! Built-in backends share documentation search, discovery, help and capability tools.
+//! Saved and live tools share exact tick-based note editing, stable object references and
+//! content revisions. The single mixer_graph entry point dispatches typed graph operations.
+//! Arrangement, authored controller curves, timeline and performance commands live in the session;
+//! saved execution adds persistence, while the desktop retains document ownership and Undo.
 //!
 //!
 //! The workspace has no root crate — `cargo doc` on it produces a list of crates and no

@@ -34,11 +34,11 @@ impl ToolGroups {
             return INSTRUCTIONS.into();
         }
         let mut text = String::from(
-            "Control saved Auris projects. Respond in the user's language. Use project_id from create_project/open_project in project arguments; paths also work. Make dependent edits sequentially. Use tool_help for exact fields and examples after an error; correct arguments before retrying. Use describe for track IDs and clip numbers; refresh clip numbers after arrangement edits. Read large reports with read_report instead of repeating a write. Never invent successful results. ",
+            "Control saved Auris projects. Respond in the user's language. Use project_id from create_project/open_project in project arguments; paths also work. Make dependent edits sequentially. Use tool_help for exact fields and examples after an error; correct arguments before retrying. Use inspect_project for stable numeric track/clip IDs. Read large reports with read_report instead of repeating a write. Never invent successful results. ",
         );
         for group in &self.0 {
             text.push_str(match group.as_str() {
-                "manual" => "For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes or replace_notes writes notes. ",
+                "manual" => "For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes writes exact tick-based notes. ",
                 "mix" => "For mixing, read mixer_graph for stable track/effect nodes and outgoing edges; follow next_offset. Track nodes contain fader controls; inserts still process before the fader. Edit graph connections and inserts through mixer_graph; all output/send/sidechain cycles are rejected. Parallel effects use bus branches. Inspect mixer parameters in native dB/pan units, and measure or listen to the same range before and after edits. After sound changes remeasure loudness; normalize_mix moves source faders toward a requested target. Render inspects the encoded WAV; use verify_render for target, peak and ending checks. ",
                 "transcription" => "For transcription, analyze the source and fetch tool_help before applying recognized notes. ",
                 "vocals" => "For vocals, inspect singer availability and write lyrics before singing. ",
@@ -81,7 +81,7 @@ pub fn tool_group(name: &str) -> &'static str {
         | "forget_progression"
         | "list_progressions"
         | "list_presets"
-        | "add_part"
+        | "generate_phrase"
         | "accompany" => "composition",
         "create_project"
         | "import_audio"
@@ -93,7 +93,11 @@ pub fn tool_group(name: &str) -> &'static str {
         | "set_instrument"
         | "add_clip"
         | "edit_clip"
-        | "notes"
+        | "read_notes"
+        | "edit_clip_curve"
+        | "edit_timeline"
+        | "inspect_performance"
+        | "set_performance"
         | "edit_notes"
         | "replace_notes"
         | "replace_notes_batch"
@@ -184,7 +188,7 @@ pub mod discover_tools {
             .filter(|t| {
                 args.group
                     .as_deref()
-                    .is_none_or(|g| g == tool_group(t.name))
+                    .is_none_or(|g| g == tool_group(&t.name))
                     && words.split_whitespace().all(|w| {
                         format!("{} {}", t.name, t.description)
                             .to_lowercase()
@@ -199,7 +203,7 @@ pub mod discover_tools {
             .iter()
             .skip(args.offset)
             .take(10)
-            .map(|t| serde_json::json!({"name":t.name,"group":tool_group(t.name)}))
+            .map(|t| serde_json::json!({"name":t.name,"group":tool_group(&t.name)}))
             .collect::<Vec<_>>();
         let next = args.offset + page.len();
         Ok(serde_json::json!({"tools":page,"total":matches.len(),"next_offset":(next<matches.len()).then_some(next)}).to_string())

@@ -36,7 +36,6 @@ mod composition_preview;
 pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
 mod batch_editing;
 pub use batch_editing::{InstrumentParamChange, InstrumentParamEdit};
-mod agent_instruments;
 mod setup_tracks;
 mod sound_search;
 mod sounds;
@@ -334,7 +333,6 @@ pub struct Session {
     /// Shared with the registry, whose sampler factory captured it — which is the only way sample
     /// data reaches an instrument the registry builds.
     fonts: SharedSoundFonts,
-    agent_instruments: agent_instruments::PluginCatalog,
     /// Separates discovery handles belonging to different unsaved sessions.
     sound_scope: String,
     pub(crate) listening: crate::audio_audition::ListeningHistory,
@@ -695,7 +693,6 @@ impl Session {
             voices: HashMap::new(),
             voice_load_generations: HashMap::new(),
             acceleration: auris_singer::Acceleration::default(),
-            agent_instruments: agent_instruments::PluginCatalog::default(),
             sound_scope: crate::transient_id::transient_id("session"),
             hosted: hosted::HostedPlugins::default(),
             vst3: vst3::Vst3Plugins::default(),

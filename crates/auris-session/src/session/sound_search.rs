@@ -31,6 +31,18 @@ pub enum SoundSearch {
         #[serde(default, flatten)]
         filter: SoundFilter,
     },
+    /// Browse one bounded page, optionally filtered by source and library.
+    Browse {
+        /// Maximum results, 1..50.
+        #[serde(default = "default_limit")]
+        limit: usize,
+        /// Zero-based result offset.
+        #[serde(default)]
+        offset: usize,
+        /// Optional source and library constraints.
+        #[serde(default, flatten)]
+        filter: SoundFilter,
+    },
     /// Other sounds ordered by full standardized acoustic feature distance.
     Similar {
         /// Exact sound ID returned by search_instruments for this project/session.
@@ -1298,10 +1310,15 @@ impl SoundLibraryJob {
             return Err("Sound search cancelled".into());
         }
         let limit = match &request {
-            SoundSearch::Text { limit, .. } | SoundSearch::Similar { limit, .. } => *limit,
+            SoundSearch::Text { limit, .. }
+            | SoundSearch::Similar { limit, .. }
+            | SoundSearch::Browse { limit, .. } => *limit,
         };
         if !(1..=50).contains(&limit) {
             return Err("limit must be between 1 and 50".into());
+        }
+        if refresh && matches!(&request, SoundSearch::Browse { offset, .. } if *offset != 0) {
+            return Err("Refresh only with offset 0".into());
         }
         if let SoundSearch::Text { query, offset, .. } = &request {
             if query.trim().is_empty() {
@@ -1318,7 +1335,21 @@ impl SoundLibraryJob {
                 .map_err(|_| "Unknown or expired sound ID; search_instruments first")?;
         }
         let catalog = self.catalog_with_cancel(refresh, cancelled)?;
+        let request = match request {
+            SoundSearch::Browse {
+                limit,
+                offset,
+                filter,
+            } => SoundSearch::Text {
+                query: String::new(),
+                limit,
+                offset,
+                filter,
+            },
+            request => request,
+        };
         match request {
+            SoundSearch::Browse { .. } => unreachable!("browse normalized above"),
             SoundSearch::Text {
                 query,
                 offset,

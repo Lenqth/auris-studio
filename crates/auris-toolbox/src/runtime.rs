@@ -145,11 +145,11 @@ fn discover_saved(
     let matches: Vec<_> = tool_catalog()
         .into_iter()
         .filter(|tool| {
-            groups.allows(tool.name)
+            groups.allows(&tool.name)
                 && args
                     .group
                     .as_deref()
-                    .is_none_or(|group| tool_group(tool.name) == group)
+                    .is_none_or(|group| tool_group(&tool.name) == group)
                 && query.split_whitespace().all(|word| {
                     format!("{} {}", tool.name, tool.description)
                         .to_lowercase()
@@ -157,7 +157,7 @@ fn discover_saved(
                 })
         })
         .collect();
-    let tools: Vec<_> = matches.iter().skip(args.offset).take(10).map(|tool| json!({"name":tool.name,"group":tool_group(tool.name),"description":crate::concise_description(tool.description)})).collect();
+    let tools: Vec<_> = matches.iter().skip(args.offset).take(10).map(|tool| json!({"name":tool.name,"group":tool_group(&tool.name),"description":crate::concise_description(&tool.description)})).collect();
     let next = args.offset.saturating_add(tools.len());
     Ok(json!({"tools":tools,"total":matches.len(),"next_offset":(next < matches.len()).then_some(next)}).to_string())
 }
