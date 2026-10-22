@@ -301,11 +301,19 @@ pub struct History {
     past: Vec<Snapshot>,
     future: Vec<Snapshot>,
     limit: usize,
+    pub(crate) recording_agent: Option<AgentGroup>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct AgentGroup {
+    pub(crate) id: u64,
+    pub(crate) interrupted: bool,
 }
 
 struct Snapshot {
     edit: Edit,
     project: Project,
+    agent: Option<AgentGroup>,
 }
 
 impl Default for History {
@@ -328,6 +336,7 @@ impl History {
             past: Vec::new(),
             future: Vec::new(),
             limit: limit.max(1),
+            recording_agent: None,
         }
     }
 
@@ -337,9 +346,21 @@ impl History {
     /// redo stack, which is what every editor does after diverging from an undone branch.
     pub fn push(&mut self, edit: Edit, project: &Project) {
         self.future.clear();
+        if let Some(group) = self.recording_agent
+            && let Some(last) = self.past.last_mut()
+            && last.agent.is_some_and(|held| held.id == group.id)
+        {
+            last.agent = Some(group);
+            return;
+        }
         self.past.push(Snapshot {
-            edit,
+            edit: if self.recording_agent.is_some() {
+                Edit::ExternalChanges
+            } else {
+                edit
+            },
             project: project.clone(),
+            agent: self.recording_agent,
         });
         if self.past.len() > self.limit {
             self.past.remove(0);
@@ -400,6 +421,7 @@ impl History {
         self.future.push(Snapshot {
             edit: snapshot.edit,
             project: current.clone(),
+            agent: snapshot.agent,
         });
         Some(snapshot.project)
     }
@@ -410,6 +432,7 @@ impl History {
         self.past.push(Snapshot {
             edit: snapshot.edit,
             project: current.clone(),
+            agent: snapshot.agent,
         });
         Some(snapshot.project)
     }
@@ -432,6 +455,25 @@ impl History {
     /// `true` when there is something to redo.
     pub fn can_redo(&self) -> bool {
         !self.future.is_empty()
+    }
+
+    pub(crate) fn agent_target(&self, redo: bool) -> Option<u64> {
+        let stack = if redo { &self.future } else { &self.past };
+        stack
+            .last()?
+            .agent
+            .filter(|group| !group.interrupted)
+            .map(|group| group.id)
+    }
+
+    pub(crate) fn agent_summary(&self, redo: bool) -> serde_json::Value {
+        let stack = if redo { &self.future } else { &self.past };
+        serde_json::json!({"available_group":self.agent_target(redo),"total":stack.len(),
+            "entries":stack.iter().rev().take(8).map(|snapshot|serde_json::json!({
+                "agent_group":snapshot.agent.map(|group|group.id),
+                "interrupted":snapshot.agent.is_some_and(|group|group.interrupted),
+                "edit":format!("{:?}",snapshot.edit)
+            })).collect::<Vec<_>>()})
     }
 
     /// Forgets all history, for example after opening a different project.

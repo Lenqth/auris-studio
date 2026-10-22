@@ -186,7 +186,7 @@ fn installed_agent_edits_and_exports_the_unsaved_document(cx: &mut gpui::TestApp
     ] {
         assert_eq!(report[key], true, "{key}: {report}");
     }
-    assert_eq!(report["undo_steps"], 3, "{report}");
+    assert_eq!(report["undo_steps"], 1, "{report}");
     assert_eq!(report["midi_notes"], 3, "{report}");
     for name in ["preview", "render", "export_midi", "verify_render"] {
         assert_eq!(report["successful_calls"][name], 1, "{name}: {report}");

@@ -5,6 +5,17 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
+/// One bounded page of authored notes in a multi-clip read.
+#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NoteRead {
+    /// Stable MIDI clip ID.
+    pub clip: u64,
+    /// First original storage index; defaults to zero.
+    #[serde(default)]
+    pub offset: usize,
+}
+
 /// A newly authored note in clip-relative ticks.
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -86,6 +97,48 @@ impl NoteEdit {
 }
 
 impl Session {
+    pub(super) fn agent_read_notes(&self, requests: &[NoteRead]) -> Result<String, String> {
+        if requests.is_empty() || requests.len() > 8 {
+            return Err("Supply 1..8 distinct clip pages".into());
+        }
+        let mut seen = HashSet::new();
+        let mut pages = Vec::with_capacity(requests.len());
+        for request in requests {
+            if !seen.insert(request.clip) {
+                return Err("Duplicate clip in read_notes".into());
+            }
+            let (_, clip) = self
+                .project()
+                .midi_clip(ClipId(request.clip))
+                .ok_or("Unknown MIDI clip ID")?;
+            if request.offset > clip.notes.len() {
+                return Err("Offset exceeds the note count".into());
+            }
+            let notes: Vec<_> = clip
+                .notes
+                .iter()
+                .enumerate()
+                .skip(request.offset)
+                .take(128)
+                .map(|(index, note)| {
+                    let mut value =
+                        serde_json::to_value(note).map_err(|error| error.to_string())?;
+                    let fields = value.as_object_mut().ok_or("Expected a note object")?;
+                    fields.remove("start");
+                    fields.remove("length");
+                    fields.insert("start_tick".into(), note.start.raw().into());
+                    fields.insert("length_ticks".into(), note.length.raw().into());
+                    fields.insert("index".into(), index.into());
+                    Ok::<_, String>(value)
+                })
+                .collect::<Result<_, _>>()?;
+            let next = request.offset + notes.len();
+            pages.push(serde_json::json!({"clip":request.clip,"offset":request.offset,"notes":notes,"total":clip.notes.len(),
+                "next_offset":(next < clip.notes.len()).then_some(next),"truncated":next < clip.notes.len()}));
+        }
+        Ok(serde_json::json!({"revision":self.agent_document_revision()?,"ticks_per_quarter":Ticks::QUARTER.raw(),"clips":pages}).to_string())
+    }
+
     /// Content-based revision, also stable across saved-project calls and process restarts.
     pub fn agent_document_revision(&self) -> Result<String, String> {
         let bytes = serde_json::to_vec(self.project()).map_err(|e| e.to_string())?;
@@ -189,6 +242,106 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multi_clip_reads_share_a_revision_and_page_original_indices_without_editing() {
+        let mut session = Session::new(crate::SessionOptions::headless()).unwrap();
+        let track = session.add_default_instrument_track("Read").unwrap();
+        let a = session
+            .add_midi_clip(track, "Long", Ticks::ZERO, Ticks::QUARTER * 200)
+            .unwrap();
+        let b = session
+            .add_midi_clip(track, "Empty", Ticks::ZERO, Ticks::QUARTER)
+            .unwrap();
+        session
+            .replace_notes(
+                a,
+                (0..129)
+                    .map(|i| Note::new(60, Ticks::QUARTER * i, Ticks(13)))
+                    .collect(),
+            )
+            .unwrap();
+        let before = session.project().clone();
+        let result: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_read_notes(&[
+                    NoteRead {
+                        clip: a.0,
+                        offset: 0,
+                    },
+                    NoteRead {
+                        clip: b.0,
+                        offset: 0,
+                    },
+                ])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            result["revision"],
+            session.agent_document_revision().unwrap()
+        );
+        assert_eq!(result["clips"][0]["notes"].as_array().unwrap().len(), 128);
+        assert_eq!(result["clips"][0]["next_offset"], 128);
+        assert_eq!(result["clips"][0]["truncated"], true);
+        assert_eq!(result["clips"][1]["total"], 0);
+        let last: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_read_notes(&[NoteRead {
+                    clip: a.0,
+                    offset: 128,
+                }])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(last["revision"], result["revision"]);
+        assert_eq!(last["clips"][0]["notes"][0]["index"], 128);
+        assert_eq!(last["clips"][0]["notes"][0]["start_tick"], 128 * 960);
+        assert!(last["clips"][0]["next_offset"].is_null());
+        assert!(
+            session
+                .agent_read_notes(&[
+                    NoteRead {
+                        clip: a.0,
+                        offset: 0
+                    },
+                    NoteRead {
+                        clip: a.0,
+                        offset: 0
+                    }
+                ])
+                .is_err()
+        );
+        assert!(
+            session
+                .agent_read_notes(&[NoteRead {
+                    clip: a.0,
+                    offset: 130
+                }])
+                .is_err()
+        );
+        assert!(
+            session
+                .agent_read_notes(&[NoteRead {
+                    clip: u64::MAX,
+                    offset: 0
+                }])
+                .is_err()
+        );
+        assert!(session.agent_read_notes(&[]).is_err());
+        assert!(
+            session
+                .agent_read_notes(&vec![
+                    NoteRead {
+                        clip: a.0,
+                        offset: 0
+                    };
+                    9
+                ])
+                .is_err()
+        );
+        assert_eq!(session.project(), &before);
+    }
 
     #[test]
     fn tick_edits_preserve_metadata_rollback_stale_reads_and_undo_as_one() {

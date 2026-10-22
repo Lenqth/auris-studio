@@ -11,6 +11,28 @@ pub use jobs::{AgentJob, AgentResult, AgentStep};
 mod harmony;
 pub mod note_editing;
 pub mod performance;
+
+/// Read or reverse one complete live agent request using the session's ordinary history.
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum HistoryOperation {
+    /// Inspect bounded entries and the current numeric revision.
+    Read,
+    /// Reverse the latest uninterrupted agent request.
+    Undo {
+        /// Exact available_group from history.undo.
+        group: u64,
+        /// Numeric revision returned by history, not the note content hash.
+        expected_revision: u64,
+    },
+    /// Reapply the latest uninterrupted agent request.
+    Redo {
+        /// Exact available_group from history.redo.
+        group: u64,
+        /// Numeric revision returned by history.
+        expected_revision: u64,
+    },
+}
 mod vocals;
 pub use vocals::{VocalJob, VocalResult, VocalStep};
 fn sound_search_limit() -> usize {
@@ -31,6 +53,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Read or undo/redo one complete user request in the live session. First use operation {"kind":"read"}; then supply its available_group and numeric revision. Human edits and open gestures are boundaries. Use this for "undo that change" instead of rewriting old notes. Does not save. Session-local; unavailable for saved-project calls.
+    History {
+        /// Read, undo or redo; reversal requires the exact group and revision.
+        operation: HistoryOperation,
+    },
     /// List/create named snapshots, or explicitly restore one as a single Undo edit. Read inspect_project and pass expected_revision for restoration; concurrent edits invalidate worker results. Keeps the current project path. Checkpoints retain asset references, not independent audio copies.
     Checkpoints {
         /// Bounded listing, new snapshot or restoration.
@@ -175,7 +202,7 @@ pub enum Command {
         /// Exact drum writer name from the clip's notes or recipe; omit for the whole clip.
         drum_voice: Option<String>,
     },
-    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Values use explicit units: ratios 0..1, swing 50..75 percent, milliseconds and semitones. Omitted fields, other stages, stored notes, authored curves and recipes are preserved. settings.reset explicitly removes selected stage families. Optional drum_voice scopes edits to one drum writer. More specific expression/ghost fields override humanize/brush. All edits validate before one transaction; identical retries are no-ops and persistence follows the host.
+    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Ratios use 0..1, swing 50..75 percent, times milliseconds and pitch semitones. Strum spreads simultaneous pitches; it cannot make chord strokes from single-note arpeggios. Read note_effects and warnings before claiming an effective change. Omitted fields, stored notes, curves and recipes are preserved. settings.reset removes selected stages. Optional drum_voice scopes edits to one writer. More specific expression/ghost fields override humanize/brush. Edits validate atomically; identical retries are no-ops.
     SetPerformance {
         /// Stable MIDI clip ID.
         clip: u64,
@@ -301,7 +328,7 @@ pub enum Command {
         #[serde(default)]
         refresh: bool,
     },
-    /// Edit authored notes atomically across 1..16 clips in exact clip-relative ticks. Read read_notes first and supply its revision. Patch indices address the original note storage order. Preserves recipes, authored curves, vocal metadata on updated notes and non-destructive performance. Identical current-state replacements are no-ops.
+    /// Edit authored notes atomically across 1..16 clips in exact clip-relative ticks (960 per quarter). Velocity is normalized 0..1, never MIDI 0..127; for example {"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}. Use input {"kind":"inline","edits":[...]} or {"kind":"file","source_path":"/absolute/notes.json"}, never both. Edits are typed objects, not JSON strings; expected_revision belongs at the top level. Read read_notes first and supply its revision. Patch indices address original storage order. Preserves recipes, curves, metadata on updated notes and performance. Identical replacements are no-ops.
     EditNotes {
         /// Exact content revision from the latest read_notes or inspect_project.
         expected_revision: String,
@@ -309,13 +336,11 @@ pub enum Command {
         #[schemars(length(min = 1, max = 16))]
         edits: Vec<note_editing::NoteEdit>,
     },
-    /// Read up to 128 notes with exact clip-relative start_tick/length_ticks and zero-based storage indices. Follow next_offset without editing between pages. Pass the returned revision to edit_notes; stale indices are rejected.
+    /// Read 1..8 clip pages in one call, for example {"clips":[{"clip":1},{"clip":2,"offset":128}]}. Returns one shared revision and clips containing up to 128 notes each with exact clip-relative ticks, normalized velocity 0..1 and original zero-based storage indices. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
     ReadNotes {
-        /// Stable clip ID.
-        clip: u64,
-        /// First note index; defaults to zero.
-        #[serde(default)]
-        offset: usize,
+        /// Up to eight distinct clip pages; omitted offset starts at zero.
+        #[schemars(length(min = 1, max = 8))]
+        clips: Vec<note_editing::NoteRead>,
     },
     /// Compose into the current document. Replacing existing tracks requires replace=true.
     Compose {
@@ -414,6 +439,7 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::History { operation } => !matches!(operation, HistoryOperation::Read),
             Self::Checkpoints { operation, .. } => operation.is_mutating(),
             Self::Automation { operation, .. } => !operation.is_read_only(),
             Self::EditRecipe { operation, .. } => !operation.is_read_only(),
@@ -495,8 +521,17 @@ impl Session {
         command: Command,
         plugin_paths: &[std::path::PathBuf],
     ) -> Result<String, String> {
+        self.with_agent_history(|session| session.execute_agent_command(command, plugin_paths))
+    }
+
+    fn execute_agent_command(
+        &mut self,
+        command: Command,
+        plugin_paths: &[std::path::PathBuf],
+    ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::History { operation } => self.agent_history(operation),
             Command::EditVocalNotes {
                 clip,
                 expected_revision,
@@ -716,38 +751,7 @@ impl Session {
                 let result = job.run(&std::sync::atomic::AtomicBool::new(false))?;
                 self.continue_listening(result)
             }
-            Command::ReadNotes { clip, offset } => {
-                let (_, clip) = self
-                    .project()
-                    .midi_clip(ClipId(clip))
-                    .ok_or("Unknown MIDI clip ID")?;
-                if offset > clip.notes.len() {
-                    return Err("Offset exceeds the note count".into());
-                }
-                let notes: Vec<_> = clip
-                    .notes
-                    .iter()
-                    .enumerate()
-                    .skip(offset)
-                    .take(128)
-                    .map(|(index, note)| {
-                        let mut value = serde_json::to_value(note).unwrap_or_default();
-                        if let Some(fields) = value.as_object_mut() {
-                            fields.remove("start");
-                            fields.remove("length");
-                            fields.insert("start_tick".into(), note.start.raw().into());
-                            fields.insert("length_ticks".into(), note.length.raw().into());
-                            fields.insert("index".into(), index.into());
-                        }
-                        value
-                    })
-                    .collect();
-                let next = offset + notes.len();
-                Ok(serde_json::json!({"clip":clip.id.0,"revision":self.agent_document_revision()?,"notes":notes, "total":clip.notes.len(),
-                    "next_offset":(next < clip.notes.len()).then_some(next),
-                    "ticks_per_quarter":Ticks::QUARTER.raw()})
-                .to_string())
-            }
+            Command::ReadNotes { clips } => self.agent_read_notes(&clips),
             Command::Compose {
                 spec,
                 preset: name,

@@ -31,6 +31,7 @@
 //! now share.
 
 mod accompany;
+mod agent_history;
 mod composition_inspection;
 mod composition_preview;
 pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
@@ -365,6 +366,8 @@ pub struct Session {
     headless: bool,
 
     history: History,
+    agent_request: Option<agent_history::AgentRequest>,
+    agent_request_serial: u64,
     transaction: Option<Transaction>,
     /// Counts every change to the document: edits, undo, redo, another document entirely.
     ///
@@ -657,6 +660,8 @@ impl Session {
             audio,
             headless: !options.audio,
             history: History::default(),
+            agent_request: None,
+            agent_request_serial: 0,
             transaction: None,
             revision: 0,
             listening: Default::default(),

@@ -364,6 +364,12 @@ pub mod architecture {
     //! OpenAI-compatible API — offers read-only toolbox references and live session commands.
     //! The desktop executes [`live_agent::Command`](crate::live_agent::Command) against the
     //! currently open session, so changes appear immediately and remain unsaved and undoable.
+    //! The host brackets each user request with `begin_agent_request`/`end_agent_request`.
+    //! Synchronous commands and worker publication tag the ordinary history while they execute;
+    //! adjacent edits with that tag share one snapshot. No gesture stays open while the model
+    //! thinks. Human edits remain separate and interrupt a request's ownership. Live `history`
+    //! reverses only the latest uninterrupted group with a numeric revision guard; saved-project
+    //! adapters do not expose ephemeral session history.
     //! The desktop owns [`agent_policy::Policy`](crate::agent_policy::Policy): every live tool
     //! asks it for a decision, and live edits are checked again immediately before execution.
     //! Deny rules override every mode; plan mode forbids mutations even with an allow rule.

@@ -2044,6 +2044,7 @@ impl AurisApp {
 
     /// Stops the worker and checks for completed writes, which remain undoable.
     fn agent_stop(&mut self, cx: &mut gpui::Context<Self>) {
+        self.session.end_agent_request();
         self.agent_chat.controls.review = None;
         self.agent_chat.controls.pending = None;
         self.agent_chat.restore_pending_focus = false;
@@ -2237,6 +2238,7 @@ impl AurisApp {
         }
         // Typed here, so it is something the user asked for. Restored turns are not, which is
         // why automatic review reads this list rather than the transcript.
+        self.session.begin_agent_request();
         self.agent_chat
             .controls
             .typed_requests
@@ -2691,6 +2693,9 @@ impl AurisApp {
                 Absorbed::Reload(path) => {
                     self.accept_agent_changes(path, cx);
                 }
+            }
+            if !self.agent_chat.busy {
+                self.session.end_agent_request();
             }
             if !self.agent_chat.busy && self.agent_chat.restart_after_turn {
                 self.agent_chat.link = None;

@@ -387,8 +387,15 @@ pub mod tool_help {
                 {"project":project,"target":{"kind":"track_gain","track":1},"operation":{"kind":"read"}},
                 {"project":project,"target":{"kind":"track_gain","track":1},"expected_revision":"copy-from-automation-read","operation":{"kind":"set","points":[{"at_tick":0,"value":-12}],"replace":false,"curve":"linear"}}
             ]),
+            "history" => serde_json::json!([
+                {"operation":{"kind":"read"}},
+                {"operation":{"kind":"undo","group":1,"expected_revision":12}}
+            ]),
+            "read_notes" => serde_json::json!([
+                {"project":project,"clips":[{"clip":1},{"clip":2,"offset":128}]}
+            ]),
             "edit_notes" => serde_json::json!([
-                {"project":project,"expected_revision":"copy-from-read_notes","edits":[{"kind":"patch","clip":1,"add":[{"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}]}]}
+                {"project":project,"expected_revision":"copy-from-read_notes","input":{"kind":"inline","edits":[{"kind":"patch","clip":1,"add":[{"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}]}]}}
             ]),
             _ => serde_json::json!([]),
         };

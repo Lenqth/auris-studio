@@ -81,7 +81,7 @@ Use project_id from open_project/create_project or an absolute project path. Dep
 Call inspect_project for stable numeric track/clip IDs; read_notes returns exact clip-relative integer
 start_tick/length_ticks, full velocity and a content revision. edit_notes accepts expected_revision plus
 one or several edits with kind patch (add/remove/update) or replace (complete notes). Original indices
-are zero-based storage indices. Read again after edits. Use source for a large local JSON array of clip edits.
+are zero-based storage indices. Read again after edits. Use input {kind:inline,edits:[...]} for typed note objects or input {kind:file,source_path:absolute_local_path} for a large local JSON array. expected_revision is always top-level. Velocity is normalized 0..1, never MIDI 0..127. Batch read_notes with clips:[{clip:1},{clip:2}] under one shared revision.
 
 Use discover_tools for enabled names and tool_help for exact fields before an unfamiliar call or after an
 argument error. Correct the named field before retrying; never invent tools, IDs, paths or successful results.

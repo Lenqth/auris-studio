@@ -67,13 +67,14 @@ impl ToolHost {
             let text = crate::search_internet(&request).await?;
             return Ok(json!({"event":"edit_result","ok":true,"text":text}));
         }
-        if name == "edit_notes" && args["source"].is_string() {
+        if name == "edit_notes" && args["input"]["kind"] == "file" {
             let request: toolbox::score_input::Args =
                 serde_json::from_value(args).map_err(|e| e.to_string())?;
             permissions::authorize(
                 Some(&self.bridge),
                 "cli_file_read",
-                &json!({"path":request.source,"purpose":"Read exact note edits"}).to_string(),
+                &json!({"path":request.source_path(),"purpose":"Read exact note edits"})
+                    .to_string(),
             )
             .await?;
             let command = tokio::task::spawn_blocking(move || request.command())

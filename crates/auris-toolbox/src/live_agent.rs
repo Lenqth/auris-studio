@@ -203,7 +203,7 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
     if tool == "edit_notes" {
         let args: super::score_input::Args = serde_json::from_value(args.clone())
             .map_err(|e| format!("Invalid arguments for edit_notes: {e}"))?;
-        if args.source.is_some() {
+        if args.source_path().is_some() {
             return Err(
                 "File input must be loaded and authorized by the tool host before editing".into(),
             );

@@ -25,11 +25,15 @@ for the selected operation's full field explanations and examples.
 
 Add a track with an explicit kind and name, then `add_clip` with its numeric track,
 intended clip name, one-based `start_bar` and duration `bars`. Read the clip with
-`read_notes` before editing. Pages contain up to 128 notes, exact tick/velocity
-values, storage indices and a content revision. Follow next_offset without editing
-between pages. Indices start at zero and are checked against the supplied revision.
+`read_notes` before editing. Supply `clips:[{"clip":2},{"clip":3,"offset":128}]`
+for one to eight distinct clip pages. The response has one top-level content
+`revision` and a `clips` array. Each page contains up to 128 notes, exact ticks,
+normalized velocities, original storage indices, `truncated` and `next_offset`.
+Follow each clip's next offset without editing between pages. Indices start at zero
+and are checked against the supplied revision.
 
-`edit_notes` accepts one batch of 1..16 clip edits. A patch addresses original
+`edit_notes` takes a top-level `expected_revision` and one typed `input` object.
+`input.kind="inline"` accepts a batch of 1..16 clip edits. A patch addresses original
 indices for updates/removals, then appends new notes. A replacement supplies a
 complete note list; [] clears it. Updates preserve vocal metadata. Both forms
 preserve clip curves, performance, recipes and playback windows.
@@ -37,9 +41,9 @@ preserve clip curves, performance, recipes and playback windows.
 ```json
 {
   "expected_revision":"<revision from read_notes>",
-  "edits":[{"kind":"patch","clip":2,
+  "input":{"kind":"inline","edits":[{"kind":"patch","clip":2,
     "update":[{"index":0,"velocity":0.7}],
-    "add":[{"pitch":62,"start_tick":13,"length_ticks":997,"velocity":0.8}]}]
+    "add":[{"pitch":62,"start_tick":13,"length_ticks":997,"velocity":0.8}]}]}
 }
 ```
 
@@ -47,10 +51,22 @@ Times are integer clip-relative ticks. `ticks_per_quarter` is returned by reads;
 there is no conversion to rounded meter beats. Notes must fit the clip, have a
 positive tick length, MIDI pitch 0..127 and velocity 0..1. All changes validate
 before a single atomic edit. Stale revisions are refused without changing notes.
-Inline input allows 4096 note changes. For larger scores, supply `source` instead
-of `edits`: an absolute local UTF-8 JSON file containing the same array of clip
+Inline input allows 4096 note changes. For larger scores, choose
+`input:{"kind":"file","source_path":"/absolute/notes.json"}`: a local UTF-8 JSON
+file containing the same array of clip
 edits, up to 16 MiB and 65536 note changes. The host reads it once and authorizes
 that immutable draft before live execution. Input is never retained as an asset.
+
+## Live request history
+
+The desktop groups edits from one user request in the existing Session Undo stack,
+without keeping a gesture open or delaying playback. `history` is live-only:
+`{"operation":{"kind":"read"}}` returns bounded undo/redo entries, an
+`available_group` for each direction and a numeric `revision`. Reverse that exact
+group with `{"operation":{"kind":"undo","group":2,"expected_revision":123}}`;
+`redo` has the same fields. Use this instead of reconstructing earlier note arrays.
+Human edits and open gestures are boundaries; stale or interrupted groups are
+refused. Empty requests add no step. Checkpoints serve separately named milestones.
 
 ## Arrangement, curves and timeline
 
@@ -171,8 +187,18 @@ Use `set_performance` with a partial `settings` object, for example
 `{"clip":2,"settings":{"swing_percent":62,"gate":0.8,"expression":{"timing":0.15}}}`.
 Only supplied fields change. Within a family, the first matching stage is edited in place;
 other stages retain their order. Stored notes, generation recipes, authored controller curves
-and automatic volume contour shapes remain intact. Each changed call is one Undo step;
-repeating the current settings adds no history. The result reads back the updated settings.
+and automatic volume contour shapes remain intact. The live host groups changed calls by
+user request; repeating current settings adds no history. The result reads back settings.
+
+`note_effects` measures the first loop pass through the actual performer, with at most
+2048 notes and 32 stages. It reports changed onsets, durations, velocities and pitches,
+added/removed notes, simultaneous chord groups, warnings and explicit truncation.
+Strum spreads simultaneous pitches: a single-note arpeggio may retain a strum setting
+that changes no events. Do not claim an effective stroke in that case. Pitch curves,
+timbre and volume contours are outside note-event measurements. Select `drum_voice`
+to inspect a named writer's stages; whole-clip measurement stops before nested scopes.
+Time-grid generators on clips longer than 64 quarter notes also stop measurement,
+so sparse long clips cannot make an inspection scan the entire song grid.
 
 The controls include humanize, swing/grid, gate, mute, brush, slide, transpose, lean,
 octave copies, expression, strum, ghost notes, automatic pitch and reference groove.

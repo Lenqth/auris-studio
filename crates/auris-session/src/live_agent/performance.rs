@@ -1,4 +1,5 @@
 //! Typed, partial edits of the open clip's non-destructive performance.
+mod effects;
 #[cfg(test)]
 mod tests;
 use super::*;
@@ -228,6 +229,7 @@ impl Session {
             "melodic_pitch_supported": melodic,
             "stage_order": stack.iter().filter_map(family).take(64).collect::<Vec<_>>(),
             "stage_count": stack.len(),
+            "note_effects": effects::measure(target, &stack, voice, self.project()),
             "units": {
                 "ratios": "0..1",
                 "swing_percent": "50..75 percent",

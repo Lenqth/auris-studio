@@ -28,58 +28,114 @@ const REMOVED_TOOLS: &[&str] = &[
 ];
 
 pub(crate) fn definitions() -> Vec<ToolDefinition> {
-    live_agent::definitions().into_iter().filter(|tool| {
-        !matches!(tool.name.as_str(), "capabilities" | "discover_tools" | "tool_help" | "search_documentation" | "export_audio_attachment" | "read_report" | "transcribe_audio")
-    }).map(|tool| {
-        let name = tool.name;
-        let mut parameters = tool.parameters;
-        parameters["properties"].as_object_mut().expect("session object schema").insert("project".into(), serde_json::json!({"type":"string","description":"Project path or project_id from open_project/create_project."}));
-        if parameters.get("required").is_none() { parameters["required"] = serde_json::json!([]); }
-        parameters["required"].as_array_mut().expect("required session fields").push("project".into());
-        let action = name.clone();
-        ToolDefinition {
-            name, description: tool.description, parameters,
-            call: Box::new(move |mut args| {
-                let object = args.as_object_mut().ok_or("Expected argument object")?;
-                let project = object.remove("project").and_then(|value| value.as_str().map(str::to_owned)).ok_or("Invalid arguments: project is required")?;
-                let command = if action == "edit_notes" {
-                    serde_json::from_value::<crate::score_input::Args>(args).map_err(|e|format!("Invalid arguments: {e}"))?.command()?
-                } else if action == "import_transcription" {
-                    serde_json::from_value::<live_agent::transcription_import::Args>(args).map_err(|e|format!("Invalid arguments: {e}"))?.command(&auris_session::AnalysisControl::cancelled_by(crate::cancellation::current().flag_handle()))?
-                } else { live_agent::command(&action, &args)?.ok_or("Unknown session tool")? };
-                let mut session = crate::opened(&project)?;
-                if let auris_session::live_agent::Command::InspectAudio {start_bar,bars,track}=command {
-                    let report=session.audio_inspection_job(start_bar,bars,track)?.run(crate::cancellation::current().flag())?;
-                    return serde_json::to_string(&report).map_err(|e|e.to_string());
-                }
-                if let auris_session::live_agent::Command::Listen {start_bar,bars,focus,compare_to}=command {
-                    return crate::saved_listening::run(&mut session,start_bar,bars,focus.as_deref(),compare_to.as_deref());
-                }
-                let before = command.is_mutating().then(||session.project().clone());
-                let text = if command.needs_worker() {
-                    let cancellation=crate::cancellation::current();
-                    let mut job=session.begin_agent_job(command,auris_session::Settings::load())?;
-                    loop {
-                        let result=job.run(cancellation.flag())?;
-                        match session.continue_agent_job(result,cancellation.flag())? {
-                            auris_session::live_agent::AgentStep::Done(text)=>break text,
-                            auris_session::live_agent::AgentStep::Work(next) => job = next,
-                        }
+    live_agent::definitions()
+        .into_iter()
+        .filter(|tool| {
+            !matches!(
+                tool.name.as_str(),
+                "history"
+                    | "capabilities"
+                    | "discover_tools"
+                    | "tool_help"
+                    | "search_documentation"
+                    | "export_audio_attachment"
+                    | "read_report"
+                    | "transcribe_audio"
+            )
+        })
+        .map(|tool| {
+            let name = tool.name;
+            let mut parameters = tool.parameters;
+            parameters["properties"].as_object_mut().expect("session object schema").insert("project".into(), serde_json::json!({"type":"string","description":"Project path or project_id from open_project/create_project."}));
+            if parameters.get("required").is_none() { parameters["required"] = serde_json::json!([]); }
+            parameters["required"].as_array_mut().expect("required session fields").push("project".into());
+            let action = name.clone();
+            ToolDefinition {
+                name,
+                description: tool.description,
+                parameters,
+                call: Box::new(move |mut args| {
+                    let object = args.as_object_mut().ok_or("Expected argument object")?;
+                    let project = object
+                        .remove("project")
+                        .and_then(|value| value.as_str().map(str::to_owned))
+                        .ok_or("Invalid arguments: project is required")?;
+                    let command = if action == "edit_notes" {
+                        serde_json::from_value::<crate::score_input::Args>(args)
+                            .map_err(|e| format!("Invalid arguments: {e}"))?
+                            .command()?
+                    } else if action == "import_transcription" {
+                        serde_json::from_value::<live_agent::transcription_import::Args>(args)
+                            .map_err(|e| format!("Invalid arguments: {e}"))?
+                            .command(&auris_session::AnalysisControl::cancelled_by(
+                                crate::cancellation::current().flag_handle(),
+                            ))?
+                    } else {
+                        live_agent::command(&action, &args)?.ok_or("Unknown session tool")?
+                    };
+                    let mut session = crate::opened(&project)?;
+                    if let auris_session::live_agent::Command::InspectAudio {
+                        start_bar,
+                        bars,
+                        track,
+                    } = command
+                    {
+                        let report = session
+                            .audio_inspection_job(start_bar, bars, track)?
+                            .run(crate::cancellation::current().flag())?;
+                        return serde_json::to_string(&report).map_err(|e| e.to_string());
                     }
-                } else {
-                    session.agent_command_with_plugin_paths(command,&crate::sound_search::configured_plugin_paths())?
-                };
-                if before.as_ref().is_some_and(|before|session.project() != before) { crate::save_checkpointed(&mut session)?; }
-                if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&text)
-                    && let Some(object) = value.as_object_mut()
-                    && object.contains_key("unsaved") {
-                    object.insert("unsaved".into(),session.is_dirty().into());
-                    return Ok(value.to_string());
-                }
-                Ok(text)
-            }),
-        }
-    }).collect()
+                    if let auris_session::live_agent::Command::Listen {
+                        start_bar,
+                        bars,
+                        focus,
+                        compare_to,
+                    } = command
+                    {
+                        return crate::saved_listening::run(
+                            &mut session,
+                            start_bar,
+                            bars,
+                            focus.as_deref(),
+                            compare_to.as_deref(),
+                        );
+                    }
+                    let before = command.is_mutating().then(|| session.project().clone());
+                    let text = if command.needs_worker() {
+                        let cancellation = crate::cancellation::current();
+                        let mut job =
+                            session.begin_agent_job(command, auris_session::Settings::load())?;
+                        loop {
+                            let result = job.run(cancellation.flag())?;
+                            match session.continue_agent_job(result, cancellation.flag())? {
+                                auris_session::live_agent::AgentStep::Done(text) => break text,
+                                auris_session::live_agent::AgentStep::Work(next) => job = next,
+                            }
+                        }
+                    } else {
+                        session.agent_command_with_plugin_paths(
+                            command,
+                            &crate::sound_search::configured_plugin_paths(),
+                        )?
+                    };
+                    if before
+                        .as_ref()
+                        .is_some_and(|before| session.project() != before)
+                    {
+                        crate::save_checkpointed(&mut session)?;
+                    }
+                    if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&text)
+                        && let Some(object) = value.as_object_mut()
+                        && object.contains_key("unsaved")
+                    {
+                        object.insert("unsaved".into(), session.is_dirty().into());
+                        return Ok(value.to_string());
+                    }
+                    Ok(text)
+                }),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -109,9 +165,9 @@ mod tests {
         );
         let read = call(
             "read_notes",
-            json!({"project":created["project_id"],"clip":clip["clip"]}),
+            json!({"project":created["project_id"],"clips":[{"clip":clip["clip"]}]}),
         );
-        assert_eq!(read["total"], 0);
+        assert_eq!(read["clips"][0]["total"], 0);
         assert_eq!(read["ticks_per_quarter"], 960);
     }
 
@@ -194,7 +250,7 @@ mod tests {
         let read = || {
             serde_json::from_str::<Value>(&call(
                 "read_notes",
-                json!({"project":path,"clip":clip.0}),
+                json!({"project":path,"clips":[{"clip":clip.0}]}),
             ))
             .unwrap()
         };
@@ -202,15 +258,15 @@ mod tests {
         let edits = json!([{"kind":"replace","clip":clip.0,"notes":[{"pitch":60,"start_tick":13,"length_ticks":97,"velocity":0.73125}]}]);
         call(
             "edit_notes",
-            json!({"project":path,"expected_revision":initial["revision"],"edits":edits}),
+            json!({"project":path,"expected_revision":initial["revision"],"input":{"kind":"inline","edits":edits}}),
         );
         let current = read();
-        assert_eq!(current["notes"][0]["start_tick"], 13);
-        assert_eq!(current["notes"][0]["length_ticks"], 97);
+        assert_eq!(current["clips"][0]["notes"][0]["start_tick"], 13);
+        assert_eq!(current["clips"][0]["notes"][0]["length_ticks"], 97);
         let bytes = std::fs::read(&path).unwrap();
         call(
             "edit_notes",
-            json!({"project":path,"expected_revision":current["revision"],"edits":edits}),
+            json!({"project":path,"expected_revision":current["revision"],"input":{"kind":"inline","edits":edits}}),
         );
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
         call(
@@ -223,6 +279,6 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(performance["settings"]["gate"], 0.5);
-        assert_eq!(read()["notes"], current["notes"]);
+        assert_eq!(read()["clips"][0]["notes"], current["clips"][0]["notes"]);
     }
 }

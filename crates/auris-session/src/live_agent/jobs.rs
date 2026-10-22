@@ -79,6 +79,14 @@ impl Session {
         result: AgentResult,
         cancelled: &AtomicBool,
     ) -> Result<AgentStep, String> {
+        self.with_agent_history(|session| session.publish_agent_job(result, cancelled))
+    }
+
+    fn publish_agent_job(
+        &mut self,
+        result: AgentResult,
+        cancelled: &AtomicBool,
+    ) -> Result<AgentStep, String> {
         if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
             return Err("Agent operation cancelled before publication".into());
         }

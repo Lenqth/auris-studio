@@ -115,6 +115,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.export_midi",
     "edit_project.verify_render",
     "edit_project.read_notes",
+    "edit_project.history",
     "edit_project.edit_notes",
     "edit_project.automation",
     "edit_project.edit_recipe",
@@ -172,6 +173,7 @@ impl Operation {
             }
             let mutating = parsed.is_mutating();
             let confirm = matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
+                || matches!(&parsed, crate::live_agent::Command::History { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
                 || matches!(&parsed, crate::live_agent::Command::EditNotes { edits, .. } if edits.iter().any(crate::live_agent::note_editing::NoteEdit::requires_confirmation))
                 || matches!(
@@ -283,6 +285,26 @@ impl Policy {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn live_history_read_is_inspection_and_reversal_requires_edit_permission() {
+        use super::*;
+        let parse = |operation| {
+            Operation::parse(
+                "edit_project",
+                &serde_json::json!({"command":{"action":"history","operation":operation}}),
+            )
+            .unwrap()
+        };
+        let read = parse(serde_json::json!({"kind":"read"}));
+        let undo = parse(serde_json::json!({"kind":"undo","group":1,"expected_revision":2}));
+        let policy = Policy {
+            mode: Mode::ReadOnly,
+            ..Default::default()
+        };
+        assert_eq!(policy.decide(&read), Decision::Allow);
+        assert!(matches!(policy.decide(&undo), Decision::Deny(_)));
+        assert!(undo.confirm);
+    }
     use super::*;
 
     #[test]

@@ -1,6 +1,98 @@
 use super::*;
 use serde_json::{Value, json};
 
+#[test]
+fn sparse_long_ghost_clips_do_not_trigger_unbounded_grid_scans_during_inspection() {
+    let mut clip = MidiClip::new(ClipId(1), "Sparse", Ticks::ZERO, Ticks::QUARTER * 256);
+    clip.notes.push(Note::new(60, Ticks::ZERO, Ticks::QUARTER));
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Ghost {
+            settings: GhostNotes {
+                density: 1.0,
+                velocity: 0.3,
+                preserve_rests: false,
+                ..Default::default()
+            },
+        }],
+        None,
+        &Project::new("Probe", 48000.0),
+    );
+    assert_eq!(result["complete"], false);
+    assert_eq!(result["stages"][0]["measured"], false);
+}
+
+#[test]
+fn arpeggio_reports_ineffective_strum_and_effective_expression_without_changing_the_score() {
+    let (mut session, clip) = fixture();
+    let before = session.project().midi_clip(clip).unwrap().1.notes.clone();
+    let result = edit(&mut session, clip, json!({"strum":{"spread_ms":24,"direction":"low_to_high","clock":"attacks"},"expression":{"timing":0.1,"velocity":0.08,"seed":73}}), None).unwrap();
+    let stages = &result["note_effects"]["stages"];
+    assert_eq!(result["note_effects"]["complete"], true);
+    assert_eq!(stages[0]["eligible_chord_groups"], 0);
+    assert_eq!(stages[0]["note_events_unchanged"], true);
+    assert!(!stages[0]["warnings"].as_array().unwrap().is_empty());
+    let expression = stages
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|stage| stage["stage"] == "expression")
+        .unwrap();
+    assert_eq!(expression["changed_velocities"], 2, "{result}");
+    assert_eq!(session.project().midi_clip(clip).unwrap().1.notes, before);
+}
+
+#[test]
+fn chord_strum_reports_actual_onset_changes_and_readback_agrees() {
+    let (mut session, clip) = fixture();
+    session
+        .replace_notes(
+            clip,
+            [60, 64, 67]
+                .map(|pitch| Note::new(pitch, Ticks::ZERO, Ticks::QUARTER))
+                .to_vec(),
+        )
+        .unwrap();
+    let result = edit(
+        &mut session,
+        clip,
+        json!({"strum":{"spread_ms":24,"direction":"low_to_high"}}),
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        result["note_effects"]["stages"][0]["eligible_chord_groups"],
+        1
+    );
+    assert_eq!(result["note_effects"]["stages"][0]["changed_onsets"], 2);
+    let read: Value =
+        serde_json::from_str(&session.agent_inspect_performance(clip, None).unwrap()).unwrap();
+    assert_eq!(read["note_effects"], result["note_effects"]);
+}
+
+#[test]
+fn performance_measurements_are_bounded_and_pitch_curves_are_not_called_inaudible() {
+    let (mut session, clip) = fixture();
+    session
+        .replace_notes(
+            clip,
+            (0..2050)
+                .map(|i| Note::new(60, Ticks(i), Ticks(2)))
+                .collect(),
+        )
+        .unwrap();
+    let result = edit(&mut session, clip, json!({"pitch":{"vibrato":0.2}}), None).unwrap();
+    assert_eq!(result["note_effects"]["sampled_authored_notes"], 2048);
+    assert_eq!(result["note_effects"]["truncated"], true);
+    assert!(
+        result["note_effects"]["stages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|stage| stage["warnings"].as_array().unwrap().is_empty())
+    );
+}
+
 fn fixture() -> (Session, ClipId) {
     let mut session = Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
     let track = session.add_default_instrument_track("Lead").unwrap();
