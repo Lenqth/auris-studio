@@ -35,6 +35,16 @@ variation = 0.30
 chords = "@marusa"
 form   = ["intro", "verse", "chorus", "verse", "chorus", "outro"]
 
+# `chords` here is the whole song's progression, called `main`. A section that wants another one
+# does not spell it out where it is — its `chords` is a *name* — but finds it in a `[harmony]`
+# table, written after the lines above because a TOML table ends the top level:
+#
+#   [harmony]
+#   bridge = "| ii7 | V7 | Imaj7 | Imaj7 |"
+#
+#   [section.bridge]
+#   chords = "bridge"
+
 # ------------------------------------------------------------------ sections
 # A table keyed by name, because the order sections are written in means nothing: `form` above is
 # what decides when each one plays.
