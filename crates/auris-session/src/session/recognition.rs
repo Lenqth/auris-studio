@@ -948,8 +948,8 @@ mod tests {
         s.set_bpm(90.0);
         let before = s.project().clone();
         let command = serde_json::from_value(serde_json::json!({
-            "action":"import_transcription", "name":"External draft", "at_beat":4.0,
-            "transcription":{
+            "action":"import_transcription", "name":"External draft", "at_tick":3840,
+            "draft":{"kind":"piano","transcription":{
                 "source":{"method":"codex.harmonic-fit","model":"gpt-6.1-sol",
                     "artifact_sha256":"1ad425dd3758b046d23c3e3a11bee0ce2815402fda64fc69f77a9cdd873c08b5"},
                 "seconds":2.0, "limitations":"Uniform dynamics; review missing notes.",
@@ -957,17 +957,20 @@ mod tests {
                     {"pitch":60,"start":0.25,"end":1.5,"strength":0.7},
                     {"pitch":64,"start":0.25,"end":1.5,"strength":0.7},
                     {"pitch":67,"start":0.25,"end":1.5,"strength":0.7}]
-            }
+            }}
         })).unwrap();
+        assert_eq!(
+            serde_json::to_value(&command).unwrap()["draft"]["transcription"]["source"]["method"],
+            "codex.harmonic-fit"
+        );
         let result: serde_json::Value =
             serde_json::from_str(&s.agent_command(command).unwrap()).unwrap();
         assert_eq!(result["notes"], 3);
-        assert_eq!(result["source"]["method"], "codex.harmonic-fit");
         assert_eq!(s.project().tempo_map, before.tempo_map);
         assert_eq!(s.project().tracks[0], before.tracks[0]);
         let (_, clip) = s
             .project()
-            .midi_clip(ClipId(result["clip"].as_u64().unwrap()))
+            .midi_clip(ClipId(result["created"][0]["clip"].as_u64().unwrap()))
             .unwrap();
         assert_eq!(clip.start, Ticks::from_beats(4.0));
         assert_eq!(clip.notes.len(), 3);
