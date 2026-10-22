@@ -178,11 +178,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             setup_tracks::DESCRIPTION,
             setup_tracks::run,
         ),
-        definition::<instrument_diagnostics::Args>(
-            instrument_diagnostics::NAME,
-            instrument_diagnostics::DESCRIPTION,
-            instrument_diagnostics::run,
-        ),
         definition::<discover_tools::Args>(
             discover_tools::NAME,
             discover_tools::DESCRIPTION,
@@ -214,23 +209,11 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             import_transcription::DESCRIPTION,
             import_transcription::run,
         ),
-        definition::<export_midi::Args>(
-            export_midi::NAME,
-            export_midi::DESCRIPTION,
-            export_midi::run,
-        ),
         definition::<capabilities::Args>(
             capabilities::NAME,
             capabilities::DESCRIPTION,
             capabilities::run,
         ),
-        definition::<effects::Args>(effects::NAME, effects::DESCRIPTION, effects::run),
-        definition::<mixer_graph::Args>(
-            mixer_graph::NAME,
-            mixer_graph::DESCRIPTION,
-            mixer_graph::run,
-        ),
-        definition::<automation::Args>(automation::NAME, automation::DESCRIPTION, automation::run),
         definition::<analyze_music::Args>(
             analyze_music::NAME,
             analyze_music::DESCRIPTION,
@@ -266,17 +249,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             inspect_composition::DESCRIPTION,
             inspect_composition::run,
         ),
-        definition::<edit_harmony::Args>(
-            edit_harmony::NAME,
-            edit_harmony::DESCRIPTION,
-            edit_harmony::run,
-        ),
-        definition::<edit_recipe::Args>(
-            edit_recipe::NAME,
-            edit_recipe::DESCRIPTION,
-            edit_recipe::run,
-        ),
-        definition::<edit_clip::Args>(edit_clip::NAME, edit_clip::DESCRIPTION, edit_clip::run),
         definition::<checkpoints::Args>(
             checkpoints::NAME,
             checkpoints::DESCRIPTION,
@@ -302,42 +274,16 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             preview_composition::run,
         ),
         definition::<compose::Args>(compose::NAME, compose::DESCRIPTION, compose::run),
-        definition::<render::Args>(render::NAME, render::DESCRIPTION, render::run),
-        definition::<verify_render::Args>(
-            verify_render::NAME,
-            verify_render::DESCRIPTION,
-            verify_render::run,
-        ),
-        definition::<preview::Args>(preview::NAME, preview::DESCRIPTION, preview::run),
-        definition::<describe::Args>(describe::NAME, describe::DESCRIPTION, describe::run),
         definition::<analyze::Args>(analyze::NAME, analyze::DESCRIPTION, analyze::run),
         definition::<analyze_drum_kit::Args>(
             analyze_drum_kit::NAME,
             analyze_drum_kit::DESCRIPTION,
             analyze_drum_kit::run,
         ),
-        definition::<set_drum_assignment::Args>(
-            set_drum_assignment::NAME,
-            set_drum_assignment::DESCRIPTION,
-            set_drum_assignment::run,
-        ),
-        definition::<mixer::Args>(mixer::NAME, mixer::DESCRIPTION, mixer::run),
-        definition::<set_level::Args>(set_level::NAME, set_level::DESCRIPTION, set_level::run),
-        definition::<normalize_mix::Args>(
-            normalize_mix::NAME,
-            normalize_mix::DESCRIPTION,
-            normalize_mix::run,
-        ),
-        definition::<set_effect::Args>(set_effect::NAME, set_effect::DESCRIPTION, set_effect::run),
         definition::<section_gain::Args>(
             section_gain::NAME,
             section_gain::DESCRIPTION,
             section_gain::run,
-        ),
-        definition::<regenerate_clips::Args>(
-            regenerate_clips::NAME,
-            regenerate_clips::DESCRIPTION,
-            regenerate_clips::run,
         ),
         definition::<teach_progression::Args>(
             teach_progression::NAME,
@@ -357,88 +303,15 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
         definition::<NoArgs>(list_presets::NAME, list_presets::DESCRIPTION, |_| {
             Ok(list_presets::run())
         }),
-        definition::<NoArgs>(
-            list_instruments::NAME,
-            list_instruments::DESCRIPTION,
-            |_| Ok(list_instruments::run()),
-        ),
-        definition::<search_instruments::Args>(
-            search_instruments::NAME,
-            search_instruments::DESCRIPTION,
-            search_instruments::run,
-        ),
-        definition::<similar_instruments::Args>(
-            similar_instruments::NAME,
-            similar_instruments::DESCRIPTION,
-            similar_instruments::run,
-        ),
-        definition::<add_track::Args>(add_track::NAME, add_track::DESCRIPTION, add_track::run),
-        definition::<add_part::Args>(add_part::NAME, add_part::DESCRIPTION, add_part::run),
-        definition::<set_instrument::Args>(
-            set_instrument::NAME,
-            set_instrument::DESCRIPTION,
-            set_instrument::run,
-        ),
-        definition::<rename_track::Args>(
-            rename_track::NAME,
-            rename_track::DESCRIPTION,
-            rename_track::run,
-        ),
-        definition::<remove_track::Args>(
-            remove_track::NAME,
-            remove_track::DESCRIPTION,
-            remove_track::run,
-        ),
-        definition::<add_clip::Args>(add_clip::NAME, add_clip::DESCRIPTION, add_clip::run),
-        definition::<notes::Args>(notes::NAME, notes::DESCRIPTION, notes::run),
-        definition::<edit_notes::Args>(edit_notes::NAME, edit_notes::DESCRIPTION, edit_notes::run),
-        definition::<replace_notes::Args>(
-            replace_notes::NAME,
-            replace_notes::DESCRIPTION,
-            replace_notes::run,
-        ),
         definition::<accompany::Args>(accompany::NAME, accompany::DESCRIPTION, accompany::run),
-        definition::<write_lyrics::Args>(
-            write_lyrics::NAME,
-            write_lyrics::DESCRIPTION,
-            write_lyrics::run,
-        ),
-        definition::<sing::Args>(sing::NAME, sing::DESCRIPTION, sing::run),
         definition::<tool_help::Args>(tool_help::NAME, tool_help::DESCRIPTION, tool_help::run),
-        definition::<routing::Args>(routing::NAME, routing::DESCRIPTION, routing::run),
-        definition::<set_track_state::Args>(
-            set_track_state::NAME,
-            set_track_state::DESCRIPTION,
-            set_track_state::run,
-        ),
         definition::<convert_track_to_audio::Args>(
             convert_track_to_audio::NAME,
             convert_track_to_audio::DESCRIPTION,
             convert_track_to_audio::run,
         ),
-        definition::<set_instrument_param::Args>(
-            set_instrument_param::NAME,
-            set_instrument_param::DESCRIPTION,
-            set_instrument_param::run,
-        ),
-        definition::<set_instrument_params::Args>(
-            set_instrument_params::NAME,
-            set_instrument_params::DESCRIPTION,
-            set_instrument_params::run,
-        ),
-        definition::<replace_notes_batch::Args>(
-            replace_notes_batch::NAME,
-            replace_notes_batch::DESCRIPTION,
-            replace_notes_batch::run,
-        ),
     ];
     let common = crate::session_tools::definitions();
-    tools.retain(|tool| {
-        !crate::session_tools::REMOVED_TOOLS.contains(&tool.name.as_str())
-            && !common
-                .iter()
-                .any(|replacement| replacement.name == tool.name)
-    });
     tools.extend(common);
     tools
 }
@@ -489,42 +362,18 @@ pub mod tool_help {
                 {"project":project,"start_bar":1,"bars":4,"compare_to":"/absolute/path/Song/.auris-previews/preview-before.wav","focus":"Did the balance improve?"}
             ]),
             "edit_clip" => serde_json::json!([
-                {"project":project,"track":"Lead","clip":1,"action":{"kind":"resize","end_bar":9}},
-                {"project":project,"track":"Lead","clip":1,"action":{"kind":"copy","destination":"Flute","bar":9,"transpose":12}}
+                {"project":project,"clip":2,"operation":{"kind":"resize","end_tick":30720}},
+                {"project":project,"clip":2,"operation":{"kind":"copy","track":1,"start_tick":30720,"transpose":12}}
             ]),
             "preview" => serde_json::json!([
                 {"project":project,"range":{"start_bar":1,"bars":4}}
             ]),
-            "effects" => serde_json::json!([
-                {"project":project,"track":"Bass","operation":{"action":"list"}},
-                {"project":project,"track":"Bass","operation":{"action":"add","effect":"auris.fx.compressor"}},
-                {"project":project,"track":"Bass","operation":{"action":"sidechain","slot":1,"source":"Kick"}}
-            ]),
-            "set_effect" => serde_json::json!([
-                {"project":project,"track":"Bass","slot":1,"param":"threshold_db","value":-18},
-                {"project":project,"track":"master","slot":1,"effect":"auris.fx.limiter","param":"input_db","value":-3}
-            ]),
             "automation" => serde_json::json!([
-                {"project":project,"track":"Bass","target":{"kind":"effect","slot":1},"operation":{"action":"read"}},
-                {"project":project,"track":"Bass","target":{"kind":"effect","slot":1},"operation":{"action":"set","param":"threshold_db","points":[{"beat":0,"value":-6},{"beat":16,"value":-24}],"curve":"linear"}}
-            ]),
-            "routing" => serde_json::json!([
-                {"project":project,"track":"Lead","operation":"add_send","destination":"Reverb","level_db":-12},
-                {"project":project,"track":"Lead","operation":"send_level","send_id":4,"level_db":-18},
-                {"project":project,"track":"Lead","operation":"output","destination":"master"}
-            ]),
-            "regenerate_clips" => serde_json::json!([
-                {"project":project,"track":"Lead","clip":1,"take":{"kind":"same"}},
-                {"project":project,"track":"Lead","take":{"kind":"next"}},
-                {"project":project,"track":"Lead","clip":1,"take":{"kind":"seed","seed":42}}
+                {"project":project,"target":{"kind":"track_gain","track":1},"operation":{"kind":"read"}},
+                {"project":project,"target":{"kind":"track_gain","track":1},"expected_revision":"copy-from-automation-read","operation":{"kind":"set","points":[{"at_tick":0,"value":-12}],"replace":false,"curve":"linear"}}
             ]),
             "edit_notes" => serde_json::json!([
                 {"project":project,"expected_revision":"copy-from-read_notes","edits":[{"kind":"patch","clip":1,"add":[{"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}]}]}
-            ]),
-            "replace_notes" => serde_json::json!([
-                {"project":project,"track":"Lead","clip":1,"source":"/absolute/path/lead.json"},
-                {"project":project,"track":"Lead","clip":1,"notes":[{"pitch":60,"bar":1,"beat":1,"beats":1}]},
-                {"project":project,"track":"Lead","clip":1,"notes":[]}
             ]),
             _ => serde_json::json!([]),
         };
@@ -830,11 +679,16 @@ mod tests {
                     .unwrap_or_else(|e| panic!("{name}: {e}"));
             }
         }
-        check::<edit_clip::Args>("edit_clip");
-        check::<automation::Args>("automation");
         check::<mixer_graph::Args>("mixer_graph");
         check::<listen::Args>("listen");
-        for name in ["edit_notes", "add_track", "add_clip", "preview"] {
+        for name in [
+            "edit_notes",
+            "add_track",
+            "add_clip",
+            "preview",
+            "edit_clip",
+            "automation",
+        ] {
             let help: serde_json::Value = serde_json::from_str(
                 &tool_help::run(&tool_help::Args { name: name.into() }).unwrap(),
             )

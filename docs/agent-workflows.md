@@ -102,6 +102,13 @@ source-fader move is appropriate. It preserves relative balance and can stop sho
 at fader or peak limits. Sound replacement preserves faders but can change output
 level substantially, so remeasure. Audio file delivery never establishes listening.
 
+`automation` selects a typed target (`track_gain`, `track_pan`, `master_gain`,
+`master_pan`, `send`, `instrument` or `effect`) and an operation. `read` pages
+points and choices in native units. Copy its revision into `expected_revision`
+for `set` or `clear`. `set` accepts up to 4096 `{at_tick,value}` points, optional
+`replace` and `curve` (`linear` or `hold`). Absolute ticks, discrete parameter
+steps and all points validate before mutation. Static controls remain unchanged.
+
 ## Audio and MIDI delivery
 
 `render` exports the current snapshot to destination kind `mix` with an absolute
@@ -125,6 +132,13 @@ first. Drum parts use the drum track's sound assignments and do not require chor
 
 The result reports the new clip ID, note count and seed. The clip retains its generation
 recipe and stored notes, so it can be edited or regenerated through the usual clip controls.
+
+`edit_recipe` reads, patches or regenerates 1..16 explicit clip IDs. A `patch`
+changes only supplied recipe settings; `regenerate` selects the same, next or an
+explicit seed. Both regenerate stored notes. Hand-edited notes require explicit
+`replace_hand_edits:true`; otherwise the complete batch is refused. Optional
+`drum_voice` selects a single drum lane. `set_drum_assignment` changes a drum role's
+MIDI note without rewriting notes or other mappings.
 Existing clips are preserved, one Undo removes the new phrase, and the document remains
 unsaved. The same tool is available to native model APIs, Codex and Claude Code through
 their shared live catalog and permission checks. Read-only and Plan modes refuse generation.
@@ -180,6 +194,13 @@ a new song and verify their positions with `inspect_project`. Clip names and a p
 outline do not create section metadata. A short loop can remain one section.
 
 ### Live vocal production
+
+`edit_vocal_notes` applies 1..256 ordered lyric, phoneme, timing-pin or pitch-ornament
+corrections to one singer clip. Supply `expected_revision` from `read_notes`.
+`inspect_singer` reports manual-phoneme/timing support and the model frame hop;
+unsupported controls are refused. Note/phoneme indices must exist. Scoop/fall and
+vibrato retain the original pitch, duration and velocity. A failed batch rolls back
+all its corrections. Run `sing` again after changing a rendered score.
 
 Create a `singer` track and a note clip, then add its melody with `edit_notes`.
 `list_voices` discovers installed voice entries in pages of 16; follow `next_offset`.

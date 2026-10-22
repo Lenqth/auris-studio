@@ -501,7 +501,12 @@ mod tests {
                 .is_err()
         );
         session
-            .agent_command(crate::live_agent::Command::SetTempo { bpm: 90.0 })
+            .agent_command(crate::live_agent::Command::EditTimeline {
+                operation: crate::live_agent::document_editing::TimelineOperation::SetTempo {
+                    at_tick: 0,
+                    bpm: 90.0,
+                },
+            })
             .unwrap();
         assert!(
             session

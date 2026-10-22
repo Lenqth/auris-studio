@@ -602,6 +602,11 @@ impl Session {
                         "value must be finite and within the parameter's native range".into(),
                     );
                 }
+                if (descriptor.clamp(*value) - *value).abs() > 1e-5 {
+                    return Err(
+                        "value must match a native discrete choice or parameter step".into(),
+                    );
+                }
                 changed = self.param_value(*target, descriptor) != *value;
                 if changed {
                     self.set_param(*target, *value);

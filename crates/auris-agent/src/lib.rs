@@ -334,7 +334,7 @@ Use verify_render with path and explicit delivery target/ceiling/ending limits. 
 Track kind is one lowercase string, for example {\"name\":\"Drums\",\"kind\":\"drum\"}.
 Use instrument for melody/harmony and drum for percussion. Do not wrap kind in an array.
 For set_instrument use sound_id with the exact returned ID, never a program number. Search results use library indices into the libraries array; instrument_diagnostics reads failures on demand.
-Set the tempo with set_tempo and a loop region with set_loop for loop background music.
+Set tempo/meter through edit_timeline; at_tick 0 is the beginning. Use set_loop for a playback loop.
 Preserve existing tracks and notes unless the user explicitly requests their removal.
 Make dependent edits one at a time. Changes are unsaved and undoable. Verify with
 inspect_project before claiming completion. Use read_notes before changing existing notes.

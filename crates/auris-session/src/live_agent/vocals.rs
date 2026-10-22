@@ -251,6 +251,12 @@ impl Session {
         offset: usize,
     ) -> Result<String, String> {
         let info = self.singer_voice_info(track).map_err(|e| e.to_string())?;
+        let capabilities = self.singer_capabilities(track).map_err(|e| e.to_string())?;
+        let frame_hop = self
+            .project()
+            .track(track)
+            .and_then(|track| track.kind.as_singer())
+            .map(|singer| singer.frame_hop);
         let total = info.as_ref().map_or(0, |info| info.speakers.len());
         if offset > total {
             return Err("offset exceeds speaker count".into());
@@ -268,6 +274,7 @@ impl Session {
             .and_then(|singer| singer.take.as_ref())
             .map(|take| take.seed);
         Ok(serde_json::json!({"track":track.0,"voice":voice,"take_seed":seed,"next_offset":(next < total).then_some(next),
+            "capabilities":{"manual_phonemes":capabilities.manual_phonemes,"phoneme_timing":capabilities.phoneme_timing,"frame_hop_seconds":frame_hop},
             "take_state":match self.singer_take_state(track).map_err(|e|e.to_string())? {
                 crate::SingerTakeState::Absent => "missing",
                 crate::SingerTakeState::Current => "current",

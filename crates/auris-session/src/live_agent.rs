@@ -1,9 +1,12 @@
-//! File-free commands for the agent attached to an open session.
+//! Canonical session commands shared by saved-file and live agents.
 
 use crate::{Session, prelude::*};
+pub mod automation;
 pub mod document_editing;
 pub mod file_jobs;
 mod jobs;
+pub mod recipes;
+pub mod vocal_editing;
 pub use jobs::{AgentJob, AgentResult, AgentStep};
 mod harmony;
 pub mod note_editing;
@@ -24,10 +27,52 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
     })
 }
 
-/// An operation on the current document. No operation accepts a filesystem destination.
+/// A validated session operation; the frontend owns project selection and persistence.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Correct singer-note lyrics, supported IPA/duration pins and pitch ornaments in one atomic edit. Read inspect_singer capabilities and read_notes first. Unsupported controls are refused; stale revisions and failed batches leave all notes unchanged. Rerender stale takes with sing.
+    EditVocalNotes {
+        /// Stable singer clip ID.
+        clip: u64,
+        /// Exact revision returned by read_notes.
+        expected_revision: String,
+        /// 1..256 ordered note corrections.
+        #[schemars(length(min = 1, max = 256))]
+        edits: Vec<vocal_editing::VocalEdit>,
+    },
+    /// Read or edit native-unit parameter automation through stable track/effect/send IDs. Read first; writes require the returned document revision. Static values and authored notes are preserved.
+    Automation {
+        /// Exact parameter address.
+        target: automation::ControlTarget,
+        /// Paged read, atomic set or clear.
+        operation: automation::Operation,
+        /// Required for writes; copied from the latest read.
+        expected_revision: Option<String>,
+    },
+    /// Inspect, partially edit or explicitly regenerate 1..16 generated clips. Writes preserve other clips and mix state; hand-edited generated notes require explicit replacement permission. Recipe controls change stored notes; performance controls are separate.
+    EditRecipe {
+        /// Unique stable generated clip IDs.
+        #[schemars(length(min = 1, max = 16))]
+        clips: Vec<u64>,
+        /// Optional exact writer name within a composite drum kit.
+        drum_voice: Option<String>,
+        /// Read, patch controls or explicitly regenerate a take.
+        operation: recipes::Operation,
+    },
+    /// Change one drum-role assignment for the editor and future generation without rewriting existing notes or retained recipes. Read current assignments with inspect_project. Removing the last role preserves an explicitly empty map.
+    SetDrumAssignment {
+        /// Stable drum track ID.
+        track: u64,
+        /// kick, snare, closed_hat, open_hat, crash or tom.
+        #[schemars(extend("enum"=["kick","snare","closed_hat","open_hat","crash","tom"]))]
+        role: String,
+        /// MIDI key 0..127; required unless remove is true.
+        note: Option<u8>,
+        /// Explicitly remove this role; omit note when true.
+        #[serde(default)]
+        remove: bool,
+    },
     /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. Existing outputs are never replaced. No project save or document edit; cancellation/stale documents discard private stages.
     Render {
         /// Explicit mix file or stem folder destination.
@@ -107,7 +152,7 @@ pub enum Command {
         /// Exact drum writer name from the clip's notes or recipe; omit for the whole clip.
         drum_voice: Option<String>,
     },
-    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Values use explicit units: ratios 0..1, swing 50..75 percent, milliseconds and semitones. Omitted fields, other stages, stored notes, authored curves and recipes are preserved. settings.reset explicitly removes selected stage families. Optional drum_voice scopes edits to one drum writer. More specific expression/ghost fields override humanize/brush. All edits validate before one Undo step; identical retries are no-ops and the document remains unsaved.
+    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Values use explicit units: ratios 0..1, swing 50..75 percent, milliseconds and semitones. Omitted fields, other stages, stored notes, authored curves and recipes are preserved. settings.reset explicitly removes selected stage families. Optional drum_voice scopes edits to one drum writer. More specific expression/ghost fields override humanize/brush. All edits validate before one transaction; identical retries are no-ops and persistence follows the host.
     SetPerformance {
         /// Stable MIDI clip ID.
         clip: u64,
@@ -116,7 +161,7 @@ pub enum Command {
         /// Partial settings; omit every field that should stay unchanged.
         settings: Box<performance::PerformancePatch>,
     },
-    /// Write the document's key, Roman-numeral chord progression and/or section label across a bounded bar range. For a new song, write its harmony and named form (intro, verse, chorus, bridge, outro as appropriate) before adding notes. Changes metadata only; existing notes and mix are preserved. One Undo reverts the edit; changes remain unsaved.
+    /// Write the document's key, Roman-numeral chord progression and/or section label across a bounded bar range. For a new song, write its harmony and named form (intro, verse, chorus, bridge, outro as appropriate) before adding notes. Changes metadata only; existing notes and mix are preserved. One Undo reverts the edit; persistence follows the host.
     EditHarmony {
         /// First bar, 1-based.
         #[schemars(range(min = 1))]
@@ -148,7 +193,7 @@ pub enum Command {
         #[serde(default)]
         offset: usize,
     },
-    /// Choose a local installed singing voice and optional speaker for a singer track. Use list_voices for paths, then inspect_singer for speaker names. To change speaker, repeat the selected voice path with a speaker. Validates before editing; failure leaves the track unchanged. One Undo; unsaved. Remote network/device model paths and remote VOICEVOX servers are refused; local loopback VOICEVOX is supported.
+    /// Choose a local installed singing voice and optional speaker for a singer track. Use list_voices for paths, then inspect_singer for speaker names. To change speaker, repeat the selected voice path with a speaker. Validates before editing; failure leaves the track unchanged. One transaction. Remote network/device model paths and remote VOICEVOX servers are refused; local loopback VOICEVOX is supported.
     SetSingerVoice {
         /// Stable singer track ID.
         track: u64,
@@ -157,7 +202,7 @@ pub enum Command {
         /// Exact speaker name; omit for the voice's default. Unknown names are refused with available names.
         speaker: Option<String>,
     },
-    /// Write lyrics across a singer clip's notes in time order. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Later unfilled notes keep their words. Returns filled count and available notes; one Undo, unsaved. Use read_notes to verify before sing.
+    /// Write lyrics across a singer clip's notes in time order. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Later unfilled notes keep their words. Returns filled count and available notes; one transaction. Use read_notes to verify before sing.
     WriteLyrics {
         /// Stable singer clip ID.
         clip: u64,
@@ -268,7 +313,7 @@ pub enum Command {
         #[serde(default)]
         replace: bool,
     },
-    /// Add one empty track and return its numeric track ID. Pass kind as one string, for example {"name":"Drums","kind":"drum"}. Instrument and drum tracks start with a default sound; then use set_instrument with an ID from search_instruments. Use add_clip followed by edit_notes to write music. Edits affect the open document and remain unsaved.
+    /// Add one empty track and return its numeric track ID. Pass kind as one string, for example {"name":"Drums","kind":"drum"}. Instrument and drum tracks start with a default sound; then use set_instrument with an ID from search_instruments. Use add_clip followed by edit_notes to write music. The host owns persistence.
     AddTrack {
         /// The exact desired name; must contain non-whitespace text.
         #[schemars(length(min = 1))]
@@ -298,7 +343,7 @@ pub enum Command {
         instrument: String,
     },
 
-    /// Measure the whole mix, move every source fader by the same amount toward target_lufs under a true-peak ceiling, and measure again. Keeps relative balance and master gain; refuses automated source gain. The measured result may fall short at fader or peak limits. Edits remain unsaved.
+    /// Measure the whole mix, move every source fader by the same amount toward target_lufs under a true-peak ceiling, and measure again. Keeps relative balance and master gain; refuses automated source gain. The measured result may fall short at fader or peak limits. Persistence follows the host.
     NormalizeMix {
         /// Desired integrated loudness, -60 to -6 LUFS.
         #[schemars(range(min = -60, max = -6))]
@@ -322,7 +367,7 @@ pub enum Command {
         #[schemars(range(min = 1, max = 1024))]
         bars: u32,
     },
-    /// Generate a new MIDI phrase on an existing instrument or drum track using the project's key, chords and meter. Write melodic harmony with edit_harmony first; drum parts use the track's sound assignments. part is lead, chords, pad, arp, bass, drums, kick, snare or hat. Returns clip ID, note count and seed; zero notes is an empty clip, not a finished phrase. Existing clips are preserved. One Undo removes the new clip; changes remain unsaved.
+    /// Generate a new MIDI phrase on an existing instrument or drum track using the project's key, chords and meter. Write melodic harmony with edit_harmony first; drum parts use the track's sound assignments. part is lead, chords, pad, arp, bass, drums, kick, snare or hat. Returns clip ID, note count and seed; zero notes is an empty clip, not a finished phrase. Existing clips are preserved. One Undo removes the new clip; persistence follows the host.
     GeneratePhrase {
         /// Stable instrument or drum track ID from inspect_project or add_track.
         track: u64,
@@ -340,12 +385,6 @@ pub enum Command {
         seed: u64,
     },
 
-    /// Set the tempo at the beginning of the project.
-    SetTempo {
-        /// Tempo in BPM, 20 through 300.
-        #[schemars(range(min = 20, max = 300))]
-        bpm: f64,
-    },
     /// Set and enable a playback loop using a 1-based start bar and duration.
     SetLoop {
         /// First bar, starting at 1.
@@ -361,6 +400,8 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::Automation { operation, .. } => !operation.is_read_only(),
+            Self::EditRecipe { operation, .. } => !operation.is_read_only(),
             Self::MixerGraph { operation } => !operation.is_read_only(),
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
@@ -438,6 +479,38 @@ impl Session {
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::EditVocalNotes {
+                clip,
+                expected_revision,
+                edits,
+            } => self.agent_edit_vocal_notes(clip, expected_revision, edits),
+            Command::Automation {
+                target,
+                operation,
+                expected_revision,
+            } => self.agent_automation(target, operation, expected_revision),
+            Command::EditRecipe {
+                clips,
+                drum_voice,
+                operation,
+            } => self.agent_edit_recipe(clips, drum_voice, operation),
+            Command::SetDrumAssignment {
+                track,
+                role,
+                note,
+                remove,
+            } => {
+                if note.is_some() == remove || note.is_some_and(|note| note > 127) {
+                    return Err("Supply note within 0..127, or remove:true without note".into());
+                }
+                let role = serde_json::from_value::<auris_core::project::DrumRole>(role.into())
+                    .map_err(|_| "Unknown drum role")?;
+                let track = TrackId(track);
+                let changed = self
+                    .set_drum_assignment(track, role, note)
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"track":track.0,"changed":changed,"assignments":self.drum_assignments(track)}).to_string())
+            }
             Command::EditTimeline { operation } => self.agent_edit_timeline(operation),
             Command::EditClip { clip, operation } => self.agent_edit_clip(clip, operation),
             Command::EditClipCurve {
@@ -612,25 +685,19 @@ impl Session {
                     .tracks
                     .iter()
                     .map(|track| {
-                        let clips: Vec<_> = track
-                            .kind
-                            .note_clips()
-                            .into_iter()
-                            .flatten()
-                            .map(|clip| {
-                                serde_json::json!({"id":clip.id.0, "name":clip.name,
-                            "start_tick":clip.start.raw(), "length_ticks":clip.length.raw(),
-                            "note_count":clip.notes.len()})
-                            })
-                            .collect();
+                        let clips: Vec<_> = if let Some(clips)=track.kind.note_clips() {
+                            clips.iter().map(|clip|serde_json::json!({"id":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":clip.length.raw(),"note_count":clip.notes.len()})).collect()
+                        } else if let Some(audio)=track.kind.as_audio() {
+                            audio.clips.iter().map(|clip|serde_json::json!({"id":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":project.audio_clip_length_ticks(clip).raw(),"gain_db":clip.gain_db,"source_bpm":clip.source_bpm,"follows_tempo":clip.follows_tempo,"fade_in_frames":clip.fade_in_frames,"fade_out_frames":clip.fade_out_frames,"source_frames":clip.length_frames,"source_sample_rate":project.audio_sources.get(&clip.source).map(|source|source.sample_rate),"fade_in_curve":clip.fade_in_curve,"fade_out_curve":clip.fade_out_curve})).collect()
+                        } else { Vec::new() };
                         serde_json::json!({"id":track.id.0, "name":track.name,
-                        "kind":track.kind.label(), "mixer":mixer_summary(&track.mixer), "clips":clips,
+                        "kind":track.kind.label(), "mixer":mixer_summary(&track.mixer), "clips":clips,"drum_assignments":self.drum_assignments(track.id),
                         "instrument":track.kind.as_instrument().map(|inner| &inner.instrument_id),
                         "soundfont_preset":self.track_preset(track.id)})
                     })
                     .collect();
                 Ok(serde_json::json!({"title":project.name, "tracks":tracks, "revision":self.agent_document_revision()?,
-                    "duration_seconds":project.duration_seconds(), "harmony":project.harmony,
+                    "sample_rate":project.sample_rate,"duration_seconds":project.duration_seconds(), "harmony":project.harmony,
                     "sections":project.sections, "tempo_map":project.tempo_map, "signatures":project.signatures, "loop_region":project.loop_region, "loop_enabled":project.loop_enabled, "ticks_per_quarter":Ticks::QUARTER.raw()})
                 .to_string())
             }
@@ -748,7 +815,7 @@ impl Session {
                 let ceiling_db = ceiling_db.unwrap_or(-1.0);
                 let report = self.normalize_mix(target_lufs, ceiling_db).map_err(error)?;
                 Ok(format!(
-                    "Moved source faders {:+.2} dB. Mix {:.1} -> {:.1} LUFS; true peak {:.1} -> {:.1} dBTP. Target {:.1} LUFS, ceiling {:.1} dBTP. Changes are unsaved; inspect_audio again before judging the sound.",
+                    "Moved source faders {:+.2} dB. Mix {:.1} -> {:.1} LUFS; true peak {:.1} -> {:.1} dBTP. Target {:.1} LUFS, ceiling {:.1} dBTP. Inspect_audio again before judging the sound.",
                     report.offset_db,
                     report.before.lufs.unwrap_or(f32::NEG_INFINITY),
                     report.after.lufs.unwrap_or(f32::NEG_INFINITY),
@@ -818,13 +885,6 @@ impl Session {
                     "unsaved":true})
                     .to_string(),
                 )
-            }
-            Command::SetTempo { bpm } => {
-                if !(20.0..=300.0).contains(&bpm) {
-                    return Err("bpm must be 20..300".into());
-                }
-                self.set_tempo_at(Ticks::ZERO, bpm);
-                Ok(format!("Set tempo to {bpm} BPM"))
             }
             Command::SetLoop { start_bar, bars } => {
                 if start_bar == 0 || !(1..=1024).contains(&bars) {
@@ -1074,7 +1134,12 @@ mod tests {
         let mut session = session();
         let before = session.project().clone();
         for command in [
-            Command::SetTempo { bpm: f64::NAN },
+            Command::EditTimeline {
+                operation: document_editing::TimelineOperation::SetTempo {
+                    at_tick: 0,
+                    bpm: f64::NAN,
+                },
+            },
             Command::SetLoop {
                 start_bar: 0,
                 bars: 8,
@@ -1088,7 +1153,12 @@ mod tests {
             assert_eq!(session.project(), &before);
         }
         session
-            .agent_command(Command::SetTempo { bpm: 144.0 })
+            .agent_command(Command::EditTimeline {
+                operation: document_editing::TimelineOperation::SetTempo {
+                    at_tick: 0,
+                    bpm: 144.0,
+                },
+            })
             .unwrap();
         session.undo();
         assert_eq!(session.project(), &before);

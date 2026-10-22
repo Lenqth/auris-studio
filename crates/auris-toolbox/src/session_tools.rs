@@ -2,7 +2,8 @@
 
 use crate::{ToolDefinition, live_agent};
 
-pub(crate) const REMOVED_TOOLS: &[&str] = &[
+#[cfg(test)]
+const REMOVED_TOOLS: &[&str] = &[
     "add_note",
     "add_notes",
     "remove_notes",
@@ -20,6 +21,8 @@ pub(crate) const REMOVED_TOOLS: &[&str] = &[
     "notes",
     "similar_instruments",
     "list_instruments",
+    "regenerate_clips",
+    "set_tempo",
 ];
 
 pub(crate) fn definitions() -> Vec<ToolDefinition> {
@@ -56,6 +59,12 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                     session.agent_command_with_plugin_paths(command,&crate::sound_search::configured_plugin_paths())?
                 };
                 if before.as_ref().is_some_and(|before|session.project() != before) { crate::save_checkpointed(&mut session)?; }
+                if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&text)
+                    && let Some(object) = value.as_object_mut()
+                    && object.contains_key("unsaved") {
+                    object.insert("unsaved".into(),session.is_dirty().into());
+                    return Ok(value.to_string());
+                }
                 Ok(text)
             }),
         }
