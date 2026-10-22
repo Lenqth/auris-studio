@@ -299,7 +299,11 @@ pub struct MidiClip {
     /// them and no reason for this crate to have an opinion about which ones a piece uses. Sorted
     /// by number so that a saved file, a MIDI export and a stack of lanes all come out in the
     /// same order, and empty vectors are never kept — see [`Self::forget_empty_curves`].
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_controllers"
+    )]
     pub controllers: BTreeMap<u8, Vec<CurvePoint>>,
     /// Whether the length above was chosen by hand rather than grown to fit the notes.
     ///
@@ -323,6 +327,25 @@ pub struct MidiClip {
     /// identity, and is what every clip carried before this field existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transforms: Vec<super::NoteTransform>,
+}
+
+// JSON object keys are strings. TrackKind's internally tagged deserializer buffers them,
+// bypassing serde_json's special integer-key reader even though a standalone MidiClip works.
+fn deserialize_controllers<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<u8, Vec<CurvePoint>>, D::Error> {
+    BTreeMap::<String, Vec<CurvePoint>>::deserialize(deserializer)?
+        .into_iter()
+        .map(|(key, points)| {
+            let number = key.parse::<u8>().map_err(serde::de::Error::custom)?;
+            if number > 127 || key != number.to_string() {
+                return Err(serde::de::Error::custom(
+                    "controller keys must be MIDI numbers 0..127",
+                ));
+            }
+            Ok((number, points))
+        })
+        .collect()
 }
 
 impl MidiClip {
@@ -1748,6 +1771,36 @@ mod tests {
     use super::*;
     use crate::project::fixtures::demo_project;
     use crate::time::TICKS_PER_QUARTER;
+
+    #[test]
+    fn controller_curves_round_trip_inside_every_tagged_note_track() {
+        let mut project = Project::new("Controllers", 48_000.0);
+        for track in [
+            project.add_instrument_track("Lead", "lead"),
+            project.add_drum_track("Kit", "kit"),
+            project.add_singer_track("Voice", "voice"),
+        ] {
+            let clip = project
+                .add_midi_clip(track, "Curves", Ticks::ZERO, Ticks::QUARTER)
+                .unwrap();
+            let clip = project.midi_clip_mut(clip).unwrap();
+            for controller in [0, 64, 127] {
+                clip.controllers.insert(
+                    controller,
+                    vec![CurvePoint {
+                        at: Ticks(13),
+                        value: 0.73125,
+                    }],
+                );
+            }
+            let text = serde_json::to_string(clip).unwrap();
+            assert_eq!(serde_json::from_str::<MidiClip>(&text).unwrap(), *clip);
+        }
+        let text = serde_json::to_string(&project).unwrap();
+        assert_eq!(serde_json::from_str::<Project>(&text).unwrap(), project);
+        let value = serde_json::to_value(&project).unwrap();
+        assert_eq!(serde_json::from_value::<Project>(value).unwrap(), project);
+    }
 
     #[test]
     fn curve_order_from_an_untrusted_document_is_repaired() {
