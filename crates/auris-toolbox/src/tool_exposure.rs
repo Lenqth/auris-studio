@@ -126,29 +126,55 @@ pub fn concise_description(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(". ")
 }
-/// Compact only presentation metadata; schema validation constraints are unchanged.
+/// Remove field prose from transmitted schemas; full descriptions remain in tool_help.
+/// Only JSON Schema positions are visited, preserving literal const/default values and
+/// fields whose actual name happens to be description. Validation is unchanged.
 pub fn compact_parameters(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(object) => {
-            if let Some(serde_json::Value::String(text)) = object.get_mut("description") {
-                *text = concise_description(text);
-            }
-            if let Some(properties) = object.get_mut("properties").and_then(|v| v.as_object_mut())
-                && let Some(project) = properties.get_mut("project")
-            {
-                project["description"] =
-                    "Project path or project_id from create_project/open_project.".into();
-            }
-            for child in object.values_mut() {
+    let Some(schema) = value.as_object_mut() else {
+        return;
+    };
+    schema.remove("description");
+    for key in [
+        "properties",
+        "patternProperties",
+        "$defs",
+        "dependentSchemas",
+    ] {
+        if let Some(entries) = schema
+            .get_mut(key)
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            for child in entries.values_mut() {
                 compact_parameters(child);
             }
         }
-        serde_json::Value::Array(array) => {
-            for child in array {
+    }
+    for key in [
+        "items",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "if",
+        "then",
+        "else",
+        "not",
+        "contains",
+        "propertyNames",
+        "contentSchema",
+    ] {
+        if let Some(child) = schema.get_mut(key) {
+            compact_parameters(child);
+        }
+    }
+    for key in ["oneOf", "allOf", "anyOf", "prefixItems"] {
+        if let Some(branches) = schema
+            .get_mut(key)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for child in branches {
                 compact_parameters(child);
             }
         }
-        _ => {}
     }
 }
 /// Bounded discovery without loading every tool schema.

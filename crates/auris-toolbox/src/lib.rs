@@ -65,7 +65,7 @@ pub mod mixer_graph;
 mod project_files;
 mod recognition;
 mod reports;
-mod transcription;
+pub mod transcription_tools;
 pub use reports::read_report;
 pub mod plugin_paths;
 pub mod replace_notes;
@@ -87,11 +87,8 @@ pub use editing::{
 pub use listening::listen;
 pub use mix_editing::{automation, effects};
 pub use project_files::{create_project, export_midi, import_audio, import_midi};
-pub use recognition::{
-    analyze_audio, analyze_chords, analyze_instruments, transcribe_audio, transcribe_mixture,
-};
+pub use recognition::{analyze_audio, analyze_chords, analyze_instruments};
 pub use track_editing::{convert_track_to_audio, routing, set_instrument_param, set_track_state};
-pub use transcription::import_transcription;
 
 /// What a model is told before it has called anything.
 ///
@@ -354,75 +351,6 @@ pub struct SpecArgs {
     /// Field overrides applied on top, e.g. `{"key": "D minor", "tempo": "96"}`. Every name is
     /// a field of the format itself — run `check_spec` on an empty spec to see them all.
     pub overrides: Option<BTreeMap<String, String>>,
-}
-
-/// The tools that write the project file they are aimed at, by wire name.
-///
-/// For a host watching the conversation from beside an open document — the desktop's agent
-/// panel — this is how it knows the file under it may have moved after a call succeeds.
-/// `render` is absent because it writes WAV files beside the project, and the progression
-/// tools because they write the machine's own book; neither touches a document.
-pub const WRITES_PROJECTS: &[&str] = &[
-    create_project::NAME,
-    import_audio::NAME,
-    import_midi::NAME,
-    import_transcription::NAME,
-    routing::NAME,
-    set_track_state::NAME,
-    convert_track_to_audio::NAME,
-    set_instrument_param::NAME,
-    set_instrument_params::NAME,
-    analyze_chords::NAME,
-    transcribe_audio::NAME,
-    transcribe_mixture::NAME,
-    analyze_drum_kit::NAME,
-    set_drum_assignment::NAME,
-    effects::NAME,
-    automation::NAME,
-    checkpoints::NAME,
-    edit_clip::NAME,
-    edit_harmony::NAME,
-    edit_recipe::NAME,
-    compose::NAME,
-    regenerate_clips::NAME,
-    set_level::NAME,
-    normalize_mix::NAME,
-    set_effect::NAME,
-    section_gain::NAME,
-    add_track::NAME,
-    add_part::NAME,
-    set_instrument::NAME,
-    rename_track::NAME,
-    remove_track::NAME,
-    add_clip::NAME,
-    edit_notes::NAME,
-    replace_notes::NAME,
-    replace_notes_batch::NAME,
-    accompany::NAME,
-    write_lyrics::NAME,
-    sing::NAME,
-];
-
-/// Whether a particular invocation can rewrite a project, excluding read operations.
-pub fn writes_project(tool: &str, args: &serde_json::Value) -> bool {
-    if !WRITES_PROJECTS.contains(&tool) {
-        return false;
-    }
-    match tool {
-        routing::NAME => args.get("operation").and_then(|value| value.as_str()) != Some("list"),
-        analyze_drum_kit::NAME
-        | analyze_chords::NAME
-        | transcribe_audio::NAME
-        | transcribe_mixture::NAME => {
-            args.get("apply").and_then(|value| value.as_bool()) == Some(true)
-        }
-        effects::NAME => args.pointer("/operation/action").and_then(|v| v.as_str()) != Some("list"),
-        automation::NAME => {
-            args.pointer("/operation/action").and_then(|v| v.as_str()) != Some("read")
-        }
-        checkpoints::NAME => args.get("action").and_then(|v| v.as_str()) != Some("list"),
-        _ => true,
-    }
 }
 
 /// The `.asong` format, taught by example.
@@ -3392,22 +3320,6 @@ mod tests {
             .set_point(change + Ticks::QUARTER * 3, TimeSignature::new(3, 4));
         assert!(placed_at(&project, 3, 4.0).is_err());
         assert_eq!(placed_at(&project, 3, 1.0).unwrap(), Ticks::QUARTER * 7);
-    }
-
-    #[test]
-    fn checkpoint_creation_is_classified_as_a_durable_project_write() {
-        assert!(!writes_project(
-            checkpoints::NAME,
-            &serde_json::json!({"action":"list"})
-        ));
-        assert!(writes_project(
-            checkpoints::NAME,
-            &serde_json::json!({"action":"create"})
-        ));
-        assert!(writes_project(
-            checkpoints::NAME,
-            &serde_json::json!({"action":"restore"})
-        ));
     }
 
     #[test]

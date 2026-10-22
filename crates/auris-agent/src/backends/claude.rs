@@ -1036,8 +1036,7 @@ mod tests {
                     let init = request(json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"claude-fixture","version":"1"}}})).send().await.unwrap();
                     let session = init.headers().get("mcp-session-id").unwrap().to_str().unwrap().to_owned();
                     request(json!({"jsonrpc":"2.0","method":"notifications/initialized"})).header("mcp-session-id", &session).send().await.unwrap();
-                    let response = request(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_piano_cover","arguments":{"attachment":metadata["attachment_id"],"name":"Claude lead"}}})).header("mcp-session-id", &session).send().await.unwrap().text().await.unwrap();
-                    let result: Value = serde_json::from_str(&response).ok().or_else(|| response.lines().filter_map(|line| line.strip_prefix("data: ")).find_map(|line| serde_json::from_str(line).ok())).unwrap();
+                    let result=crate::live_mcp::transcription_test_call(&client,&mcp.url,&mcp.token,&session,&metadata["attachment_id"],"Claude lead").await;
                     assert_eq!(result["result"]["isError"] == true, !allowed, "{result}");
                     reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Finished"})).await;
                 };
@@ -1053,7 +1052,7 @@ mod tests {
                         };
                         match event["event"].as_str().unwrap_or_default() {
                             "permission" => {
-                                commands.send(json!({"event":"permission_result","id":event["id"],"ok":allowed,"reason":"fixture policy"}).to_string()).unwrap();
+                                commands.send(json!({"event":"permission_result","id":event["id"],"ok":allowed || event["tool"]=="transcribe_audio","reason":"fixture policy"}).to_string()).unwrap();
                             }
                             "edit" => {
                                 assert!(allowed);
@@ -1141,7 +1140,7 @@ mod tests {
                         .unwrap();
                 }
                 "edit" => {
-                    assert_eq!(event["command"]["action"], "create_piano_cover");
+                    assert_eq!(event["command"]["action"], "import_transcription");
                     assert!(
                         event["command"]["transcription"]["notes"]
                             .as_array()

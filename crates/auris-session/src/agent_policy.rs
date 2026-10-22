@@ -86,7 +86,8 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.set_singer_voice",
     "edit_project.write_lyrics",
     "edit_project.sing",
-    "edit_project.create_piano_cover",
+    "transcribe_audio",
+    "read_report",
     "edit_project.import_transcription",
     "export_audio_attachment",
     "edit_project.mixer_graph.read",
@@ -201,6 +202,8 @@ impl Operation {
                 // decides that from the path the CLI asked for, and says so here; anything
                 // else — another project, a home directory's keys — asks like a network call.
                 confirm: matches!(tool, "search_internet" | "cli_command" | "cli_file_change")
+                    || (tool == "transcribe_audio"
+                        && (args["path"].is_string() || args["backend"]["model"].is_string()))
                     || (tool == "cli_file_read" && args["within_project"] != true),
             })
         } else {

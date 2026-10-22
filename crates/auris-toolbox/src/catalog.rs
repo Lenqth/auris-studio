@@ -194,11 +194,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             create_project::DESCRIPTION,
             create_project::run,
         ),
-        definition::<import_transcription::Args>(
-            import_transcription::NAME,
-            import_transcription::DESCRIPTION,
-            import_transcription::run,
-        ),
         definition::<capabilities::Args>(
             capabilities::NAME,
             capabilities::DESCRIPTION,
@@ -224,15 +219,10 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             analyze_instruments::DESCRIPTION,
             analyze_instruments::run,
         ),
-        definition::<transcribe_audio::Args>(
-            transcribe_audio::NAME,
-            transcribe_audio::DESCRIPTION,
-            transcribe_audio::run,
-        ),
-        definition::<transcribe_mixture::Args>(
-            transcribe_mixture::NAME,
-            transcribe_mixture::DESCRIPTION,
-            transcribe_mixture::run,
+        definition::<transcription_tools::Args>(
+            transcription_tools::NAME,
+            transcription_tools::DESCRIPTION,
+            transcription_tools::run,
         ),
         definition::<inspect_composition::Args>(
             inspect_composition::NAME,

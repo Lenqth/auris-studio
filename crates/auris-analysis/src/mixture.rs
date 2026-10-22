@@ -19,7 +19,7 @@ use std::{
 pub const MUSCRIPTOR_NOTICE: &str = "MuScriptor model weights are licensed under CC BY-NC 4.0 for noncommercial use only. Do not use this model for commercial work without separate permission from its rights holders. This optional model does not change Auris Studio's Apache-2.0 license. Acknowledgement does not grant commercial rights.";
 
 /// One unquantized, instrument-labeled note hypothesis.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
 pub struct MixtureNote {
     /// MIDI pitch, or percussion pitch for drums.
     pub pitch: u8,

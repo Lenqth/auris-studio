@@ -201,10 +201,6 @@ pub(crate) fn begin_commit() -> Result<(), String> {
     current().begin_commit()
 }
 
-pub(crate) fn finish_independent_commit() -> Result<(), String> {
-    current().finish_independent_commit()
-}
-
 fn cancelled_message() -> String {
     "the tool request was cancelled before making durable changes".to_string()
 }

@@ -25,9 +25,10 @@ not edit or save the document.
 
 ## Import a note draft
 
-Call live `import_transcription` with exactly one of `transcription` (the object
-below) or `path` (an absolute local JSON file containing it). Optional `name`
-defaults to `Transcription`; `at_beat` defaults to zero and accepts 0..1000000.
+Call `import_transcription` with exactly one of `draft_id` (from `transcribe_audio`),
+`transcription` (the external piano object below) or `path` (an absolute local JSON
+file containing that object). Optional `name` defaults to `Transcription`;
+`at_tick` is a nonnegative absolute insertion tick and defaults to zero.
 Use a JSON file for large drafts instead of putting thousands of events into chat.
 
 ```json
@@ -50,7 +51,7 @@ to 256 bytes. Optional `artifact_sha256` identifies the actual model or analysis
 program used; optional `audio_sha256` identifies the analyzed source bytes. Each
 hash must contain 64 hexadecimal characters. These are caller claims: the host
 does not authenticate a recognizer, check the claimed audio association, or certify
-musical accuracy. The response explicitly reports `provenance_verified: false`.
+musical accuracy. Recognition accuracy is not certified by acceptance.
 Provenance and limitations are returned to the caller, not persisted in the score;
 keep the original JSON and hashes when reproducible analysis matters.
 
@@ -72,13 +73,12 @@ step and refuses the entire draft if any interval collapses to zero ticks, so sh
 notes cannot silently disappear. It remains unsaved. Use `read_notes` and
 `inspect_audio` to review the result.
 
-Saved-project MCP offers `import_transcription` with `project`, `path`, and the
-same optional `name` and `at_beat`. It uses the same session command and saves with
-a checkpoint, returning `unsaved: false`. The transcription tool group exposes it.
-
-`create_piano_cover` remains the bundled local Basic Pitch shortcut. Its
-recognizer-specific hash validation is unchanged; external drafts use the separate
-`NoteTranscription` contract instead of masquerading as a bundled-model result.
+Saved-project MCP adds required `project` to the same import contract and saves
+changed results with a checkpoint. Live imports stay unsaved. All transports expose
+`transcribe_audio` with explicit YIN, Basic Pitch or MuScriptor backend selection.
+Recognition returns an immutable `draft_id`, a preview and a report, without editing.
+Use `read_report` for large reports and `import_transcription` for explicit acceptance.
+See [agent workflows](agent-workflows.md) for limits and license acknowledgement.
 
 ## Validation
 

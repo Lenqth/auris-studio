@@ -189,9 +189,9 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
         let entries=transcript(&this.agent_chat.entries);
         let imported=entries.iter().any(|e|e["name"]=="import_transcription" && e["ok"]==true);
         let exported=entries.iter().any(|e|e["name"]=="export_audio_attachment" && e["ok"]==true);
-        let used_basic_pitch=entries.iter().any(|e|e["name"]=="create_piano_cover");
-        let cover_added=imported || used_basic_pitch;
-        let import_index=entries.iter().position(|e| matches!(e["name"].as_str(),Some("import_transcription"|"create_piano_cover")) && e["ok"]==true);
+        let used_basic_pitch=entries.iter().any(|e|e["name"]=="transcribe_audio" && e["args"].as_str().is_some_and(|args|args.contains("basic_pitch")));
+        let cover_added=imported;
+        let import_index=entries.iter().position(|e| e["name"]=="import_transcription" && e["ok"]==true);
         let readback=import_index.is_some_and(|index|entries[index+1..].iter().any(|e|e["name"]=="read_notes" && e["ok"]==true && e["detail"].as_str().is_some_and(|s|!s.is_empty())));
         let inspected=import_index.is_some_and(|index|entries[index+1..].iter().any(|e|e["name"]=="inspect_audio" && e["ok"]==true && e["detail"].as_str().is_some_and(|s|!s.is_empty())));
         let after=this.session.project().clone();

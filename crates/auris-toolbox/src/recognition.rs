@@ -7,40 +7,6 @@ fn analysis_control() -> AnalysisControl {
     AnalysisControl::cancelled_by(cancellation::current().flag_handle())
 }
 
-fn export_midi_noclobber(session: &Session, output: &Path) -> Result<(), String> {
-    if output.exists() {
-        return Err("MIDI output already exists".into());
-    }
-    output.parent().ok_or("MIDI output needs a parent folder")?;
-    let staged = session
-        .stage_midi_export(output)
-        .map_err(|error| error.to_string())?;
-    cancellation::begin_commit()?;
-    staged
-        .publish_noclobber()
-        .map_err(|error| format!("could not publish MIDI without replacing a file: {error}"))?;
-    Ok(())
-}
-
-fn continue_after_midi<T>(
-    midi_path: &str,
-    update_project: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
-    cancellation::finish_independent_commit()
-        .and_then(|()| update_project())
-        .map_err(|error| {
-            if error.contains("tool request was cancelled before making durable changes") {
-                format!(
-                    "MIDI was written to {midi_path}; cancellation stopped before the project file was changed"
-                )
-            } else {
-                format!(
-                    "MIDI was written to {midi_path}; the subsequent project update failed: {error}"
-                )
-            }
-        })
-}
-
 fn beats(value: f64) -> Result<Ticks, String> {
     if !value.is_finite() || !(0.0..=1_000_000.0).contains(&value) {
         return Err("beat positions must be finite and within 0..1000000".into());
@@ -75,84 +41,6 @@ pub mod analyze_instruments {
         )
         .map_err(|e| e.to_string())?;
         reports::publish(&report)
-    }
-}
-
-/// Optional noncommercial mixture transcription and explicit draft acceptance.
-pub mod transcribe_mixture {
-    use super::*;
-    /// Wire name.
-    pub const NAME: &str = "transcribe_mixture";
-    /// Model-facing command description.
-    pub const DESCRIPTION: &str = "Uses user-converted MuScriptor Small ONNX on CPU for instrument-labeled note drafts. Its model is CC BY-NC 4.0, noncommercial only; present this restriction and obtain explicit user acknowledgement for this invocation before setting acknowledge_noncommercial=true. Acknowledgement does not grant commercial rights. Auris itself remains Apache-2.0. Select decoder.onnx beside audio.onnx and muscriptor.json, prepared with export_muscriptor.py. Runtime requires no Python or downloads. Defaults to read-only JSON. Optional MIDI creates a new file; apply adds instrument tracks and saves a checkpoint. Notes and playback patches need review. Large results return an immutable report_id snapshot; use read_report for details instead of repeating analysis or edits.";
-    /// Local inference and optional write destinations.
-    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-    pub struct Args {
-        /// Absolute input audio path.
-        pub audio: String,
-        /// Absolute converted decoder.onnx path beside audio.onnx and muscriptor.json.
-        pub model: String,
-        /// True only after the user explicitly accepted noncommercial use for this invocation.
-        #[serde(default)]
-        pub acknowledge_noncommercial: bool,
-        /// New MIDI destination; existing files are refused.
-        pub midi_output: Option<String>,
-        /// Existing project to receive new tracks; requires apply.
-        pub project: Option<String>,
-        /// Zero-based insertion beat; defaults to zero.
-        pub at_beat: Option<f64>,
-        /// Explicitly modify and save the project; defaults to false.
-        #[serde(default)]
-        pub apply: bool,
-    }
-    /// Requires acknowledgement before any audio I/O, worker creation or project edit.
-    pub fn run(args: &Args) -> Result<String, String> {
-        if !args.acknowledge_noncommercial {
-            return Err(auris_session::MUSCRIPTOR_NOTICE.into());
-        }
-        if args.apply != args.project.is_some() {
-            return Err("project and apply must be supplied together".into());
-        }
-        if args
-            .midi_output
-            .as_ref()
-            .is_some_and(|p| Path::new(p).exists())
-        {
-            return Err("MIDI output already exists".into());
-        }
-        let start = beats(args.at_beat.unwrap_or(0.0))?;
-        let config = auris_session::MixtureOptions {
-            model: args.model.clone().into(),
-            acknowledge_noncommercial: true,
-        };
-        let report = auris_session::transcribe_mixture_file(
-            Path::new(&args.audio),
-            &config,
-            &analysis_control(),
-        )
-        .map_err(|e| e.to_string())?;
-        let response = reports::publish(&report)?;
-        if let Some(path) = &args.midi_output {
-            let mut output = Session::new(SessionOptions::headless()).map_err(|e| e.to_string())?;
-            output
-                .create_mixture_tracks(&report, Ticks::ZERO)
-                .map_err(|e| e.to_string())?;
-            export_midi_noclobber(&output, Path::new(path))?;
-        }
-        if let Some(path) = &args.project {
-            let update = || {
-                let mut output = opened(path)?;
-                output
-                    .create_mixture_tracks(&report, start)
-                    .map_err(|e| e.to_string())?;
-                save_checkpointed(&mut output)
-            };
-            match args.midi_output.as_deref() {
-                Some(midi_path) => continue_after_midi(midi_path, update)?,
-                None => update()?,
-            }
-        }
-        Ok(response)
     }
 }
 
@@ -238,127 +126,9 @@ pub mod analyze_audio {
     }
 }
 
-/// Isolated monophonic transcription and explicit MIDI or project output.
-pub mod transcribe_audio {
-    use super::*;
-    /// Wire name.
-    pub const NAME: &str = "transcribe_audio";
-    /// Model-facing command description.
-    pub const DESCRIPTION: &str = "Transcribes an isolated monophonic audio file using CPU YIN, without models or GPU. Supports approximately 65-1000 Hz; does not separate mixed instruments or produce engraved staff notation. Returns source-second note estimates. Optional MIDI output creates a new file; apply adds an editable note track to a project and saves a checkpoint. Existing notes and tempo are preserved. Large results return an immutable report_id snapshot; use read_report for details instead of repeating analysis or edits.";
-    /// Input, optional destination, and explicit acceptance.
-    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-    pub struct Args {
-        /// Absolute audio-file path.
-        pub audio: String,
-        /// Existing project receiving a new track; requires apply.
-        pub project: Option<String>,
-        /// New MIDI file containing only the transcription; existing files are refused.
-        pub midi_output: Option<String>,
-        /// Name for the new track and clip; defaults to Transcription.
-        pub name: Option<String>,
-        /// Zero-based insertion beat in the project's current tempo map; defaults to zero.
-        pub at_beat: Option<f64>,
-        /// Explicitly modify the named project. Defaults to false.
-        #[serde(default)]
-        pub apply: bool,
-    }
-    /// Reports notes, optionally writes a new MIDI and/or accepts them in a project.
-    pub fn run(args: &Args) -> Result<String, String> {
-        if args.apply != args.project.is_some() {
-            return Err("project and apply must be supplied together".into());
-        }
-        if args
-            .midi_output
-            .as_ref()
-            .is_some_and(|p| Path::new(p).exists())
-        {
-            return Err("MIDI output already exists".into());
-        }
-        let start = beats(args.at_beat.unwrap_or(0.0))?;
-        let report = auris_session::analyze_audio_file(
-            Path::new(&args.audio),
-            AudioOptions { transcribe: true },
-            &analysis_control(),
-        )
-        .map_err(|e| e.to_string())?;
-        let name = args.name.as_deref().unwrap_or("Transcription");
-        let response = reports::publish(&report)?;
-        if let Some(path) = &args.midi_output {
-            let mut output = Session::new(SessionOptions::headless()).map_err(|e| e.to_string())?;
-            output
-                .create_transcription_track(&report, Ticks::ZERO, name)
-                .map_err(|e| e.to_string())?;
-            export_midi_noclobber(&output, Path::new(path))?;
-        }
-        if let Some(path) = &args.project {
-            let update = || {
-                let mut session = opened(path)?;
-                session
-                    .create_transcription_track(&report, start, name)
-                    .map_err(|e| e.to_string())?;
-                save_checkpointed(&mut session)
-            };
-            match args.midi_output.as_deref() {
-                Some(midi_path) => continue_after_midi(midi_path, update)?,
-                None => update()?,
-            }
-        }
-        Ok(response)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
-    #[test]
-    fn mixture_tool_defaults_to_no_consent_and_refuses_before_io() {
-        let args: transcribe_mixture::Args =
-            serde_json::from_str(r#"{"audio":"missing.wav","model":"missing"}"#).unwrap();
-        assert!(!args.acknowledge_noncommercial);
-        assert!(
-            transcribe_mixture::run(&args)
-                .unwrap_err()
-                .contains("CC BY-NC 4.0")
-        );
-    }
-    #[test]
-    fn invalid_ranges_and_accidental_project_writes_are_rejected_before_io() {
-        assert!(beats(f64::NAN).is_err());
-        assert!(beats(-1.0).is_err());
-        let args = transcribe_audio::Args {
-            audio: "missing.wav".into(),
-            project: Some("missing.auris".into()),
-            midi_output: None,
-            name: None,
-            at_beat: None,
-            apply: false,
-        };
-        assert!(
-            transcribe_audio::run(&args)
-                .unwrap_err()
-                .contains("together")
-        );
-    }
-
-    #[test]
-    fn cancellation_after_midi_never_starts_the_project_update() {
-        let control = std::sync::Arc::new(crate::Cancellation::new());
-        control.begin_commit().unwrap();
-        assert!(!control.cancel());
-        let attempted = Cell::new(false);
-        let error = crate::with_cancellation(control, || {
-            continue_after_midi("Draft.mid", || {
-                attempted.set(true);
-                Ok(())
-            })
-        })
-        .unwrap_err();
-        assert!(!attempted.get());
-        assert!(error.contains("MIDI was written to Draft.mid"), "{error}");
-        assert!(error.contains("project file was changed"), "{error}");
-    }
-
     #[test]
     fn file_tools_report_without_writing_then_export_only_the_draft_and_apply() {
         let root = std::env::temp_dir().join(format!(
@@ -430,42 +200,27 @@ mod tests {
             "C"
         );
         assert_eq!(std::fs::read(&project).unwrap(), original);
-        let mut args = transcribe_audio::Args {
-            audio: wav.display().to_string(),
-            project: None,
-            midi_output: None,
-            name: None,
-            at_beat: None,
-            apply: false,
+        let args = crate::transcription_tools::Args {
+            path: Some(wav.display().to_string()),
+            attachment: None,
+            backend: crate::transcription_tools::Backend::Yin,
         };
-        let json: serde_json::Value =
-            serde_json::from_str(&transcribe_audio::run(&args).unwrap()).unwrap();
-        assert_eq!(json["notes"].as_array().unwrap().len(), 1);
-        assert_eq!(json["notes"][0]["pitch"], 69);
-        let midi = root.join("Draft.mid");
-        args.midi_output = Some(midi.display().to_string());
-        args.project = Some(project.display().to_string());
-        args.apply = true;
-        args.at_beat = Some(8.0);
-        transcribe_audio::run(&args).unwrap();
+        let recognized: serde_json::Value =
+            serde_json::from_str(&crate::transcription_tools::run(&args).unwrap()).unwrap();
+        assert_eq!(recognized["note_count"], 1);
+        assert_eq!(recognized["preview"]["notes"][0]["pitch"], 69);
+        assert_eq!(std::fs::read(&project).unwrap(), original);
+        let accepted = crate::runtime::call_saved(
+            &crate::ToolGroups::default(),
+            "import_transcription",
+            serde_json::json!({"project":project,"draft_id":recognized["draft_id"],"at_tick":7680}),
+        )
+        .unwrap();
+        let accepted: serde_json::Value = serde_json::from_str(&accepted).unwrap();
+        assert_eq!(accepted["notes"], 1);
         let saved = opened(project.to_str().unwrap()).unwrap();
         assert_eq!(saved.project().tracks.len(), 2);
         assert_eq!(saved.project().midi_clip(clip).unwrap().1.notes.len(), 3);
-        let mut exported = Session::new(SessionOptions::headless()).unwrap();
-        exported.import_midi(&midi).unwrap();
-        let pitches: Vec<_> = exported
-            .project()
-            .tracks
-            .iter()
-            .flat_map(|t| t.kind.note_clips().into_iter().flatten())
-            .flat_map(|c| c.notes.iter().map(|n| n.pitch))
-            .collect();
-        assert_eq!(pitches, vec![69]);
-        assert!(
-            transcribe_audio::run(&args)
-                .unwrap_err()
-                .contains("already exists")
-        );
         assert_eq!(std::fs::read(&wav).unwrap(), wav_bytes);
         std::fs::remove_dir_all(&root).unwrap();
     }

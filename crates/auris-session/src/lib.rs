@@ -96,6 +96,7 @@ pub use auris_analysis::audio::{
 pub use auris_analysis::basic_pitch::PianoTranscription;
 pub use auris_analysis::transcription::{NoteTranscription, TranscriptionSource};
 mod transcription;
+mod transcription_draft;
 pub use auris_analysis::chords::{
     ChordCandidate, ChordOptions, ChordReading, ChordState, SymbolicChordSegment,
 };
@@ -170,6 +171,7 @@ pub use settings::{
 };
 pub use singer_portrait::{SingerPortraitError, SingerPortraitSource, load_singer_portrait};
 pub use transcription::read_transcription_file;
+pub use transcription_draft::TranscriptionDraft;
 pub use voice_setup::{
     DiffSingerSetup, LeapSingerCheck, LeapSingerSetup, VoiceSetupError, VoicevoxCatalog,
     VoicevoxConnection, VoicevoxSetup, VoicevoxSpeakerChoice, VoicevoxStyle,

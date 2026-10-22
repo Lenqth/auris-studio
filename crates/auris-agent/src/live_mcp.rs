@@ -23,6 +23,58 @@ use std::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[cfg(test)]
+pub(crate) async fn transcription_test_call(
+    client: &reqwest::Client,
+    url: &str,
+    token: &str,
+    session: &str,
+    attachment: &serde_json::Value,
+    name: &str,
+) -> serde_json::Value {
+    use serde_json::{Value, json};
+    let request = |id, name: &str, args: Value| {
+        client.post(url).bearer_auth(token).header("Accept","application/json, text/event-stream").header("mcp-session-id",session).json(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":name,"arguments":args}}))
+    };
+    let parse = |text: &str| {
+        serde_json::from_str::<Value>(text)
+            .ok()
+            .or_else(|| {
+                text.lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .find_map(|line| serde_json::from_str(line).ok())
+            })
+            .expect("MCP JSON or SSE")
+    };
+    let recognized = request(
+        2,
+        "transcribe_audio",
+        json!({"attachment":attachment,"backend":{"kind":"basic_pitch"}}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .text()
+    .await
+    .unwrap();
+    let recognized = parse(&recognized);
+    assert_ne!(recognized["result"]["isError"], true, "{recognized}");
+    let draft: Value =
+        serde_json::from_str(recognized["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let imported = request(
+        3,
+        "import_transcription",
+        json!({"draft_id":draft["draft_id"],"name":name}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .text()
+    .await
+    .unwrap();
+    parse(&imported)
+}
+
 #[derive(Clone)]
 struct LiveTools {
     host: ToolHost,

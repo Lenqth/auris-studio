@@ -9,11 +9,12 @@ require no GPU. Reproducible measurements and current quality limits are in
 Optional CPU models now add instrument-presence tagging and multi-instrument note drafts.
 See [local model setup, license notices and measured limitations](music-analysis-models.md).
 MuScriptor is a separate noncommercial option requiring acknowledgement on every invocation.
-The Agent panel also provides `create_piano_cover` for attached audio. Its bundled
+Agents use `transcribe_audio` for local files or live attachments, choosing `yin`,
+`basic_pitch` or `muscriptor`. The bundled
 Apache-2.0 Basic Pitch ONNX model needs no external weights or Python and estimates
 overlapping pitched notes on the CPU. Up to ten minutes/eight channels can become
 an editable piano track through the normal permission and Undo paths. This draft
-is independent of the monophonic YIN and optional MuScriptor workflows below.
+is accepted separately with `import_transcription` and its returned `draft_id`.
 The [piano-cover evaluation](piano-transcription-evaluation.md) records the composer/audio-pair
 benchmark, confidence-gated decoding, existing-score results and remaining omissions.
 Agents with local analysis tools can also export the original attachment and import

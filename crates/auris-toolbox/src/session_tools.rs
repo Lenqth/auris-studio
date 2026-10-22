@@ -23,11 +23,13 @@ const REMOVED_TOOLS: &[&str] = &[
     "list_instruments",
     "regenerate_clips",
     "set_tempo",
+    "create_piano_cover",
+    "transcribe_mixture",
 ];
 
 pub(crate) fn definitions() -> Vec<ToolDefinition> {
     live_agent::definitions().into_iter().filter(|tool| {
-        !matches!(tool.name.as_str(), "capabilities" | "discover_tools" | "tool_help" | "search_documentation" | "export_audio_attachment" | "create_piano_cover" | "import_transcription" | "inspect_audio" | "listen")
+        !matches!(tool.name.as_str(), "capabilities" | "discover_tools" | "tool_help" | "search_documentation" | "export_audio_attachment" | "read_report" | "transcribe_audio" | "inspect_audio" | "listen")
     }).map(|tool| {
         let name = tool.name;
         let mut parameters = tool.parameters;
@@ -42,6 +44,8 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                 let project = object.remove("project").and_then(|value| value.as_str().map(str::to_owned)).ok_or("Invalid arguments: project is required")?;
                 let command = if action == "edit_notes" {
                     serde_json::from_value::<crate::score_input::Args>(args).map_err(|e|format!("Invalid arguments: {e}"))?.command()?
+                } else if action == "import_transcription" {
+                    serde_json::from_value::<live_agent::transcription_import::Args>(args).map_err(|e|format!("Invalid arguments: {e}"))?.command(&auris_session::AnalysisControl::cancelled_by(crate::cancellation::current().flag_handle()))?
                 } else { live_agent::command(&action, &args)?.ok_or("Unknown session tool")? };
                 let mut session = crate::opened(&project)?;
                 let before = command.is_mutating().then(||session.project().clone());

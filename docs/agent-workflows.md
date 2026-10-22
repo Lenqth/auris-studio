@@ -190,6 +190,23 @@ Codex and Claude trials, including actual rendering and Undo/Redo checks.
 
 ## Live harmony and vocals
 
+`transcribe_audio` is read-only recognition. Select backend kind `yin` for an
+isolated monophonic source, `basic_pitch` for the bundled polyphonic pitched-note
+model, or `muscriptor` with a prepared local `model` and explicit per-invocation
+`acknowledge_noncommercial:true`. MuScriptor's CC BY-NC 4.0 notice must be presented
+and accepted first. No model download or audio upload is implicit.
+
+Supply exactly one absolute local `path` or live conversation `attachment` ID.
+The result contains `draft_id`, a short preview and a complete `report`; large
+reports are paged with `read_report`. Recognition does not change or save a project.
+Explicit acceptance uses `import_transcription` with `draft_id` and optional
+`at_tick` (absolute timeline ticks) and piano track `name`. Mixture drafts retain
+their instrument labels. Notes are estimates; review their timing and timbres.
+Drafts expire after 30 minutes, restart or bounded-cache eviction (8 drafts/64 MiB).
+The alternative external-piano input is exactly one inline `transcription` or
+absolute JSON `path`, following the source/seconds/notes/limitations schema shown
+by tool_help. Declared provenance is not recognition verification.
+
 For a new song, write its musical decisions into the document with `edit_harmony`, for example
 `{"start_bar":1,"bars":16,"key":"D major","chords":"| I | vi | IV | V |"}`.
 The chart repeats over the requested bars. The previous key resumes after the range;
@@ -230,7 +247,7 @@ local loopback VOICEVOX is supported and its Engine must already be running.
 `write_lyrics` takes `clip` and `text`, for example `{"clip":2,"text":"さくらさいた"}`.
 Kana is split into moras and phonemes; non-kana text requires the installed Japanese dictionary.
 Omit `from` to begin at the earliest note, or copy a zero-based storage index from `read_notes`
-to begin there in time order. This differs from the saved-file MCP tool's 1-based note number.
+to begin there in time order. Saved and live calls use the same storage indices.
 Unfilled later notes retain their words. Check the returned `filled` count and `available`
 capacity and read back the notes before claiming the whole phrase was entered.
 

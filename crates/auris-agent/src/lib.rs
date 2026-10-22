@@ -309,7 +309,7 @@ For a new composition, use edit_harmony to write the chosen key and Roman-numera
 Plan the song's form too, and write each section with edit_harmony section, start_bar and bars (section alone is valid). Use meaningful labels such as Intro, Verse, Chorus, Bridge and Outro where musically appropriate, in the user's language if requested. Clip names or a prose outline do not populate the section lane. Cover the intended arrangement with named sections and verify their positions and lengths with inspect_project before claiming a new composition is finished. Keep short loops or explicitly requested single-section pieces simple; preserve existing structure on local edits.
 For a vocal song, add_track kind singer, add_clip and edit_notes create the score. list_voices discovers local voice paths; set_singer_voice selects a voice and optional named speaker. inspect_singer reads back the selected voice, offered speakers and take state. write_lyrics uses the singer clip ID and optional zero-based storage index from read_notes; verify the filled count and lyrics. Then sing creates the actual playback take on a worker; inspect_singer must report a current take before claiming vocals are finished. Missing voices, unavailable synthesis servers and failed/cancelled synthesis are errors, never completed vocals. These live operations leave the document unsaved and are undoable.
 
-For alternative audio transcription, export_audio_attachment returns a separate exact-original local file plus its byte hash. Analyze it with local tools/code when available; delivery is not listening. Import your complete source-second note JSON with import_transcription, inline or by absolute local path. Declare the real method/model/program hash and uncertainty; never impersonate Basic Pitch or invent notes from filenames/tempo/chords. Supply every note's relative strength; if dynamics were not measured, disclose uniform dynamics in limitations. Provenance claims are not verification. create_piano_cover remains the bundled local recognizer shortcut. Read back notes and inspect_audio before claiming a finished cover.
+For alternative audio transcription, export_audio_attachment returns a separate exact-original local file plus its byte hash. Analyze it with local tools/code when available; delivery is not listening. Import your complete source-second note JSON with import_transcription, inline or by absolute local path; at_tick is the absolute insertion tick. Declare the real method/model/program hash and uncertainty; never impersonate Basic Pitch or invent notes from filenames/tempo/chords. Supply every note's relative strength; if dynamics were not measured, disclose uniform dynamics in limitations. Provenance claims are not verification. Use transcribe_audio with explicit backend kind yin, basic_pitch or muscriptor; recognition returns draft_id without editing. Then import_transcription explicitly accepts it. Read back notes and inspect_audio before claiming a finished cover.
 Use search_instruments with request {\"mode\":\"text\",\"query\":\"piano\"} for focused search.
 The same request supports mode similar with id, or mode browse with bounded pagination. Continue other work while acoustic status is indexing.
 Copy returned sound_id exactly; use add_track, add_clip and edit_notes to write music.
@@ -561,7 +561,7 @@ fn strip_markup(text: &str) -> String {
 /// File-free editing and reference tools for the rig agent.
 fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
     let mut builder = builder.preamble(preamble()).tool(InternetSearch);
-    for definition in toolbox::live_agent::definitions() {
+    for definition in host::ToolHost::definitions() {
         let tool_name = definition.name.clone();
         let bridge = bridge.clone();
         builder = builder.dynamic_tool(rig::tool::DynamicTool::new(
@@ -2286,7 +2286,7 @@ mod tests {
         let names: std::collections::BTreeSet<_> =
             actual.iter().map(|tool| tool.name.as_str()).collect();
         assert_eq!(names.len(), actual.len());
-        for expected in toolbox::live_agent::definitions() {
+        for expected in host::ToolHost::definitions() {
             let tool = actual
                 .iter()
                 .find(|tool| tool.name == expected.name)

@@ -29,10 +29,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     let clip = session.add_midi_clip(existing, "Sentinel", Ticks::ZERO, Ticks::QUARTER)?;
     session.add_note(clip, Note::new(48, Ticks::ZERO, Ticks::QUARTER))?;
     let before = session.project().clone();
-    let command = || Command::CreatePianoCover {
-        transcription: draft.clone(),
+    let command = || Command::ImportTranscription {
+        draft: Box::new(auris_session::TranscriptionDraft::Piano {
+            transcription: auris_session::NoteTranscription {
+                source: auris_session::TranscriptionSource {
+                    method: "basic_pitch".into(),
+                    model: None,
+                    artifact_sha256: Some(draft.model_sha256.clone()),
+                    audio_sha256: None,
+                },
+                seconds: draft.seconds,
+                notes: draft.notes.clone(),
+                limitations: None,
+            },
+        }),
         name: "Audio piano cover".into(),
-        at_beat: 4.0,
+        at_tick: 3840,
     };
     let response: serde_json::Value = serde_json::from_str(&session.agent_command(command())?)?;
     let retained = session.project().tracks.first() == before.tracks.first();

@@ -43,8 +43,8 @@ with source timestamps and sampling strides. Analysis runs in the background
 without editing or importing into the song. Raw audio stays local on these routes.
 
 To create a piano cover, attach the recording and ask, for example, “Transcribe
-this audio and make a piano cover.” The agent's `create_piano_cover` tool runs
-the bundled Apache-2.0 Basic Pitch model locally and adds an editable physical-piano
+this audio and make a piano cover.” The agent's `transcribe_audio` tool with backend `basic_pitch` runs
+the bundled Apache-2.0 Basic Pitch model locally and returns a draft. `import_transcription` accepts it as an editable physical-piano
 track with overlapping notes, source timing and estimated relative velocities.
 No Python, model setup or separate audio-model connection is needed. The draft
 preserves the project's tempo and existing tracks, remains unsaved, and one Undo

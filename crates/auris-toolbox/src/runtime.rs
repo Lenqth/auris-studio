@@ -10,6 +10,7 @@ struct Empty {}
 /// Reference tools available through every live transport.
 pub fn live_references() -> Vec<crate::live_agent::Definition> {
     [
+        ("read_report", crate::read_report::DESCRIPTION, crate::parameter_schema::<crate::read_report::Args>()),
         ("search_documentation", crate::search_documentation::DESCRIPTION, crate::parameter_schema::<crate::search_documentation::Args>()),
         ("discover_tools", crate::discover_tools::DESCRIPTION, crate::parameter_schema::<crate::discover_tools::Args>()),
         ("tool_help", crate::tool_help::DESCRIPTION, crate::parameter_schema::<crate::tool_help::Args>()),
@@ -24,6 +25,9 @@ pub fn call_live_reference(name: &str, args: Value) -> Option<Result<String, Str
     let run = || -> Result<String, String> {
         let invalid = |e: serde_json::Error| format!("Invalid arguments for {name}: {e}");
         match name {
+            "read_report" => {
+                crate::read_report::run(&serde_json::from_value(args).map_err(invalid)?)
+            }
             "search_documentation" => {
                 crate::search_documentation::run(&serde_json::from_value(args).map_err(invalid)?)
             }
@@ -86,7 +90,7 @@ pub fn call_live_reference(name: &str, args: Value) -> Option<Result<String, Str
     };
     matches!(
         name,
-        "search_documentation" | "tool_help" | "discover_tools" | "capabilities"
+        "search_documentation" | "tool_help" | "discover_tools" | "capabilities" | "read_report"
     )
     .then(run)
 }

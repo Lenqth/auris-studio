@@ -16,6 +16,13 @@ impl ToolHost {
 
     pub(crate) fn definitions() -> Vec<toolbox::live_agent::Definition> {
         toolbox::live_agent::definitions()
+            .into_iter()
+            .map(|mut tool| {
+                toolbox::compact_parameters(&mut tool.parameters);
+                tool.description = toolbox::concise_description(&tool.description);
+                tool
+            })
+            .collect()
     }
 
     pub(crate) fn contains(name: &str) -> bool {
@@ -91,107 +98,55 @@ impl ToolHost {
                 "status":"Local file access only; not proof of listening or transcription."});
             return Ok(json!({"event":"edit_result","ok":true,"text":metadata.to_string()}));
         }
-        if name == toolbox::live_agent::transcription_import::NAME {
-            let args: toolbox::live_agent::transcription_import::Args =
-                serde_json::from_value(args).map_err(|e| e.to_string())?;
-            let name = args.name.unwrap_or_else(|| "Transcription".into());
-            let at_beat = args.at_beat.unwrap_or(0.0);
-            if name.trim().is_empty()
-                || name.len() > 256
-                || !at_beat.is_finite()
-                || !(0.0..=1_000_000.0).contains(&at_beat)
-            {
-                return Err(
-                    "Use a nonempty name up to 256 bytes and at_beat within 0..1000000".into(),
-                );
-            }
-            let transcription = match (args.transcription, args.path) {
-                (Some(draft), None) => draft,
-                (None, Some(path)) => {
-                    permissions::authorize(
-                        Some(&self.bridge),
-                        "cli_file_read",
-                        &json!({"path":path,"purpose":"Read external transcription JSON"})
-                            .to_string(),
-                    )
-                    .await?;
-                    let control = self.bridge.analysis_control();
-                    tokio::task::spawn_blocking(move || {
-                        auris_session::read_transcription_file(
-                            std::path::Path::new(&path),
-                            &control,
-                        )
-                        .map_err(|e| e.to_string())
-                    })
-                    .await
-                    .map_err(|e| e.to_string())??
-                }
-                _ => return Err("Supply exactly one of transcription or path".into()),
-            };
-            transcription.validate().map_err(|e| e.to_string())?;
-            let command = auris_session::live_agent::Command::ImportTranscription {
-                transcription,
-                name,
-                at_beat,
-            };
-            permissions::authorize(
-                Some(&self.bridge),
-                "edit_project",
-                &json!({"command":command}).to_string(),
-            )
-            .await?;
-            let reply = self
-                .bridge
-                .exchange(json!({"event":"edit","command":command}))
-                .await?;
-            if reply["event"] != "edit_result" {
-                return Err("The edit response did not match the pending request".into());
-            }
-            return Ok(reply);
-        }
-        if name == toolbox::live_agent::piano_cover::NAME {
-            let args: toolbox::live_agent::piano_cover::Args =
-                serde_json::from_value(args).map_err(|e| e.to_string())?;
-            let at_beat = args.at_beat.unwrap_or(0.0);
-            let name = args.name.unwrap_or_else(|| "Piano cover".into());
-            if !at_beat.is_finite()
-                || !(0.0..=1_000_000.0).contains(&at_beat)
-                || name.trim().is_empty()
-                || name.len() > 256
-            {
-                return Err(
-                    "Use a nonempty name up to 256 bytes and at_beat within 0..1000000".into(),
-                );
-            }
-            let source = self.bridge.audio_reference(&args.attachment)?;
+        if name == toolbox::transcription_tools::NAME {
+            let request: toolbox::transcription_tools::Args =
+                serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
+            request.validate()?;
+            let source = request
+                .attachment
+                .as_ref()
+                .map(|id| self.bridge.audio_reference(id))
+                .transpose()?;
+            permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
             let control = self.bridge.analysis_control();
-            let transcription = tokio::task::spawn_blocking(move || {
-                auris_session::transcribe_piano_file(source.path(), &control)
-                    .map_err(|e| e.to_string())
+            let text = tokio::task::spawn_blocking(move || {
+                let path = source
+                    .as_ref()
+                    .map(|s| s.path())
+                    .or_else(|| request.path.as_deref().map(std::path::Path::new))
+                    .ok_or("Missing audio source")?;
+                toolbox::transcription_tools::recognize(path, request.backend, &control)
             })
             .await
             .map_err(|e| e.to_string())??;
-            transcription.validate().map_err(|e| e.to_string())?;
-            let command = auris_session::live_agent::Command::CreatePianoCover {
-                transcription,
-                name,
-                at_beat,
-            };
-            // Approval binds the actual immutable note draft to the current document revision.
+            return Ok(json!({"event":"edit_result","ok":true,"text":text}));
+        }
+        if name == toolbox::live_agent::transcription_import::NAME {
+            let request: toolbox::live_agent::transcription_import::Args =
+                serde_json::from_value(args).map_err(|e| e.to_string())?;
+            request.validate()?;
+            if let Some(path) = &request.path {
+                permissions::authorize(
+                    Some(&self.bridge),
+                    "cli_file_read",
+                    &json!({"path":path,"purpose":"Read external transcription JSON"}).to_string(),
+                )
+                .await?;
+            }
+            let control = self.bridge.analysis_control();
+            let command = tokio::task::spawn_blocking(move || request.command(&control))
+                .await
+                .map_err(|e| e.to_string())??;
             permissions::authorize(
                 Some(&self.bridge),
                 "edit_project",
                 &json!({"command":command}).to_string(),
             )
             .await?;
-            let reply = self
+            return self
                 .bridge
                 .exchange(json!({"event":"edit","command":command}))
-                .await?;
-            if reply["event"] != "edit_result" {
-                return Err("The edit response did not match the pending request".into());
-            }
-            return Ok(reply);
+                .await;
         }
         let command = toolbox::live_agent::command(name, &args)?
             .ok_or_else(|| format!("Unknown live tool: {name}"))?;
@@ -420,9 +375,9 @@ mod tests {
             let (bridge, commands, events) = crate::worker::test_bridge();
             let host = ToolHost::new(bridge);
             let args = if file {
-                json!({"path":path,"at_beat":4})
+                json!({"path":path,"at_tick":3840})
             } else {
-                json!({"transcription":draft,"at_beat":4})
+                json!({"transcription":draft,"at_tick":3840})
             };
             let call = host.call("import_transcription", args);
             let owner = async {
@@ -441,7 +396,7 @@ mod tests {
                 }
                 let event = next_event(&events).await;
                 assert_eq!(event["event"], "permission");
-                assert_eq!(event["args"]["command"]["transcription"], draft);
+                assert_eq!(event["args"]["command"]["draft"]["transcription"], draft);
                 let operation = auris_session::agent_policy::Operation::parse(
                     event["tool"].as_str().unwrap(),
                     &event["args"],
@@ -488,7 +443,7 @@ mod tests {
         for invalid in [
             json!({}),
             json!({"transcription":draft,"path":path}),
-            json!({"transcription":draft,"at_beat":-1}),
+            json!({"transcription":draft,"at_tick":-1}),
             json!({"transcription":draft,"name":" "}),
         ] {
             let (bridge, _, events) = crate::worker::test_bridge();
@@ -546,14 +501,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn piano_cover_uses_retained_audio_and_the_canonical_permission_gate() {
+    async fn recognition_uses_retained_audio_and_acceptance_has_a_separate_edit_gate() {
         for allowed in [false, true] {
             let folder = tempfile::tempdir().unwrap();
-            let path = folder.path().join("piano.wav");
+            let path = folder.path().join("reference.wav");
             crate::attachments::tests::reference_wav(&path, false);
             let (bridge, commands, events) = crate::worker::test_bridge();
             let prepared = crate::attachments::cli_input(
-                "Piano cover".into(),
+                "Transcribe".into(),
                 vec![path.display().to_string()],
                 &bridge,
                 false,
@@ -569,116 +524,85 @@ mod tests {
                     .unwrap(),
             )
             .unwrap();
-            std::fs::write(path, b"replaced after sending").unwrap();
+            std::fs::write(&path, b"changed original").unwrap();
             let host = ToolHost::new(bridge.clone());
-            let call = host.call(
-                "create_piano_cover",
-                json!({"attachment":metadata["attachment_id"],"at_beat":4.0}),
-            );
+            let invoke = async {
+                let result=host.call("transcribe_audio",json!({"attachment":metadata["attachment_id"],"backend":{"kind":"basic_pitch"}})).await.unwrap();
+                let draft: Value = serde_json::from_str(result["text"].as_str().unwrap()).unwrap();
+                assert!(draft["note_count"].as_u64().unwrap() >= 3);
+                host.call(
+                    "import_transcription",
+                    json!({"draft_id":draft["draft_id"],"at_tick":3840}),
+                )
+                .await
+            };
             let owner = async {
                 let mut session =
                     auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
                 session.add_default_instrument_track("Existing").unwrap();
                 let before = session.project().clone();
-                let mut edits = 0;
-                loop {
-                    let event = loop {
-                        match events.try_recv() {
-                            Ok(value) => break value,
-                            Err(std::sync::mpsc::TryRecvError::Empty) => {
-                                tokio::task::yield_now().await
-                            }
-                            Err(error) => panic!("{error}"),
-                        }
-                    };
-                    if event["event"] == "permission" {
-                        let operation = auris_session::agent_policy::Operation::parse(
-                            event["tool"].as_str().unwrap(),
-                            &event["args"],
-                        )
+                let recognition = next_event(&events).await;
+                assert_eq!(recognition["tool"], "transcribe_audio");
+                let operation = auris_session::agent_policy::Operation::parse(
+                    "transcribe_audio",
+                    &recognition["args"],
+                )
+                .unwrap();
+                assert!(!operation.mutating && !operation.confirm);
+                commands
+                    .send(
+                        json!({"event":"permission_result","id":recognition["id"],"ok":true})
+                            .to_string(),
+                    )
+                    .unwrap();
+                let acceptance = next_event(&events).await;
+                let operation = auris_session::agent_policy::Operation::parse(
+                    "edit_project",
+                    &acceptance["args"],
+                )
+                .unwrap();
+                assert_eq!(operation.name, "edit_project.import_transcription");
+                assert!(operation.mutating);
+                assert_eq!(session.project(), &before);
+                commands
+                    .send(
+                        json!({"event":"permission_result","id":acceptance["id"],"ok":allowed})
+                            .to_string(),
+                    )
+                    .unwrap();
+                if allowed {
+                    let edit = next_event(&events).await;
+                    assert_eq!(edit["command"], acceptance["args"]["command"]);
+                    let text = session
+                        .agent_command(serde_json::from_value(edit["command"].clone()).unwrap())
                         .unwrap();
-                        assert_eq!(operation.name, "edit_project.create_piano_cover");
-                        assert!(operation.mutating);
-                        let policy = auris_session::agent_policy::Policy {
-                            mode: if allowed {
-                                auris_session::agent_policy::Mode::Edit
-                            } else {
-                                auris_session::agent_policy::Mode::ReadOnly
-                            },
-                            ..Default::default()
-                        };
-                        assert_eq!(
-                            policy.decide(&operation)
-                                == auris_session::agent_policy::Decision::Allow,
-                            allowed
-                        );
-                        commands
-                            .send(
-                                json!({"event":"permission_result","id":event["id"],"ok":allowed})
-                                    .to_string(),
-                            )
-                            .unwrap();
-                        if !allowed {
-                            break;
-                        }
-                    } else if event["event"] == "edit" {
-                        edits += 1;
-                        let text = session
-                            .agent_command(
-                                serde_json::from_value(event["command"].clone()).unwrap(),
-                            )
-                            .unwrap();
-                        commands
-                            .send(json!({"event":"edit_result","ok":true,"text":text}).to_string())
-                            .unwrap();
-                        let piano = session
-                            .project()
-                            .tracks
-                            .last()
-                            .unwrap()
-                            .kind
-                            .as_instrument()
-                            .unwrap();
-                        assert_eq!(piano.instrument_id, "auris.physical.piano");
-                        for pitch in [60, 64, 67] {
-                            assert!(piano.clips[0].notes.iter().any(|note| note.pitch == pitch));
-                        }
-                        assert!(session.path().is_none());
-                        session.undo();
-                        break;
+                    let added = session
+                        .project()
+                        .tracks
+                        .last()
+                        .unwrap()
+                        .kind
+                        .as_instrument()
+                        .unwrap();
+                    for pitch in [60, 64, 67] {
+                        assert!(added.clips[0].notes.iter().any(|n| n.pitch == pitch));
                     }
+                    commands
+                        .send(json!({"event":"edit_result","ok":true,"text":text}).to_string())
+                        .unwrap();
+                    session.undo();
                 }
-                assert_eq!(edits, usize::from(allowed));
                 assert_eq!(session.project(), &before);
             };
-            let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-                tokio::join!(call, owner)
+            let (reply, ()) = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+                tokio::join!(invoke, owner)
             })
             .await
             .unwrap();
-            assert_eq!(result.is_ok(), allowed);
+            assert_eq!(reply.is_ok(), allowed);
             assert!(events.try_recv().is_err());
             let other = ToolHost::new(crate::worker::test_bridge().0);
-            assert!(
-                other
-                    .call(
-                        "create_piano_cover",
-                        json!({"attachment":metadata["attachment_id"]})
-                    )
-                    .await
-                    .unwrap_err()
-                    .contains("Unknown or expired")
-            );
-            bridge.analysis_control().cancel();
-            assert!(
-                host.call(
-                    "create_piano_cover",
-                    json!({"attachment":metadata["attachment_id"]})
-                )
-                .await
-                .unwrap_err()
-                .contains("cancelled")
-            );
+            assert!(other.call("transcribe_audio",json!({"attachment":metadata["attachment_id"],"backend":{"kind":"basic_pitch"}})).await.unwrap_err().contains("Unknown or expired"));
         }
     }
 

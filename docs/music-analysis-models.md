@@ -119,11 +119,12 @@ auris transcribe-mixture recording.wav --model models/muscriptor-onnx/decoder.on
 
 Omit `--midi` for read-only JSON. To add tracks to an existing project, supply
 `--project Song.auris --apply [--at-beat 0]`. Existing MIDI destinations are refused.
-The MCP/agent tool `transcribe_mixture` takes `audio`, `model`,
-`acknowledge_noncommercial` (false by default), optional `midi_output`, and
-`project`/`apply`/`at_beat`. The caller must present the restriction and obtain explicit
-acknowledgement for that invocation before passing true. JSON preserves the checkpoint hash,
-backend version, model license and source-second events.
+The shared `transcribe_audio` tool selects `backend:{kind:"muscriptor",model,
+acknowledge_noncommercial:true}` and an absolute source `path` or live attachment.
+The caller must present the restriction and obtain explicit acknowledgement for
+that invocation before passing true. Recognition is read-only; the resulting
+`draft_id` is accepted separately with `import_transcription`. Instrument labels,
+source-second events and model hashes are retained in the draft report.
 
 Inference uses ONNX Runtime's CPU provider, float32, two compute threads, greedy decoding
 and five-second chunks. Rust maintains KV caches and forces the next chunk's tie prologue

@@ -1319,7 +1319,7 @@ rejected spec names its lines and fields, a render reports each file's length an
 The loop that *improves* a piece is `analyze`: the server renders the project and listens in
 the model's place, reporting loudness and peaks for the whole mix, per named section — the
 piece's dynamic arc as numbers — and, on request, per track alone. Against that answer the
-model either edits the specification and composes again, or aims `regenerate_clips` at clips
+model either edits the specification and composes again, or aims `edit_recipe` at clips
 numbered by `describe`. Its `take` selects `{kind:"same"}` to follow the current harmony,
 `{kind:"next"}` for new takes, or `{kind:"seed",seed:42}` for one exact seed.
 `teach_progression` keeps a chord progression by name on
@@ -1339,7 +1339,7 @@ instrument id (`list_instruments` names them) or by a musical sound hint, asked 
 ("Electric Piano 1") or program number. Supported families choose native models; other hints
 can use an optional installed GM library. `add_part` writes a generated part (lead, chords, pad, arp, bass, or
 the kit and its pieces) onto a track from the key and chords already under the song, keeping
-its recipe so `regenerate_clips` applies to it like any composed clip, and
+its recipe so `edit_recipe` applies to it like any composed clip, and
 `set_instrument`, `rename_track` and `remove_track` do what they say.
 
 Notes can be placed one by one, which turns the composer around: `add_clip` opens an empty
@@ -1363,7 +1363,7 @@ The same tool set is available at both model doors.
 Existing songs can be revised without composing a replacement. `inspect_composition` reads
 the original specification separately from the current harmony, tempo, sections and clip
 recipes. `edit_harmony` changes a specified bar range while leaving notes and the mix intact;
-`regenerate_clips` explicitly updates the parts that should follow it. `edit_recipe` changes one
+`edit_recipe` explicitly updates the parts that should follow it. `edit_recipe` changes one
 clip's density, intensity, rhythm, octave or groove, retaining its seed and unspecified
 controls. Hand-edited notes need an explicit replacement flag. `edit_clip` moves, duplicates,
 splits, resizes, removes, mutes or freezes a note clip. `analyze_music` measures stored notes'
@@ -1373,7 +1373,7 @@ not an aesthetic score.
 Every `track` argument also accepts a stable selector such as `id:4`, shown by `describe`
 and `mixer`. IDs continue to address the same track after a rename, including in documents
 that already contain duplicate names. Adding or renaming a track through the tools requires
-a unique name. `regenerate_clips` checks every targeted clip before changing
+a unique name. `edit_recipe` checks every targeted clip before changing
 anything; hand edits require `replace_hand_edits: true`, just as with `edit_recipe`.
 
 `section_gain` accepts either an absolute `gain_db` or a relative `gain_delta_db`. A relative
@@ -1424,8 +1424,8 @@ process environment. The transcript shows tool calls, results and the model's an
 
 The model edits the current session through live commands, including an unsaved empty
 project. `inspect_project` reads the current arrangement. The model chooses the musical
-parts and writes them through flat track, clip and note tools. `add_notes` inserts a phrase
-of up to 256 notes as one undoable edit; `set_tempo` and `set_loop` control tempo and looping.
+parts and writes them through flat track, clip and note tools. `edit_notes` applies bounded atomic patches/replacements using exact ticks and a
+revision from `read_notes`; `edit_timeline` and `set_loop` control tempo/meter and looping.
 Changes appear before the model's final reply. Existing music is preserved unless its
 removal is explicitly requested. Save the project normally when ready.
 

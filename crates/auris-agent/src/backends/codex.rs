@@ -800,7 +800,7 @@ mod tests {
                 reply(&mut writer, json!({"id":request["id"],"result":{"thread":{"id":"thread"}}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "mcpServerStatus/list");
-                reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"create_piano_cover":{}}}]}})).await;
+                reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"transcribe_audio":{},"import_transcription":{}}}]}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "turn/start");
                 assert!(request["params"]["input"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
@@ -817,14 +817,7 @@ mod tests {
                 let session = init.headers().get("mcp-session-id").unwrap().to_str().unwrap().to_owned();
                 let notify = request(json!({"jsonrpc":"2.0","method":"notifications/initialized"})).header("mcp-session-id", &session).send().await.unwrap();
                 assert!(notify.status().is_success());
-                let response = request(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_piano_cover","arguments":{"attachment":metadata["attachment_id"],"name":"Codex lead"}}})).header("mcp-session-id", &session).send().await.unwrap();
-                let status = response.status();
-                let body = response.text().await.unwrap();
-                // Legacy negotiated sessions return SSE, while newer clients may use JSON.
-                let result: Value = serde_json::from_str(&body).ok().or_else(|| {
-                    body.lines().filter_map(|line| line.strip_prefix("data: "))
-                        .find_map(|line| serde_json::from_str(line).ok())
-                }).unwrap_or_else(|| panic!("MCP {status}: {body}"));
+                let result=crate::live_mcp::transcription_test_call(&client,&mcp.url,&mcp.token,&session,&metadata["attachment_id"],"Codex lead").await;
                 assert_ne!(result["result"]["isError"], true, "{result}");
                 assert!(result["error"].is_null(), "{result}");
                 reply(&mut writer, json!({"method":"item/agentMessage/delta","params":{"threadId":"thread","turnId":"turn","delta":"Added the track."}})).await;
@@ -851,7 +844,7 @@ mod tests {
                         "edit" => {
                             edits += 1;
                             let command = serde_json::from_value(event["command"].clone()).unwrap();
-                            assert!(event["command"]["transcription"]["notes"].as_array().unwrap().len() >= 3);
+                            assert!(event["command"]["draft"]["transcription"]["notes"].as_array().unwrap().len() >= 3);
                             let text = session.agent_command(command).unwrap();
                             commands.send(json!({"event":"edit_result","ok":true,"text":text}).to_string()).unwrap();
                         }
@@ -862,7 +855,7 @@ mod tests {
                         _ => {}
                     }
                 }
-                assert_eq!((permissions, edits), (1, 1));
+                assert_eq!((permissions, edits), (2, 1));
                 assert!(session.project().tracks.iter().any(|track| track.name == "Codex lead"));
                 let piano = session.project().tracks.iter().find(|track|track.name == "Codex lead").unwrap();
                 assert_eq!(piano.kind.as_instrument().unwrap().instrument_id, "auris.physical.piano");
