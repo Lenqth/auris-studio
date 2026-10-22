@@ -753,7 +753,12 @@ mod tests {
         ] {
             assert!(validate_servers(&json!({"mcpServers":servers})).is_err());
         }
-        assert!(validate_tools(&json!({"tools":["mcp__auris_live__add_track"]})).is_ok());
+        assert!(
+            validate_tools(
+                &json!({"tools":["mcp__auris_live__add_track", "mcp__auris_live__generate_phrase"]})
+            )
+            .is_ok()
+        );
         for tools in [
             json!([]),
             json!(["Agent"]),

@@ -2339,6 +2339,11 @@ pub mod harmony {
     //! extends beyond the pointer. Otherwise it uses up to four bars from the pointer's bar,
     //! bounded by section changes. Neighbouring clips trim either edge, and an occupied position is
     //! refused. These resolved edges are preserved even between grid lines.
+    //! The live agent's `generate_phrase` command uses [`Session::generate_clip`](crate::Session::generate_clip)
+    //! with an explicit bar range, part and seed. It adds stored notes and a recipe as one Undo
+    //! step in the open document. The shared live catalog exposes it to native model APIs,
+    //! Codex and Claude Code with the same edit permissions; melodic parts require existing
+    //! harmony in the selected range.
     //!
     //! # The score does not change; the performer does
     //!

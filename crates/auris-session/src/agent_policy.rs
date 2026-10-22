@@ -113,6 +113,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.normalize_mix",
     "edit_project.set_track_state",
     "edit_project.add_clip",
+    "edit_project.generate_phrase",
     "edit_project.add_note",
     "edit_project.add_notes",
     "edit_project.replace_notes",
@@ -288,6 +289,7 @@ mod tests {
     fn harmony_and_vocals_respect_edit_read_only_plan_and_deny_rules() {
         for command in [
             serde_json::json!({"action":"edit_harmony","start_bar":1,"bars":4,"chords":"| I | V |"}),
+            serde_json::json!({"action":"generate_phrase","track":1,"part":"lead","start_bar":1,"bars":4}),
             serde_json::json!({"action":"set_singer_voice","track":1,"voice":"/voice/test.voicevox.json"}),
             serde_json::json!({"action":"write_lyrics","clip":2,"text":"さくら"}),
             serde_json::json!({"action":"sing","track":1}),

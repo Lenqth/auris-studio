@@ -270,6 +270,23 @@ pub enum Command {
         #[schemars(range(min = 1, max = 1024))]
         bars: u32,
     },
+    /// Generate a new MIDI phrase on an existing instrument or drum track using the project's key, chords and meter. Write melodic harmony with edit_harmony first; drum parts use the track's sound assignments. part is lead, chords, pad, arp, bass, drums, kick, snare or hat. Returns clip ID, note count and seed; zero notes is an empty clip, not a finished phrase. Existing clips are preserved. One Undo removes the new clip; changes remain unsaved.
+    GeneratePhrase {
+        /// Stable instrument or drum track ID from inspect_project or add_track.
+        track: u64,
+        /// Melodic parts require an instrument track; drum parts require a drum track.
+        #[schemars(extend("enum" = ["lead", "chords", "pad", "arp", "bass", "drums", "kick", "snare", "hat"]))]
+        part: String,
+        /// First bar, starting at 1, in the project's meter.
+        #[schemars(range(min = 1))]
+        start_bar: u32,
+        /// Duration in bars, 1 through 1024.
+        #[schemars(range(min = 1, max = 1024))]
+        bars: u32,
+        /// Deterministic take seed; defaults to zero. A different seed selects a different take.
+        #[serde(default)]
+        seed: u64,
+    },
     /// Add one note using start and beats in quarter-note beats relative to the clip start (zero-based). The note must fit inside the clip and last at least one tick. Unlike add_notes, this tool uses start and beats rather than start_beat and duration_beats. Velocity is 0..1, not MIDI 0..127.
     AddNote {
         /// Stable clip ID from inspect or add_clip.
@@ -738,6 +755,50 @@ impl Session {
                     .map_err(error)?;
                 Ok(format!("Added clip ID {}", id.0))
             }
+            Command::GeneratePhrase {
+                track,
+                part,
+                start_bar,
+                bars,
+                seed,
+            } => {
+                if start_bar == 0 || !(1..=1024).contains(&bars) {
+                    return Err("Use start_bar >= 1 and bars 1..1024".into());
+                }
+                let preset = ClipPreset::parse(&part).ok_or(
+                    "Unknown part; use lead, chords, pad, arp, bass, drums, kick, snare or hat",
+                )?;
+                let after = start_bar.checked_add(bars).ok_or("Bar range overflow")?;
+                let start = self.project().signatures.bar_start(start_bar);
+                let end = self.project().signatures.bar_start(after);
+                if !preset.is_drums()
+                    && self
+                        .project()
+                        .harmony
+                        .events_in(start, end, &self.project().signatures)
+                        .is_empty()
+                {
+                    return Err("No chords in this range; use edit_harmony before generating a melodic phrase".into());
+                }
+                let clip = self
+                    .generate_clip(
+                        TrackId(track),
+                        start,
+                        end - start,
+                        ClipRecipe::new(preset, seed),
+                    )
+                    .map_err(error)?;
+                let notes = self
+                    .project()
+                    .midi_clip(clip)
+                    .map_or(0, |(_, clip)| clip.notes.len());
+                Ok(
+                    serde_json::json!({"clip":clip.0,"track":track,"part":preset.name(),
+                    "start_bar":start_bar,"bars":bars,"seed":seed,"notes":notes,
+                    "unsaved":true})
+                    .to_string(),
+                )
+            }
             Command::AddNote {
                 clip,
                 pitch,
@@ -850,6 +911,157 @@ mod tests {
 
     fn session() -> Session {
         Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap()
+    }
+
+    #[test]
+    fn generated_phrases_keep_their_seed_meter_and_existing_music_and_undo_once() {
+        for preset in ClipPreset::ALL {
+            let mut session = session();
+            session.set_signature_at(Ticks::ZERO, TimeSignature::new(3, 4));
+            session
+                .agent_edit_harmony(
+                    1,
+                    8,
+                    Some("D major"),
+                    Some("| I | IV | V | I |"),
+                    false,
+                    None,
+                )
+                .unwrap();
+            let track = if preset.is_drums() {
+                session.add_default_drum_track("Beat").unwrap()
+            } else {
+                session.add_default_instrument_track("Lead").unwrap()
+            };
+            let existing = session
+                .add_midi_clip(track, "Keep", Ticks::ZERO, Ticks::QUARTER * 3)
+                .unwrap();
+            session
+                .add_note(existing, Note::new(60, Ticks::ZERO, Ticks::QUARTER))
+                .unwrap();
+            let before = session.project().clone();
+            let command = || Command::GeneratePhrase {
+                track: track.0,
+                part: preset.name().into(),
+                start_bar: 3,
+                bars: 2,
+                seed: 42,
+            };
+            let result: serde_json::Value =
+                serde_json::from_str(&session.agent_command(command()).unwrap()).unwrap();
+            let clip = session
+                .project()
+                .midi_clip(ClipId(result["clip"].as_u64().unwrap()))
+                .unwrap()
+                .1;
+            assert_eq!(clip.start, Ticks::QUARTER * 6);
+            assert_eq!(clip.length, Ticks::QUARTER * 6);
+            assert!(!clip.notes.is_empty(), "{preset:?}");
+            assert_eq!(result["notes"].as_u64().unwrap(), clip.notes.len() as u64);
+            assert_eq!(clip.recipe.as_ref().unwrap().preset, preset);
+            assert_eq!(clip.recipe.as_ref().unwrap().seed, 42);
+            assert!(
+                clip.notes
+                    .iter()
+                    .all(|n| n.start >= Ticks::ZERO && n.start + n.length <= clip.length)
+            );
+            let generated = clip.notes.clone();
+            assert_eq!(
+                session.project().midi_clip(existing),
+                before.midi_clip(existing)
+            );
+            assert!(session.path().is_none());
+            session.undo();
+            assert_eq!(session.project(), &before);
+            let result: serde_json::Value =
+                serde_json::from_str(&session.agent_command(command()).unwrap()).unwrap();
+            assert_eq!(
+                session
+                    .project()
+                    .midi_clip(ClipId(result["clip"].as_u64().unwrap()))
+                    .unwrap()
+                    .1
+                    .notes,
+                generated
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_phrase_requests_preserve_the_document_and_undo_history() {
+        let mut session = session();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let before = session.project().clone();
+        for (part, start_bar, bars) in [
+            ("lead", 1, 4),
+            ("unknown", 1, 4),
+            ("lead", 0, 4),
+            ("lead", 1, 0),
+            ("lead", 1, 1025),
+            ("lead", u32::MAX, 1),
+        ] {
+            assert!(
+                session
+                    .agent_command(Command::GeneratePhrase {
+                        track: track.0,
+                        part: part.into(),
+                        start_bar,
+                        bars,
+                        seed: 0
+                    })
+                    .is_err()
+            );
+            assert_eq!(session.project(), &before);
+        }
+        session.undo();
+        assert!(session.project().tracks.is_empty());
+    }
+
+    #[test]
+    fn drum_phrase_generation_needs_no_harmony_and_defaults_its_seed() {
+        let mut session = session();
+        let track = session.add_default_drum_track("Beat").unwrap();
+        let command = serde_json::from_value(serde_json::json!({"action":"generate_phrase",
+            "track":track.0,"part":"drums","start_bar":1,"bars":2}))
+        .unwrap();
+        let result: serde_json::Value =
+            serde_json::from_str(&session.agent_command(command).unwrap()).unwrap();
+        assert_eq!(result["seed"], 0);
+        assert!(result["notes"].as_u64().unwrap() > 0);
+        assert!(session.project().harmony.is_empty());
+    }
+
+    #[test]
+    fn phrase_generation_rejects_wrong_track_kinds_before_recording_an_edit() {
+        let mut session = session();
+        session
+            .agent_edit_harmony(1, 4, None, Some("| I | V |"), false, None)
+            .unwrap();
+        let melodic = session.add_default_instrument_track("Lead").unwrap();
+        let drum = session.add_default_drum_track("Beat").unwrap();
+        let singer = session.add_singer_track("Vocal");
+        let before = session.project().clone();
+        for (track, part) in [
+            (melodic, "drums"),
+            (drum, "lead"),
+            (singer, "lead"),
+            (TrackId(u64::MAX), "lead"),
+        ] {
+            assert!(
+                session
+                    .agent_command(Command::GeneratePhrase {
+                        track: track.0,
+                        part: part.into(),
+                        start_bar: 1,
+                        bars: 4,
+                        seed: 0
+                    })
+                    .is_err()
+            );
+            assert_eq!(session.project(), &before);
+        }
+        session.undo();
+        assert!(session.project().track(singer).is_none());
     }
 
     #[test]

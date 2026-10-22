@@ -955,6 +955,13 @@ mod tests {
             .await
             .unwrap();
         validate_servers(&status).unwrap();
+        let live = status["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|server| server["name"] == "auris_live")
+            .unwrap();
+        assert!(live["tools"].get("generate_phrase").is_some(), "{status}");
         rpc.stop().await;
     }
 

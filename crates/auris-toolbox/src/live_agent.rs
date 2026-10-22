@@ -222,6 +222,7 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         | "normalize_mix"
         | "set_track_state"
         | "add_clip"
+        | "generate_phrase"
         | "add_note"
         | "remove_notes"
         | "replace_notes"
@@ -342,6 +343,26 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generated_phrases_are_available_as_flat_live_commands() {
+        let args = serde_json::json!({"track":1,"part":"lead","start_bar":3,"bars":4,"seed":42});
+        assert!(command("generate_phrase", &args).unwrap().is_some());
+        let tools = definitions();
+        let tool = tools
+            .iter()
+            .find(|tool| tool.name == "generate_phrase")
+            .unwrap();
+        assert_eq!(tool.parameters["properties"]["bars"]["maximum"], 1024);
+        assert_eq!(
+            tool.parameters["properties"]["part"]["enum"]
+                .as_array()
+                .unwrap()
+                .len(),
+            9
+        );
+        assert!(tool.parameters["properties"].get("project").is_none());
+    }
 
     #[test]
     fn live_composition_and_vocal_workflows_are_callable_without_saved_project_arguments() {
@@ -629,6 +650,10 @@ mod tests {
                 serde_json::json!({"clip":1,"pitch":60,"start":0.0,"beats":1.0,"velocity":0.5}),
             ),
             (
+                "generate_phrase",
+                serde_json::json!({"track":1,"part":"lead","start_bar":3,"bars":4,"seed":42}),
+            ),
+            (
                 "add_notes",
                 serde_json::json!({"clip":1,"notes":[{"pitch":60,"start_beat":0.0,"duration_beats":1.0,"velocity":0.5}]}),
             ),
@@ -697,7 +722,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            31 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            32 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))

@@ -1,9 +1,24 @@
 # Live Agent Panel and MCP workflows
 
-The Agent Panel edits the open session through small, flat tools. Both the rig and
-Codex CLI backends use the same live commands, permissions and Undo history. Start with
+The Agent Panel edits the open session through small, flat tools. The rig, Codex CLI
+and Claude Code backends use the same live commands, permissions and Undo history. Start with
 `inspect_project`, then use `add_track`, `set_instrument`, `add_clip` and `add_notes`
 to construct the arrangement. Pass arguments directly without a command or action wrapper.
+
+## Generated phrases
+
+Use `generate_phrase` to add a generated MIDI clip to an existing instrument or drum track.
+For example, `{"track":1,"part":"lead","start_bar":5,"bars":4,"seed":42}` writes four bars
+starting at bar 5. Parts are `lead`, `chords`, `pad`, `arp`, `bass`, `drums`, `kick`, `snare`
+and `hat`. `start_bar` is 1-based; `bars` is 1..1024; `seed` defaults to zero.
+Melodic parts use the project's key and chords, so write their harmony with `edit_harmony`
+first. Drum parts use the drum track's sound assignments and do not require chords.
+
+The result reports the new clip ID, note count and seed. The clip retains its generation
+recipe and stored notes, so it can be edited or regenerated through the usual clip controls.
+Existing clips are preserved, one Undo removes the new phrase, and the document remains
+unsaved. The same tool is available to native model APIs, Codex and Claude Code through
+their shared live catalog and permission checks. Read-only and Plan modes refuse generation.
 
 ## Live harmony and vocals
 

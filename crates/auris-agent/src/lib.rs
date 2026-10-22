@@ -317,6 +317,7 @@ For example, two successive quarter notes:
 {\"clip\":1,\"notes\":[{\"pitch\":62,\"start_beat\":0,\"duration_beats\":1,\"velocity\":0.8},
 {\"pitch\":65,\"start_beat\":1,\"duration_beats\":1,\"velocity\":0.8}]}.
 Use short batches of up to 32 notes to keep each response manageable.
+When the user requests automatic phrase generation, use generate_phrase with track, part, start_bar, bars and optional seed. It uses the existing key/chords and meter; write melodic harmony with edit_harmony first. Parts are lead, chords, pad, arp, bass, drums, kick, snare and hat. Use instrument tracks for melodic parts and drum tracks for percussion. The tool adds a new clip with a retained recipe; read its returned clip ID and note count, then read_notes and inspect_audio to check the result. A zero-note clip is not a finished phrase. Use add_notes/replace_notes when writing specific authored notes instead.
 Use multiple tracks for distinct musical parts and set_level to balance them.
 Read read_mixer_graph before routing or effect edits. Track nodes combine the source and fader controls;
 inserts still run before the fader. Copy stable track/effect node IDs instead of effect positions.
@@ -2346,6 +2347,7 @@ mod tests {
         names.sort_unstable();
         assert!(!names.contains(&"compose_song"));
         assert!(names.contains(&"add_notes"));
+        assert!(names.contains(&"generate_phrase"));
         assert!(names.contains(&"inspect_project"));
         assert!(names.contains(&"set_level"));
         assert!(names.contains(&"normalize_mix"));
@@ -2370,7 +2372,7 @@ mod tests {
         }
         assert_eq!(
             names.len(),
-            33 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            34 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
             assert!(names.contains(name), "{name}");
