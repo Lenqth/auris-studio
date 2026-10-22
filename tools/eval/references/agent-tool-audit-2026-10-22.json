@@ -133,30 +133,6 @@
     "search_internet"
   ],
   "desktop_hidden_legacy_tool": "list_instruments",
-  "phase_one_consolidations": [
-    {
-      "surface": "live",
-      "canonical": "add_notes",
-      "aliases": [
-        "add_note"
-      ]
-    },
-    {
-      "surface": "live",
-      "canonical": "set_mixer_track",
-      "aliases": [
-        "set_level",
-        "set_track_state"
-      ]
-    },
-    {
-      "surface": "saved",
-      "canonical": "set_instrument_params",
-      "aliases": [
-        "set_instrument_param"
-      ]
-    }
-  ],
   "findings": [
     {
       "id": "catalog-help",
@@ -196,5 +172,94 @@
     "No new real-model choice benchmark",
     "No measured token savings",
     "No public callable removed or added in this planning change"
+  ],
+  "backward_compatibility_required": false,
+  "implementation_policy": "Replace superseded public contracts directly. Delete old definitions, handlers and permission keys; no aliases, migration adapters or deprecation period. Observed inventory above remains unchanged by this plan.",
+  "planned_consolidations": [
+    {
+      "canonical": "edit_notes",
+      "removed_names": [
+        "add_note",
+        "add_notes",
+        "remove_notes",
+        "replace_notes",
+        "replace_notes_batch"
+      ],
+      "operations": [
+        "patch",
+        "replace"
+      ]
+    },
+    {
+      "canonical": "mixer_graph",
+      "removed_names": [
+        "mixer",
+        "effects",
+        "set_effect",
+        "routing",
+        "set_level",
+        "set_track_state",
+        "set_mixer_track",
+        "read_mixer_graph",
+        "connect_mixer",
+        "disconnect_mixer",
+        "add_mixer_effect",
+        "remove_mixer_effect",
+        "move_mixer_effect",
+        "enable_mixer_effect",
+        "set_mixer_send",
+        "mixer_effect_parameters",
+        "set_mixer_effect_parameter"
+      ],
+      "contract": "One tagged domain operation schema, shared by saved and live execution"
+    },
+    {
+      "canonical": "set_instrument_params",
+      "removed_names": [
+        "set_instrument_param"
+      ]
+    },
+    {
+      "canonical": "generate_phrase",
+      "removed_names": [
+        "add_part"
+      ]
+    },
+    {
+      "canonical": "inspect_project",
+      "removed_names": [
+        "describe"
+      ]
+    },
+    {
+      "canonical": "read_notes",
+      "removed_names": [
+        "notes"
+      ]
+    },
+    {
+      "canonical": "search_instruments",
+      "removed_names": [
+        "similar_instruments",
+        "list_instruments"
+      ],
+      "modes": [
+        "text",
+        "reference_sound",
+        "browse"
+      ]
+    },
+    {
+      "canonical": "transcribe_audio",
+      "removed_names": [
+        "transcribe_mixture",
+        "create_piano_cover"
+      ],
+      "backends": [
+        "yin",
+        "basic_pitch",
+        "muscriptor"
+      ]
+    }
   ]
 }
