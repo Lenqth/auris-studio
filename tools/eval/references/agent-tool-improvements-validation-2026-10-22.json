@@ -1,0 +1,592 @@
+{
+  "date": "2026-10-22",
+  "production_commit": "8f8457e869d8259a82b825060b86f616eea941bc",
+  "baseline_commit": "c5d92b2d",
+  "backend": "built-in Codex via the GPUI host",
+  "model": "gpt-6.1-sol",
+  "audio_critic": "gemma4:e2b",
+  "policy": "Bypass on fresh generated fixtures; interactive approvals were not evaluated",
+  "prompt_manifest": "tools/eval/references/codex-composition-scenarios.json",
+  "evidence_root": "target/eval/agent-improvements-final-2026-10-22",
+  "cases": [
+    {
+      "case": "blank_bgm",
+      "elapsed_seconds": 107.079886,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 91.2534591,
+          "failure": null,
+          "tool_calls": 39,
+          "tool_counts": {
+            "inspect_project": 3,
+            "edit_timeline": 2,
+            "edit_harmony": 2,
+            "search_instruments": 2,
+            "rename_track": 2,
+            "add_track": 3,
+            "set_instrument": 4,
+            "add_clip": 4,
+            "mixer_graph": 7,
+            "read_notes": 3,
+            "edit_notes": 1,
+            "set_loop": 1,
+            "inspect_audio": 2,
+            "listen": 2,
+            "normalize_mix": 1
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 15.8175591,
+          "failure": null,
+          "tool_calls": 6,
+          "tool_counts": {
+            "inspect_project": 2,
+            "preview": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          }
+        }
+      ],
+      "tool_calls": 45,
+      "baseline_tool_calls": 52,
+      "read_notes": {
+        "calls": 3,
+        "successful_calls": 2,
+        "response_bytes_utf8": 18293,
+        "largest_response_bytes_utf8": 17860
+      },
+      "baseline_read_notes": {
+        "calls": 10,
+        "successful_calls": 10,
+        "response_bytes_utf8": 18991,
+        "largest_response_bytes_utf8": 6061
+      },
+      "batched_reads": 3,
+      "errors": [
+        {
+          "tool": "read_notes",
+          "detail": "Unknown MIDI clip ID"
+        }
+      ],
+      "objective_checks": {
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_bar_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "midi_reimport_has_notes": true,
+        "tempo_100": true,
+        "loop_eight_bars": true,
+        "four_populated_parts": true,
+        "no_note_input_format_or_velocity_errors": true
+      },
+      "midi_notes": 193,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 19.2,
+        "frames": 921600,
+        "lufs": -20.000001907348633,
+        "peak_db": -5.127199172973633,
+        "true_peak_db": -5.086517333984375,
+        "full_scale_samples": 0,
+        "ending_rms_db": -25.76549530029297,
+        "sha256": "d9df3315be4474f74d17ef0c5f674f436c8f4d46b22e58cc1ce2001ce3bd0459"
+      },
+      "maximum_clip_quarter_notes": 32.0
+    },
+    {
+      "case": "folk_six_eight",
+      "elapsed_seconds": 138.5682322,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 80.1090378,
+          "failure": null,
+          "tool_calls": 52,
+          "tool_counts": {
+            "inspect_project": 3,
+            "read_notes": 5,
+            "inspect_audio": 4,
+            "search_instruments": 4,
+            "mixer_graph": 6,
+            "edit_harmony": 11,
+            "inspect_performance": 2,
+            "add_track": 3,
+            "set_instrument": 3,
+            "inspect_instrument": 1,
+            "search_documentation": 1,
+            "add_clip": 3,
+            "edit_notes": 1,
+            "set_instrument_params": 1,
+            "listen": 1,
+            "edit_clip_curve": 3
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 41.9822782,
+          "failure": null,
+          "tool_calls": 13,
+          "tool_counts": {
+            "inspect_project": 2,
+            "inspect_performance": 3,
+            "read_notes": 2,
+            "inspect_audio": 2,
+            "listen": 2,
+            "set_performance": 2
+          }
+        },
+        {
+          "turn": 3,
+          "elapsed_seconds": 16.4753287,
+          "failure": null,
+          "tool_calls": 5,
+          "tool_counts": {
+            "inspect_project": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          }
+        }
+      ],
+      "tool_calls": 70,
+      "baseline_tool_calls": 99,
+      "read_notes": {
+        "calls": 7,
+        "successful_calls": 7,
+        "response_bytes_utf8": 31005,
+        "largest_response_bytes_utf8": 12477
+      },
+      "baseline_read_notes": {
+        "calls": 13,
+        "successful_calls": 13,
+        "response_bytes_utf8": 30988,
+        "largest_response_bytes_utf8": 4645
+      },
+      "batched_reads": 4,
+      "errors": [],
+      "objective_checks": {
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_bar_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "midi_reimport_has_notes": true,
+        "original_clip_including_cc1_exact": true,
+        "meter_and_tempo_exact": true,
+        "only_one_guitar_track_changed": true,
+        "all_authored_notes_preserved_in_performance_turn": true,
+        "inapplicable_stroke_explained": true,
+        "no_note_input_format_or_velocity_errors": true
+      },
+      "midi_notes": 133,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 16.0,
+        "frames": 768000,
+        "lufs": -27.904083251953125,
+        "peak_db": -16.6727237701416,
+        "true_peak_db": -16.6727237701416,
+        "full_scale_samples": 0,
+        "ending_rms_db": -52.22654342651367,
+        "sha256": "02838c660c541159abbb1e8c32ad22f1a04e6e12624fe52f6a868abcc01476ff"
+      },
+      "performance_measurement": {
+        "representation": "First loop pass, selected scope, stages in order using the playback performer. Note events only: pitch curves, timbre and volume contours are not measured; unchanged note events do not imply inaudibility of those controls.",
+        "sampled_authored_notes": 48,
+        "note_limit": 2048,
+        "stage_limit": 32,
+        "complete": true,
+        "truncated": false,
+        "stages": [
+          {
+            "stage": "ghost",
+            "input_notes": 48,
+            "eligible_chord_groups": 0,
+            "changed_onsets": 0,
+            "changed_durations": 0,
+            "changed_velocities": 0,
+            "changed_pitches": 0,
+            "added_notes": 0,
+            "removed_notes": 0,
+            "note_events_unchanged": true,
+            "warnings": []
+          },
+          {
+            "stage": "strum",
+            "input_notes": 48,
+            "eligible_chord_groups": 0,
+            "changed_onsets": 0,
+            "changed_durations": 0,
+            "changed_velocities": 0,
+            "changed_pitches": 0,
+            "added_notes": 0,
+            "removed_notes": 0,
+            "note_events_unchanged": true,
+            "warnings": [
+              "Strum spreads simultaneous pitches; no simultaneous chord groups were found in the inspected notes. It cannot turn an arpeggio into chord strokes while preserving the score.",
+              "This strum stage changes zero performed note events. Do not claim an effective stroke from the stored setting."
+            ]
+          },
+          {
+            "stage": "expression",
+            "input_notes": 48,
+            "eligible_chord_groups": 0,
+            "changed_onsets": 48,
+            "changed_durations": 0,
+            "changed_velocities": 48,
+            "changed_pitches": 0,
+            "added_notes": 0,
+            "removed_notes": 0,
+            "note_events_unchanged": false,
+            "warnings": []
+          }
+        ]
+      },
+      "performance_reply": [
+        "ギターだけに、調整可能な演奏設定でタイミング12%・強弱8%の控えめな揺れを加えました。ギター48音・元の旋律24音は、書かれた音符をすべて維持しています。\n\nストローク幅18msも設定しましたが、単音アルペジオのため現状では効果がありません。和音ストローク化はしていません。\n\n別の音声批評モデルで変更前後を比較し、6/8の流れと旋律の主役感を保っているとの評価でした。未保存です。"
+      ],
+      "maximum_clip_quarter_notes": 24.0
+    },
+    {
+      "case": "arrange_and_undo",
+      "elapsed_seconds": 264.6867043,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 74.1831024,
+          "failure": null,
+          "tool_calls": 36,
+          "tool_counts": {
+            "inspect_project": 3,
+            "edit_timeline": 2,
+            "edit_harmony": 5,
+            "search_instruments": 3,
+            "add_track": 3,
+            "rename_track": 1,
+            "set_instrument": 3,
+            "add_clip": 4,
+            "mixer_graph": 2,
+            "read_notes": 3,
+            "edit_notes": 1,
+            "set_loop": 1,
+            "inspect_audio": 2,
+            "listen": 2,
+            "normalize_mix": 1
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 97.9214689,
+          "failure": null,
+          "tool_calls": 53,
+          "tool_counts": {
+            "inspect_project": 3,
+            "read_notes": 7,
+            "inspect_audio": 8,
+            "edit_harmony": 15,
+            "search_instruments": 1,
+            "add_track": 1,
+            "set_instrument": 1,
+            "add_clip": 9,
+            "mixer_graph": 3,
+            "edit_notes": 2,
+            "set_loop": 1,
+            "listen": 2
+          }
+        },
+        {
+          "turn": 3,
+          "elapsed_seconds": 46.4157803,
+          "failure": null,
+          "tool_calls": 14,
+          "tool_counts": {
+            "inspect_project": 2,
+            "read_notes": 6,
+            "inspect_audio": 3,
+            "listen": 2,
+            "edit_notes": 1
+          }
+        },
+        {
+          "turn": 4,
+          "elapsed_seconds": 11.3299331,
+          "failure": null,
+          "tool_calls": 4,
+          "tool_counts": {
+            "inspect_project": 2,
+            "history": 2
+          }
+        },
+        {
+          "turn": 5,
+          "elapsed_seconds": 34.8329227,
+          "failure": null,
+          "tool_calls": 7,
+          "tool_counts": {
+            "inspect_project": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2,
+            "cli_command": 1
+          }
+        }
+      ],
+      "tool_calls": 114,
+      "baseline_tool_calls": 161,
+      "read_notes": {
+        "calls": 16,
+        "successful_calls": 15,
+        "response_bytes_utf8": 233247,
+        "largest_response_bytes_utf8": 38981
+      },
+      "baseline_read_notes": {
+        "calls": 64,
+        "successful_calls": 64,
+        "response_bytes_utf8": 244452,
+        "largest_response_bytes_utf8": 11894
+      },
+      "batched_reads": 12,
+      "errors": [
+        {
+          "tool": "read_notes",
+          "detail": "Unknown MIDI clip ID"
+        }
+      ],
+      "objective_checks": {
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_bar_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "midi_reimport_has_notes": true,
+        "original_four_bar_clips_exact": true,
+        "only_chorus_drum_clips_changed": true,
+        "undo_restored_entire_document": true,
+        "undo_used_history": true,
+        "undo_did_not_rewrite_notes": true,
+        "no_note_input_format_or_velocity_errors": true
+      },
+      "midi_notes": 572,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 34.28570833333333,
+        "frames": 1645714,
+        "lufs": -19.446029663085938,
+        "peak_db": -0.9999997019767761,
+        "true_peak_db": -0.9999997019767761,
+        "full_scale_samples": 0,
+        "ending_rms_db": -35.28620529174805,
+        "sha256": "0b4fd8d7991983fe9b393398bfd2650cf39fbc4ee1ae75825635447a6790246b"
+      },
+      "undo_tool_calls": 4,
+      "undo_tools": [
+        "inspect_project",
+        "history",
+        "history",
+        "inspect_project"
+      ],
+      "maximum_clip_quarter_notes": 32.0
+    },
+    {
+      "case": "regenerate_phrase",
+      "elapsed_seconds": 215.4787458,
+      "turns": [
+        {
+          "turn": 1,
+          "elapsed_seconds": 100.7696513,
+          "failure": null,
+          "tool_calls": 41,
+          "tool_counts": {
+            "inspect_project": 5,
+            "edit_timeline": 2,
+            "edit_harmony": 2,
+            "search_instruments": 4,
+            "rename_track": 1,
+            "add_track": 2,
+            "cli_command": 1,
+            "search_documentation": 1,
+            "set_instrument": 2,
+            "generate_phrase": 3,
+            "read_notes": 3,
+            "inspect_audio": 3,
+            "mixer_graph": 3,
+            "listen": 3,
+            "normalize_mix": 2,
+            "set_loop": 1,
+            "edit_recipe": 3
+          }
+        },
+        {
+          "turn": 2,
+          "elapsed_seconds": 76.9405166,
+          "failure": null,
+          "tool_calls": 29,
+          "tool_counts": {
+            "inspect_project": 2,
+            "edit_recipe": 8,
+            "read_notes": 6,
+            "inspect_audio": 2,
+            "listen": 2,
+            "search_documentation": 9
+          }
+        },
+        {
+          "turn": 3,
+          "elapsed_seconds": 37.7669678,
+          "failure": null,
+          "tool_calls": 6,
+          "tool_counts": {
+            "inspect_project": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 1
+          }
+        }
+      ],
+      "tool_calls": 76,
+      "baseline_tool_calls": 60,
+      "read_notes": {
+        "calls": 9,
+        "successful_calls": 9,
+        "response_bytes_utf8": 54376,
+        "largest_response_bytes_utf8": 15784
+      },
+      "baseline_read_notes": {
+        "calls": 12,
+        "successful_calls": 12,
+        "response_bytes_utf8": 45672,
+        "largest_response_bytes_utf8": 4269
+      },
+      "batched_reads": 4,
+      "errors": [
+        {
+          "tool": "edit_recipe",
+          "detail": "Unknown subdivision"
+        },
+        {
+          "tool": "edit_recipe",
+          "detail": "Rhythm uses x,X,o and ."
+        }
+      ],
+      "objective_checks": {
+        "all_turns_completed": true,
+        "remained_unsaved": true,
+        "export_did_not_edit_project": true,
+        "wav_24bit_48khz": true,
+        "requested_bar_duration_within_one_sample": true,
+        "wav_nonsilent_unclipped": true,
+        "midi_reimport_has_notes": true,
+        "accompaniment_tracks_exact": true,
+        "lead_recipe_retained": true,
+        "lead_note_count_reduced": true,
+        "lead_mean_duration_increased": true,
+        "no_note_input_format_or_velocity_errors": true
+      },
+      "midi_notes": 88,
+      "encoded": {
+        "sample_rate": 48000,
+        "channels": 2,
+        "bit_depth": 24,
+        "seconds": 20.0,
+        "frames": 960000,
+        "lufs": -18.31608772277832,
+        "peak_db": -13.86199951171875,
+        "true_peak_db": -13.86199951171875,
+        "full_scale_samples": 0,
+        "ending_rms_db": -37.3513069152832,
+        "sha256": "0ccf2b7f0fc88f0ea921882f96d4cd155ae83ece0b21ae187ebbffc866679aa3"
+      },
+      "lead_before": {
+        "notes": 22,
+        "mean_length_ticks": 1134.5454545454545
+      },
+      "lead_after": {
+        "notes": 16,
+        "mean_length_ticks": 1380
+      },
+      "maximum_clip_quarter_notes": 32.0
+    }
+  ],
+  "evaluation_executable_sha256": "84671806327ab683eef40a63ee3fa8cdc1713aee6b96710112a6926ff69a203c",
+  "totals": {
+    "scenarios": 4,
+    "user_turns": 13,
+    "tool_calls": 305,
+    "baseline_tool_calls": 372,
+    "read_notes_calls": 35,
+    "baseline_read_notes_calls": 99,
+    "recovered_tool_errors": 4,
+    "note_input_format_or_velocity_errors": 0,
+    "read_notes_response_bytes_utf8": 336921,
+    "baseline_read_notes_response_bytes_utf8": 340103
+  },
+  "intermediate_validation": {
+    "evidence_root": "target/eval/agent-improvements-2026-10-22",
+    "scenarios": 3,
+    "finding": "Partial root input-alternative schemas led all three controllers to send edit objects as JSON strings. The final typed input enum removes partial root alternatives; no such errors occurred in the final four scenarios."
+  },
+  "limits": [
+    "One run per scenario on one model; timing under concurrent work is descriptive, not a speed benchmark.",
+    "Numeric file/state checks do not establish aesthetic quality.",
+    "Four final tool refusals were recovered: two wrong clip IDs and two unsupported recipe values.",
+    "A separate deterministic test bounds long ghost-note grid scans; the four model scenarios do not reach that bound."
+  ],
+  "validation": {
+    "non_ui_workspace_tests": {
+      "passed": 3216,
+      "failed": 0,
+      "ignored": 18,
+      "log": "target/agent-improvements-non-ui-final-tests.log"
+    },
+    "gpui_serial_tests": {
+      "passed": 1123,
+      "failed": 0,
+      "ignored": 6,
+      "log": "target/agent-improvements-gpui-serial-tests.log"
+    },
+    "final_agent_ui_tests": {
+      "passed": 103,
+      "failed": 0,
+      "ignored": 6,
+      "log": "target/agent-improvements-agent-ui-tests.log"
+    },
+    "additional_performance_tests": {
+      "passed": 10,
+      "failed": 0,
+      "includes_long_grid_safety_regression": true,
+      "log": "target/agent-improvements-performance-final-tests.log"
+    },
+    "parallel_workspace_attempt": {
+      "gpui_failed": 1,
+      "test": "settings_window::appearance_tests::velocity_gradient_edits_save_and_override_only_the_edited_endpoint",
+      "failure": "No saved custom theme when the test indexed custom_schemes[0].",
+      "isolated_recheck": "passed",
+      "serial_full_gpui_suite": "passed",
+      "appearance_code_changed": false
+    },
+    "cargo_fmt": "passed",
+    "cargo_clippy_workspace_all_targets": "passed",
+    "desktop_and_mcp_build": "passed"
+  },
+  "model_run_exit_codes": {
+    "blank_bgm": 0,
+    "folk_six_eight": 0,
+    "arrange_and_undo": 0,
+    "regenerate_phrase": 0
+  },
+  "post_model_safety_check": "The long-grid cap and measured flags were verified separately after these model runs. Every scenario clip is at most 64 quarter notes, so the cap does not change their behavior."
+}

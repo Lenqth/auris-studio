@@ -24,7 +24,7 @@ pub enum Edit {
     ApplyDrumMap,
     /// A musical drum role's assigned MIDI key was added, changed or removed.
     SetDrumAssignment,
-    /// Changes made by an external editor were accepted from disk.
+    /// Whole-document changes from an external editor or a grouped live-agent request.
     ExternalChanges,
     /// Cycle playback was turned on or off.
     ToggleLoop,

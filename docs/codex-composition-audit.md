@@ -1,5 +1,8 @@
 # Codex composition workflow audit
 
+The proposed changes are implemented and rerun in
+[agent tool improvements](agent-tool-improvements.md).
+
 Date: 2026-10-22. Production code: `c5d92b2d`. The built-in Codex backend
 (`gpt-6.1-sol`) received natural Japanese requests without tool names, numeric
 document IDs or API argument examples. Each follow-up used the same conversation
