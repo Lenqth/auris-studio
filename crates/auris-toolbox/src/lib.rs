@@ -1124,16 +1124,13 @@ pub mod mixer {
                     position + 1,
                     auris_session::mixer_graph::MixerNode::Effect(row.track, *slot).key()
                 ));
-                let mut index = 0u32;
-                loop {
-                    let target = ParamTarget::Effect {
-                        track: row.track,
-                        slot: *slot,
-                        param: ParamId(index),
-                    };
-                    let Some(descriptor) = session.descriptor_for(target) else {
-                        break;
-                    };
+                // Listed the way the effect's panel lists them, so a hosted plugin reports the
+                // values its own state holds rather than the ones it was built with.
+                for (index, (target, descriptor)) in session
+                    .effect_params(row.track, *slot)
+                    .into_iter()
+                    .enumerate()
+                {
                     let value = session.param_value(target, &descriptor);
                     let automated = match session.is_automated(target) {
                         true => "  [automated]",
@@ -1157,8 +1154,7 @@ pub mod mixer {
                             .collect();
                         text.push_str(&format!("    {:<14} {}\n", "", listed.join(" ")));
                     }
-                    index += 1;
-                    if index == 16 {
+                    if index + 1 == 16 {
                         text.push_str("    Parameter preview limited to 16; use automation for paged detail.\n");
                         break;
                     }
@@ -1354,18 +1350,10 @@ pub mod set_effect {
         };
 
         // The parameter, by key or by name, with the refusal listing what is really there.
+        // Read fresh, so `before` is what a hosted plugin holds now rather than its build default.
         let mut keys = Vec::new();
         let mut found = None;
-        let mut index = 0u32;
-        loop {
-            let target = ParamTarget::Effect {
-                track: strip,
-                slot,
-                param: ParamId(index),
-            };
-            let Some(descriptor) = session.descriptor_for(target) else {
-                break;
-            };
+        for (target, descriptor) in session.effect_params(strip, slot) {
             keys.push(descriptor.key.to_string());
             if descriptor.key.eq_ignore_ascii_case(&args.param)
                 || descriptor.name.eq_ignore_ascii_case(&args.param)
@@ -1373,7 +1361,6 @@ pub mod set_effect {
                 found = Some((target, descriptor));
                 break;
             }
-            index += 1;
         }
         let Some((target, descriptor)) = found else {
             return Err(format!(

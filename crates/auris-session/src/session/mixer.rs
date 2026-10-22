@@ -437,6 +437,47 @@ impl Session {
         self.param_descriptors(&plugin_id).get(index).cloned()
     }
 
+    /// Every parameter of a track's instrument, each beside the target that reaches it.
+    ///
+    /// The way to list controls for a reader who will then ask [`Self::param_value`]: like drawing
+    /// the plugin's panel, it first asks a hosted plugin what it holds now. Walking
+    /// [`Self::descriptor_for`] instead reports the values the plugin had when it was built — the
+    /// defaults, under a preset its own state loaded a moment later.
+    pub fn instrument_params(&mut self, track: TrackId) -> Vec<(ParamTarget, ParamDescriptor)> {
+        let descriptors = self.instrument_descriptors(track);
+        descriptors
+            .iter()
+            .enumerate()
+            .map(|(index, descriptor)| {
+                let param = ParamId(index as u32);
+                (ParamTarget::Instrument { track, param }, descriptor.clone())
+            })
+            .collect()
+    }
+
+    /// Every parameter of the effect in a slot, each beside the target that reaches it.
+    ///
+    /// The effect counterpart of [`Self::instrument_params`], read fresh for the same reason.
+    /// `track` is the strip the slot sits on; `None` is the master bus.
+    pub fn effect_params(
+        &mut self,
+        track: Option<TrackId>,
+        slot: EffectSlotId,
+    ) -> Vec<(ParamTarget, ParamDescriptor)> {
+        let descriptors = self.effect_descriptors(slot);
+        descriptors
+            .iter()
+            .enumerate()
+            .map(|(index, descriptor)| {
+                let param = ParamId(index as u32);
+                (
+                    ParamTarget::Effect { track, slot, param },
+                    descriptor.clone(),
+                )
+            })
+            .collect()
+    }
+
     /// The synthesised descriptor for a mixer control, or `None` for a plugin parameter.
     ///
     /// Separate from [`Self::descriptor_for`] because these need no parameter cache, so a
