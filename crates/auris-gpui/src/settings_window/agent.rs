@@ -121,6 +121,24 @@ impl SettingsWindow {
         ][index];
         let focus = self.agent.focus[index].clone();
         let field = &self.agent.fields[index];
+        let editing = self.agent.active == Some(index);
+        // Only the field being typed into paints as an editable line. Both used to, so the one
+        // nobody was in showed a caret or a selection of its own and registered a second input
+        // handler.
+        let contents = if editing {
+            crate::ui::prompt::editable_text(
+                field.content().to_owned().into(),
+                field.selection(),
+                field.marked(),
+                focus.clone(),
+                cx.entity(),
+                self.theme.clone(),
+            )
+            .into_any_element()
+        } else {
+            crate::ui::prompt::field_text(field.content().to_owned(), self.theme.text)
+                .into_any_element()
+        };
         div()
             .id(id)
             .debug_selector(move || id.to_owned())
@@ -134,17 +152,18 @@ impl SettingsWindow {
             .rounded(Metrics::RADIUS_SM)
             .border_color(self.theme.border)
             .focus(|el| el.border_color(self.theme.accent))
-            .child(crate::ui::prompt::editable_text(
-                field.content().to_owned().into(),
-                field.selection(),
-                field.marked(),
-                focus.clone(),
-                cx.entity(),
-                self.theme.clone(),
-            ))
+            .cursor_text()
+            .child(contents)
             .on_mouse_down(
                 gpui::MouseButton::Left,
-                cx.listener(move |this, _, window, cx| {
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                    crate::ui::prompt::click_field(
+                        &mut this.agent.fields[index],
+                        &focus,
+                        editing,
+                        window,
+                        event,
+                    );
                     this.agent.active = Some(index);
                     this.editing_search = false;
                     window.focus(&focus);
@@ -449,6 +468,89 @@ mod tests {
         handle
             .update(cx, |this, _, _| {
                 assert_eq!(this.search.content(), "出力トークン")
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn a_click_is_measured_against_its_own_field_after_another_window_paints(
+        cx: &mut TestAppContext,
+    ) {
+        // Where a field was painted used to live in one cell, overwritten by whichever field
+        // painted last. With the URL being edited here and the library search painted in the
+        // main window afterwards, a click near the start of the URL was measured against the
+        // library box and the caret went to the end.
+        let (app, main) = crate::harness::open(cx);
+        app.update(main, |this, cx| {
+            this.settings.agent = AgentPreferences {
+                url: "http://127.0.0.1:11434/v1".into(),
+                ..Default::default()
+            };
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(main, |this, _| this.settings_window.unwrap());
+        let settings = &mut VisualTestContext::from_window(handle.into(), main);
+        settings.run_until_parked();
+        crate::harness::click("tab-agent", settings);
+        crate::harness::click("agent-url", settings);
+        settings.run_until_parked();
+
+        crate::harness::click("library-search", main);
+        crate::harness::paint(&app, main);
+
+        let url = settings
+            .debug_bounds("agent-url")
+            .expect("the URL field is drawn");
+        settings.simulate_click(
+            gpui::point(url.left() + px(14.0), url.center().y),
+            gpui::Modifiers::none(),
+        );
+        handle
+            .update(settings, |this, _, _| {
+                let field = &this.agent.fields[0];
+                assert!(field.selection().is_empty(), "{:?}", field.selection());
+                assert!(
+                    field.selection().start < field.content().len() / 2,
+                    "a click near the start put the caret at {} of {}",
+                    field.selection().start,
+                    field.content().len()
+                );
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn clicking_a_connection_field_leaves_a_caret_rather_than_a_selection(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent = AgentPreferences {
+                url: "http://127.0.0.1:1".into(),
+                ..Default::default()
+            };
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        crate::harness::click("agent-url", cx);
+        handle
+            .update(cx, |this, _, _| {
+                let field = &this.agent.fields[0];
+                assert!(
+                    field.selection().is_empty(),
+                    "a click left {:?} selected, so no caret was drawn",
+                    field.selection()
+                );
+            })
+            .unwrap();
+        // Typing extends the address instead of replacing it, which is what a visible caret at
+        // the end promised.
+        cx.simulate_input("0");
+        handle
+            .update(cx, |this, _, _| {
+                assert_eq!(this.agent.fields[0].content(), "http://127.0.0.1:10");
+                assert_eq!(this.agent.fields[1].selection(), 0..0);
             })
             .unwrap();
     }
