@@ -153,7 +153,7 @@ pub enum Command {
         /// Read, patch controls or explicitly regenerate a take.
         operation: recipes::Operation,
     },
-    /// Change one drum-role assignment for the editor and future generation without rewriting existing notes or retained recipes. Read current assignments with inspect_project. Removing the last role preserves an explicitly empty map.
+    /// Change one drum-role assignment for the editor and future generation. Existing notes and retained recipes stay unless remap_clips moves every generated drum voice onto the saved assignments in the same undo step; hand-placed hits stay. Read current assignments with inspect_project. Removing the last role preserves an explicitly empty map.
     SetDrumAssignment {
         /// Stable drum track ID.
         track: u64,
@@ -165,6 +165,11 @@ pub enum Command {
         /// Explicitly remove this role; omit note when true.
         #[serde(default)]
         remove: bool,
+        /// Also move generated drum notes and their recipes onto the saved assignments, so a
+        /// regenerated take plays the new note. Refused whole if a generated voice plays a role
+        /// left unassigned. Requires note.
+        #[serde(default)]
+        remap_clips: bool,
     },
     /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. The exact requested waveform is attenuated only when needed for ceiling_db (default -1 dBTP), before integer encoding; this is not loudness normalization or limiting. Stems share one gain to preserve relative levels. Read attenuation_db, source_true_peak_db and encoded measurements; peak protection may leave loudness below a requested LUFS target. Existing outputs are never replaced. No project save or document edit; cancellation/stale documents discard private stages.
     Render {
@@ -642,16 +647,27 @@ impl Session {
                 role,
                 note,
                 remove,
+                remap_clips,
             } => {
                 if note.is_some() == remove || note.is_some_and(|note| note > 127) {
                     return Err("Supply note within 0..127, or remove:true without note".into());
                 }
+                if remove && remap_clips {
+                    return Err(
+                        "remap_clips needs a note to move generated hits to; remove does not take it"
+                            .into(),
+                    );
+                }
                 let role = serde_json::from_value::<auris_core::project::DrumRole>(role.into())
                     .map_err(|_| "Unknown drum role")?;
                 let track = TrackId(track);
-                let changed = self
-                    .set_drum_assignment(track, role, note)
-                    .map_err(|e| e.to_string())?;
+                let changed = match note {
+                    Some(note) if remap_clips => {
+                        self.set_drum_assignment_remapping(track, role, note)
+                    }
+                    note => self.set_drum_assignment(track, role, note),
+                }
+                .map_err(|e| e.to_string())?;
                 Ok(serde_json::json!({"track":track.0,"changed":changed,"assignments":self.drum_assignments(track)}).to_string())
             }
             Command::EditTimeline { operation } => self.agent_edit_timeline(operation),
@@ -1339,5 +1355,49 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(session.path(), Some(path.as_path()));
         assert!(session.is_dirty());
+    }
+
+    #[test]
+    fn a_drum_assignment_command_with_remap_clips_moves_the_generated_hits() {
+        let mut session = session();
+        let track = session.add_default_drum_track("Kit").unwrap();
+        let clip = session
+            .generate_clip(
+                track,
+                Ticks::ZERO,
+                Ticks::QUARTER * 4,
+                ClipRecipe::new(ClipPreset::Snare, 7),
+            )
+            .unwrap();
+        let assign = |remap_clips: bool, note: Option<u8>| {
+            serde_json::from_value::<Command>(serde_json::json!({
+                "action": "set_drum_assignment",
+                "track": track.0,
+                "role": "snare",
+                "note": note,
+                "remove": note.is_none(),
+                "remap_clips": remap_clips,
+            }))
+            .unwrap()
+        };
+
+        session.agent_command(assign(true, Some(84))).unwrap();
+        let notes = &session.midi_clip(clip).unwrap().notes;
+        assert!(!notes.is_empty());
+        assert!(notes.iter().all(|note| note.pitch == 84), "{notes:?}");
+
+        // Without it the assignment changes and the clip does not, as before.
+        session.agent_command(assign(false, Some(40))).unwrap();
+        assert!(
+            session
+                .midi_clip(clip)
+                .unwrap()
+                .notes
+                .iter()
+                .all(|note| note.pitch == 84)
+        );
+
+        let refused = session.agent_command(assign(true, None)).unwrap_err();
+        assert!(refused.starts_with("remap_clips needs"), "{refused}");
     }
 }
