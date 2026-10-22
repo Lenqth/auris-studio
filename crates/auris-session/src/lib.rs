@@ -149,6 +149,7 @@ pub use session::{
     ClipInstrumentAnalysis, ClipMixtureAnalysis, analyze_audio_file, analyze_instrument_file,
     transcribe_piano_file,
 };
+pub use session::{CheckpointJob, CheckpointOperation, CheckpointResult};
 pub use session::{CompositionPreview, CompositionTrackPreview};
 pub use session::{
     DrumKitAnalysis, DrumProbeFont, DrumProbeRequest, DrumProbeSample, DrumScanOptions,

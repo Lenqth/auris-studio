@@ -136,10 +136,24 @@ impl Session {
         for (id, stored, found) in source_locations {
             self.relocate_source(id, &stored, &found);
         }
-        self.bank = bank;
-        self.render_bank = render_bank;
+        // Opening clears sources first. A history restore retains older buffers for Undo.
+        for (id, buffer) in bank.iter() {
+            self.bank.insert(id, Arc::clone(buffer));
+        }
+        if self.render_bank_rate != render_rate {
+            self.render_bank = AudioSourceBank::new();
+        }
+        for (id, buffer) in render_bank.iter() {
+            self.render_bank.insert(id, Arc::clone(buffer));
+        }
+        for (id, key) in render_bank.stretches() {
+            if let Some(buffer) = render_bank.stretched(id, key) {
+                self.render_bank
+                    .insert_stretched(id, key, Arc::clone(buffer));
+            }
+        }
         self.render_bank_rate = render_rate;
-        self.waveforms = waveforms;
+        self.waveforms.extend(waveforms);
         for (id, stored, found, font) in fonts {
             self.relocate_font(id, &stored, &found);
             self.cache_font(&found, Arc::clone(&font), false);

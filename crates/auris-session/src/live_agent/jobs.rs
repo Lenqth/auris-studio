@@ -13,6 +13,8 @@ pub enum AgentJob {
     Vocal(Box<VocalJob>),
     /// File encoding, audio export or encoded-file measurement.
     File(Box<FileJob>),
+    /// Snapshot serialization, history inspection or prepared restoration.
+    History(Box<crate::CheckpointJob>),
 }
 
 /// A worker result returned to its originating owner for validation and publication.
@@ -21,6 +23,8 @@ pub enum AgentResult {
     Vocal(VocalResult),
     /// A staged file operation's result.
     File(FileResult),
+    /// Prepared history operation awaiting its owner.
+    History(Box<crate::CheckpointResult>),
 }
 
 /// Another worker stage or the completed tool response.
@@ -35,6 +39,9 @@ impl AgentJob {
     /// Perform detached work with cooperative cancellation.
     pub fn run(self, cancelled: &AtomicBool) -> Result<AgentResult, String> {
         match self {
+            Self::History(job) => job
+                .run(cancelled)
+                .map(|result| AgentResult::History(Box::new(result))),
             Self::Vocal(job) => job.run(cancelled).map(AgentResult::Vocal),
             Self::File(job) => job.run(cancelled).map(AgentResult::File),
         }
@@ -49,6 +56,12 @@ impl Session {
         settings: Settings,
     ) -> Result<AgentJob, String> {
         match command {
+            Command::Checkpoints {
+                operation,
+                expected_revision,
+            } => self
+                .begin_agent_checkpoints(operation, expected_revision)
+                .map(|job| AgentJob::History(Box::new(job))),
             command @ (Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }
             | Command::Sing { .. }) => self
@@ -70,6 +83,9 @@ impl Session {
             return Err("Agent operation cancelled before publication".into());
         }
         match result {
+            AgentResult::History(result) => self
+                .continue_agent_checkpoints(*result, cancelled)
+                .map(AgentStep::Done),
             AgentResult::Vocal(result) => match self.continue_agent_vocal(result)? {
                 VocalStep::Work(job) => Ok(AgentStep::Work(AgentJob::Vocal(job))),
                 VocalStep::Done(text) => Ok(AgentStep::Done(text)),

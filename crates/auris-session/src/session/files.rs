@@ -599,6 +599,119 @@ impl Session {
         Some(result.report)
     }
 
+    /// Append a parsed MIDI document without replacing the open project, timeline or history.
+    pub(crate) fn append_agent_midi(
+        &mut self,
+        result: MidiImportResult,
+        at: Ticks,
+    ) -> Result<String, String> {
+        if !Arc::ptr_eq(&self.registry, &result.owner) || self.revision != result.revision {
+            return Err("Document changed during MIDI import".into());
+        }
+        if result.report.notes == 0
+            || result.report.notes > 200_000
+            || result.project.tracks.len() > 256
+        {
+            return Err("MIDI import requires 1..200000 notes and at most 256 tracks".into());
+        }
+        self.begin_transaction(Edit::ExternalChanges);
+        let applied = (|| -> Result<Vec<serde_json::Value>, String> {
+            let mut created = Vec::new();
+            for source in &result.project.tracks {
+                let Some(instrument) = source.kind.as_instrument() else {
+                    continue;
+                };
+                if instrument.clips.is_empty() {
+                    continue;
+                }
+                let track = if source.kind.is_drum() {
+                    self.add_drum_track(&source.name, &instrument.instrument_id)
+                } else {
+                    self.add_instrument_track(&source.name, &instrument.instrument_id)
+                }
+                .map_err(|e| e.to_string())?;
+                for original in &instrument.clips {
+                    let start = original
+                        .start
+                        .raw()
+                        .checked_add(at.raw())
+                        .map(Ticks)
+                        .ok_or("MIDI timeline overflow")?;
+                    start
+                        .raw()
+                        .checked_add(original.length.raw())
+                        .ok_or("MIDI end overflow")?;
+                    let clip = self
+                        .add_midi_clip(track, &original.name, start, original.length)
+                        .map_err(|e| e.to_string())?;
+                    let mut contents = original.clone();
+                    contents.id = clip;
+                    contents.start = start;
+                    *self
+                        .project
+                        .midi_clip_mut(clip)
+                        .ok_or("Missing new MIDI clip")? = contents;
+                    created.push(serde_json::json!({"track":track.0,"clip":clip.0}));
+                }
+            }
+            self.project
+                .validate_loop_expansion()
+                .map_err(|e| e.to_string())?;
+            Ok(created)
+        })();
+        match applied {
+            Ok(created) => {
+                self.end_transaction();
+                self.invalidate_graph();
+                Ok(serde_json::json!({"created":created,"notes":result.report.notes,"timeline_preserved":true,"instrument_mapping":"default instruments; review timbres","revision":self.agent_document_revision()?}).to_string())
+            }
+            Err(error) => {
+                self.revert_transaction();
+                Err(error)
+            }
+        }
+    }
+
+    /// Adopt bytes already copied and decoded by a revision-bound import worker.
+    pub(crate) fn adopt_agent_audio(
+        &mut self,
+        file: tempfile::NamedTempFile,
+        buffer: AudioBuffer,
+        name: String,
+        start: Ticks,
+        bytes: u64,
+    ) -> Result<String, String> {
+        let filename = file
+            .path()
+            .file_name()
+            .ok_or("Missing staged audio filename")?
+            .to_owned();
+        let (_file, path) = file.keep().map_err(|e| e.to_string())?;
+        self.begin_transaction(Edit::ImportAudio);
+        let source = self.project.add_audio_source(
+            name.clone(),
+            AssetPath::inside(Path::new(auris_io::AUDIO_DIR).join(filename)),
+            buffer.frame_count() as u64,
+            buffer.sample_rate(),
+            buffer.channel_count(),
+        );
+        self.project
+            .audio_sources
+            .get_mut(&source)
+            .expect("new source")
+            .byte_size = bytes;
+        let track = self.project.add_audio_track(&name);
+        let Some(clip) = self.project.add_audio_clip(track, source, start) else {
+            self.revert_transaction();
+            let _ = std::fs::remove_file(path);
+            return Err("Could not place audio clip".into());
+        };
+        self.install_source(source, Arc::new(buffer));
+        self.end_transaction();
+        self.invalidate_graph();
+        Ok(serde_json::json!({"track":track.0,"clip":clip.0,"source":source.0,"revision":self.agent_document_revision()?}).to_string())
+    }
+
     /// Writes the open document's instrument tracks as a Standard MIDI File.
     ///
     /// Returns how many notes were written. What a `.mid` has nowhere to put — audio tracks, the

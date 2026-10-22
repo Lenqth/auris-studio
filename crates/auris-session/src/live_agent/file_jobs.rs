@@ -45,6 +45,18 @@ pub struct FileJob {
 }
 
 enum Work {
+    ImportAudio {
+        path: PathBuf,
+        folder: PathBuf,
+        name: String,
+        at: Ticks,
+        rate: f64,
+    },
+    ImportMidi {
+        job: crate::MidiImportJob,
+        path: PathBuf,
+        at: Ticks,
+    },
     Audio {
         job: crate::RenderJob,
         guard: crate::render::ExportGuard,
@@ -75,6 +87,15 @@ pub struct FileResult {
 }
 
 enum Outcome {
+    ImportedAudio {
+        file: tempfile::NamedTempFile,
+        buffer: auris_core::AudioBuffer,
+        folder: PathBuf,
+        name: String,
+        at: Ticks,
+        bytes: u64,
+    },
+    ImportedMidi(Box<crate::MidiImportResult>, Ticks),
     Audio(
         Vec<(
             PathBuf,
@@ -106,6 +127,68 @@ impl FileJob {
         };
         check()?;
         let outcome = match self.work {
+            Work::ImportMidi { job, path, at } => {
+                let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+                if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 {
+                    return Err("MIDI input must be a regular file up to 32 MiB".into());
+                }
+                Outcome::ImportedMidi(
+                    Box::new(
+                        job.run(cancelled)
+                            .map_err(|e| e.to_string())?
+                            .ok_or("MIDI import cancelled")?,
+                    ),
+                    at,
+                )
+            }
+            Work::ImportAudio {
+                path,
+                folder,
+                name,
+                at,
+                rate,
+            } => {
+                use std::io::{Read, Write};
+                let mut input = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+                if !input.metadata().map_err(|e| e.to_string())?.is_file() {
+                    return Err("Audio input must be a regular file".into());
+                }
+                let directory = folder.join(auris_io::AUDIO_DIR);
+                std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+                let mut file = tempfile::Builder::new()
+                    .prefix("import-")
+                    .suffix(&format!(
+                        ".{}",
+                        path.extension().and_then(|e| e.to_str()).unwrap_or("audio")
+                    ))
+                    .tempfile_in(&directory)
+                    .map_err(|e| e.to_string())?;
+                let mut chunk = [0u8; 65536];
+                let mut bytes = 0u64;
+                loop {
+                    check()?;
+                    let size = input.read(&mut chunk).map_err(|e| e.to_string())?;
+                    if size == 0 {
+                        break;
+                    }
+                    bytes += size as u64;
+                    if bytes > 512 * 1024 * 1024 {
+                        return Err("Audio input exceeds 512 MiB".into());
+                    }
+                    file.write_all(&chunk[..size]).map_err(|e| e.to_string())?;
+                }
+                file.flush().map_err(|e| e.to_string())?;
+                let buffer = crate::decode_audio(file.path(), rate).map_err(|e| e.to_string())?;
+                check()?;
+                Outcome::ImportedAudio {
+                    file,
+                    buffer,
+                    folder,
+                    name,
+                    at,
+                    bytes,
+                }
+            }
             Work::Audio {
                 mut job,
                 guard,
@@ -190,6 +273,49 @@ impl Session {
     pub fn begin_agent_file_job(&mut self, command: Command) -> Result<FileJob, String> {
         let owner = Arc::clone(self.registry());
         let work = match command {
+            Command::ImportAudio {
+                path,
+                at_tick,
+                name,
+            } => {
+                if at_tick < 0
+                    || name
+                        .as_ref()
+                        .is_some_and(|n| n.trim().is_empty() || n.len() > 256)
+                {
+                    return Err(
+                        "Use nonnegative at_tick and a nonempty name up to 256 bytes".into(),
+                    );
+                }
+                let path = local_path(&path)?;
+                let name = name.unwrap_or_else(|| {
+                    path.file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned()
+                });
+                Work::ImportAudio {
+                    path,
+                    folder: self
+                        .project_folder()
+                        .ok_or("Missing project folder")?
+                        .to_owned(),
+                    name,
+                    at: Ticks(at_tick),
+                    rate: self.project().sample_rate,
+                }
+            }
+            Command::ImportMidi { path, at_tick } => {
+                if at_tick < 0 {
+                    return Err("at_tick must be nonnegative".into());
+                }
+                let path = local_path(&path)?;
+                Work::ImportMidi {
+                    job: self.begin_midi_import(&path).map_err(|e| e.to_string())?,
+                    path,
+                    at: Ticks(at_tick),
+                }
+            }
             Command::Render {
                 destination,
                 range,
@@ -338,7 +464,7 @@ impl Session {
 
     /// Publish only a still-current, uncancelled worker result; stale stages are deleted on drop.
     pub fn continue_agent_file_job(
-        &self,
+        &mut self,
         result: FileResult,
         cancelled: &AtomicBool,
     ) -> Result<String, String> {
@@ -351,6 +477,22 @@ impl Session {
             );
         }
         match result.outcome {
+            Outcome::ImportedMidi(result, at) => self.append_agent_midi(*result, at),
+            Outcome::ImportedAudio {
+                file,
+                buffer,
+                folder,
+                name,
+                at,
+                bytes,
+            } => {
+                if self.project_folder() != Some(folder.as_path())
+                    || buffer.sample_rate() != self.project().sample_rate
+                {
+                    return Err("Document folder/rate changed during audio import".into());
+                }
+                self.adopt_agent_audio(file, buffer, name, at, bytes)
+            }
             Outcome::Verified(text) => Ok(text),
             Outcome::Midi(result) => {
                 let (path, notes) = self
@@ -387,6 +529,123 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn audio_and_midi_import_append_without_replacing_music_and_undo_once() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut live = fixture();
+        let midi = directory.path().join("source.mid");
+        live.export_midi(&midi).unwrap();
+        let original = live.project().clone();
+        let cancelled = AtomicBool::new(false);
+        let job = live
+            .begin_agent_file_job(Command::ImportMidi {
+                path: midi.to_string_lossy().into_owned(),
+                at_tick: 997,
+            })
+            .unwrap();
+        let result = job.run(&cancelled).unwrap();
+        assert_eq!(live.project(), &original);
+        live.continue_agent_file_job(result, &cancelled).unwrap();
+        assert_eq!(live.project().tracks.len(), original.tracks.len() + 1);
+        assert_eq!(live.project().tempo_map, original.tempo_map);
+        assert_eq!(live.project().tracks[0], original.tracks[0]);
+        let added = live
+            .project()
+            .tracks
+            .last()
+            .unwrap()
+            .kind
+            .as_instrument()
+            .unwrap();
+        assert_eq!(added.clips[0].start, Ticks(997));
+        live.undo();
+        assert_eq!(live.project(), &original);
+
+        let audio = directory.path().join("source.wav");
+        let mut writer = hound::WavWriter::create(
+            &audio,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 24_000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for _ in 0..2400 {
+            writer.write_sample::<i16>(1234).unwrap();
+        }
+        writer.finalize().unwrap();
+        let job = live
+            .begin_agent_file_job(Command::ImportAudio {
+                path: audio.to_string_lossy().into_owned(),
+                at_tick: 13,
+                name: Some("Recording".into()),
+            })
+            .unwrap();
+        let result = job.run(&cancelled).unwrap();
+        assert_eq!(live.project(), &original);
+        live.continue_agent_file_job(result, &cancelled).unwrap();
+        let source = live.project().audio_sources.values().next().unwrap();
+        let stored = source.path.resolve(live.project_folder()).unwrap();
+        assert_eq!(
+            std::fs::read(&audio).unwrap(),
+            std::fs::read(&stored).unwrap()
+        );
+        assert!(source.path.is_inside());
+        let added = live.project().tracks.last().unwrap();
+        assert_eq!(added.name, "Recording");
+        assert_eq!(added.kind.as_audio().unwrap().clips[0].start, Ticks(13));
+        live.undo();
+        assert_eq!(live.project(), &original);
+    }
+
+    #[test]
+    fn cancelled_and_stale_audio_imports_discard_private_source_copies() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.wav");
+        let mut writer = hound::WavWriter::create(
+            &source,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 24_000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for _ in 0..240 {
+            writer.write_sample::<i16>(1).unwrap();
+        }
+        writer.finalize().unwrap();
+        let mut live = fixture();
+        let cancelled = AtomicBool::new(false);
+        for cancel in [false, true] {
+            let job = live
+                .begin_agent_file_job(Command::ImportAudio {
+                    path: source.to_string_lossy().into_owned(),
+                    at_tick: 0,
+                    name: None,
+                })
+                .unwrap();
+            let result = job.run(&cancelled).unwrap();
+            let Outcome::ImportedAudio { file, .. } = &result.outcome else {
+                panic!("audio")
+            };
+            let private = file.path().to_owned();
+            if cancel {
+                cancelled.store(true, Ordering::Relaxed);
+            } else {
+                live.add_bus_track("Concurrent edit");
+            }
+            let before = live.project().clone();
+            assert!(live.continue_agent_file_job(result, &cancelled).is_err());
+            assert!(!private.exists());
+            assert_eq!(live.project(), &before);
+        }
+        assert!(source.exists());
+    }
 
     fn fixture() -> Session {
         let mut session = Session::new(crate::SessionOptions::headless()).unwrap();

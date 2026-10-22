@@ -106,6 +106,9 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.inspect",
     "edit_project.inspect_audio",
     "edit_project.listen",
+    "edit_project.checkpoints",
+    "edit_project.import_audio",
+    "edit_project.import_midi",
     "edit_project.render",
     "edit_project.preview",
     "edit_project.export_midi",
@@ -167,11 +170,14 @@ impl Operation {
                 });
             }
             let mutating = parsed.is_mutating();
-            let confirm = matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
+            let confirm = matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
+                || matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
                 || matches!(&parsed, crate::live_agent::Command::EditNotes { edits, .. } if edits.iter().any(crate::live_agent::note_editing::NoteEdit::requires_confirmation))
                 || matches!(
                     parsed,
                     crate::live_agent::Command::Listen { .. }
+                        | crate::live_agent::Command::ImportAudio { .. }
+                        | crate::live_agent::Command::ImportMidi { .. }
                         | crate::live_agent::Command::Render { .. }
                         | crate::live_agent::Command::ExportMidi { .. }
                         | crate::live_agent::Command::VerifyRender { .. }

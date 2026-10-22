@@ -67,6 +67,10 @@ impl StagedFile {
 }
 
 impl StagedProject {
+    /// Publishes a new checkpoint without replacing a file created by another writer.
+    pub fn publish_noclobber(self) -> Result<()> {
+        publish_ready_staged_file_noclobber(self.file, &self.path)
+    }
     /// Modification time that the staged file keeps when it is atomically published.
     pub fn modified(&self) -> Option<std::time::SystemTime> {
         self.modified

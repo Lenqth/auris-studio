@@ -111,6 +111,20 @@ steps and all points validate before mutation. Static controls remain unchanged.
 
 ## Audio and MIDI delivery
 
+`checkpoints` lists named snapshots, creates a new named snapshot or restores one.
+Use operation kind `list`, `create` or `restore`. Restoration requires
+`expected_revision` from `inspect_project`, retains the current file path and is
+one Undo step. Both the supplied revision and worker ownership are checked, so
+unrelated edits made while loading are protected. Existing checkpoint names are
+never replaced. Snapshots retain asset references; audio files are not duplicated.
+
+`import_audio` and `import_midi` append to the existing document at `at_tick`.
+Both take an absolute local `path`, preserve the current tempo/meter maps and run
+copy/decode/parse work off the UI thread. Audio imports retain an independent
+source copy; an optional `name` labels the new track. MIDI imports preserve note,
+bend and controller timing, using default instruments that need timbre review.
+Cancellation or a changed document discards the result. Each import is one Undo.
+
 `render` exports the current snapshot to destination kind `mix` with an absolute
 path or kind `stems` with an absolute folder. Optional range uses start_bar/bars;
 bit_depth is 16, 24 (default), or 32 float. `preview` makes a protected 24 kHz WAV

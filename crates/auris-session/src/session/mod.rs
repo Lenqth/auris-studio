@@ -98,6 +98,7 @@ pub use autosave::{
     DiskWatchJob, DiskWatchResult, RECOVERY_DIR_VAR, RecoveryCleanupJob, RecoveryJob,
     RecoveryQuarantineCleanupJob, RecoveryResult, RecoverySnapshot, recovery_dir, should_autosave,
 };
+pub use checkpoints::{CheckpointJob, CheckpointOperation, CheckpointResult};
 pub use chord_preview::{ChordPreview, ChordPreviewJob};
 pub use clipboard::{Clipboard, CopiedClip, CopiedContent};
 pub use compose::{composed_gain_db, kit_trim_db};

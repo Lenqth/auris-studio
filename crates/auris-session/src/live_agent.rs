@@ -31,6 +31,29 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// List/create named snapshots, or explicitly restore one as a single Undo edit. Read inspect_project and pass expected_revision for restoration; concurrent edits invalidate worker results. Keeps the current project path. Checkpoints retain asset references, not independent audio copies.
+    Checkpoints {
+        /// Bounded listing, new snapshot or restoration.
+        operation: crate::CheckpointOperation,
+        /// Current revision required for restore; omitted for list/create.
+        expected_revision: Option<String>,
+    },
+    /// Import a local audio file as a new track at an absolute tick position. Existing music and tempo are preserved. Copy and decode run off the UI thread; cancellation or document changes discard the staged import. One Undo removes it.
+    ImportAudio {
+        /// Absolute local source path, up to 512 MiB; no network paths.
+        path: String,
+        /// Nonnegative absolute timeline position in ticks.
+        at_tick: i64,
+        /// Optional track and clip name, up to 256 bytes; otherwise the source stem.
+        name: Option<String>,
+    },
+    /// Append a Standard MIDI File as new editable instrument/drum tracks. Keep the current tempo/meter maps and existing tracks. Notes, bends and controllers retain exact source ticks; playback instruments are defaults and need review. One Undo removes the whole import.
+    ImportMidi {
+        /// Absolute local .mid path, up to 32 MiB.
+        path: String,
+        /// Nonnegative absolute insertion tick, added to all source positions.
+        at_tick: i64,
+    },
     /// Correct singer-note lyrics, supported IPA/duration pins and pitch ornaments in one atomic edit. Read inspect_singer capabilities and read_notes first. Unsupported controls are refused; stale revisions and failed batches leave all notes unchanged. Rerender stale takes with sing.
     EditVocalNotes {
         /// Stable singer clip ID.
@@ -400,6 +423,7 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::Checkpoints { operation, .. } => operation.is_mutating(),
             Self::Automation { operation, .. } => !operation.is_read_only(),
             Self::EditRecipe { operation, .. } => !operation.is_read_only(),
             Self::MixerGraph { operation } => !operation.is_read_only(),
@@ -433,6 +457,9 @@ impl Command {
                 | Self::Preview { .. }
                 | Self::ExportMidi { .. }
                 | Self::VerifyRender { .. }
+                | Self::ImportAudio { .. }
+                | Self::ImportMidi { .. }
+                | Self::Checkpoints { .. }
         )
     }
 }
@@ -624,7 +651,10 @@ impl Session {
             | Command::Render { .. }
             | Command::Preview { .. }
             | Command::ExportMidi { .. }
-            | Command::VerifyRender { .. }) => {
+            | Command::VerifyRender { .. }
+            | Command::ImportAudio { .. }
+            | Command::ImportMidi { .. }
+            | Command::Checkpoints { .. }) => {
                 let cancelled = std::sync::atomic::AtomicBool::new(false);
                 let mut job = self.begin_agent_job(command, crate::Settings::load())?;
                 loop {

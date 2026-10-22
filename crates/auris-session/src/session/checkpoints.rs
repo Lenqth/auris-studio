@@ -12,7 +12,233 @@ use auris_io::{IoError, StagedProject, load_project, save_project, stage_project
 use super::Session;
 use crate::SessionError;
 
+/// Explicit document-history operation, shared by saved and live agents.
+#[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CheckpointOperation {
+    /// Page at most 128 retained checkpoint names.
+    List {
+        /// Zero-based sorted name offset.
+        #[serde(default)]
+        offset: usize,
+    },
+    /// Preserve the current document under a new name; existing names are refused.
+    Create {
+        /// 1..80 bytes of letters, digits, hyphens or underscores.
+        name: String,
+    },
+    /// Restore one snapshot as an undoable edit; requires the current document revision.
+    Restore {
+        /// Exact name returned by list or create.
+        name: String,
+    },
+}
+
+impl CheckpointOperation {
+    /// Whether the operation replaces current document content.
+    pub fn is_mutating(&self) -> bool {
+        matches!(self, Self::Restore { .. })
+    }
+}
+
+/// History work detached from its originating document thread.
+pub struct CheckpointJob {
+    owner: std::sync::Arc<auris_core::PluginRegistry>,
+    revision: u64,
+    content_revision: String,
+    folder: PathBuf,
+    project: Project,
+    render_rate: f64,
+    operation: CheckpointOperation,
+}
+
+/// A private staged checkpoint or prepared restoration awaiting owner validation.
+pub struct CheckpointResult {
+    owner: std::sync::Arc<auris_core::PluginRegistry>,
+    revision: u64,
+    content_revision: String,
+    folder: PathBuf,
+    outcome: CheckpointOutcome,
+}
+
+enum CheckpointOutcome {
+    Listed(serde_json::Value),
+    Created {
+        name: String,
+        staged: StagedProject,
+    },
+    Restored {
+        name: String,
+        project: Box<Project>,
+        assets: super::assets::PreparedAssets,
+    },
+}
+
+impl CheckpointJob {
+    /// Read, serialize or prepare assets on a worker, without publishing or editing.
+    pub fn run(
+        self,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<CheckpointResult, String> {
+        let check = || {
+            if cancelled.load(Ordering::Relaxed) {
+                Err("History operation cancelled".to_string())
+            } else {
+                Ok(())
+            }
+        };
+        check()?;
+        let outcome = match self.operation {
+            CheckpointOperation::List { offset } => {
+                let path = checkpoint_path_in_folder(&self.folder, "listing")
+                    .map_err(|e| e.to_string())?;
+                let mut names = Vec::new();
+                for entry in std::fs::read_dir(path.parent().expect("history folder"))
+                    .map_err(|e| e.to_string())?
+                {
+                    check()?;
+                    let entry = entry.map_err(|e| e.to_string())?;
+                    if let Some(name) = entry
+                        .file_name()
+                        .to_str()
+                        .and_then(|name| name.strip_prefix("checkpoint-"))
+                        .and_then(|name| name.strip_suffix(".json"))
+                    {
+                        if names.len() >= 10000 {
+                            return Err("History exceeds the 10000-checkpoint listing limit".into());
+                        }
+                        names.push(name.to_owned());
+                    }
+                }
+                names.sort();
+                if offset > names.len() {
+                    return Err("offset exceeds checkpoint count".into());
+                }
+                let next = (offset + 128).min(names.len());
+                CheckpointOutcome::Listed(
+                    serde_json::json!({"names":&names[offset..next],"total":names.len(),"next_offset":(next<names.len()).then_some(next)}),
+                )
+            }
+            CheckpointOperation::Create { name } => {
+                let path =
+                    checkpoint_path_in_folder(&self.folder, &name).map_err(|e| e.to_string())?;
+                if path.exists() {
+                    return Err("Checkpoint name already exists".into());
+                }
+                let staged =
+                    stage_project(&path, &mut self.project.clone()).map_err(|e| e.to_string())?;
+                CheckpointOutcome::Created { name, staged }
+            }
+            CheckpointOperation::Restore { name } => {
+                let path =
+                    checkpoint_path_in_folder(&self.folder, &name).map_err(|e| e.to_string())?;
+                let resolved = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+                let directory = std::fs::canonicalize(path.parent().expect("history folder"))
+                    .map_err(|e| e.to_string())?;
+                if !resolved.starts_with(directory) {
+                    return Err("Checkpoint escapes its history folder".into());
+                }
+                let project = load_project(&path).map_err(|e| e.to_string())?;
+                let assets = super::assets::prepare_project_assets(
+                    &project,
+                    Some(&self.folder),
+                    self.render_rate,
+                    cancelled,
+                )
+                .ok_or("History operation cancelled")?;
+                CheckpointOutcome::Restored {
+                    name,
+                    project: Box::new(project),
+                    assets,
+                }
+            }
+        };
+        check()?;
+        Ok(CheckpointResult {
+            owner: self.owner,
+            revision: self.revision,
+            content_revision: self.content_revision,
+            folder: self.folder,
+            outcome,
+        })
+    }
+}
+
 impl Session {
+    /// Capture history work and reject a restore aimed at an obsolete document revision.
+    pub fn begin_agent_checkpoints(
+        &self,
+        operation: CheckpointOperation,
+        expected_revision: Option<String>,
+    ) -> Result<CheckpointJob, String> {
+        if self.transaction.is_some() {
+            return Err("An edit is already in progress".into());
+        }
+        let content_revision = self.agent_document_revision()?;
+        if operation.is_mutating() && expected_revision.as_deref() != Some(&content_revision) {
+            return Err("Document changed; inspect_project before restoring a checkpoint".into());
+        }
+        Ok(CheckpointJob {
+            owner: std::sync::Arc::clone(&self.registry),
+            revision: self.revision,
+            content_revision,
+            folder: self
+                .project_folder()
+                .ok_or("Missing project folder")?
+                .to_owned(),
+            project: self.project.clone(),
+            render_rate: self.engine.sample_rate(),
+            operation,
+        })
+    }
+
+    /// Accept a current history result; restoration retains the current file and one Undo step.
+    pub fn continue_agent_checkpoints(
+        &mut self,
+        result: CheckpointResult,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<String, String> {
+        if cancelled.load(Ordering::Relaxed)
+            || self.revision != result.revision
+            || !std::sync::Arc::ptr_eq(&self.registry, &result.owner)
+            || self.project_folder() != Some(result.folder.as_path())
+        {
+            return Err("Document changed or history operation cancelled; nothing applied".into());
+        }
+        let mut response = match result.outcome {
+            CheckpointOutcome::Listed(response) => response,
+            CheckpointOutcome::Created { name, staged } => {
+                staged.publish_noclobber().map_err(|e| e.to_string())?;
+                serde_json::json!({"created":name})
+            }
+            CheckpointOutcome::Restored {
+                name,
+                mut project,
+                assets,
+            } => {
+                if self.engine.sample_rate() != assets.render_rate {
+                    return Err("Audio device rate changed during checkpoint preparation".into());
+                }
+                // The open document keeps its file's build provenance until the next save.
+                project.saved_by.clone_from(&self.project.saved_by);
+                if self.project == *project {
+                    serde_json::json!({"restored":name,"changed":false})
+                } else {
+                    self.record(crate::Edit::ExternalChanges);
+                    self.hosted.clear();
+                    self.vst3.clear();
+                    self.adopt_project(*project);
+                    let missing = self.install_prepared_assets(assets);
+                    self.invalidate_graph();
+                    self.publish_loop();
+                    serde_json::json!({"restored":name,"changed":true,"missing_assets":missing})
+                }
+            }
+        };
+        response["revision"] = self.agent_document_revision()?.into();
+        response["captured_revision"] = result.content_revision.into();
+        Ok(response.to_string())
+    }
     fn checkpoint_path(&self, name: &str) -> Result<PathBuf, SessionError> {
         let folder = self.project_folder().ok_or(SessionError::NoPath)?;
         checkpoint_path_in_folder(folder, name)
@@ -150,6 +376,66 @@ pub(super) fn stage_preserved_document_in_folder(
 #[cfg(test)]
 mod tests {
     use crate::session::fixtures::{Scratch, session};
+
+    #[test]
+    fn agent_history_restores_one_undo_and_rejects_concurrent_edits_and_name_races() {
+        use super::*;
+        let mut live = session();
+        live.add_bus_track("Original");
+        let cancelled = std::sync::atomic::AtomicBool::new(false);
+        let saved_path = live.path().map(Path::to_owned);
+        let snapshot = live.project().clone();
+        let capture = || CheckpointOperation::Create {
+            name: "TakeA".into(),
+        };
+        let first = live
+            .begin_agent_checkpoints(capture(), None)
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        let raced = live
+            .begin_agent_checkpoints(capture(), None)
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        live.continue_agent_checkpoints(first, &cancelled).unwrap();
+        assert!(live.continue_agent_checkpoints(raced, &cancelled).is_err());
+        assert_eq!(live.project(), &snapshot);
+        live.add_bus_track("Other take");
+        let other = live.project().clone();
+        let restore = || CheckpointOperation::Restore {
+            name: "TakeA".into(),
+        };
+        assert!(live.begin_agent_checkpoints(restore(), None).is_err());
+        let result = live
+            .begin_agent_checkpoints(restore(), Some(live.agent_document_revision().unwrap()))
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        live.continue_agent_checkpoints(result, &cancelled).unwrap();
+        assert_eq!(live.project(), &snapshot);
+        assert_eq!(live.path(), saved_path.as_deref());
+        live.undo();
+        assert_eq!(live.project(), &other);
+        let result = live
+            .begin_agent_checkpoints(restore(), Some(live.agent_document_revision().unwrap()))
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        live.add_bus_track("User edit while waiting");
+        let concurrent = live.project().clone();
+        assert!(live.continue_agent_checkpoints(result, &cancelled).is_err());
+        assert_eq!(live.project(), &concurrent);
+        let listed = live
+            .begin_agent_checkpoints(CheckpointOperation::List { offset: 0 }, None)
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        let listed: serde_json::Value =
+            serde_json::from_str(&live.continue_agent_checkpoints(listed, &cancelled).unwrap())
+                .unwrap();
+        assert_eq!(listed["names"], serde_json::json!(["TakeA"]));
+    }
 
     #[test]
     fn snapshots_survive_fresh_sessions_and_restore_without_losing_the_other_take() {

@@ -194,16 +194,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             create_project::DESCRIPTION,
             create_project::run,
         ),
-        definition::<import_audio::Args>(
-            import_audio::NAME,
-            import_audio::DESCRIPTION,
-            import_audio::run,
-        ),
-        definition::<import_midi::Args>(
-            import_midi::NAME,
-            import_midi::DESCRIPTION,
-            import_midi::run,
-        ),
         definition::<import_transcription::Args>(
             import_transcription::NAME,
             import_transcription::DESCRIPTION,
@@ -248,11 +238,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             inspect_composition::NAME,
             inspect_composition::DESCRIPTION,
             inspect_composition::run,
-        ),
-        definition::<checkpoints::Args>(
-            checkpoints::NAME,
-            checkpoints::DESCRIPTION,
-            checkpoints::run,
         ),
         definition::<NoArgs>(spec_reference::NAME, spec_reference::DESCRIPTION, |_| {
             Ok(spec_reference::run())
