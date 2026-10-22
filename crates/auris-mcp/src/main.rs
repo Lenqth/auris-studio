@@ -349,7 +349,7 @@ impl AurisMcp {
         blocking(move || toolbox::edit_harmony::run(&args)).await
     }
 
-    /// Changes a generated clip's recipe and regenerates that clip only. With drum_voice, edits only the named writer within a drum kit. Unspecified controls and the seed are kept. Read inspect_composition first. Hand-edited notes require replace_hand_edits; a checkpoint preserves the previous document. Use edit_clip with freeze to keep a take without its recipe.
+    /// Changes a generated clip's recipe and regenerates that clip only; omit clip to make the same change to every generated clip on the track in one call. With drum_voice, edits only the named writer within a drum kit. Unspecified controls and the seed are kept. Read inspect_composition first. Hand-edited notes require replace_hand_edits; a checkpoint preserves the previous document. Use edit_clip with freeze to keep a take without its recipe.
     #[tool(input_schema = tool_schema("edit_recipe"))]
     async fn edit_recipe(
         &self,

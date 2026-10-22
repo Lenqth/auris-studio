@@ -1859,15 +1859,16 @@ pub mod list_instruments {
     pub fn run() -> String {
         match headless() {
             Ok(session) => {
+                // Every one: there are fewer than twenty, and a cap of ten listed only the
+                // physical models, so the synthesisers were found by reading the documentation.
                 let names = session
                     .registry()
                     .instruments()
                     .filter(|p| p.id != SAMPLER_ID)
-                    .take(10)
                     .map(|p| format!("{}: {}", p.id, p.name))
                     .collect::<Vec<_>>();
                 format!(
-                    "Built-ins (up to 10):\n{}\nGeneral MIDI library loaded: {}.\nUse search_instruments with project and a focused query for selectable sounds, including SoundFonts and plugin presets. Pass the returned id as sound_id.",
+                    "Built-ins:\n{}\nGeneral MIDI library loaded: {}.\nUse search_instruments with project and a focused query for selectable sounds, including SoundFonts and plugin presets. Pass the returned id as sound_id.",
                     names.join("\n"),
                     session.general_midi_available()
                 )
@@ -3759,6 +3760,14 @@ mod tests {
         // The vocabulary teaches both doors: the registry ids and the General MIDI field.
         let listed = list_instruments::run();
         assert!(listed.contains("General MIDI"), "{listed}");
+        // Every family, not only the first ten registered, which were all physical models.
+        for id in [
+            "auris.synth.chiptune",
+            "auris.synth.fm2",
+            "auris.synth.drumkit",
+        ] {
+            assert!(listed.contains(id), "{id} missing from {listed}");
+        }
         let default_id = headless()
             .unwrap()
             .registry()

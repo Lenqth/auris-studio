@@ -188,7 +188,7 @@ pub mod edit_recipe {
     /// The tool's wire name.
     pub const NAME: &str = "edit_recipe";
     /// The tool's model-facing description.
-    pub const DESCRIPTION: &str = "Changes a generated clip's recipe and regenerates that clip only. With drum_voice, edits only the named writer within a drum kit. Unspecified controls and the seed are kept. Read inspect_composition first. Hand-edited notes require replace_hand_edits; a checkpoint preserves the previous document. Use edit_clip with freeze to keep a take without its recipe.";
+    pub const DESCRIPTION: &str = "Changes a generated clip's recipe and regenerates that clip only; omit clip to make the same change to every generated clip on the track in one call. With drum_voice, edits only the named writer within a drum kit. Unspecified controls and the seed are kept. Read inspect_composition first. Hand-edited notes require replace_hand_edits; a checkpoint preserves the previous document. Use edit_clip with freeze to keep a take without its recipe.";
     /// The controls to change on one generated clip.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     pub struct Args {
@@ -197,8 +197,9 @@ pub mod edit_recipe {
         /// Track name from describe.
         /// Also accepts a stable `id:<number>` selector from describe.
         pub track: String,
-        /// 1-based clip number.
-        pub clip: usize,
+        /// 1-based clip number. Omit it to apply the same change to every generated clip on the
+        /// track (with drum_voice, every clip whose kit has that voice).
+        pub clip: Option<usize>,
         /// Composite drum voice name from inspect_composition; edits only that voice.
         pub drum_voice: Option<String>,
         /// Density, 0-1.
@@ -225,32 +226,116 @@ pub mod edit_recipe {
         pub motif: Option<String>,
         /// Authored rhythm: x hit, X accent, o ghost, . rest. Empty clears it.
         pub rhythm: Option<String>,
-        /// Explicitly replace manual changes to this generated clip.
+        /// Explicitly replace manual changes to the chosen generated clips.
         #[serde(default)]
         pub replace_hand_edits: bool,
     }
     /// Validates each supplied control, regenerates and saves.
+    ///
+    /// Every chosen clip is checked and its recipe built before any is written, so a refusal
+    /// changes nothing, and the project is saved once.
     pub fn run(args: &Args) -> Result<String, String> {
         let mut session = opened(&args.project)?;
         let track = track_by_name(session.project(), &args.track)?.id;
-        let (clip, _) = clip_by_number(session.project(), track, args.clip)?;
-        let whole_recipe = session
-            .clip_recipe(clip)
-            .cloned()
-            .ok_or("this clip has no recipe")?;
-        let original = match &args.drum_voice {
-            Some(name) => whole_recipe
-                .drum_voices
-                .iter()
-                .find(|voice| &voice.name == name)
-                .and_then(|voice| voice.recipe.as_deref())
-                .ok_or("this drum voice has no editable recipe")?,
-            None => &whole_recipe,
+        let single = args.clip.is_some();
+        let chosen: Vec<(usize, ClipId)> = match args.clip {
+            Some(number) => vec![(number, clip_by_number(session.project(), track, number)?.0)],
+            None => {
+                let chosen: Vec<_> = session
+                    .project()
+                    .track(track)
+                    .and_then(|entry| entry.kind.note_clips())
+                    .ok_or("that track holds no note clips")?
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, clip)| {
+                        clip.recipe
+                            .as_ref()
+                            .is_some_and(|recipe| match &args.drum_voice {
+                                Some(name) => recipe
+                                    .drum_voices
+                                    .iter()
+                                    .any(|voice| &voice.name == name && voice.recipe.is_some()),
+                                None => true,
+                            })
+                    })
+                    .map(|(index, clip)| (index + 1, clip.id))
+                    .collect();
+                if chosen.is_empty() {
+                    return Err(match &args.drum_voice {
+                        Some(_) => "no generated clip on this track has that drum voice with an editable recipe".into(),
+                        None => "this track has no generated clips".into(),
+                    });
+                }
+                chosen
+            }
         };
-        let mut recipe = original.clone();
-        if session.clip_hand_edited(clip) && !args.replace_hand_edits {
-            return Err("this clip has hand-edited notes; use replace_hand_edits: true to replace them, or edit_clip with freeze to keep them".into());
+        let mut edited = Vec::new();
+        let mut planned = Vec::new();
+        for (number, clip) in chosen {
+            let whole_recipe = session
+                .clip_recipe(clip)
+                .cloned()
+                .ok_or("this clip has no recipe")?;
+            let original = match &args.drum_voice {
+                Some(name) => whole_recipe
+                    .drum_voices
+                    .iter()
+                    .find(|voice| &voice.name == name)
+                    .and_then(|voice| voice.recipe.as_deref())
+                    .ok_or("this drum voice has no editable recipe")?,
+                None => &whole_recipe,
+            };
+            if session.clip_hand_edited(clip) && !args.replace_hand_edits {
+                if single {
+                    return Err("this clip has hand-edited notes; use replace_hand_edits: true to replace them, or edit_clip with freeze to keep them".into());
+                }
+                edited.push(format!("[{number}]"));
+                continue;
+            }
+            let recipe = changed(args, original)?;
+            if original != &recipe {
+                planned.push((number, clip, recipe));
+            }
         }
+        if !edited.is_empty() {
+            return Err(format!(
+                "Hand-edited clips: {}. No clips were changed. Set replace_hand_edits: true to replace them, or freeze them with edit_clip first.",
+                edited.join(", ")
+            ));
+        }
+        if planned.is_empty() {
+            return Ok("Recipe unchanged; no notes were rewritten.".into());
+        }
+        let mut written = Vec::new();
+        for (number, clip, recipe) in planned {
+            let notes = match &args.drum_voice {
+                Some(name) => session.set_drum_voice_recipe(clip, name, recipe),
+                None => session.set_clip_recipe(clip, recipe),
+            }
+            .map_err(|error| error.to_string())?;
+            written.push((number, notes));
+        }
+        save_checkpointed(&mut session)?;
+        Ok(match written.as_slice() {
+            [(number, notes)] if single => format!(
+                "Saved clip [{number}]: {notes} notes. Other clips and the mix are unchanged."
+            ),
+            _ => format!(
+                "Saved {} clips: {}. Other clips and the mix are unchanged.",
+                written.len(),
+                written
+                    .iter()
+                    .map(|(number, notes)| format!("[{number}] {notes} notes"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        })
+    }
+
+    /// The recipe with every supplied control applied, each validated.
+    fn changed(args: &Args, original: &ClipRecipe) -> Result<ClipRecipe, String> {
+        let mut recipe = original.clone();
         for (name, value, target) in [
             ("density", args.density, &mut recipe.density),
             ("intensity", args.intensity, &mut recipe.intensity),
@@ -310,19 +395,7 @@ pub mod edit_recipe {
                 )
             };
         }
-        if original == &recipe {
-            return Ok("Recipe unchanged; no notes were rewritten.".into());
-        }
-        let notes = match &args.drum_voice {
-            Some(name) => session.set_drum_voice_recipe(clip, name, recipe),
-            None => session.set_clip_recipe(clip, recipe),
-        }
-        .map_err(|error| error.to_string())?;
-        save_checkpointed(&mut session)?;
-        Ok(format!(
-            "Saved clip [{}]: {notes} notes. Other clips and the mix are unchanged.",
-            args.clip
-        ))
+        Ok(recipe)
     }
 }
 
@@ -588,6 +661,63 @@ mod tests {
         assert_eq!(read("/current_instruments/0/name"), "Lead");
         assert!(read("/current_instruments/0/parameters/0/param").is_string());
         assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn a_recipe_edit_without_a_clip_changes_every_generated_clip_or_none() {
+        // A model reshaping a bass line clip by clip made ten calls for one change; a
+        // specification part cannot say `motif`, so the edit had to happen here.
+        let fixture = Fixture::new("recipe-every-clip");
+        let mut session = opened(&fixture.path).unwrap();
+        let second = session
+            .generate_clip(
+                fixture.track,
+                Ticks::QUARTER * 16,
+                Ticks::QUARTER * 16,
+                ClipRecipe::new(ClipPreset::Lead, 9),
+            )
+            .unwrap();
+        let plain = session
+            .add_midi_clip(
+                fixture.track,
+                "Plain",
+                Ticks::QUARTER * 32,
+                Ticks::QUARTER * 4,
+            )
+            .unwrap();
+        session.save_in_place().unwrap();
+
+        let answer = edit_recipe::run(&args(
+            json!({"project":fixture.path,"track":"Lead","motif":"0 7"}),
+        ))
+        .unwrap();
+        assert!(answer.contains("Saved 2 clips"), "{answer}");
+        let reopened = opened(&fixture.path).unwrap();
+        for clip in [fixture.clip, second] {
+            let recipe = reopened.clip_recipe(clip).unwrap();
+            assert_eq!(recipe.motif.len(), 2, "clip {clip:?}: {recipe:?}");
+        }
+        assert!(
+            reopened.clip_recipe(plain).is_none(),
+            "a plain clip gains no recipe"
+        );
+
+        // One hand-edited clip refuses the whole change, naming it, and nothing is saved.
+        let mut session = opened(&fixture.path).unwrap();
+        session
+            .add_note(second, Note::new(90, Ticks::ZERO, Ticks::QUARTER))
+            .unwrap();
+        session.save_in_place().unwrap();
+        let bytes = std::fs::read(&fixture.path).unwrap();
+        let refusal = edit_recipe::run(&args(
+            json!({"project":fixture.path,"track":"Lead","density":0.2}),
+        ))
+        .unwrap_err();
+        assert!(
+            refusal.contains("[2]") && !refusal.contains("[1]"),
+            "{refusal}"
+        );
+        assert_eq!(std::fs::read(&fixture.path).unwrap(), bytes);
     }
 
     #[test]

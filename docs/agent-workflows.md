@@ -365,7 +365,9 @@ recipe. `regenerate_clips` and `edit_recipe` retain them. The required `take` in
 or `{kind:"seed",seed:42}` to choose a seed for one clip. `edit_recipe` accepts `motif` (relative
 scale steps such as `0 2 4 2`) and `rhythm` (`x` hit, `X` accent, `o` ghost, `.` rest);
 an empty string clears that authored control. Density, gate, dynamics and subdivision
-remain available for articulation and phrasing.
+remain available for articulation and phrasing. Leaving out `clip` applies the same change to
+every generated clip on the track in one call — a bass line's motif across all its sections —
+and one hand-edited clip refuses the whole call until `replace_hand_edits` is set.
 
 Regeneration writes a local take in the current composer. Whole-song arrangement
 context can produce different notes from a local take even with the same seed. Freeze
