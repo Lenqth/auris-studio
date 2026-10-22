@@ -9,7 +9,7 @@ pub mod set_drum_assignment {
     /// The tool's wire name.
     pub const NAME: &str = "set_drum_assignment";
     /// The model-facing description, shared by both tool frontends.
-    pub const DESCRIPTION: &str = "Adds or changes one drum track role's MIDI note assignment, or removes it with remove: true. Roles are kick, snare, closed_hat, open_hat, crash and tom; note is 0-127. Requires an explicit drum track. Saves the assignment for the drum editor and future generation without rewriting existing clips or their saved recipes. Other assignments and instrument state are preserved; removing the final role leaves an explicitly empty map.";
+    pub const DESCRIPTION: &str = "Adds or changes one drum track role's MIDI note assignment, or removes it with remove: true. Roles are kick, snare, closed_hat, open_hat, crash and tom; note is 0-127. Requires an explicit drum track. Saves the assignment for the drum editor and future generation; existing clips keep their notes and saved recipes unless remap_clips moves every generated drum voice onto the saved assignments (hand-placed untagged hits stay). Other assignments and instrument state are preserved; removing the final role leaves an explicitly empty map.";
 
     /// Arguments for adding, replacing or removing one musical assignment.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -26,12 +26,22 @@ pub mod set_drum_assignment {
         /// Remove the role's assignment; do not supply note together with this flag.
         #[serde(default)]
         pub remove: bool,
+        /// Also move existing generated drum notes and their recipes onto the saved assignments,
+        /// so a regenerated take plays the new note. Requires note.
+        #[serde(default)]
+        pub remap_clips: bool,
     }
 
     /// Applies one manual assignment and saves a checkpoint when it changed.
     pub fn run(args: &Args) -> Result<String, String> {
         if args.note.is_some() == args.remove {
             return Err("pass note to assign a role, or remove: true to remove it".into());
+        }
+        if args.remove && args.remap_clips {
+            return Err(
+                "remap_clips needs a note to move generated hits to; remove does not take it"
+                    .into(),
+            );
         }
         if args.note.is_some_and(|note| note > 127) {
             return Err("note must be between 0 and 127".into());
@@ -42,9 +52,13 @@ pub mod set_drum_assignment {
         })?;
         let mut session = opened(&args.project)?;
         let track = track_by_name(session.project(), &args.track)?.id;
-        let changed = session
-            .set_drum_assignment(track, role, args.note)
-            .map_err(|error| error.to_string())?;
+        let changed = match args.note {
+            Some(note) if args.remap_clips => {
+                session.set_drum_assignment_remapping(track, role, note)
+            }
+            note => session.set_drum_assignment(track, role, note),
+        }
+        .map_err(|error| error.to_string())?;
         if changed {
             save_checkpointed(&mut session)?;
         }
@@ -68,6 +82,7 @@ pub mod set_drum_assignment {
                 role: "snare".into(),
                 note: None,
                 remove: false,
+                remap_clips: false,
             };
             assert!(run(&args).unwrap_err().starts_with("pass note"));
             args.note = Some(38);
@@ -79,6 +94,11 @@ pub mod set_drum_assignment {
             args.note = Some(38);
             args.role = "melody".into();
             assert!(run(&args).unwrap_err().starts_with("role must"));
+            args.role = "snare".into();
+            args.note = None;
+            args.remove = true;
+            args.remap_clips = true;
+            assert!(run(&args).unwrap_err().starts_with("remap_clips needs"));
         }
     }
 }

@@ -456,7 +456,7 @@ impl AurisMcp {
         blocking(move || toolbox::analyze_drum_kit::run(&args)).await
     }
 
-    /// Adds or changes one drum track role's MIDI note assignment, or removes it with remove: true. Roles are kick, snare, closed_hat, open_hat, crash and tom; note is 0-127. Requires an explicit drum track. Saves the assignment for the drum editor and future generation without rewriting existing clips or their saved recipes. Other assignments and instrument state are preserved; removing the final role leaves an explicitly empty map.
+    /// Adds or changes one drum track role's MIDI note assignment, or removes it with remove: true. Roles are kick, snare, closed_hat, open_hat, crash and tom; note is 0-127. Requires an explicit drum track. Saves the assignment for the drum editor and future generation; existing clips keep their notes and saved recipes unless remap_clips moves every generated drum voice onto the saved assignments (hand-placed untagged hits stay). Other assignments and instrument state are preserved; removing the final role leaves an explicitly empty map.
     #[tool(input_schema = tool_schema("set_drum_assignment"))]
     async fn set_drum_assignment(
         &self,
