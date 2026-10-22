@@ -177,6 +177,7 @@ pub fn definitions() -> Vec<Definition> {
         description: audio_attachment::DESCRIPTION.into(),
         parameters: super::parameter_schema::<audio_attachment::Args>(),
     });
+    tools.extend(super::runtime::live_references());
     tools
 }
 
@@ -704,7 +705,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            fixtures.len() + 3 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            fixtures.len() + 7 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (name, args) in fixtures {
             let tool = tools.iter().find(|tool| tool.name == name).unwrap();
@@ -761,7 +762,7 @@ mod tests {
         let tools = definitions();
         assert_eq!(
             tools.len(),
-            34 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            38 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         assert!(
             command("compose_song", &serde_json::json!({}))

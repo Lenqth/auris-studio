@@ -1,4 +1,8 @@
 //! How Auris Studio fits together.
+//! Saved-project MCP registers and dispatches through the toolbox execution registry.
+//! Runtime discovery and help use the same enabled tool set as execution.
+//! Built-in backends share documentation search, discovery, help and capability tools.
+//!
 //!
 //! The workspace has no root crate — `cargo doc` on it produces a list of crates and no
 //! account of how they relate. This module is that account. It lives here because `auris-session`

@@ -40,6 +40,10 @@ impl ToolHost {
         if !Self::contains(name) {
             return Err(format!("Unknown live tool: {name}"));
         }
+        if let Some(result) = toolbox::runtime::call_live_reference(name, args.clone()) {
+            permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
+            return result.map(|text| json!({"event":"edit_result","ok":true,"text":text}));
+        }
         if name == toolbox::live_agent::audio_attachment::NAME {
             let args: toolbox::live_agent::audio_attachment::Args =
                 serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;

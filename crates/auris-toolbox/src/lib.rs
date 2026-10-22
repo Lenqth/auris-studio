@@ -47,6 +47,7 @@ pub use batch_editing::{replace_notes_batch, set_instrument_params};
 mod availability;
 mod cancellation;
 mod catalog;
+pub mod runtime;
 mod tool_exposure;
 pub use tool_exposure::{
     ToolGroups, compact_parameters, concise_description, discover_tools, tool_group,

@@ -398,49 +398,6 @@ mod memory;
 mod permissions;
 mod runtime;
 
-/// One [`rig::tool::Tool`] over one `auris-toolbox` module that takes arguments.
-///
-/// The work runs in `spawn_blocking` for the same two reasons as at the MCP door: it blocks
-/// honestly (a session open parses SoundFonts, a render is minutes of DSP), and a session
-/// created and dropped inside one closure never has to be `Send`.
-macro_rules! session_tool {
-    ($tool:ident, $module:ident) => {
-        struct $tool;
-
-        impl Tool for $tool {
-            const NAME: &'static str = toolbox::$module::NAME;
-            type Args = toolbox::$module::Args;
-            type Output = String;
-            type Error = ToolFailed;
-
-            fn description(&self) -> String {
-                toolbox::$module::DESCRIPTION.to_string()
-            }
-
-            fn parameters(&self) -> serde_json::Value {
-                schema::<Self::Args>()
-            }
-
-            fn map_error(&self, error: ToolFailed) -> ToolExecutionError {
-                ToolExecutionError::other(error.0)
-            }
-
-            async fn call(
-                &self,
-                _context: &mut ToolContext,
-                args: Self::Args,
-            ) -> Result<String, ToolFailed> {
-                tokio::task::spawn_blocking(move || toolbox::$module::run(&args))
-                    .await
-                    .map_err(|error| ToolFailed(error.to_string()))?
-                    .map_err(ToolFailed)
-            }
-        }
-    };
-}
-
-session_tool!(SearchDocumentation, search_documentation);
-
 fn edit_reply(response: serde_json::Value) -> Result<String, ToolFailed> {
     if response["event"] != "edit_result" {
         return Err(ToolFailed("The live session response was missing".into()));
@@ -605,10 +562,7 @@ fn strip_markup(text: &str) -> String {
 
 /// File-free editing and reference tools for the rig agent.
 fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
-    let mut builder = builder
-        .preamble(preamble())
-        .tool(SearchDocumentation)
-        .tool(InternetSearch);
+    let mut builder = builder.preamble(preamble()).tool(InternetSearch);
     let edits_live_document = bridge.is_some();
     for definition in toolbox::live_agent::definitions() {
         // The legacy unfiltered list opens every installed native provider. Keep its small
@@ -632,6 +586,14 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
                             .await
                             .map(ToolOutput::text)
                             .map_err(|error| ToolExecutionError::other(error.to_string()));
+                    }
+                    if bridge.is_none()
+                        && let Some(result) =
+                            toolbox::runtime::call_live_reference(&name, args.clone())
+                    {
+                        return result
+                            .map(ToolOutput::text)
+                            .map_err(ToolExecutionError::other);
                     }
                     let bridge = bridge.ok_or_else(|| {
                         ToolExecutionError::other(
@@ -2375,7 +2337,7 @@ mod tests {
         }
         assert_eq!(
             names.len(),
-            36 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
+            39 + auris_session::mixer_graph::commands::GRAPH_TOOLS.len()
         );
         for (_, name) in auris_session::mixer_graph::commands::GRAPH_TOOLS {
             assert!(names.contains(name), "{name}");

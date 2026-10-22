@@ -16,6 +16,8 @@ pub struct ToolDefinition {
     pub description: &'static str,
     /// JSON Schema for the tool's arguments.
     pub parameters: serde_json::Value,
+    /// Validated synchronous execution, shared by saved-project transports.
+    pub call: Box<dyn Fn(serde_json::Value) -> Result<String, String> + Send + Sync>,
 }
 
 /// Builds a self-contained argument schema without presentation-only metadata.
@@ -133,9 +135,10 @@ pub fn parameter_schema<T: schemars::JsonSchema>() -> serde_json::Value {
     value
 }
 
-fn definition<T: schemars::JsonSchema>(
+fn definition<T: schemars::JsonSchema + serde::de::DeserializeOwned + 'static>(
     name: &'static str,
     description: &'static str,
+    run: fn(&T) -> Result<String, String>,
 ) -> ToolDefinition {
     let mut parameters = parameter_schema::<T>();
     if let Some(project) = parameters
@@ -149,137 +152,284 @@ fn definition<T: schemars::JsonSchema>(
         name,
         description,
         parameters,
+        call: Box::new(move |value| {
+            let args = serde_json::from_value(value)
+                .map_err(|error| format!("Invalid arguments for {name}: {error}"))?;
+            run(&args)
+        }),
     }
 }
 
 /// No arguments, said as a schema — for the reference and listing tools.
-#[derive(schemars::JsonSchema)]
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct NoArgs {}
 
 /// Complete project-tool catalog. Transport tests compare their registrations to this list.
 pub fn tool_catalog() -> Vec<ToolDefinition> {
     vec![
-        definition::<open_project::Args>(open_project::NAME, open_project::DESCRIPTION),
-        definition::<setup_tracks::Args>(setup_tracks::NAME, setup_tracks::DESCRIPTION),
+        definition::<open_project::Args>(
+            open_project::NAME,
+            open_project::DESCRIPTION,
+            open_project::run,
+        ),
+        definition::<setup_tracks::Args>(
+            setup_tracks::NAME,
+            setup_tracks::DESCRIPTION,
+            setup_tracks::run,
+        ),
         definition::<instrument_diagnostics::Args>(
             instrument_diagnostics::NAME,
             instrument_diagnostics::DESCRIPTION,
+            instrument_diagnostics::run,
         ),
-        definition::<discover_tools::Args>(discover_tools::NAME, discover_tools::DESCRIPTION),
-        definition::<read_report::Args>(read_report::NAME, read_report::DESCRIPTION),
-        definition::<listen::Args>(listen::NAME, listen::DESCRIPTION),
-        definition::<create_project::Args>(create_project::NAME, create_project::DESCRIPTION),
-        definition::<import_audio::Args>(import_audio::NAME, import_audio::DESCRIPTION),
-        definition::<import_midi::Args>(import_midi::NAME, import_midi::DESCRIPTION),
+        definition::<discover_tools::Args>(
+            discover_tools::NAME,
+            discover_tools::DESCRIPTION,
+            discover_tools::run,
+        ),
+        definition::<read_report::Args>(
+            read_report::NAME,
+            read_report::DESCRIPTION,
+            read_report::run,
+        ),
+        definition::<listen::Args>(listen::NAME, listen::DESCRIPTION, listen::run),
+        definition::<create_project::Args>(
+            create_project::NAME,
+            create_project::DESCRIPTION,
+            create_project::run,
+        ),
+        definition::<import_audio::Args>(
+            import_audio::NAME,
+            import_audio::DESCRIPTION,
+            import_audio::run,
+        ),
+        definition::<import_midi::Args>(
+            import_midi::NAME,
+            import_midi::DESCRIPTION,
+            import_midi::run,
+        ),
         definition::<import_transcription::Args>(
             import_transcription::NAME,
             import_transcription::DESCRIPTION,
+            import_transcription::run,
         ),
-        definition::<export_midi::Args>(export_midi::NAME, export_midi::DESCRIPTION),
-        definition::<capabilities::Args>(capabilities::NAME, capabilities::DESCRIPTION),
-        definition::<effects::Args>(effects::NAME, effects::DESCRIPTION),
-        definition::<mixer_graph::Args>(mixer_graph::NAME, mixer_graph::DESCRIPTION),
-        definition::<automation::Args>(automation::NAME, automation::DESCRIPTION),
-        definition::<analyze_music::Args>(analyze_music::NAME, analyze_music::DESCRIPTION),
-        definition::<analyze_chords::Args>(analyze_chords::NAME, analyze_chords::DESCRIPTION),
-        definition::<analyze_audio::Args>(analyze_audio::NAME, analyze_audio::DESCRIPTION),
+        definition::<export_midi::Args>(
+            export_midi::NAME,
+            export_midi::DESCRIPTION,
+            export_midi::run,
+        ),
+        definition::<capabilities::Args>(
+            capabilities::NAME,
+            capabilities::DESCRIPTION,
+            capabilities::run,
+        ),
+        definition::<effects::Args>(effects::NAME, effects::DESCRIPTION, effects::run),
+        definition::<mixer_graph::Args>(
+            mixer_graph::NAME,
+            mixer_graph::DESCRIPTION,
+            mixer_graph::run,
+        ),
+        definition::<automation::Args>(automation::NAME, automation::DESCRIPTION, automation::run),
+        definition::<analyze_music::Args>(
+            analyze_music::NAME,
+            analyze_music::DESCRIPTION,
+            analyze_music::run,
+        ),
+        definition::<analyze_chords::Args>(
+            analyze_chords::NAME,
+            analyze_chords::DESCRIPTION,
+            analyze_chords::run,
+        ),
+        definition::<analyze_audio::Args>(
+            analyze_audio::NAME,
+            analyze_audio::DESCRIPTION,
+            analyze_audio::run,
+        ),
         definition::<analyze_instruments::Args>(
             analyze_instruments::NAME,
             analyze_instruments::DESCRIPTION,
+            analyze_instruments::run,
         ),
-        definition::<transcribe_audio::Args>(transcribe_audio::NAME, transcribe_audio::DESCRIPTION),
+        definition::<transcribe_audio::Args>(
+            transcribe_audio::NAME,
+            transcribe_audio::DESCRIPTION,
+            transcribe_audio::run,
+        ),
         definition::<transcribe_mixture::Args>(
             transcribe_mixture::NAME,
             transcribe_mixture::DESCRIPTION,
+            transcribe_mixture::run,
         ),
         definition::<inspect_composition::Args>(
             inspect_composition::NAME,
             inspect_composition::DESCRIPTION,
+            inspect_composition::run,
         ),
-        definition::<edit_harmony::Args>(edit_harmony::NAME, edit_harmony::DESCRIPTION),
-        definition::<edit_recipe::Args>(edit_recipe::NAME, edit_recipe::DESCRIPTION),
-        definition::<edit_clip::Args>(edit_clip::NAME, edit_clip::DESCRIPTION),
-        definition::<checkpoints::Args>(checkpoints::NAME, checkpoints::DESCRIPTION),
-        definition::<NoArgs>(spec_reference::NAME, spec_reference::DESCRIPTION),
+        definition::<edit_harmony::Args>(
+            edit_harmony::NAME,
+            edit_harmony::DESCRIPTION,
+            edit_harmony::run,
+        ),
+        definition::<edit_recipe::Args>(
+            edit_recipe::NAME,
+            edit_recipe::DESCRIPTION,
+            edit_recipe::run,
+        ),
+        definition::<edit_clip::Args>(edit_clip::NAME, edit_clip::DESCRIPTION, edit_clip::run),
+        definition::<checkpoints::Args>(
+            checkpoints::NAME,
+            checkpoints::DESCRIPTION,
+            checkpoints::run,
+        ),
+        definition::<NoArgs>(spec_reference::NAME, spec_reference::DESCRIPTION, |_| {
+            Ok(spec_reference::run())
+        }),
         definition::<search_documentation::Args>(
             search_documentation::NAME,
             search_documentation::DESCRIPTION,
+            search_documentation::run,
         ),
-        definition::<check_spec::Args>(check_spec::NAME, check_spec::DESCRIPTION),
+        definition::<check_spec::Args>(check_spec::NAME, check_spec::DESCRIPTION, check_spec::run),
         definition::<configure_plugin_paths::Args>(
             configure_plugin_paths::NAME,
             configure_plugin_paths::DESCRIPTION,
+            configure_plugin_paths::run,
         ),
         definition::<preview_composition::Args>(
             preview_composition::NAME,
             preview_composition::DESCRIPTION,
+            preview_composition::run,
         ),
-        definition::<compose::Args>(compose::NAME, compose::DESCRIPTION),
-        definition::<render::Args>(render::NAME, render::DESCRIPTION),
-        definition::<verify_render::Args>(verify_render::NAME, verify_render::DESCRIPTION),
-        definition::<preview::Args>(preview::NAME, preview::DESCRIPTION),
-        definition::<describe::Args>(describe::NAME, describe::DESCRIPTION),
-        definition::<analyze::Args>(analyze::NAME, analyze::DESCRIPTION),
-        definition::<analyze_drum_kit::Args>(analyze_drum_kit::NAME, analyze_drum_kit::DESCRIPTION),
+        definition::<compose::Args>(compose::NAME, compose::DESCRIPTION, compose::run),
+        definition::<render::Args>(render::NAME, render::DESCRIPTION, render::run),
+        definition::<verify_render::Args>(
+            verify_render::NAME,
+            verify_render::DESCRIPTION,
+            verify_render::run,
+        ),
+        definition::<preview::Args>(preview::NAME, preview::DESCRIPTION, preview::run),
+        definition::<describe::Args>(describe::NAME, describe::DESCRIPTION, describe::run),
+        definition::<analyze::Args>(analyze::NAME, analyze::DESCRIPTION, analyze::run),
+        definition::<analyze_drum_kit::Args>(
+            analyze_drum_kit::NAME,
+            analyze_drum_kit::DESCRIPTION,
+            analyze_drum_kit::run,
+        ),
         definition::<set_drum_assignment::Args>(
             set_drum_assignment::NAME,
             set_drum_assignment::DESCRIPTION,
+            set_drum_assignment::run,
         ),
-        definition::<mixer::Args>(mixer::NAME, mixer::DESCRIPTION),
-        definition::<set_level::Args>(set_level::NAME, set_level::DESCRIPTION),
-        definition::<normalize_mix::Args>(normalize_mix::NAME, normalize_mix::DESCRIPTION),
-        definition::<set_effect::Args>(set_effect::NAME, set_effect::DESCRIPTION),
-        definition::<section_gain::Args>(section_gain::NAME, section_gain::DESCRIPTION),
-        definition::<regenerate_clips::Args>(regenerate_clips::NAME, regenerate_clips::DESCRIPTION),
+        definition::<mixer::Args>(mixer::NAME, mixer::DESCRIPTION, mixer::run),
+        definition::<set_level::Args>(set_level::NAME, set_level::DESCRIPTION, set_level::run),
+        definition::<normalize_mix::Args>(
+            normalize_mix::NAME,
+            normalize_mix::DESCRIPTION,
+            normalize_mix::run,
+        ),
+        definition::<set_effect::Args>(set_effect::NAME, set_effect::DESCRIPTION, set_effect::run),
+        definition::<section_gain::Args>(
+            section_gain::NAME,
+            section_gain::DESCRIPTION,
+            section_gain::run,
+        ),
+        definition::<regenerate_clips::Args>(
+            regenerate_clips::NAME,
+            regenerate_clips::DESCRIPTION,
+            regenerate_clips::run,
+        ),
         definition::<teach_progression::Args>(
             teach_progression::NAME,
             teach_progression::DESCRIPTION,
+            teach_progression::run,
         ),
         definition::<forget_progression::Args>(
             forget_progression::NAME,
             forget_progression::DESCRIPTION,
+            forget_progression::run,
         ),
-        definition::<NoArgs>(list_progressions::NAME, list_progressions::DESCRIPTION),
-        definition::<NoArgs>(list_presets::NAME, list_presets::DESCRIPTION),
-        definition::<NoArgs>(list_instruments::NAME, list_instruments::DESCRIPTION),
+        definition::<NoArgs>(
+            list_progressions::NAME,
+            list_progressions::DESCRIPTION,
+            |_| Ok(list_progressions::run()),
+        ),
+        definition::<NoArgs>(list_presets::NAME, list_presets::DESCRIPTION, |_| {
+            Ok(list_presets::run())
+        }),
+        definition::<NoArgs>(
+            list_instruments::NAME,
+            list_instruments::DESCRIPTION,
+            |_| Ok(list_instruments::run()),
+        ),
         definition::<search_instruments::Args>(
             search_instruments::NAME,
             search_instruments::DESCRIPTION,
+            search_instruments::run,
         ),
         definition::<similar_instruments::Args>(
             similar_instruments::NAME,
             similar_instruments::DESCRIPTION,
+            similar_instruments::run,
         ),
-        definition::<add_track::Args>(add_track::NAME, add_track::DESCRIPTION),
-        definition::<add_part::Args>(add_part::NAME, add_part::DESCRIPTION),
-        definition::<set_instrument::Args>(set_instrument::NAME, set_instrument::DESCRIPTION),
-        definition::<rename_track::Args>(rename_track::NAME, rename_track::DESCRIPTION),
-        definition::<remove_track::Args>(remove_track::NAME, remove_track::DESCRIPTION),
-        definition::<add_clip::Args>(add_clip::NAME, add_clip::DESCRIPTION),
-        definition::<notes::Args>(notes::NAME, notes::DESCRIPTION),
-        definition::<edit_notes::Args>(edit_notes::NAME, edit_notes::DESCRIPTION),
-        definition::<replace_notes::Args>(replace_notes::NAME, replace_notes::DESCRIPTION),
-        definition::<accompany::Args>(accompany::NAME, accompany::DESCRIPTION),
-        definition::<write_lyrics::Args>(write_lyrics::NAME, write_lyrics::DESCRIPTION),
-        definition::<sing::Args>(sing::NAME, sing::DESCRIPTION),
-        definition::<tool_help::Args>(tool_help::NAME, tool_help::DESCRIPTION),
-        definition::<routing::Args>(routing::NAME, routing::DESCRIPTION),
-        definition::<set_track_state::Args>(set_track_state::NAME, set_track_state::DESCRIPTION),
+        definition::<add_track::Args>(add_track::NAME, add_track::DESCRIPTION, add_track::run),
+        definition::<add_part::Args>(add_part::NAME, add_part::DESCRIPTION, add_part::run),
+        definition::<set_instrument::Args>(
+            set_instrument::NAME,
+            set_instrument::DESCRIPTION,
+            set_instrument::run,
+        ),
+        definition::<rename_track::Args>(
+            rename_track::NAME,
+            rename_track::DESCRIPTION,
+            rename_track::run,
+        ),
+        definition::<remove_track::Args>(
+            remove_track::NAME,
+            remove_track::DESCRIPTION,
+            remove_track::run,
+        ),
+        definition::<add_clip::Args>(add_clip::NAME, add_clip::DESCRIPTION, add_clip::run),
+        definition::<notes::Args>(notes::NAME, notes::DESCRIPTION, notes::run),
+        definition::<edit_notes::Args>(edit_notes::NAME, edit_notes::DESCRIPTION, edit_notes::run),
+        definition::<replace_notes::Args>(
+            replace_notes::NAME,
+            replace_notes::DESCRIPTION,
+            replace_notes::run,
+        ),
+        definition::<accompany::Args>(accompany::NAME, accompany::DESCRIPTION, accompany::run),
+        definition::<write_lyrics::Args>(
+            write_lyrics::NAME,
+            write_lyrics::DESCRIPTION,
+            write_lyrics::run,
+        ),
+        definition::<sing::Args>(sing::NAME, sing::DESCRIPTION, sing::run),
+        definition::<tool_help::Args>(tool_help::NAME, tool_help::DESCRIPTION, tool_help::run),
+        definition::<routing::Args>(routing::NAME, routing::DESCRIPTION, routing::run),
+        definition::<set_track_state::Args>(
+            set_track_state::NAME,
+            set_track_state::DESCRIPTION,
+            set_track_state::run,
+        ),
         definition::<convert_track_to_audio::Args>(
             convert_track_to_audio::NAME,
             convert_track_to_audio::DESCRIPTION,
+            convert_track_to_audio::run,
         ),
         definition::<set_instrument_param::Args>(
             set_instrument_param::NAME,
             set_instrument_param::DESCRIPTION,
+            set_instrument_param::run,
         ),
         definition::<set_instrument_params::Args>(
             set_instrument_params::NAME,
             set_instrument_params::DESCRIPTION,
+            set_instrument_params::run,
         ),
         definition::<replace_notes_batch::Args>(
             replace_notes_batch::NAME,
             replace_notes_batch::DESCRIPTION,
+            replace_notes_batch::run,
         ),
     ]
 }
