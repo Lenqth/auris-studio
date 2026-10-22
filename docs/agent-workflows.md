@@ -157,6 +157,17 @@ path or kind `stems` with an absolute folder. Optional range uses start_bar/bars
 bit_depth is 16, 24 (default), or 32 float. `preview` makes a protected 24 kHz WAV
 of a required range, up to 120 seconds. `export_midi` writes the score to output.
 `verify_render` measures an existing path against loudness/peak/ending limits.
+
+Agent `render` measures the exact requested waveform before integer encoding and
+applies attenuation only as needed for `ceiling_db` (default -1 dBTP, range
+-12..-0.1). It returns `source_true_peak_db`, nonpositive `attenuation_db`, the
+ceiling and measurements of the actual encoded file. This changes neither the
+document nor its mixer, notes, dynamics or duration. It is uniform output gain,
+not a limiter or loudness normalization. Stems share one gain to preserve their
+relative levels. Quiet exports remain unchanged. Earlier mix measurements can
+become stale after arrangement edits; exported bytes are checked before publication.
+Peak protection can prevent a loudness target from being reached, so verify the
+actual result and report that constraint instead of claiming both targets passed.
 All backends use the same contracts; saved calls add project. Work runs off the UI
 thread and private stages publish only for an unchanged, uncancelled document.
 Existing output files are refused. No project save or Undo step is added by export.

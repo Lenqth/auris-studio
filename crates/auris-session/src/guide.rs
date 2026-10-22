@@ -8,6 +8,10 @@
 //! saved execution adds persistence, while the desktop retains document ownership and Undo.
 //! Detached agent jobs share a worker/owner continuation for vocals and file delivery. Export
 //! workers stage and inspect encoded bytes; only the unchanged owner publishes those files.
+//! Agent audio delivery captures the requested range as private floating-point stages before
+//! integer encoding. One attenuation-only gain enforces the requested peak ceiling without
+//! editing the document; stems share that gain to preserve their relative levels. The encoded
+//! bytes are checked again before publication. Earlier mix analysis is not a delivery guarantee.
 //!
 //!
 //! The workspace has no root crate — `cargo doc` on it produces a list of crates and no

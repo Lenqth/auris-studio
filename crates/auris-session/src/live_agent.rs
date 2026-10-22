@@ -123,7 +123,7 @@ pub enum Command {
         #[serde(default)]
         remove: bool,
     },
-    /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. Existing outputs are never replaced. No project save or document edit; cancellation/stale documents discard private stages.
+    /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. The exact requested waveform is attenuated only when needed for ceiling_db (default -1 dBTP), before integer encoding; this is not loudness normalization or limiting. Stems share one gain to preserve relative levels. Read attenuation_db, source_true_peak_db and encoded measurements; peak protection may leave loudness below a requested LUFS target. Existing outputs are never replaced. No project save or document edit; cancellation/stale documents discard private stages.
     Render {
         /// Explicit mix file or stem folder destination.
         destination: file_jobs::AudioDestination,
@@ -134,6 +134,9 @@ pub enum Command {
         /// Include effect tails; defaults to false.
         #[serde(default)]
         include_tail: bool,
+        /// Maximum encoded true peak, -12..-0.1 dBTP; default -1. Only attenuation is applied.
+        #[schemars(range(min = -12, max = -0.1))]
+        ceiling_db: Option<f32>,
     },
     /// Create a protected 24 kHz WAV audition of 1..120 seconds from the current snapshot. Returns a playable file under the document's preview folder. Does not imply listening.
     Preview {

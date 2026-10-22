@@ -102,12 +102,6 @@ fn protective_gain(audio: &AudioBuffer) -> Result<f32, String> {
         .min(1.0))
 }
 
-pub(crate) fn protect_preview(audio: &mut AudioBuffer) -> Result<f32, String> {
-    let gain = protective_gain(audio)?;
-    audio.apply_gain(gain);
-    Ok(gain)
-}
-
 fn encode_audition(
     path: &Path,
     audio: &AudioBuffer,

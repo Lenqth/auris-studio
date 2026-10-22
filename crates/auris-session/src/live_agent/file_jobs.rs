@@ -1,6 +1,7 @@
 //! Snapshot-based file operations; workers stage outputs and the owner publishes them.
 
 use super::Command;
+mod peak_export;
 use crate::{Session, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -66,6 +67,7 @@ enum Work {
         options: OfflineOptions,
         settings: WavExportSettings,
         audition_root: Option<PathBuf>,
+        ceiling_db: f32,
     },
     Midi {
         job: crate::MidiExportJob,
@@ -98,16 +100,18 @@ enum Outcome {
         bytes: u64,
     },
     ImportedMidi(Box<crate::MidiImportResult>, Ticks),
-    Audio(
-        Vec<(
-            PathBuf,
-            auris_io::StagedAudioExport,
-            crate::ExportInspection,
-            Option<f32>,
-        )>,
-    ),
+    Audio(Vec<StagedAudio>),
     Midi(crate::MidiExportResult),
     Verified(String),
+}
+
+struct StagedAudio {
+    path: PathBuf,
+    encoded: auris_io::StagedAudioExport,
+    inspection: crate::ExportInspection,
+    source_true_peak_db: f32,
+    attenuation_db: f32,
+    ceiling_db: f32,
 }
 
 fn local_path(value: &str) -> Result<PathBuf, String> {
@@ -203,6 +207,7 @@ impl FileJob {
                 options,
                 settings,
                 audition_root,
+                ceiling_db,
             } => {
                 if let Some(folder) = &folder {
                     guard
@@ -216,19 +221,16 @@ impl FileJob {
                         .map_err(|e| e.to_string())?;
                     std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
                 }
-                let mut staged = Vec::with_capacity(targets.len());
-                for (path, track) in targets {
+                for (path, _) in &targets {
                     check()?;
-                    guard.check_file(&path).map_err(|e| e.to_string())?;
+                    guard.check_file(path).map_err(|e| e.to_string())?;
                     if path.exists() {
                         return Err(format!("Output already exists: {}", path.display()));
                     }
                     if let Some(parent) = path.parent() {
                         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                     }
-                    let mut progress = RenderProgress::default().cancelled_by(cancelled);
-                    let mut attenuation_db = None;
-                    let encoded = if let Some(root) = &audition_root {
+                    if let Some(root) = &audition_root {
                         let directory = path.parent().ok_or("Missing preview directory")?;
                         if !directory
                             .canonicalize()
@@ -239,42 +241,11 @@ impl FileJob {
                                 "Preview directory must stay inside the project folder".into()
                             );
                         }
-                        let mut audio = job
-                            .render(&options, &mut progress)
-                            .map_err(|e| e.to_string())?;
-                        let gain = crate::audio_audition::protect_preview(&mut audio)?;
-                        attenuation_db = Some(if gain < 1.0 { 20.0 * gain.log10() } else { 0.0 });
-                        check()?;
-                        let mut writer = auris_io::AudioExportWriter::create(
-                            &path,
-                            audio.channel_count(),
-                            audio.frame_count(),
-                            &settings.into(),
-                        )
-                        .map_err(|e| e.to_string())?;
-                        writer.write(&audio).map_err(|e| e.to_string())?;
-                        writer.finish_staged().map_err(|e| e.to_string())?
-                    } else {
-                        job.stage_audio_export(
-                            &path,
-                            &settings.into(),
-                            &options,
-                            track,
-                            &mut progress,
-                        )
-                        .map_err(|e| e.to_string())?
-                    };
-                    check()?;
-                    let inspection =
-                        crate::inspect_export(encoded.staged_path()).map_err(|e| e.to_string())?;
-                    if audition_root.is_some()
-                        && (inspection.peak_db >= 0.0 || inspection.true_peak_db > -0.99)
-                    {
-                        return Err("Encoded audition exceeds its peak ceiling".into());
                     }
-                    check()?;
-                    staged.push((path, encoded, inspection, attenuation_db));
                 }
+                let staged = peak_export::stage(
+                    &mut job, targets, &options, settings, ceiling_db, cancelled,
+                )?;
                 Outcome::Audio(staged)
             }
             Work::Midi { job, guard, path } => {
@@ -368,7 +339,12 @@ impl Session {
                 range,
                 bit_depth,
                 include_tail,
+                ceiling_db,
             } => {
+                let ceiling_db = ceiling_db.unwrap_or(-1.0);
+                if !ceiling_db.is_finite() || !(-12.0..=-0.1).contains(&ceiling_db) {
+                    return Err("ceiling_db must be finite within -12..-0.1 dBTP".into());
+                }
                 let options = self.agent_export_range(range, include_tail)?;
                 let settings = WavExportSettings {
                     bit_depth: match bit_depth.unwrap_or(24) {
@@ -407,6 +383,7 @@ impl Session {
                     options,
                     settings,
                     audition_root: None,
+                    ceiling_db,
                 }
             }
             Command::Preview { range } => {
@@ -448,6 +425,7 @@ impl Session {
                         ..Default::default()
                     },
                     audition_root: self.project_folder().map(std::path::Path::to_owned),
+                    ceiling_db: -1.0,
                 }
             }
             Command::ExportMidi { output } => {
@@ -556,7 +534,7 @@ impl Session {
                 )
             }
             Outcome::Audio(staged) => {
-                for (path, _, _, _) in &staged {
+                for StagedAudio { path, .. } in &staged {
                     self.export_guard()
                         .check_file(path)
                         .map_err(|e| e.to_string())?;
@@ -565,11 +543,19 @@ impl Session {
                     }
                 }
                 let mut files = Vec::with_capacity(staged.len());
-                for (path, encoded, inspection, attenuation_db) in staged {
+                for StagedAudio {
+                    path,
+                    encoded,
+                    inspection,
+                    source_true_peak_db,
+                    attenuation_db,
+                    ceiling_db,
+                } in staged
+                {
                     encoded.publish_noclobber().map_err(|e| {
                         format!("Publication failed: {e}; already published: {files:?}")
                     })?;
-                    files.push(serde_json::json!({"path":path,"encoded":inspection,"audition_attenuation_db":attenuation_db}));
+                    files.push(serde_json::json!({"path":path,"encoded":inspection,"attenuation_db":attenuation_db,"source_true_peak_db":source_true_peak_db,"ceiling_db":ceiling_db}));
                 }
                 Ok(serde_json::json!({"files":files,"document_unchanged":true}).to_string())
             }
@@ -580,6 +566,169 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overloaded_mix_is_attenuated_before_integer_encoding_without_document_edits() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut live = fixture();
+        let track = live.project().tracks[0].id;
+        live.set_track_instrument(track, "auris.synth.fm2").unwrap();
+        live.set_param(crate::ParamTarget::TrackGain(track), 30.0);
+        let before = live.project().clone();
+        let cancelled = AtomicBool::new(false);
+        let raw = live
+            .render_job()
+            .render(&OfflineOptions::default(), &mut RenderProgress::default())
+            .unwrap();
+        assert!(raw.peak() > 1.0);
+        for bits in [16, 24, 32] {
+            let path = directory.path().join(format!("mix-{bits}.wav"));
+            let mut command = render(&path);
+            if let Command::Render { bit_depth, .. } = &mut command {
+                *bit_depth = Some(bits);
+            }
+            let result = live
+                .begin_agent_file_job(command)
+                .unwrap()
+                .run(&cancelled)
+                .unwrap();
+            let response: serde_json::Value =
+                serde_json::from_str(&live.continue_agent_file_job(result, &cancelled).unwrap())
+                    .unwrap();
+            let file = &response["files"][0];
+            let gain =
+                auris_core::param::db_to_gain(file["attenuation_db"].as_f64().unwrap() as f32);
+            assert!(gain < 1.0);
+            assert!(file["source_true_peak_db"].as_f64().unwrap() > 0.0);
+            let actual = crate::inspect_export(&path).unwrap();
+            assert_eq!(actual.full_scale_samples, 0, "{bits}-bit export clips");
+            assert!(actual.true_peak_db <= -1.0, "{actual:?}");
+            assert_eq!(actual.frames as usize, raw.frame_count());
+            let decoded = auris_io::decode_audio_file(&path).unwrap().buffer;
+            let tolerance = if bits == 16 { 1.0 / 32768.0 } else { 1.0e-6 };
+            for (source, output) in raw
+                .iter_channels()
+                .flatten()
+                .zip(decoded.iter_channels().flatten())
+            {
+                assert!(
+                    (source * gain - output).abs() < tolerance,
+                    "export must be linear attenuation, not clipping"
+                );
+            }
+            assert_eq!(live.project(), &before);
+        }
+    }
+
+    #[test]
+    fn quiet_float_export_is_sample_exact_and_stems_share_one_attenuation() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut live = fixture();
+        let track = live.project().tracks[0].id;
+        live.set_track_instrument(track, "auris.synth.fm2").unwrap();
+        let cancelled = AtomicBool::new(false);
+        let raw = live
+            .render_job()
+            .render(&OfflineOptions::default(), &mut RenderProgress::default())
+            .unwrap();
+        assert!(auris_gpu::analysis::analyze_loudness_cpu(&raw).true_peak_db() < -1.0);
+        let path = directory.path().join("quiet.wav");
+        let mut command = render(&path);
+        if let Command::Render { bit_depth, .. } = &mut command {
+            *bit_depth = Some(32);
+        }
+        let result = live
+            .begin_agent_file_job(command)
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        let response: serde_json::Value =
+            serde_json::from_str(&live.continue_agent_file_job(result, &cancelled).unwrap())
+                .unwrap();
+        assert_eq!(response["files"][0]["attenuation_db"], 0.0);
+        assert_eq!(auris_io::decode_audio_file(&path).unwrap().buffer, raw);
+
+        let loud = live.add_default_instrument_track("Loud").unwrap();
+        live.set_track_instrument(loud, "auris.synth.fm2").unwrap();
+        let clip = live
+            .add_midi_clip(loud, "Loud", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        live.replace_notes(clip, vec![Note::new(60, Ticks::ZERO, Ticks::QUARTER * 2)])
+            .unwrap();
+        live.set_param(crate::ParamTarget::TrackGain(loud), 30.0);
+        let before = live.project().clone();
+        let result = live
+            .begin_agent_file_job(Command::Render {
+                destination: AudioDestination::Stems {
+                    folder: directory
+                        .path()
+                        .join("stems")
+                        .to_string_lossy()
+                        .into_owned(),
+                },
+                range: None,
+                bit_depth: Some(24),
+                include_tail: false,
+                ceiling_db: Some(-3.0),
+            })
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        let response: serde_json::Value =
+            serde_json::from_str(&live.continue_agent_file_job(result, &cancelled).unwrap())
+                .unwrap();
+        let files = response["files"].as_array().unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0]["attenuation_db"], files[1]["attenuation_db"]);
+        assert!(files[0]["attenuation_db"].as_f64().unwrap() < 0.0);
+        for file in files {
+            assert!(file["encoded"]["true_peak_db"].as_f64().unwrap() <= -3.0);
+            assert_eq!(file["encoded"]["full_scale_samples"], 0);
+        }
+        assert_eq!(live.project(), &before);
+        for ceiling in [0.0, -0.05, -13.0, f32::NAN, f32::INFINITY] {
+            let mut command = render(&directory.path().join("invalid.wav"));
+            if let Command::Render { ceiling_db, .. } = &mut command {
+                *ceiling_db = Some(ceiling);
+            }
+            assert!(live.begin_agent_file_job(command).is_err());
+        }
+    }
+
+    #[test]
+    #[ignore = "requires AURIS_CLIPPING_REPLAY pointing to a retained synthetic project snapshot"]
+    fn retained_composition_export_preserves_headroom() {
+        let path = std::env::var_os("AURIS_CLIPPING_REPLAY").unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let copy = directory.path().join("Replayed.auris");
+        std::fs::copy(path, &copy).unwrap();
+        let mut live = Session::new(crate::SessionOptions::headless()).unwrap();
+        assert!(live.open(&copy).unwrap().is_empty());
+        let before = live.project().clone();
+        let cancelled = AtomicBool::new(false);
+        let output = std::env::var_os("AURIS_CLIPPING_REPLAY_OUTPUT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| directory.path().join("replayed.wav"));
+        let mut command = render(&output);
+        if let Command::Render { range, .. } = &mut command {
+            *range = Some(BarRange {
+                start_bar: 1,
+                bars: 16,
+            });
+        }
+        let result = live
+            .begin_agent_file_job(command)
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        let response = live.continue_agent_file_job(result, &cancelled).unwrap();
+        println!("{response}");
+        let actual = crate::inspect_export(&output).unwrap();
+        assert_eq!(actual.full_scale_samples, 0);
+        assert!(actual.true_peak_db <= -1.0);
+        assert_eq!(actual.frames, 1_645_714);
+        assert_eq!(live.project(), &before);
+    }
 
     #[test]
     fn overloaded_preview_attenuates_only_the_audition_and_preserves_the_document() {
@@ -602,7 +751,7 @@ mod tests {
             serde_json::from_str(&live.continue_agent_file_job(result, &cancelled).unwrap())
                 .unwrap();
         let file = &response["files"][0];
-        assert!(file["audition_attenuation_db"].as_f64().unwrap() < 0.0);
+        assert!(file["attenuation_db"].as_f64().unwrap() < 0.0);
         assert_eq!(file["encoded"]["sample_rate"], 24000);
         assert_eq!(file["encoded"]["full_scale_samples"], 0);
         assert!(file["encoded"]["true_peak_db"].as_f64().unwrap() <= -0.99);
@@ -746,6 +895,7 @@ mod tests {
             range: None,
             bit_depth: Some(24),
             include_tail: false,
+            ceiling_db: None,
         }
     }
 
@@ -855,6 +1005,7 @@ mod tests {
                 range: None,
                 bit_depth: None,
                 include_tail: false,
+                ceiling_db: None,
             })
             .unwrap()
             .run(&cancelled)
