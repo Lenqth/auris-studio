@@ -23,6 +23,16 @@ for the selected operation's full field explanations and examples.
 
 ## Exact authored notes
 
+For an authored foreground with generated backing, use
+[`accompaniment`](agent-accompaniment.md). It protects explicit melody clip IDs, delegates
+backing to Auris writers, and can change harmony while regenerating only selected backing
+clips in one edit. It is available in both the `manual` and `composition` groups.
+Before revising harmony, `suggest_harmony` reads the selected melody and proposes short
+progressions with per-bar reasons, tensions and a plain alternative. Mood affects how much
+supported colour earns its cost; no proportion of 7th, sus4 or diminished chords is required.
+The proposal's revision and harmony object can be passed to selective backing regeneration.
+It is read-only and available in the same two tool groups.
+
 Add a track with an explicit kind and name, then `add_clip` with its numeric track,
 intended clip name, one-based `start_bar` and duration `bars`. Read the clip with
 the returned `clip` address, not the owning `track`. `inspect_project` uses
@@ -220,10 +230,43 @@ user request; repeating current settings adds no history. The result reads back 
 added/removed notes, simultaneous chord groups, warnings and explicit truncation.
 Strum spreads simultaneous pitches: a single-note arpeggio may retain a strum setting
 that changes no events. Do not claim an effective stroke in that case. Pitch curves,
-timbre and volume contours are outside note-event measurements. Select `drum_voice`
+timbre and volume contours are outside note-event measurements; `pitch_effects` separately
+reports controller changes. Select `drum_voice`
 to inspect a named writer's stages; whole-clip measurement stops before nested scopes.
 Time-grid generators on clips longer than 64 quarter notes also stop measurement,
 so sparse long clips cannot make an inspection scan the entire song grid.
+
+Choose `settings.slide` for a brief discrete intermediate note. It connects an unambiguous
+single-note line with at least two semitones of movement, no overlapping notes and no gap
+longer than a quarter-note beat. `note_effects` reports inserted notes and transition
+conditions; a stored strength with zero inserted notes is not an effective slide.
+
+Choose `settings.pitch.glide_ms` for a continuous pitch connection. It follows the final
+performed notes, after gate and timing edits. Notes must be isolated, at least 80 ms long,
+at most 60 ms apart and within two octaves. Repeated pitches need no pitch movement.
+The independent `pitch_effects` report compares the actual combined bend with only glide
+disabled, retaining authored bends and other gestures. It therefore distinguishes a
+working glide from a bend that was already present. Incomplete measurements are unknown,
+not success or evidence of no effect. Diagnostics describe the first loop pass only.
+
+Each `pitch_effects[].report` labels its top-level `effective` as the contribution of
+`control: "glide_ms"`. `generated_curves.bend` measures that same isolated contribution;
+`all_bend_gestures` measures all bend gestures in that stage. `modulation` and `volume_swell`
+measure the corresponding controller separately. Each comparison disables only that
+control, preserving other stages and authored curves. `measured: false` and
+`effective: null` mean unknown. Curve work is bounded to 2,048 source/performed notes,
+32 stages, 64 quarter-note beats, 30 seconds and 2,048 comparison timestamps.
+`instrument_response: "unknown"` requires an audio check to establish the patch's response.
+Eligibility includes `maximum_gap_ms` from the tempo map and `gap_limit_ms`; use those
+measurements when explaining rests instead of guessing their duration from beat labels.
+
+Read back with a separate `inspect_performance` call. If an articulation has no effect,
+explain its conditions without rewriting the score or filling intentional rests. Compare
+the same short rendered range before and after when verifying audible response, especially
+for hosted patches whose controller mapping is unknown. A changed control curve or audio
+signal is not a musical quality judgment.
+Local `inspect_audio` and performance diagnostics cover this mechanical verification;
+external `listen` criticism is optional and retains its normal permission requirements.
 
 The controls include humanize, swing/grid, gate, mute, brush, slide, transpose, lean,
 octave copies, expression, strum, ghost notes, automatic pitch and reference groove.

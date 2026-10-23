@@ -113,6 +113,12 @@ Built-in instruments and CLAP note-expression instruments receive bends in semit
 Live VST3 and MIDI-only CLAP playback retain the host's existing +/-2-semitone range;
 the deeper control range is audible with instruments that accept it.
 
+Agents use `inspect_performance` before and after an edit to distinguish stored controls
+from measured effects. `slide` inserts an intermediate note; `pitch.glide_ms` produces the
+continuous connection described above. The first-pass diagnostics report note changes,
+controller contributions and inapplicable conditions. Audio comparison is still needed
+to verify the selected instrument's response.
+
 **Auto modulation** sends CC1 with the same monophonic eligibility, delay, 100 ms fade-in,
 and release fade as vibrato. Its depth is independent of pitch vibrato, so pitch depth can
 remain zero while the instrument's modulation wheel opens. The instrument determines the

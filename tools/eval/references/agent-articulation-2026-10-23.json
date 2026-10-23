@@ -1,0 +1,813 @@
+{
+  "date": "2026-10-23",
+  "base_commit": "92432d74",
+  "test": "installed_cli_selects_slide_or_glide_and_reports_effective_performance",
+  "policy": "Default Edit policy through the application; no approval bypass",
+  "cli_versions": {
+    "claude": "2.1.309",
+    "codex": "0.163.0"
+  },
+  "fixtures": [
+    "simultaneous guitar chord: strum",
+    "connected bass A: discrete intermediate note",
+    "connected bass B: continuous pitch glide",
+    "gapped bass: existing glide with a 1000 ms gap",
+    "repeated-pitch bass: existing discrete slide"
+  ],
+  "audio_comparison": "Same one-bar native-instrument render before and after; RMS of linear sample differences. This verifies response, not musical quality.",
+  "prior_attempts": [
+    {
+      "status": "stopped_for_application_approval",
+      "detail": "External listen critique requested permission before edits. Re-ran with explicit local-only mechanical verification; policy unchanged.",
+      "backend": "codex",
+      "artifact": "codex-2"
+    },
+    {
+      "status": "checks_passed_but_report_misstated_gap",
+      "detail": "Report called the actual 1000 ms rest 500 ms. Added tempo-derived maximum_gap_ms to diagnostics and repeated evaluation.",
+      "backend": "claude",
+      "artifact": "claude-2"
+    },
+    {
+      "status": "failed_independent_readback",
+      "detail": "Selected all three gestures correctly but re-read only authored notes for edited clips. Retained failure; harness now allows at most one explicit read-only reminder, recording its use.",
+      "backend": "claude",
+      "artifact": "claude-3"
+    }
+  ],
+  "final_trials": [
+    {
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "status": "passed",
+      "elapsed_seconds": 120.8085821,
+      "readback_followup": false,
+      "independent_readback": true,
+      "source_preserved": true,
+      "successful_edit_calls": 3,
+      "undo_steps": 1,
+      "undo_restored": true,
+      "redo_restored": true,
+      "effective_readback_count": 3,
+      "ineffective_readback_count": 2,
+      "audio_rms_difference": [
+        0.010812374903039264,
+        0.007938639047313997,
+        0.04398251314259967,
+        0.0,
+        0.0
+      ],
+      "edits": [
+        {
+          "clip": 4,
+          "settings": {
+            "strum": {
+              "direction": "low_to_high",
+              "spread_ms": 36
+            }
+          }
+        },
+        {
+          "clip": 5,
+          "settings": {
+            "slide": 0.8
+          }
+        },
+        {
+          "clip": 6,
+          "settings": {
+            "pitch": {
+              "glide_ms": 120
+            }
+          }
+        }
+      ],
+      "readbacks": [
+        {
+          "clip": 4,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.0,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": {
+              "spread_ms": 36.0,
+              "direction": "low_to_high",
+              "clock": "sixteenths",
+              "up_notes": 0,
+              "up_velocity": 1.0,
+              "low_accent": 0.0
+            },
+            "ghost": null,
+            "pitch": null,
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "strum",
+              "changed_onsets": 3,
+              "changed_durations": 3,
+              "added_notes": 0,
+              "note_events_unchanged": false,
+              "slide": null
+            }
+          ],
+          "pitch_effects": []
+        },
+        {
+          "clip": 5,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.800000011920929,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": null,
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "slide",
+              "changed_onsets": 0,
+              "changed_durations": 1,
+              "added_notes": 1,
+              "note_events_unchanged": false,
+              "slide": {
+                "candidate_transitions": 1,
+                "eligible_transitions": 1,
+                "ineligible_reasons": {},
+                "added_notes": 1,
+                "measured": true,
+                "effective": true
+              }
+            }
+          ],
+          "pitch_effects": []
+        },
+        {
+          "clip": 6,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.0,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": {
+              "scoop": 0.0,
+              "scoop_ms": 100.0,
+              "vibrato": 0.0,
+              "vibrato_hz": 5.800000190734863,
+              "vibrato_delay_ms": 300.0,
+              "modulation": 0.0,
+              "volume_swell": 0.0,
+              "glide_ms": 120.0,
+              "fall": 0.0,
+              "fall_ms": 150.0
+            },
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "pitch",
+              "changed_onsets": 0,
+              "changed_durations": 0,
+              "added_notes": 0,
+              "note_events_unchanged": true,
+              "slide": null
+            }
+          ],
+          "pitch_effects": [
+            {
+              "stage_index": 0,
+              "report": {
+                "measured": true,
+                "control": "glide_ms",
+                "glide_ms": 120.0,
+                "effective": true,
+                "changed_samples": 48,
+                "sample_count": 403,
+                "max_semitone_delta": 3.5,
+                "generated_curves": {
+                  "bend": {
+                    "measured": true,
+                    "effective": true,
+                    "changed_samples": 48,
+                    "sample_count": 403,
+                    "max_delta": 3.5
+                  },
+                  "all_bend_gestures": {
+                    "measured": true,
+                    "effective": true,
+                    "changed_samples": 48,
+                    "sample_count": 403,
+                    "max_delta": 3.5
+                  }
+                },
+                "eligibility": {
+                  "candidate_transitions": 1,
+                  "eligible_transitions": 1,
+                  "maximum_gap_ms": 0.0,
+                  "gap_limit_ms": 60,
+                  "ineligible_reasons": {}
+                },
+                "instrument_response": "unknown",
+                "warnings": [
+                  "The project bend curve changed. A hosted instrument may ignore or reinterpret pitch bend, so audible response is not measured here."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "clip": 7,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.0,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": {
+              "scoop": 0.0,
+              "scoop_ms": 100.0,
+              "vibrato": 0.0,
+              "vibrato_hz": 5.800000190734863,
+              "vibrato_delay_ms": 300.0,
+              "modulation": 0.0,
+              "volume_swell": 0.0,
+              "glide_ms": 120.0,
+              "fall": 0.0,
+              "fall_ms": 150.0
+            },
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "pitch",
+              "changed_onsets": 0,
+              "changed_durations": 0,
+              "added_notes": 0,
+              "note_events_unchanged": true,
+              "slide": null
+            }
+          ],
+          "pitch_effects": [
+            {
+              "stage_index": 0,
+              "report": {
+                "measured": true,
+                "control": "glide_ms",
+                "glide_ms": 120.0,
+                "effective": false,
+                "changed_samples": 0,
+                "sample_count": 205,
+                "max_semitone_delta": 0.0,
+                "generated_curves": {
+                  "bend": {
+                    "measured": true,
+                    "effective": false,
+                    "changed_samples": 0,
+                    "sample_count": 205,
+                    "max_delta": 0.0
+                  },
+                  "all_bend_gestures": {
+                    "measured": true,
+                    "effective": false,
+                    "changed_samples": 0,
+                    "sample_count": 205,
+                    "max_delta": 0.0
+                  }
+                },
+                "eligibility": {
+                  "candidate_transitions": 1,
+                  "eligible_transitions": 0,
+                  "maximum_gap_ms": 1000.0,
+                  "gap_limit_ms": 60,
+                  "ineligible_reasons": {
+                    "gap_over_60ms": 1
+                  }
+                },
+                "instrument_response": "unknown",
+                "warnings": [
+                  "glide_ms did not change the performed bend curve. Check the eligibility counts: connections must be monophonic, at most 60 ms apart, within two octaves, and notes must be at least 80 ms long. Repeated pitches have no pitch movement."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "clip": 8,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.800000011920929,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": null,
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "slide",
+              "changed_onsets": 0,
+              "changed_durations": 0,
+              "added_notes": 0,
+              "note_events_unchanged": true,
+              "slide": {
+                "candidate_transitions": 1,
+                "eligible_transitions": 0,
+                "ineligible_reasons": {
+                  "same_or_semitone": 1
+                },
+                "added_notes": 0,
+                "measured": true,
+                "effective": false
+              }
+            }
+          ],
+          "pitch_effects": []
+        }
+      ],
+      "assistant_reports": [
+        "対象5クリップの元音符・休符・既存設定を確認してから、必要な演奏設定だけを変更します。外部への音声送信は行わず、変更前後の発音列・ピッチ曲線・ローカル音声計測で確認します。\n",
+        "確認できました。4は同時発音の4音コード、5と6は休符なしで7半音上行する単音フレーズです。4には低音→高音のストローク、5には短い中間音の挿入、6には連続的なグライドだけを設定します。\n\n7は音間の休符が1,000msあり、既存グライドの上限60msを超えています。8は同音反復のため、既存スライドの挿入条件を満たしません。この2つの設定は変更しません。\n",
+        "必要な設定だけを、**1つのUndoグループ**にまとめました。各クリップを個別に再読取済みです。\n\n| クリップ | 設定と実際の生成結果 |\n|---|---|\n| **4** | 低音→高音、36msのストローク。4音中3音の発音開始・長さが変化。ピッチ曲線の追加なし。 |\n| **5** | スライド0.8。再生時だけ短い中間音が1音入り、2音→3音に変化。連続ピッチ曲線の追加なし。 |\n| **6** | グライド120ms。発音列は2音のまま。ピッチ曲線は403測定点中48点で変化し、グライド単独の寄与を確認。 |\n| **7** | 既存設定を保持。休符1,000msが接続上限60msを超えるため、発音列・ピッチ曲線とも変化なし。 |\n| **8** | 既存設定を保持。同音反復で挿入条件を満たさず、追加音・ピッチ曲線変化なし。 |\n\n同じ区間のローカル音声計測では4〜6に差があり、7・8はPeak/RMSとも一致しました。ただし、音源がグライド曲線へ正確に追従したかは未確定です。\n\n元の音符、手描きベンド／コントローラ、生成レシピは保持しています。外部音声送信・音楽的批評・保存・ファイル操作は行っていません。"
+      ],
+      "tool_sequence": [
+        "inspect_project",
+        "read_notes",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_audio",
+        "inspect_audio",
+        "inspect_audio",
+        "inspect_audio",
+        "inspect_audio",
+        "edit_recipe",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "tool_help",
+        "history",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "search_documentation",
+        "set_performance",
+        "set_performance",
+        "set_performance",
+        "read_notes",
+        "inspect_performance",
+        "read_notes",
+        "inspect_performance",
+        "read_notes",
+        "inspect_performance",
+        "read_notes",
+        "inspect_performance",
+        "read_notes",
+        "inspect_performance",
+        "inspect_audio",
+        "inspect_audio",
+        "inspect_audio",
+        "inspect_audio",
+        "inspect_audio",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_clip_curve",
+        "edit_recipe",
+        "history",
+        "inspect_project"
+      ],
+      "local_artifacts": ".local-evaluations/articulation-2026-10-23/codex-3"
+    },
+    {
+      "backend": "claude",
+      "model": "sonnet",
+      "status": "passed",
+      "elapsed_seconds": 20.346359,
+      "readback_followup": false,
+      "independent_readback": true,
+      "source_preserved": true,
+      "successful_edit_calls": 3,
+      "undo_steps": 1,
+      "undo_restored": true,
+      "redo_restored": true,
+      "effective_readback_count": 3,
+      "ineffective_readback_count": 2,
+      "audio_rms_difference": [
+        0.031197591612045508,
+        0.007938639047313997,
+        0.04398251314259967,
+        0.0,
+        0.0
+      ],
+      "edits": [
+        {
+          "clip": 4,
+          "settings": {
+            "strum": {
+              "direction": "low_to_high",
+              "spread_ms": 40,
+              "clock": "attacks"
+            }
+          }
+        },
+        {
+          "clip": 5,
+          "settings": {
+            "slide": 0.8
+          }
+        },
+        {
+          "clip": 6,
+          "settings": {
+            "pitch": {
+              "glide_ms": 120
+            }
+          }
+        }
+      ],
+      "readbacks": [
+        {
+          "clip": 4,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.0,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": {
+              "spread_ms": 40.0,
+              "direction": "low_to_high",
+              "clock": "attacks",
+              "up_notes": 0,
+              "up_velocity": 1.0,
+              "low_accent": 0.0
+            },
+            "ghost": null,
+            "pitch": null,
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "strum",
+              "changed_onsets": 3,
+              "changed_durations": 3,
+              "added_notes": 0,
+              "note_events_unchanged": false,
+              "slide": null
+            }
+          ],
+          "pitch_effects": []
+        },
+        {
+          "clip": 5,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.800000011920929,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": null,
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "slide",
+              "changed_onsets": 0,
+              "changed_durations": 1,
+              "added_notes": 1,
+              "note_events_unchanged": false,
+              "slide": {
+                "candidate_transitions": 1,
+                "eligible_transitions": 1,
+                "ineligible_reasons": {},
+                "added_notes": 1,
+                "measured": true,
+                "effective": true
+              }
+            }
+          ],
+          "pitch_effects": []
+        },
+        {
+          "clip": 6,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.0,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": {
+              "scoop": 0.0,
+              "scoop_ms": 100.0,
+              "vibrato": 0.0,
+              "vibrato_hz": 5.800000190734863,
+              "vibrato_delay_ms": 300.0,
+              "modulation": 0.0,
+              "volume_swell": 0.0,
+              "glide_ms": 120.0,
+              "fall": 0.0,
+              "fall_ms": 150.0
+            },
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "pitch",
+              "changed_onsets": 0,
+              "changed_durations": 0,
+              "added_notes": 0,
+              "note_events_unchanged": true,
+              "slide": null
+            }
+          ],
+          "pitch_effects": [
+            {
+              "stage_index": 0,
+              "report": {
+                "measured": true,
+                "control": "glide_ms",
+                "glide_ms": 120.0,
+                "effective": true,
+                "changed_samples": 48,
+                "sample_count": 403,
+                "max_semitone_delta": 3.5,
+                "generated_curves": {
+                  "bend": {
+                    "measured": true,
+                    "effective": true,
+                    "changed_samples": 48,
+                    "sample_count": 403,
+                    "max_delta": 3.5
+                  },
+                  "all_bend_gestures": {
+                    "measured": true,
+                    "effective": true,
+                    "changed_samples": 48,
+                    "sample_count": 403,
+                    "max_delta": 3.5
+                  }
+                },
+                "eligibility": {
+                  "candidate_transitions": 1,
+                  "eligible_transitions": 1,
+                  "maximum_gap_ms": 0.0,
+                  "gap_limit_ms": 60,
+                  "ineligible_reasons": {}
+                },
+                "instrument_response": "unknown",
+                "warnings": [
+                  "The project bend curve changed. A hosted instrument may ignore or reinterpret pitch bend, so audible response is not measured here."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "clip": 7,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.0,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": {
+              "scoop": 0.0,
+              "scoop_ms": 100.0,
+              "vibrato": 0.0,
+              "vibrato_hz": 5.800000190734863,
+              "vibrato_delay_ms": 300.0,
+              "modulation": 0.0,
+              "volume_swell": 0.0,
+              "glide_ms": 120.0,
+              "fall": 0.0,
+              "fall_ms": 150.0
+            },
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "pitch",
+              "changed_onsets": 0,
+              "changed_durations": 0,
+              "added_notes": 0,
+              "note_events_unchanged": true,
+              "slide": null
+            }
+          ],
+          "pitch_effects": [
+            {
+              "stage_index": 0,
+              "report": {
+                "measured": true,
+                "control": "glide_ms",
+                "glide_ms": 120.0,
+                "effective": false,
+                "changed_samples": 0,
+                "sample_count": 205,
+                "max_semitone_delta": 0.0,
+                "generated_curves": {
+                  "bend": {
+                    "measured": true,
+                    "effective": false,
+                    "changed_samples": 0,
+                    "sample_count": 205,
+                    "max_delta": 0.0
+                  },
+                  "all_bend_gestures": {
+                    "measured": true,
+                    "effective": false,
+                    "changed_samples": 0,
+                    "sample_count": 205,
+                    "max_delta": 0.0
+                  }
+                },
+                "eligibility": {
+                  "candidate_transitions": 1,
+                  "eligible_transitions": 0,
+                  "maximum_gap_ms": 1000.0,
+                  "gap_limit_ms": 60,
+                  "ineligible_reasons": {
+                    "gap_over_60ms": 1
+                  }
+                },
+                "instrument_response": "unknown",
+                "warnings": [
+                  "glide_ms did not change the performed bend curve. Check the eligibility counts: connections must be monophonic, at most 60 ms apart, within two octaves, and notes must be at least 80 ms long. Repeated pitches have no pitch movement."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "clip": 8,
+          "settings": {
+            "humanize": 0.0,
+            "swing_percent": 50,
+            "swing_grid": "sixteenth",
+            "gate": 1.0,
+            "mute": 0.0,
+            "brush": 0.0,
+            "slide": 0.800000011920929,
+            "transpose": 0,
+            "lean_ticks": 0,
+            "octave_above": 0.0,
+            "octave_below": 0.0,
+            "expression": null,
+            "strum": null,
+            "ghost": null,
+            "pitch": null,
+            "groove": null
+          },
+          "complete": true,
+          "note_stages": [
+            {
+              "stage": "slide",
+              "changed_onsets": 0,
+              "changed_durations": 0,
+              "added_notes": 0,
+              "note_events_unchanged": true,
+              "slide": {
+                "candidate_transitions": 1,
+                "eligible_transitions": 0,
+                "ineligible_reasons": {
+                  "same_or_semitone": 1
+                },
+                "added_notes": 0,
+                "measured": true,
+                "effective": false
+              }
+            }
+          ],
+          "pitch_effects": []
+        }
+      ],
+      "assistant_reports": [
+        "Independent re-read of all clips (notes unchanged check and performance state).",
+        "クリップ 4、5、6 に設定を追加しました。クリップ 7 と 8 は既存の設定を変えていません。確認はローカルの演奏診断だけで行いました。外部への音声送信や音楽的な批評はしていません。再読取でも、保存済みの音符 5 クリップ分は変わっていません。手描きカーブと生成レシピにも触れていません。変更の前後で、音量カーブの点数は 9 のままです。\n\n| クリップ | 設定 | 再読取で確認した結果 |\n|---|---|---|\n| 4(ギターの同時発音コード、E3・B3・E4・G4) | ストローク。低い音から高い音の順、広がり 40ms、発音の起点に合わせる | 和音グループ 1 件が対象です。発音開始が 3 音、音の長さが 3 音変わりました。追加・削除された音、音程や強さの変化はありません。 |\n| 5(ベース A、C2→G2 で隣接、7 半音) | 短い音程移動(slide)0.8 | 移動候補 1 件が対象です。発音列に音が 1 つ追加され、前の音の長さが 1 つ変わりました。 |\n| 6(ベース B、E2→B2 で隣接) | 滑らかな音程変化(glide_ms)120 | 移動候補 1 件が対象です。ピッチ曲線は 403 サンプル中 48 で変わり、最大変化は 3.5 半音でした。音符の発音列は変わっていません。 |\n| 7(ベース C、間に休符) | 既存の glide_ms 120 のまま | 効いていません。2 音の間隔が 1000ms あり、上限の 60ms を超えています(gap_over_60ms)。曲線の変化は 0 でした。 |\n| 8(ベース D、C2 を 2 回繰り返し) | 既存の slide 0.8 のまま | 効いていません。音程が同じか半音以内のため対象外です(same_or_semitone)。音の追加も変化もありませんでした。 |\n\nクリップ 5 の slide で追加された音の音程は、診断では出ていません。クリップ 6 は、ホスト側の楽器がピッチベンドに反応するかどうかは測定できません。"
+      ],
+      "tool_sequence": [
+        "inspect_project",
+        "read_notes",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "set_performance",
+        "set_performance",
+        "set_performance",
+        "read_notes",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance",
+        "inspect_performance"
+      ],
+      "local_artifacts": ".local-evaluations/articulation-2026-10-23/claude-4"
+    }
+  ],
+  "checks": {
+    "clippy": "passed; pre-existing proc-macro-error2 future-compatibility notice",
+    "workspace_tests_ignored": 30,
+    "articulation_harness_tests_passed": 2,
+    "workspace_tests_passed": 4464,
+    "format": "passed",
+    "focused_performance_tests_passed": 23
+  }
+}

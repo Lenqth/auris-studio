@@ -79,3 +79,82 @@ cargo test --workspace installed_cli_edits_performance_in_the_window -- --ignore
 This invokes real model inference using the signed-in account. The test requires
 successful tool calls and exact state and rendering checks; authentication and
 provider limits remain failures. Ordinary test runs skip this opt-in test.
+
+## Articulation selection and measured effects
+
+The separate `installed_cli_selects_slide_or_glide_and_reports_effective_performance`
+evaluation asks for musical gestures without naming their API properties. It uses
+five short clips on native physical guitar and bass instruments:
+
+| Clip | Requested or existing gesture | Required evidence |
+| --- | --- | --- |
+| Guitar chord | Low-to-high stroke | Changed performed onsets and rendered audio |
+| Bass A | One brief intermediate pitch | Added slide note, no continuous glide, changed audio |
+| Bass B | Smooth continuous connection | Glide's isolated bend contribution, unchanged note events, changed audio |
+| Bass C | Existing glide across a long rest | Measured ineffective glide with the gap reason; unchanged audio |
+| Bass D | Existing slide between repeated pitches | No inserted note with the interval reason; unchanged audio |
+
+The model must inspect each edited clip before its edit and independently afterward.
+As in the earlier evaluation, one explicit read-only follow-up in the same conversation
+is allowed when the model finishes editing without the separate performance readback.
+The result records whether that reminder was needed; it does not waive the readback,
+source-preservation or audio checks. Permissions and approval requests are not bypassed.
+Ineffective-gesture evidence must appear in the model's own successful inspection
+results, rather than only in the harness's final reads. The harness compares the
+complete project after substituting only the permitted performance stacks, and
+checks Undo/Redo against the complete before/after projects. Authored bend and
+controller curves and generated recipes are present in the fixture.
+
+Use the same JSON configuration fields as above, but set `AURIS_ARTICULATION_EVAL`
+and run:
+
+```powershell
+cargo test -p auris-gpui --bins installed_cli_selects_slide_or_glide_and_reports_effective_performance -- --ignored --nocapture --test-threads=1
+```
+
+Each run saves `transcript.json`, `result.json`, and five before/after WAV pairs in
+its fresh output directory. Audio RMS differences verify that these native
+instruments respond; they do not measure musical quality or establish the MIDI
+mapping of an unrelated hosted patch. The source performer algorithms are unchanged.
+
+### Results on 2026-10-23
+
+| Backend | Final outcome | Independent readback | Read-only reminder |
+| --- | --- | --- | --- |
+| Codex CLI 0.163.0, `gpt-6.1-sol` | Passed in 120.81 seconds | All five clips | Not needed |
+| Claude Code 2.1.309, `sonnet` | Passed in 20.35 seconds | All five clips | Not needed |
+
+Both selected three partial edits: guitar strum (36 ms for Codex, 40 ms for Claude),
+discrete slide strength 0.8, and continuous glide 120 ms. Both preserved the complete
+project except those performance stacks, and one Undo/Redo restored the complete
+before/after projects. The guitar had three changed onsets, the discrete slide added
+one note, and glide changed 48 of 403 curve samples without changing note events.
+Both correctly reported the measured 1,000 ms rest against glide's 60 ms limit and
+the repeated-pitch slide's zero inserted notes.
+
+| Native render | Codex RMS difference | Claude RMS difference |
+| --- | ---: | ---: |
+| Guitar strum | 0.01081237 | 0.03119759 |
+| Discrete bass slide | 0.00793864 | 0.00793864 |
+| Continuous bass glide | 0.04398251 | 0.04398251 |
+| Gapped bass | 0 | 0 |
+| Repeated-pitch bass | 0 | 0 |
+
+Codex additionally called local `inspect_audio` before and after its changes. Claude
+used the symbolic diagnostics and explicitly left instrument response unverified in
+its report; the harness independently established the native audio differences above.
+
+Earlier trials are retained rather than counted as final passes. Codex initially
+requested external `listen` criticism and stopped at the application's approval
+request before editing. The rerun explicitly scoped verification to local measurements
+with the same permission policy. Claude's first trial passed the structural checks
+but misstated the rest as 500 ms; adding tempo-derived gap measurements corrected that
+report in later trials. Another Claude trial selected all gestures correctly but omitted
+independent performance readback for edited clips, so it failed that criterion. The
+bounded read-only reminder now addresses that omission without relaxing the assertion;
+the final trial completed it without a reminder.
+
+Compact evidence, including final model reports and the earlier outcomes, is saved in
+[`agent-articulation-2026-10-23.json`](../tools/eval/references/agent-articulation-2026-10-23.json).
+Full transcripts and WAV pairs are in the ignored local
+`.local-evaluations/articulation-2026-10-23/codex-3` and `claude-4` directories.

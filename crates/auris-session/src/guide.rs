@@ -2400,6 +2400,26 @@ pub mod harmony {
     //!
     //! # Clips that write themselves
     //!
+    //! The read-only `suggest_harmony` command collects a bounded authored melody passage,
+    //! including clip windows and loops, and delegates musical search to
+    //! [`auris_compose::harmony_suggestions`]. Duration and metric salience support colour;
+    //! suspensions and diminished chords require resolving successors. Mood adjusts costs,
+    //! never a complexity quota or the declared key. A plain comparison always remains.
+    //! Reports contain per-bar evidence, a content revision and literal harmony objects for
+    //! explicit acceptance through `accompaniment`; neither notes nor metadata change during
+    //! suggestion. Performed transforms and audio are not evidence for this symbolic search.
+    //!
+    //! The shared agent `accompaniment` command keeps explicit foreground clip IDs protected
+    //! while generating backing on existing tracks, using the same phrase writer as the editor.
+    //! It also accepts explicit generated backing clip IDs and an optional bounded harmony
+    //! replacement: only those clips are rewritten, and their IDs, seeds, recipe controls,
+    //! authored curves and performance stacks survive. Hand-edited and frozen targets are refused.
+    //! A detached [`accompaniment::Job`](crate::accompaniment::Job) prepares a project snapshot;
+    //! the owner checks document identity, numeric/content revisions, folder and cancellation
+    //! before applying the complete result as one Undo. Saved execution uses the same worker
+    //! protocol and checkpointed save. No implicit regeneration follows an ordinary harmony edit.
+    //! `docs/agent-accompaniment.md` describes the bounded request and response contract.
+    //!
     //! A [`MidiClip`](auris_core::MidiClip) may carry a
     //! [`ClipRecipe`](auris_core::ClipRecipe): a preset, a seed and a few dials saying how the
     //! notes in it were written. Melodic presets read the harmony underneath; drum presets read
@@ -2483,6 +2503,14 @@ pub mod harmony {
     //! a separate Undo transaction per call, and identical retries record no step. Reference
     //! grooves share the UI's snapshot capture path. Native model APIs, Codex and Claude Code
     //! expose the same typed commands and permissions.
+    //! Inspection also measures the first performed pass. Note-event diagnostics explain
+    //! whether strum offsets attacks and whether slide inserts intermediate notes. Continuous
+    //! pitch connections use `pitch.glide_ms`, not the discrete `slide` articulation. Bounded
+    //! pitch diagnostics compare rendered control curves with only that gesture disabled,
+    //! retaining authored curves and other gestures. An incomplete measurement remains unknown;
+    //! a changed curve is not proof that an external instrument responds. Agents independently
+    //! read back the measured effect and compare the same audio range before claiming an
+    //! audible change. These diagnostics never bake performance into the score.
     //! Every wander draws from a seed
     //! the transform stores, through the same named streams the composer draws from
     //! ([`auris_core::rng`]), and it draws per loop pass — a repeated bar is loose differently

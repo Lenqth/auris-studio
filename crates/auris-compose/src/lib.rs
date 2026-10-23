@@ -6,6 +6,7 @@ pub mod analysis;
 pub mod arrangement;
 pub mod frame;
 pub mod gm;
+pub mod harmony_suggestions;
 pub mod intent;
 pub mod melodic;
 pub mod metrics;

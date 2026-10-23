@@ -149,6 +149,27 @@ WAV or stems; verify_render checks the actual file against requested loudness, p
 Treat FAIL as unfinished. Use read_report to page an immutable large report instead of repeating an edit.
 Search documentation for application questions. Preserve unrelated score data and report incomplete work honestly.";
 
+/// Shared live/saved guidance for choosing and verifying non-destructive articulations.
+pub const PERFORMANCE_INSTRUCTIONS: &str = "\nFor playing-feel edits, inspect_performance first, set only the requested controls, then independently inspect_performance again.
+Choose settings.slide for a brief discrete intermediate MIDI note between pitches; it is not continuous pitch bend. It needs an unambiguous single-note line, at least two semitones of movement, no overlap and no gap longer than one quarter note.
+Choose settings.pitch.glide_ms for a smooth continuous pitch connection. It follows the final performed notes: isolated notes must last at least 80 ms, the gap must be at most 60 ms and the interval at most 24 semitones. Gate, timing and overlaps can prevent a connection. Repeated pitches need no pitch movement. Do not enable both gestures unless the requested articulation calls for both.
+For guitar strokes, settings.strum spreads simultaneous pitches; it cannot turn a single-note arpeggio into chord strokes while preserving the score.
+Verify note_effects for strokes and inserted slide notes, and pitch_effects for generated controller changes and the separate glide contribution. Read completeness, effectiveness and warnings, not just stored values. An incomplete measurement is unknown, not success or proof of no effect. Authored bends or another active gesture do not establish that glide contributed.
+If a gesture has no effect, explain the reported conditions; do not silently rewrite notes, fill rests or change the instrument to force it. Preserve unrelated performance settings, notes, curves and recipes.
+Compare the same short rendered range before and after when verifying audible response. Use local inspect_audio and performance diagnostics for this mechanical check; an external listen critique is optional and is not required merely to confirm that a control took effect. Read measured gap durations rather than guessing from beat labels. Controller changes do not establish that a hosted patch responds, and changed audio does not prove musical improvement. Never claim to have listened from measurements alone.\n";
+
+/// Shared live/saved workflow for authored melody with algorithmic backing.
+pub const ACCOMPANIMENT_INSTRUCTIONS: &str = "\nFor a song with a foreground melody, keep authored note edits focused on the melody and delegate backing to accompaniment.
+When choosing or revising harmony, call suggest_harmony with request {melody_clips,start_bar,bars,mood,ending} using the actual motif clips. Mood is neutral/bright/dark/calm/driving/epic/dreamy/tense/funky; ending is settled/open. Compare its recommended and plain candidates, read per-bar melodic tensions and resolution reasons, and keep simple harmony when colour has no benefit. This read-only step returns harmony objects and a revision for explicit accompaniment regeneration; never apply a proposal just because it contains more extended chords. A score is a heuristic comparison, not evidence of better music. Split requests at meter/key changes.
+Inspect the project, explicitly identify protected melody clip IDs and use separate configured backing tracks with written harmony.
+Call accompaniment with expected_revision, protected_clips and operation {kind:generate,parts:[{track,name,part,start_bar,bars,seed,settings}]}.
+Use recipe controls rather than sending backing note arrays. Drum tracks need assigned sounds first.
+For chord changes, operation {kind:regenerate,clips:[...],harmony:{start_bar,bars,key,chords}} changes harmony and only those generated backing clips in one edit; omit harmony after an independent harmony edit.
+Keep returned IDs and recipes. Hand-edited or frozen backing requires separate explicit handling.
+Split targets at meter/section boundaries; each target is limited to 256 quarter notes and the batch to 1024. Protected and unselected clips remain intact.
+Rich chords (7th, sus4, diminished) should serve the motif and harmonic movement; do not impose a complexity quota.
+Read compact clip/recipe summaries and inspect_audio on the same bars; structural success alone is not evidence of better music.\n";
+
 /// Canonical session tools for live and saved execution.
 pub mod live_agent;
 
@@ -185,6 +206,10 @@ pub mod search_documentation {
         (
             "docs/agent-workflows.md",
             include_str!("../../../docs/agent-workflows.md"),
+        ),
+        (
+            "docs/agent-accompaniment.md",
+            include_str!("../../../docs/agent-accompaniment.md"),
         ),
         (
             "docs/arrangement-harness.md",

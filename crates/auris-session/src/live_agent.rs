@@ -4,6 +4,7 @@ use crate::{Session, prelude::*};
 pub mod automation;
 pub mod document_editing;
 pub mod file_jobs;
+pub mod harmony_suggestions;
 mod jobs;
 pub mod recipes;
 pub mod vocal_editing;
@@ -53,6 +54,21 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Suggest up to three melody-aware chord progressions without changing notes or harmony. Pass request with melody_clips, start_bar, bars and optional key/mood/ending. Keeps a plain alternative; 7th, sus4 and diminished colour needs melodic evidence and appropriate resolution, never a complexity quota. Returns explanations, tensions, a content revision and harmony objects usable by accompaniment. Read tool_help for bounds. These are heuristic proposals; compare and audition before claiming musical improvement.
+    SuggestHarmony {
+        /// Explicit foreground clips and musical intent for one short phrase.
+        request: harmony_suggestions::Request,
+    },
+    /// Generate backing parts on existing tracks, or change harmony and regenerate only explicit backing clips, while preserving protected melody clips and every other clip. Uses Auris writers, not model-authored note arrays. Read inspect_project for expected_revision. Operations run on a worker and apply atomically as one Undo; stale/cancelled work and hand-edited regeneration targets are refused. Returns compact recipe summaries, not notes. Split targets at meter/section boundaries first; read tool_help for limits.
+    Accompaniment {
+        /// Content revision from inspect_project or read_notes.
+        expected_revision: String,
+        /// 1..16 distinct melody clip IDs to protect; never inferred from names.
+        #[schemars(length(min = 1, max = 16))]
+        protected_clips: Vec<u64>,
+        /// Generate configured backing clips or explicitly regenerate selected recipes.
+        operation: crate::session::accompaniment::Operation,
+    },
     /// Inspect a passage's verified instrument capabilities and phrase conditions, validate a bounded arrangement proposal on an immutable snapshot, or apply its exact plan_id as one Undo edit. Requires explicit AURIS_ARRANGEMENT_HARNESS=1. Read first; validation returns changes, warnings and a fifteen-minute process-local plan bound to this document/revision. Only an explicit breath edit may shorten notes or omit named pickups; lyrics, harmony and timeline maps remain intact. Independently read back and compare the same rendered bars; structural readiness is not musical improvement.
     Arrangement {
         /// Inspect, validate or apply. Copy stable clip IDs and native parameter addresses from inspection.
@@ -225,14 +241,14 @@ pub enum Command {
         #[schemars(length(min = 1, max = 256))]
         edits: Vec<InstrumentControl>,
     },
-    /// Read one MIDI clip's non-destructive performance, stage order and editable settings. Optional drum_voice addresses one named writer in a drum kit; omit it for the whole clip. Notes, curves and generation recipes are unchanged. Use this before set_performance and read back afterward.
+    /// Read a MIDI clip's non-destructive settings and measured note/pitch effects, including whether slide/glide actually contributes. Optional drum_voice addresses one named writer in a drum kit; omit it for the whole clip. Read completeness and warnings: stored settings alone are not verification. Notes, curves and generation recipes are unchanged. Use this before set_performance and independently read back afterward.
     InspectPerformance {
         /// Stable MIDI clip ID from inspect_project or read_notes.
         clip: u64,
         /// Exact drum writer name from the clip's notes or recipe; omit for the whole clip.
         drum_voice: Option<String>,
     },
-    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Ratios use 0..1, swing 50..75 percent, times milliseconds and pitch semitones. Strum spreads simultaneous pitches; it cannot make chord strokes from single-note arpeggios. Read note_effects and warnings before claiming an effective change. Omitted fields, stored notes, curves and recipes are preserved. settings.reset removes selected stages. Optional drum_voice scopes edits to one writer. More specific expression/ghost fields override humanize/brush. Edits validate atomically; identical retries are no-ops.
+    /// Adjust only supplied non-destructive playing controls and return measured note/pitch effects. Read inspect_performance first and independently afterward. Ratios use 0..1, swing 50..75 percent, times milliseconds and pitch semitones. slide inserts a discrete intermediate note; pitch.glide_ms creates a continuous pitch connection. Strum spreads simultaneous pitches, not single-note arpeggios. Check note_effects, pitch_effects, completeness and warnings before claiming an effective change. Omitted fields, stored notes, curves and recipes are preserved. settings.reset removes selected stages. Optional drum_voice scopes edits to one writer. More specific expression/ghost fields override humanize/brush. Edits validate atomically; identical retries are no-ops.
     SetPerformance {
         /// Stable MIDI clip ID.
         clip: u64,
@@ -479,6 +495,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::SuggestHarmony { .. }
             | Self::AnalyzeLyrics { .. }
             | Self::DiagnoseSong { .. }
             | Self::InspectInstrument { .. }
@@ -503,7 +520,8 @@ impl Command {
             self,
             Self::Arrangement {
                 operation: crate::arrangement::Operation::Validate { .. }
-            } | Self::ListVoices { .. }
+            } | Self::Accompaniment { .. }
+                | Self::ListVoices { .. }
                 | Self::SetSingerVoice { .. }
                 | Self::Sing { .. }
                 | Self::Render { .. }
@@ -572,6 +590,7 @@ impl Session {
             );
         }
         match command {
+            Command::SuggestHarmony { request } => self.agent_suggest_harmony(request),
             Command::Arrangement {
                 operation:
                     operation @ (crate::arrangement::Operation::Inspect { .. }
@@ -742,7 +761,8 @@ impl Session {
             Command::InspectSinger { track, offset } => {
                 self.agent_inspect_singer(TrackId(track), offset)
             }
-            command @ (Command::ListVoices { .. }
+            command @ (Command::Accompaniment { .. }
+            | Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }
             | Command::Sing { .. }
             | Command::Render { .. }

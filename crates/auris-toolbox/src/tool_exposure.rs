@@ -28,14 +28,18 @@ impl ToolGroups {
             || self.0.iter().any(|g| g == "all" || g == tool_group(name))
             || (matches!(name, "analyze_lyrics" | "diagnose_song")
                 && self.0.iter().any(|g| g == "composition"))
+            || (matches!(name, "accompaniment" | "suggest_harmony")
+                && self.0.iter().any(|g| g == "manual"))
             || tool_group(name) == "common"
     }
     /// Workflow text for only the selected groups.
     pub fn instructions(&self) -> String {
         if self.0.is_empty() || self.0.iter().any(|g| g == "all") {
             return format!(
-                "{INSTRUCTIONS}{}{}",
+                "{INSTRUCTIONS}{}{}{}{}",
                 crate::MELODY_PHRASING_INSTRUCTIONS,
+                crate::ACCOMPANIMENT_INSTRUCTIONS,
+                crate::PERFORMANCE_INSTRUCTIONS,
                 crate::arrangement_instructions()
             );
         }
@@ -54,6 +58,12 @@ impl ToolGroups {
         }
         if self.allows("arrangement") {
             text.push_str(crate::arrangement_instructions());
+        }
+        if self.allows("accompaniment") {
+            text.push_str(crate::ACCOMPANIMENT_INSTRUCTIONS);
+        }
+        if self.allows("set_performance") {
+            text.push_str(crate::PERFORMANCE_INSTRUCTIONS);
         }
         if self
             .0
@@ -91,6 +101,8 @@ pub fn tool_group(name: &str) -> &'static str {
         | "list_progressions"
         | "list_presets"
         | "generate_phrase"
+        | "accompaniment"
+        | "suggest_harmony"
         | "accompany" => "composition",
         "arrangement"
         | "create_project"
@@ -303,6 +315,38 @@ mod tests {
         assert!(manual.allows("tool_help") && manual.allows("edit_notes"));
         assert!(!manual.allows("compose"));
         assert!(!manual.instructions().contains("spec_reference"));
+        assert!(manual.allows("accompaniment"));
+        assert!(manual.allows("suggest_harmony"));
+        assert!(
+            manual
+                .instructions()
+                .contains(crate::PERFORMANCE_INSTRUCTIONS)
+        );
+        assert!(
+            ToolGroups::default()
+                .instructions()
+                .contains(crate::PERFORMANCE_INSTRUCTIONS)
+        );
+        assert!(
+            manual
+                .instructions()
+                .contains(crate::ACCOMPANIMENT_INSTRUCTIONS)
+        );
+        let composition = ToolGroups::parse("composition").unwrap();
+        assert!(composition.allows("accompaniment"));
+        assert!(composition.allows("suggest_harmony"));
+        assert!(
+            composition
+                .instructions()
+                .contains(crate::ACCOMPANIMENT_INSTRUCTIONS)
+        );
+        let mix = ToolGroups::parse("mix").unwrap();
+        assert!(!mix.allows("accompaniment"));
+        assert!(!mix.allows("suggest_harmony"));
+        assert!(
+            !mix.instructions()
+                .contains(crate::ACCOMPANIMENT_INSTRUCTIONS)
+        );
     }
     #[test]
     fn discovery_and_unknown_help_are_bounded() {

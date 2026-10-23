@@ -84,7 +84,7 @@ impl Operation {
 }
 
 impl RecipePatch {
-    fn apply(&self, recipe: &mut ClipRecipe) -> Result<(), String> {
+    pub(crate) fn apply(&self, recipe: &mut ClipRecipe) -> Result<(), String> {
         for (name, value, target) in [
             ("density", self.density, &mut recipe.density),
             ("intensity", self.intensity, &mut recipe.intensity),
@@ -152,7 +152,7 @@ impl RecipePatch {
     }
 }
 
-fn summary(recipe: &ClipRecipe) -> serde_json::Value {
+pub(crate) fn summary(recipe: &ClipRecipe) -> serde_json::Value {
     serde_json::json!({"part":recipe.preset.name(),"seed":recipe.seed,"density":recipe.density,"intensity":recipe.intensity,"gate":recipe.gate,"dynamics":recipe.dynamics,"syncopation":recipe.syncopation,"fill":recipe.fill,"octave":recipe.octave,"swing":recipe.swing,"groove":recipe.groove,"subdivision":recipe.subdivision,"motif":recipe.motif,"rhythm":recipe.rhythm,"drum_voices":recipe.drum_voices.iter().map(|voice|serde_json::json!({"name":voice.name,"has_recipe":voice.recipe.is_some()})).collect::<Vec<_>>()})
 }
 
