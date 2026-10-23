@@ -56,6 +56,7 @@ flac-codec = "1.3"
 hound = "3.5"
 hex = "0.4"
 ureq = { version = "3.4", features = ["json"] }
+semver = "1"
 url = "2.5"
 unicode-normalization = "0.1"
 log = "0.4"

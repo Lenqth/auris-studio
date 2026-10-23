@@ -563,11 +563,6 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                 actions::DecreaseTrackHeight,
                 "view.track_height_decrease",
             ),
-            MenuRow::Separator,
-            // Not a Help menu of its own for one row. What people are looking for when they
-            // reach for Help in an application with no manual is the version number, and this
-            // is the menu they are already in.
-            command(t(Key::CmdAbout), actions::ShowAbout, "view.about"),
         ],
     });
 
@@ -709,6 +704,18 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                 actions::OpenAnalysisResults,
                 "analysis.results",
             ),
+        ],
+    });
+    sections.push(MenuSection {
+        name: t(Key::GroupHelp),
+        rows: vec![
+            command(
+                t(Key::CmdCheckForUpdates),
+                actions::CheckForUpdates,
+                "help.check_updates",
+            ),
+            MenuRow::Separator,
+            command(t(Key::CmdAbout), actions::ShowAbout, "view.about"),
         ],
     });
     sections
@@ -942,6 +949,29 @@ mod tests {
         assert!(
             labels.iter().any(|label| label == expected),
             "`{expected}` is in no menu"
+        );
+    }
+
+    #[test]
+    fn help_menu_exposes_the_release_check_and_build_information() {
+        let help = plain(Language::English)
+            .into_iter()
+            .find(|section| section.name == Key::GroupHelp.get(Language::English))
+            .expect("Help menu");
+        let labels: Vec<_> = help
+            .rows
+            .iter()
+            .filter_map(|row| match row {
+                MenuRow::Command { label, .. } => Some(label.as_ref()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            labels,
+            [
+                Key::CmdCheckForUpdates.get(Language::English),
+                Key::CmdAbout.get(Language::English),
+            ]
         );
     }
 

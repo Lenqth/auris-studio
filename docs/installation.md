@@ -5,6 +5,10 @@ and portable archives. Desktop releases contain the application, the `auris` CLI
 `auris-mcp` server and the Japanese dictionary from one build. Linux releases contain the CLI
 and dictionary. Built-in physical instruments do not require a separate sound library.
 
+In the desktop app, **Help → Check for Updates** compares the installed version with the
+latest published release. If an update is available, choose **Open Release Page** to download
+the appropriate installer. The check is manual; installation follows the platform steps below.
+
 ## Windows
 
 Run `auris-studio-v<version>-windows-x86_64-setup.exe`. The installer uses the current user's

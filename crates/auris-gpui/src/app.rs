@@ -1723,6 +1723,8 @@ pub struct AurisApp {
     pub(crate) menu_bar: Option<OpenMenu>,
     /// The open rename sheet, if any.
     pub(crate) prompt: Option<Prompt>,
+    /// Prevents duplicate network checks while a manual update request is running.
+    pub(crate) checking_updates: bool,
     /// Crash-recovery snapshots discovered before this session was created, newest first.
     ///
     /// Discard walks this queue during the current launch. Recover and Cancel stop asking, so
@@ -2165,6 +2167,7 @@ impl AurisApp {
             menu: None,
             menu_bar: None,
             prompt: None,
+            checking_updates: false,
             recovery_queue,
             palette: None,
             plugin_window: None,

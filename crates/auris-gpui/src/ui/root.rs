@@ -394,6 +394,7 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_export_stems))
                     .on_action(Self::window_listener(cx, Self::on_open_recent))
                     .on_action(Self::window_listener(cx, Self::on_show_about))
+                    .on_action(Self::window_listener(cx, Self::on_check_for_updates))
                     .on_action(Self::window_listener(cx, Self::on_add_instrument_track))
                     .on_action(Self::window_listener(cx, Self::on_add_drum_track))
                     .on_action(Self::window_listener(cx, Self::on_add_singer_track))
@@ -2831,6 +2832,15 @@ impl AurisApp {
     ) {
         self.show_about();
         cx.notify();
+    }
+
+    fn on_check_for_updates(
+        &mut self,
+        _: &actions::CheckForUpdates,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.check_for_updates(cx);
     }
 
     fn on_add_instrument_track(
