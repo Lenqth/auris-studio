@@ -283,14 +283,38 @@ impl TextField {
     /// field in this application was doing it in its own `match`: four tables that were supposed
     /// to agree, and did not. The library's search box shipped without a backspace at all.
     ///
-    /// Escape, Return and the arrow keys are deliberately *not* here. They mean different things
+    /// Escape, Return, Up and Down are deliberately *not* here. They mean different things
     /// to each field — the palette walks its rows with Up and Down, the rename sheet takes them
     /// as Home and End, and a browser's search box has neither — so each caller answers those
     /// first and hands the rest here.
+    /// On macOS, Command-Left/Right move to line boundaries, with Shift extending the selection.
     ///
     /// Call [`Self::apply_key_with_clipboard`] from a view to include cut, copy and paste.
     pub fn apply_key(&mut self, key: &str, shift: bool, secondary: bool) -> KeyEffect {
+        self.apply_key_for_platform(key, shift, secondary, cfg!(target_os = "macos"))
+    }
+
+    fn apply_key_for_platform(
+        &mut self,
+        key: &str,
+        shift: bool,
+        secondary: bool,
+        mac: bool,
+    ) -> KeyEffect {
         let before = self.content.len();
+        if mac && secondary {
+            match key {
+                "left" => {
+                    self.move_home(shift);
+                    return KeyEffect::Moved;
+                }
+                "right" => {
+                    self.move_end(shift);
+                    return KeyEffect::Moved;
+                }
+                _ => {}
+            }
+        }
         match key {
             "backspace" => self.backspace(),
             "delete" => self.delete_forward(),
@@ -675,6 +699,29 @@ pub fn utf16_to_byte(text: &str, offset: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mac_command_arrows_move_and_select_to_line_boundaries() {
+        let mut field = TextField::new("あいう\nalpha beta\n最後");
+        field.place_caret("あいう\nalpha beta".len(), false);
+        field.apply_key_for_platform("left", false, true, true);
+        field.insert("X");
+        assert_eq!(field.content(), "あいう\nXalpha beta\n最後");
+        field.apply_key_for_platform("right", true, true, true);
+        assert_eq!(field.selected_text(), "alpha beta");
+        field.apply_key_for_platform("left", true, true, true);
+        assert_eq!(field.selected_text(), "X");
+        assert!(field.is_reversed());
+    }
+
+    #[test]
+    fn non_mac_command_arrows_keep_the_existing_character_movement() {
+        let mut field = TextField::new("alpha beta");
+        field.caret_to_end();
+        field.apply_key_for_platform("left", false, true, false);
+        field.insert("X");
+        assert_eq!(field.content(), "alpha betXa");
+    }
 
     #[test]
     fn utf16_offsets_inside_the_ime_s_own_text_are_converted() {

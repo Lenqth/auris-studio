@@ -11,7 +11,7 @@ Download binaries from the [releases page](https://github.com/uthree/auris-studi
 the desktop application, `auris` and `auris-mcp` for macOS and Windows,
 and `auris` for Linux. Built-in physical instruments are ready to play.
 
-On macOS, drag `Auris Studio.app` to `/Applications`. The binaries are unsigned;
+On macOS 13.4 or later, drag `Auris Studio.app` to `/Applications`. The binaries are unsigned;
 if macOS blocks the downloaded app, remove its quarantine attribute with
 `xattr -dr com.apple.quarantine "Auris Studio.app"`. On Windows, SmartScreen may require
 **More info → Run anyway**.

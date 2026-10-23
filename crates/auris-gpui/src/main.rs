@@ -27,6 +27,7 @@ mod logbook;
 mod menu;
 mod settings_window;
 mod startup_soundfonts;
+mod termination;
 mod theme;
 mod titlebar;
 mod voice_setup_window;
@@ -67,6 +68,7 @@ fn main() {
         let _ = handed_over.send(urls);
     });
     application.run(move |cx: &mut App| {
+        termination::install();
         // Installs the Markdown renderer's theme and language registry. The agent transcript uses
         // gpui-component's TextView, as picocode does, while the rest of the window keeps Auris's
         // own deliberately small widget set and palette.
@@ -106,30 +108,12 @@ fn main() {
         // and quitting from there would lose the main window's document just the same. So the
         // fallback runs the same guard through the main window instead of quitting on the spot.
         cx.on_action(move |_: &actions::Quit, cx: &mut App| {
-            let guarded = window.update(cx, |view, window, cx| {
-                if view.compose_progress.is_some() {
-                    window.activate_window();
-                    return false;
-                }
-                let go = view.confirm_discard(ui::prompt::PendingAction::Quit);
-                if !go {
-                    // The sheet is asking in the main window; bring it forward so the
-                    // question is not left behind the window the keystroke landed in.
-                    window.activate_window();
-                }
-                cx.notify();
-                go
-            });
-            // A clean document quits now — and so does a main window that is already gone,
-            // because then there is nothing left to guard.
-            if guarded.unwrap_or(true) {
-                // The same write the window's own Quit does. This path is the one a Quit that
-                // landed in the Settings window takes, and it is still the main window's
-                // placement being put away.
-                window
-                    .update(cx, |view, _, _| view.save_window_placement())
-                    .ok();
-                cx.quit();
+            if window
+                .update(cx, |view, window, cx| view.quit_asking(window, cx))
+                .is_err()
+            {
+                // The document window is already gone; nothing remains to guard.
+                termination::quit(cx);
             }
         });
 
@@ -147,6 +131,9 @@ fn main() {
         // unsaved work, so these go through the guard a dropped project does.
         cx.spawn(async move |cx| {
             loop {
+                if termination::take_request() {
+                    let _ = window.update(cx, |view, window, cx| view.quit_asking(window, cx));
+                }
                 while let Ok(urls) = open_requests.try_recv() {
                     let Some(path) = urls.iter().find_map(|url| handed_over_project(url)) else {
                         continue;
@@ -205,7 +192,7 @@ fn main() {
         let main = gpui::AnyWindowHandle::from(window).window_id();
         cx.on_window_closed(move |cx| {
             if !cx.windows().iter().any(|open| open.window_id() == main) {
-                cx.quit();
+                termination::quit(cx);
             }
         })
         .detach();

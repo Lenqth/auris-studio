@@ -1,0 +1,4 @@
+# The bundled Apple Silicon ONNX Runtime targets macOS 13.4. Keep Rust's executables and
+# every native dependency on the same baseline as the desktop application's Info.plist.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "13.4"

@@ -450,8 +450,9 @@ impl AurisApp {
                 // About the pointer, so the bar under it stays under it: zooming towards a
                 // fixed left edge walks the thing being looked at off the screen.
                 let anchor = event.position.x - self.timeline_origin().x;
-                let factor = if delta.y > px(0.0) { 1.12 } else { 1.0 / 1.12 };
-                self.timeline.zoom_by(factor, anchor);
+                if let Some(factor) = crate::gestures::wheel_zoom_factor(delta.y) {
+                    self.timeline.zoom_by(factor, anchor);
+                }
             }
             crate::gestures::Wheel::AlongTheSong => self.timeline.scroll_by(-delta.y - delta.x),
             crate::gestures::Wheel::DownTheTracks => {

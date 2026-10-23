@@ -60,6 +60,25 @@ pub fn wheel_action(modifiers: Modifiers) -> Wheel {
         Wheel::DownTheTracks
     }
 }
+
+/// The zoom step for vertical wheel movement, ignoring horizontal and phase-only events.
+///
+/// macOS delivers zero-delta events when a trackpad gesture ends. They must not undo a zoom
+/// step merely because zero falls into the negative branch of a sign check.
+pub fn wheel_zoom_factor(vertical: Pixels) -> Option<f32> {
+    // Pixels uses total floating-point ordering, where -0.0 precedes +0.0. Compare the
+    // scalar movement instead so both spellings of a stationary event remain stationary.
+    let vertical = f32::from(vertical);
+    if !vertical.is_finite() {
+        None
+    } else if vertical > 0.0 {
+        Some(1.12)
+    } else if vertical < 0.0 {
+        Some(1.0 / 1.12)
+    } else {
+        None
+    }
+}
 use serde::{Deserialize, Serialize};
 
 /// A click that means more than "select this".
@@ -264,6 +283,15 @@ mod tests {
     use super::*;
     use auris_i18n::Language;
     use gpui::{Modifiers, MouseButton, point, px};
+
+    #[test]
+    fn wheel_zoom_ignores_zero_movement_and_preserves_direction() {
+        assert_eq!(wheel_zoom_factor(px(0.0)), None);
+        assert_eq!(wheel_zoom_factor(px(-0.0)), None);
+        assert_eq!(wheel_zoom_factor(px(f32::NAN)), None);
+        assert_eq!(wheel_zoom_factor(px(3.0)), Some(1.12));
+        assert_eq!(wheel_zoom_factor(px(-3.0)), Some(1.0 / 1.12));
+    }
 
     #[test]
     fn a_press_that_has_not_travelled_is_not_a_drag() {

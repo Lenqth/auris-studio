@@ -184,12 +184,12 @@ mod tests {
 
     #[test]
     fn asking_the_system_for_its_locale_answers_or_declines_but_never_panics() {
-        // The Windows arm reaches into Win32 and back through UTF-16; the rest decline. Either
-        // way `from_environment` has to be able to call it on a machine set to any language.
+        // Windows and macOS query the OS; other platforms decline. Unsupported system
+        // languages may also return None on either native backend.
         let answer = Language::from_system_locale();
         assert!(
-            cfg!(target_os = "windows") || answer.is_none(),
-            "only Windows has a system locale to read here"
+            cfg!(any(target_os = "windows", target_os = "macos")) || answer.is_none(),
+            "only Windows and macOS query the system locale directly"
         );
         // And whatever came back has to be a language we can actually render.
         if let Some(language) = answer {
