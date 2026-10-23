@@ -16,9 +16,9 @@ auris render <project.auris> -o <preview.wav> [--stems <directory>]
 
 The CLI's exact flags are authoritative for the installed version. `--print` parses a specification and prints normalized TOML without writing a project; use it as the headless syntax check. Run `auris help` when a command rejects an argument. A Save As path may become a nested `<name>/<name>.auris` project; use the path printed by the command or `auris info` rather than guessing.
 
-## MCP/live tool sequence
+## Saved-project MCP sequence
 
-The shared toolbox names are the stable vocabulary:
+The saved-project server exposes specification and composition tools:
 
 1. `create_project` or `open_project`.
 2. `inspect_project` to obtain stable track and clip IDs.
@@ -28,7 +28,11 @@ The shared toolbox names are the stable vocabulary:
 6. `inspect_project`, `inspect_audio`/`analyze`, and `preview_composition` to verify.
 7. `render` and `verify_render` for delivery files.
 
-Every saved edit must use the current project or clip revision returned by inspection. Read the clip again after writing. Use `discover_tools` and `tool_help` instead of guessing schemas; argument errors are feedback, not permission to retry unrelated calls.
+`compose` and `accompany` carry their own input contracts and do not take a clip revision field. `setup_tracks` uses its request ID/fingerprint contract. For operations that explicitly require an `expected_revision` or current revision, obtain it from the relevant inspection/read call and pass it unchanged. Read the affected project or clip again after writing. Use `tool_help` instead of guessing schemas; argument errors are feedback, not permission to retry unrelated calls.
+
+## Live agent sequence
+
+The desktop live agent has a separate, smaller catalog. Start with `discover_tools` and fetch `tool_help` for the returned candidates; do not assume that saved-only names such as `compose`, `spec_reference`, `check_spec`, `list_presets`, or `list_progressions` are available. Inspect the open document, read the target clip, then use the advertised live note/phrase/harmony tools and read back the result. Apply revision checks only to operations whose schema declares them.
 
 ## Minimal `.asong` approach
 
