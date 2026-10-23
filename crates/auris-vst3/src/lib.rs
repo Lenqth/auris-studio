@@ -271,6 +271,10 @@ fn load_configured_plugin(
     let mut plugin = host.load_plugin_class(path, class_id)?;
     let layout = plugin.audio_bus_layout()?;
     let sidechain = layout.inputs.len() > 1;
+    // Some instruments, including Vital, do not mark their main output default-active.
+    if layout.outputs.first().is_some_and(|bus| !bus.active) {
+        plugin.set_bus_active(MediaType::Audio, BusDirection::Output, 0, true)?;
+    }
     for index in 1..layout.inputs.len() {
         plugin.set_bus_active(MediaType::Audio, BusDirection::Input, index as i32, true)?;
     }

@@ -91,7 +91,8 @@ fn smoke_instrument(plugin: &Vst3Plugin) {
     }
     assert!(
         peak > 1.0e-6,
-        "the instrument should produce audible output"
+        "the instrument should produce audible output (peak={peak}, processing_failed={})",
+        instrument.processing_failed()
     );
     instrument.reset();
     let context = ProcessContext::realtime(
