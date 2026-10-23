@@ -759,9 +759,11 @@ dependencies = [
  "objc2-foundation",
  "raw-window-handle",
  "rfd",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",
+ "ureq",
  "url",
 ]
 

@@ -30,6 +30,7 @@ mod startup_soundfonts;
 mod termination;
 mod theme;
 mod titlebar;
+mod update_check;
 mod voice_setup_window;
 
 mod ui;

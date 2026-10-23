@@ -533,6 +533,13 @@ pub enum Answer {
 /// A question the sheet is asking, and what turns on the answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Question {
+    /// Open the official release page after a newer version was found.
+    OpenUpdateRelease {
+        /// Installed version shown in the question.
+        current: String,
+        /// Published version shown in the question.
+        latest: String,
+    },
     /// Replaces an exact library entry with a snapshot captured before confirmation.
     OverwriteSound {
         /// The entry whose previous contents were shown to the user.
@@ -1428,6 +1435,10 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         match (question, answer) {
+            (Question::OpenUpdateRelease { .. }, Answer::Confirm) => {
+                cx.open_url(crate::update_check::RELEASE_PAGE);
+            }
+            (Question::OpenUpdateRelease { .. }, Answer::Deny) => {}
             (
                 Question::OverwriteSound {
                     expected,
@@ -2113,6 +2124,14 @@ impl AurisApp {
         question: &Question,
     ) -> (SharedString, SharedString, Option<SharedString>) {
         match question {
+            Question::OpenUpdateRelease { current, latest } => (
+                self.t(Key::UpdateAvailable)
+                    .replace("{current}", current)
+                    .replace("{version}", latest)
+                    .into(),
+                self.t(Key::UpdateOpenRelease).into(),
+                None,
+            ),
             Question::OverwriteSound { source, .. } => (
                 messages::overwrite_sound_body(self.language(), source).into(),
                 self.t(Key::OverwriteSoundConfirm).into(),

@@ -540,6 +540,7 @@ strings! {
     // of file operations, under a label that named the *file* route to it.
     GroupCompose { en: "Compose", ja: "作曲" }
     GroupView { en: "View", ja: "表示" }
+    GroupHelp { en: "Help", ja: "ヘルプ" }
 
     // ------------------------------------------------------------------ commands
     CmdPlayStop { en: "Play / Stop", ja: "再生 / 停止" }
@@ -1294,6 +1295,13 @@ strings! {
     DialogPluginFolder { en: "Choose a plugin folder", ja: "プラグインのフォルダを選択" }
     CmdOpenRecent { en: "Open Recent", ja: "最近のプロジェクト" }
     CmdAbout { en: "About Auris Studio", ja: "Auris Studio について" }
+    CmdCheckForUpdates { en: "Check for Updates", ja: "更新を確認" }
+    UpdateChecking { en: "Checking for updates…", ja: "更新を確認しています…" }
+    UpdateAvailable { en: "Auris Studio {version} is available. You have {current}.", ja: "Auris Studio {version} を利用できます。現在のバージョン: {current}" }
+    UpdateCurrent { en: "Auris Studio {version} is up to date.", ja: "Auris Studio {version} は最新版です。" }
+    UpdateNoRelease { en: "No published release is available yet.", ja: "公開済みのリリースはまだありません。" }
+    UpdateFailed { en: "Could not check for updates. Please try again later.", ja: "更新を確認できませんでした。時間をおいて再度お試しください。" }
+    UpdateOpenRelease { en: "Open Release Page", ja: "リリースページを開く" }
     MenuNoRecentProjects { en: "Nothing opened yet", ja: "まだ何も開いていません" }
     MenuForgetRecent { en: "Forget This List", ja: "履歴を消去" }
     DialogComposeSpec { en: "Compose from specification", ja: "仕様書から作曲" }
