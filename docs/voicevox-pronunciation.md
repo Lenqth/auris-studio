@@ -55,6 +55,38 @@ Their waveform RMS over the predicted consonant windows rises by about 20 and
 Numeric tests also check that the incoming pitch edit is used and the preceding
 vowel keeps its own gain.
 
+## Velocity and the Engine's volume
+
+The 2026-10-23 investigation transcribed sung probes with Whisper (large-v3-turbo). The Engine's
+`volume` is a decoder input, not a fader. Scaling it changes the spectrum of every phoneme even
+after the level is normalised: across 24 phrases sung by 四国めたん / ノーマル, the per-phoneme
+log-spectral RMS difference is about 0.5 at ×0.8, 0.9 at ×0.5 and 1.2 at ×0.3. Auris used to
+send velocity × expression as that scale. At velocity 0.5 the character error rate of 四国めたん
+and 波音リツ rose from about 10 % to 18.7 %, and the errors were substituted consonants: ば as ま,
+ざ as だ, ひ as ぎ.
+
+The adapter now sends the predicted volume unchanged and applies velocity × expression to the
+decoded audio. The gain is interpolated between frame centres. Consonants that anticipate their
+vowel still take the gain of their own note.
+
+A same-take comparison isolates the change. It uses 72 queries (24 phrases × 3 takes,
+四国めたん / ノーマル), and each one is decoded with its volume scaled and with its audio scaled.
+
+| Level | Volume scaled (before) | Audio scaled (now) |
+| ---: | ---: | ---: |
+| 0.8 | 11.9 % | 11.4 % |
+| 0.5 | 19.0 % | 11.7 % |
+
+At 0.5, audio scaling was better on 20 takes and worse on 8. The errors it removed are consonant
+substitutions (さしすせそ heard as しじせぞ, ざじずぜぞ as ざみでぞ, ぽすと as ぼすと). The
+remaining error rate is the same as at full volume.
+
+Two properties of Engine 0.25.2 limit these comparisons. `sing_frame_audio_query` predicts phoneme
+durations deterministically, but its f0 and volume differ on every request, so two renders of the
+same score are two takes. A fair comparison therefore synthesises the same query twice;
+`frame_synthesis` is deterministic. Some confusions also occur without Auris: ぱ行 is heard as ば行
+in most takes sung directly through the Engine.
+
 ## Reproduction
 
 With the Engine running, set `AURIS_VOICEVOX_TEST_URL` to its URL and run:
@@ -68,3 +100,13 @@ The live inventory regression is
 `a_running_engine_preserves_the_mora_inventory_across_timing_adaptation`.
 Without the environment variable, Engine-dependent tests return without
 contacting a service. Existing saved takes require an explicit re-render.
+
+To check intelligibility, render the probes and transcribe them:
+
+```sh
+cargo run -p auris-singer --example voicevox_probe -- target/voicevox-probe 3002
+uv run tools/eval/voicevox_intelligibility.py target/voicevox-probe
+```
+
+The probe writes each phrase through Auris at three velocities and once directly through the
+Engine. The script reports the character error rate per variant against the written kana.

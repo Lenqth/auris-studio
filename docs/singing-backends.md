@@ -283,7 +283,11 @@ not contain lyrics and therefore cannot be rendered through this backend; full s
 note previews can.
 
 Written bends and ornaments shift the predicted pitch relative to each note's key; velocity
-and expression scale the predicted volume. Auris does not add its generic glide or note
+and expression scale the decoded audio. The Engine's predicted volume is sent unchanged: the
+decoder reads it as articulation rather than level, and a quieter volume makes it sing a
+different consonant (see [VOICEVOX pronunciation checks](voicevox-pronunciation.md)). The gain
+is interpolated between frame centres, so a change of velocity between notes does not click.
+Auris does not add its generic glide or note
 attack/release envelope to this backend. Controls extend into rests so the Engine can sound
 anticipatory consonants without being muted by the host's note boundaries. Existing audio
 takes stay as recorded; render the singer track again to hear this behavior.

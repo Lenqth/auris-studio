@@ -736,6 +736,22 @@ impl VoicevoxBackend {
     }
 }
 
+/// Velocity and expression scale the decoded audio, not the Engine's volume: the decoder reads
+/// volume as articulation, and at half volume it sings ば as ま and ざ as だ. The gain is
+/// interpolated between frame centres so a change of velocity between notes does not click.
+fn apply_frame_gain(samples: &mut [f32], gain: &[f64], hop: usize) {
+    let Some(last) = gain.len().checked_sub(1) else {
+        return;
+    };
+    for (index, sample) in samples.iter_mut().enumerate() {
+        let position = (index as f64 + 0.5) / hop as f64 - 0.5;
+        let left = (position.max(0.0).floor() as usize).min(last);
+        let right = (left + 1).min(last);
+        let t = (position - left as f64).clamp(0.0, 1.0);
+        *sample *= (gain[left] * (1.0 - t) + gain[right] * t) as f32;
+    }
+}
+
 fn prediction_from_query(
     query: Value,
     padding: usize,
@@ -997,6 +1013,7 @@ impl SingingBackend for VoicevoxBackend {
                 samples.len()
             )));
         }
+        apply_frame_gain(&mut samples, &prepared.gain, hop);
         // The padding belongs to this adapter, never to the track's saved score or timeline.
         let remove = checked_sample_count(padding, hop, "VOICEVOX decoder padding")?;
         let keep = checked_sample_count(frames.len(), hop, "VOICEVOX rendered audio")?;
@@ -1525,7 +1542,8 @@ mod tests {
             .apply_expression(&frames, &score, VoicevoxBackend::SOURCES)
             .unwrap();
         assert_eq!(prepared.pitch_hz, [0.0, 0.0, 880.0, 876.0, 0.0, 0.0]);
-        assert_eq!(prepared.energy, [0.0, 0.02, 0.2, 0.05, 0.0, 0.0]);
+        assert_eq!(prepared.energy, [0.0, 0.04, 0.4, 0.2, 0.0, 0.0]);
+        assert_eq!(prepared.gain, [0.5, 0.5, 0.5, 0.25, 0.5, 0.5]);
         assert_eq!(
             prepared.context, query,
             "pronunciation context is untouched"
@@ -2198,8 +2216,10 @@ mod tests {
             let (samples, requests) = mock_round_trip(frame_rate, padding, true, false);
             let samples = samples.unwrap();
             assert_eq!(samples.len(), 2 * hop);
-            assert_eq!(samples[..hop], vec![0.25; hop]);
-            assert_eq!(samples[hop..], vec![0.5; hop]);
+            // The note's 0.8 velocity reaches back over the opening rest, scaling the audio.
+            let close = |sample: &f32, expected: f32| (sample - expected).abs() < 1e-6;
+            assert!(samples[..hop].iter().all(|sample| close(sample, 0.2)));
+            assert!(samples[hop..].iter().all(|sample| close(sample, 0.4)));
             assert!(requests[0].starts_with("POST /sing_frame_audio_query?speaker=6000 "));
             assert!(requests[1].starts_with("POST /frame_synthesis?speaker=3001 "));
             let score = request_body(&requests[0]);
@@ -2217,7 +2237,7 @@ mod tests {
             let mut pitch = vec![0.0; 2 * padding + 2];
             let mut energy = pitch.clone();
             pitch[padding + 1] = 440.0;
-            energy[padding + 1] = f64::from(0.8_f32);
+            energy[padding + 1] = 1.0;
             assert_eq!(query["f0"], json!(pitch));
             assert_eq!(query["volume"], json!(energy));
         }
@@ -2226,7 +2246,11 @@ mod tests {
     #[test]
     fn a_score_without_boundary_rests_keeps_its_first_pitch_and_energy() {
         let (samples, requests) = mock_round_trip(93.75, 94, false, false);
-        assert_eq!(samples.unwrap().len(), 2 * 256);
+        let samples = samples.unwrap();
+        assert_eq!(samples.len(), 2 * 256);
+        // Velocities 0.4 then 0.8 scale the decoded 0.25 and 0.5, meeting in a ramp.
+        assert!((samples[0] - 0.1).abs() < 1e-6);
+        assert!((samples[511] - 0.4).abs() < 1e-6);
         let score = request_body(&requests[0]);
         assert_eq!(
             score["notes"][0],
@@ -2235,7 +2259,27 @@ mod tests {
         assert_eq!(score["notes"][1]["lyric"], "ア");
         let query = request_body(&requests[1]);
         assert_eq!(query["f0"][94], json!(220.0_f32));
-        assert_eq!(query["volume"][94], json!(f64::from(0.4_f32)));
+        assert_eq!(
+            query["volume"][94],
+            json!(1.0),
+            "the Engine's volume is articulation, not a fader"
+        );
+    }
+
+    #[test]
+    fn frame_gain_ramps_between_frame_centres_instead_of_stepping() {
+        let mut samples = vec![1.0_f32; 8];
+        apply_frame_gain(&mut samples, &[0.0, 1.0], 4);
+        assert_eq!(
+            samples,
+            [0.0, 0.0, 0.125, 0.375, 0.625, 0.875, 1.0, 1.0],
+            "constant at each frame's outer half, linear between the centres"
+        );
+        let mut samples = vec![0.5_f32; 6];
+        apply_frame_gain(&mut samples, &[0.5; 3], 2);
+        assert_eq!(samples, [0.25; 6]);
+        apply_frame_gain(&mut samples, &[], 2);
+        assert_eq!(samples, [0.25; 6]);
     }
 
     #[test]
