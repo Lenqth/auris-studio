@@ -12,6 +12,7 @@ use crate::MILLISECONDS_PER_SECOND;
 use crate::bank::ParamBank;
 use crate::delay_line::DelayLine;
 use crate::smooth::one_pole_coefficient;
+use crate::true_peak::{self, DETECTION_DELAY, TAPS};
 
 const P_INPUT_DB: u32 = 0;
 const P_CEILING_DB: u32 = 1;
@@ -25,27 +26,20 @@ const P_RELEASE_MS: u32 = 2;
 /// pushing the mix bus into audible pre-echo.
 const LOOKAHEAD_MS: f32 = 2.0;
 
+/// Guard band for finite FIR approximation and a moving gain envelope.
+///
+/// Independent 192 kHz reconstruction of a rendered synthwave mix read 0.02 dB above the
+/// requested ceiling with the shared 4x FIR alone. Holding the internal target 0.1 dB lower
+/// leaves room for the remaining filter and envelope differences.
+const TRUE_PEAK_HEADROOM_DB: f32 = 0.1;
+
 /// Highest rate used to size the limiter's internal windows.
 ///
 /// This is well above production audio formats while keeping a corrupt project value from
 /// turning `prepare` into an unbounded allocation.
 const MAX_PREPARE_SAMPLE_RATE: f32 = 768_000.0;
 
-/// How far detection runs behind the input, in samples, to see both sides of each sample.
-///
-/// The peak between two samples is interpolated from four of them, so judging sample `m` against
-/// the stretch after it needs `m + 2`. Audio is delayed by the same two samples on top of the
-/// look-ahead, which keeps the window arithmetic below exactly as it was.
-const DETECTION_DELAY: usize = 2;
-
-/// Where between two samples their interpolated peak is looked for.
-///
-/// The same three points, and the same interpolation, as the true-peak meter in `auris-gpu`
-/// that `analyze` and `verify_render` report, so the ceiling a limiter promises is the ceiling
-/// those tools then measure.
-const INTERSAMPLE_STEPS: [f32; 3] = [0.25, 0.5, 0.75];
-
-/// A brickwall limiter whose output cannot exceed its ceiling, between samples as well as on them.
+/// A look-ahead limiter that measures peaks between samples with four-times oversampling.
 ///
 /// The gain is derived from the input in three steps:
 ///
@@ -60,9 +54,9 @@ const INTERSAMPLE_STEPS: [f32; 3] = [0.25, 0.5, 0.75];
 ///
 /// Averaging is what makes the guarantee work: every value inside the average's window is a
 /// window minimum that already contains `required[n - L]`, so the mean cannot exceed it either.
-/// Applying that mean to `x[n - L]` therefore always lands at or below the ceiling. Sample values
-/// are bounded exactly, and the clamp backs that up; the stretch between samples is bounded as
-/// closely as a gain that moves smoothly across a few samples allows.
+/// Applying that mean to `x[n - L]` therefore keeps sample values below the internal target.
+/// The clamp backs that up; a 0.1 dB guard band covers small differences between the finite FIR
+/// estimate, an independent reconstruction and the gain moving between adjacent samples.
 ///
 /// The steps above hold gains worked out against one ceiling. When the ceiling changes they are
 /// worked out again from the peaks they came from, which are kept for exactly that: otherwise a
@@ -73,8 +67,8 @@ pub struct Limiter {
     sample_rate: f32,
     lookahead: usize,
     lines: Vec<DelayLine>,
-    /// The last four driven samples per channel, oldest first: the interpolation's support.
-    recent: Vec<[f32; 4]>,
+    /// The last 16 driven samples per channel, oldest first: the FIR's support.
+    recent: Vec<[f32; TAPS]>,
     /// The loudest interpolated peak, across channels, just before the sample being judged.
     preceding: f32,
     minimum: SlidingMinimum,
@@ -195,7 +189,7 @@ impl Effect for Limiter {
         PluginDescriptor::effect(
             "auris.fx.limiter",
             "Limiter",
-            "Look-ahead brickwall limiter with a guaranteed output ceiling",
+            "Look-ahead limiter with four-times oversampled peak detection",
             PluginCategory::Dynamics,
         )
     }
@@ -219,7 +213,7 @@ impl Effect for Limiter {
         self.lines
             .resize_with(ctx.channel_count.max(1), || DelayLine::new(capacity));
         self.recent.clear();
-        self.recent.resize(ctx.channel_count.max(1), [0.0; 4]);
+        self.recent.resize(ctx.channel_count.max(1), [0.0; TAPS]);
         self.preceding = 0.0;
         self.hold = 1.0;
         self.history.clear();
@@ -232,7 +226,7 @@ impl Effect for Limiter {
         for line in &mut self.lines {
             line.reset();
         }
-        self.recent.fill([0.0; 4]);
+        self.recent.fill([0.0; TAPS]);
         self.preceding = 0.0;
         self.minimum.reset();
         self.average.reset();
@@ -250,7 +244,7 @@ impl Effect for Limiter {
         }
 
         let input_gain = db_to_gain(self.params.at(P_INPUT_DB));
-        let ceiling = db_to_gain(self.params.at(P_CEILING_DB));
+        let ceiling = db_to_gain(self.params.at(P_CEILING_DB) - TRUE_PEAK_HEADROOM_DB);
         let release = one_pole_coefficient(
             self.params.at(P_RELEASE_MS) / MILLISECONDS_PER_SECOND,
             self.sample_rate,
@@ -261,9 +255,8 @@ impl Effect for Limiter {
         }
 
         for frame in 0..frames {
-            // The sample judged now is the one `DETECTION_DELAY` frames back, `recent[1]` once
-            // this frame is in: its own value, the stretch after it (complete now that two more
-            // samples have arrived) and the stretch before it (measured on the previous frame).
+            // The sample judged now is `DETECTION_DELAY` frames back. The FIR can now inspect
+            // the interval after it; the preceding interval was measured on the previous frame.
             let mut peak = self.preceding;
             let mut following = 0.0f32;
             for (channel, recent) in buffer
@@ -273,13 +266,10 @@ impl Effect for Limiter {
                 .take(channels)
             {
                 let driven = crate::settled(channel[frame] * input_gain);
-                *recent = [recent[1], recent[2], recent[3], driven];
-                let [before, judged, after, beyond] = *recent;
-                for step in INTERSAMPLE_STEPS {
-                    following =
-                        following.max(catmull_rom(before, judged, after, beyond, step).abs());
-                }
-                peak = peak.max(judged.abs());
+                recent.copy_within(1.., 0);
+                recent[TAPS - 1] = driven;
+                following = following.max(true_peak::interval_peak(recent));
+                peak = peak.max(recent[TAPS - DETECTION_DELAY - 1].abs());
             }
             peak = peak.max(following);
             self.preceding = following;
@@ -322,19 +312,6 @@ impl Effect for Limiter {
 #[inline]
 fn required_gain(peak: f32, ceiling: f32) -> f32 {
     if peak > ceiling { ceiling / peak } else { 1.0 }
-}
-
-/// Catmull-Rom interpolation between `p1` and `p2`, with `p0` and `p3` as the outer control points.
-///
-/// Written out exactly as `auris_gpu::analysis` writes it, order of operations included, so the
-/// limiter's idea of a peak between samples is the meter's to within f32 rounding.
-#[inline]
-fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
-    let a = 2.0 * p1;
-    let b = p2 - p0;
-    let c = 2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3;
-    let d = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
-    0.5 * (a + b * t + c * t * t + d * t * t * t)
 }
 
 /// Minimum of the last `window` pushed values, in amortised constant time.
@@ -468,13 +445,13 @@ mod tests {
     #[test]
     fn latency_is_the_lookahead() {
         let plugin = prepared();
-        // 2 ms at 48 kHz, and the two samples detection runs behind.
-        assert_eq!(plugin.latency_frames(), 98);
-        assert_eq!(plugin.tail_frames(), 98);
+        // 2 ms at 48 kHz, plus the FIR support after the judged sample.
+        assert_eq!(plugin.latency_frames(), 104);
+        assert_eq!(plugin.tail_frames(), 104);
 
         let mut at_44k = Limiter::new();
         at_44k.prepare(&PrepareContext::new(44_100.0, 512, 2));
-        assert_eq!(at_44k.latency_frames(), 90);
+        assert_eq!(at_44k.latency_frames(), 96);
     }
 
     #[test]
@@ -482,7 +459,7 @@ mod tests {
         let mut plugin = Limiter::new();
         plugin.prepare(&PrepareContext::new(1.0e12, 512, 2));
 
-        assert_eq!(plugin.latency_frames(), 1_538);
+        assert_eq!(plugin.latency_frames(), 1_544);
         assert_eq!(plugin.lines.len(), 2);
     }
 
@@ -513,18 +490,20 @@ mod tests {
 
     /// The meter's estimate of the highest point between samples, as `verify_render` reports it.
     fn true_peak(buffer: &AudioBuffer) -> f32 {
-        let mut peak = 0.0f32;
-        for samples in buffer.channels() {
-            let at = |index: usize| samples[index.min(samples.len() - 1)];
-            for (index, sample) in samples.iter().enumerate() {
-                peak = peak.max(sample.abs());
-                let (p0, p2, p3) = (at(index.saturating_sub(1)), at(index + 1), at(index + 2));
-                for step in INTERSAMPLE_STEPS {
-                    peak = peak.max(catmull_rom(p0, *sample, p2, p3, step).abs());
-                }
-            }
-        }
-        peak
+        buffer.channels().iter().fold(0.0f32, |peak, samples| {
+            peak.max(true_peak::measure_channel(samples))
+        })
+    }
+
+    /// Measures intervals whose entire FIR support is inside the supplied live block.
+    fn interior_true_peak(buffer: &AudioBuffer) -> f32 {
+        buffer.channels().iter().fold(0.0f32, |peak, samples| {
+            (7..samples.len().saturating_sub(8)).fold(peak, |peak, index| {
+                let window = std::array::from_fn(|offset| samples[index + offset - 7]);
+                peak.max(samples[index].abs())
+                    .max(true_peak::interval_peak(&window))
+            })
+        })
     }
 
     #[test]
@@ -543,16 +522,42 @@ mod tests {
                 .collect();
             let mut buffer = AudioBuffer::from_planar(vec![samples.clone(), samples], SR).unwrap();
             plugin.process(&mut buffer, &context(48_000));
-            let measured = true_peak(&buffer);
+            let measured = interior_true_peak(&buffer);
             assert!(
                 gain_to_db(measured) <= ceiling_db + 0.01,
                 "ceiling {ceiling_db} dB: true peak {} dBTP",
                 gain_to_db(measured)
             );
             // Held there, not ducked far below it.
-            assert!(gain_to_db(true_peak(&buffer.slice(24_000, 24_000))) > ceiling_db - 0.5);
+            assert!(
+                gain_to_db(interior_true_peak(&buffer.slice(24_000, 24_000))) > ceiling_db - 0.5
+            );
             assert!(buffer.peak() <= ceiling);
         }
+    }
+
+    #[test]
+    fn rendered_transient_is_limited_even_when_its_samples_are_below_the_ceiling() {
+        // Consecutive samples around the former synthwave export's +0.3 dBTP crest. Its
+        // samples and the old Catmull-Rom estimate were below the -0.3 dBFS ceiling.
+        let transient = [
+            -0.3977586, -0.0878502, -0.3198856, -0.9146782, -0.8444753, -0.0558680, -0.3177444,
+            -0.770285,
+        ];
+        let mut samples = vec![0.0f32; 512];
+        samples.extend(transient);
+        samples.resize(2048, 0.0);
+        assert!(true_peak::measure_channel(&samples) > 1.0);
+
+        let mut plugin = prepared();
+        plugin.set_param_by_key("ceiling_db", -0.3);
+        let mut buffer = AudioBuffer::from_planar(vec![samples], SR).unwrap();
+        plugin.process(&mut buffer, &context(2048));
+        assert!(
+            gain_to_db(interior_true_peak(&buffer)) <= -0.3,
+            "true peak after limiting: {} dBTP",
+            gain_to_db(interior_true_peak(&buffer))
+        );
     }
 
     #[test]
@@ -574,7 +579,7 @@ mod tests {
             plugin.set_param_by_key("ceiling_db", second);
             let mut buffer = block(4_096);
             plugin.process(&mut buffer, &context(4_096));
-            let measured = gain_to_db(true_peak(&buffer));
+            let measured = gain_to_db(interior_true_peak(&buffer));
             assert!(
                 measured <= second + 0.01,
                 "{first} dB -> {second} dB: true peak {measured} dBTP"
@@ -656,12 +661,12 @@ mod tests {
     #[test]
     fn limiting_is_gain_reduction_rather_than_clipping() {
         // `an_overloud_sine_never_passes_the_ceiling` would also pass for a plain hard clipper,
-        // so pin down *how* the ceiling is met: a limiter that reduces gain lets the waveform
-        // touch the ceiling only at its peaks, while a clipper flattens the top of every cycle.
+        // so pin down *how* the internal target is met: a limiter that reduces gain lets the
+        // waveform touch it only at its peaks, while a clipper flattens every cycle's top.
         let mut plugin = prepared();
         plugin.set_param_by_key("ceiling_db", -0.3);
         plugin.set_param_by_key("release_ms", 50.0);
-        let ceiling = db_to_gain(-0.3);
+        let ceiling = db_to_gain(-0.3 - TRUE_PEAK_HEADROOM_DB);
 
         // 4x over the ceiling: a clipper would pin |sin| >= 0.24, i.e. 84 % of every cycle.
         let mut buffer = sine(48_000, 220.0, 4.0);
@@ -679,7 +684,7 @@ mod tests {
         );
         assert!(
             buffer.slice(24_000, 24_000).peak() > ceiling * 0.99,
-            "the limiter never reached its ceiling at all"
+            "the limiter never reached its internal target"
         );
     }
 

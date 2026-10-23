@@ -732,6 +732,7 @@ name = "auris-gpu"
 version = "0.9.0"
 dependencies = [
  "auris-core",
+ "auris-dsp",
  "bytemuck",
  "log",
  "pollster 1.0.1",

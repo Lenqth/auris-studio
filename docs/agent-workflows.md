@@ -388,7 +388,7 @@ tails. Both comparison excerpts use one common protective attenuation when neede
 the -1 dB estimated true-peak ceiling. Quiet audio is never increased. The source mix
 stays unchanged, and source overloads remain visible in the measurements. Temporary
 16-bit WAVs are decoded and measured before submission, then removed after the request.
-The true-peak estimate uses 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+The true-peak estimate uses 4x FIR interpolation, not a certified BS.1770 meter.
 
 Listening uses the `edit_project.listen` network permission. Existing exact approvals,
 allow/deny rules and automatic review apply. It adds no Undo checkpoint. Rendering,

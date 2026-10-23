@@ -9,6 +9,7 @@
 
 use auris_core::AudioBuffer;
 use auris_core::param::{db_to_gain, gain_to_db};
+use auris_dsp::true_peak;
 
 use crate::context::GpuContext;
 
@@ -25,9 +26,6 @@ const SHADER: &str = include_str!("shaders/loudness.wgsl");
 /// with the square root of the term count, so 4096 terms cost about 4e-6, and the host adds
 /// the partial sums back together in f64.
 const SAMPLES_PER_INVOCATION: usize = 4096;
-
-/// Samples the interpolator reads past the sample it is working on.
-const LOOK_AHEAD: usize = 2;
 
 /// Uniform block handed to the loudness kernel. Must match `Params` in `loudness.wgsl`.
 #[repr(C)]
@@ -48,12 +46,8 @@ pub struct LoudnessAnalysis {
     pub rms: f32,
     /// Estimated largest value of the reconstructed continuous signal.
     ///
-    /// A signal can exceed its highest *sample* between samples, which is what clips a
-    /// downstream converter even though the file itself measures below 0 dBFS. This is an
-    /// estimate, not a BS.1770-4 true-peak meter: it reconstructs with 4x Catmull-Rom
-    /// interpolation rather than the standard's 4x FIR upsampler, so it tracks the direction
-    /// and rough size of the overshoot while typically reading a little low. It is never less
-    /// than [`Self::peak`].
+    /// A four-times oversampled, 16-tap FIR measures peaks between stored samples. As with
+    /// other finite FIR meters this is an estimate; it is never less than [`Self::peak`].
     pub true_peak_estimate: f32,
 }
 
@@ -121,49 +115,24 @@ pub fn analyze_loudness_cpu(buffer: &AudioBuffer) -> LoudnessAnalysis {
     let mut count = 0usize;
 
     for samples in buffer.channels() {
-        for (index, &value) in samples.iter().enumerate() {
+        for &value in samples {
             peak = peak.max(value.abs());
             sum_squares += (value * value) as f64;
-
-            let previous = sample_clamped(samples, index.saturating_sub(1));
-            let next = sample_clamped(samples, index + 1);
-            let after = sample_clamped(samples, index + 2);
-            for step in [0.25, 0.5, 0.75] {
-                true_peak = true_peak.max(catmull_rom(previous, value, next, after, step).abs());
-            }
         }
+        true_peak = true_peak.max(true_peak::measure_channel(samples));
         count += samples.len();
     }
 
     LoudnessAnalysis::from_totals(peak, sum_squares, count, true_peak)
 }
 
-/// Reads a sample, clamping to the last one. Matches `sample_at` in `loudness.wgsl`.
-fn sample_clamped(samples: &[f32], index: usize) -> f32 {
-    match samples.last() {
-        Some(&last) => samples.get(index).copied().unwrap_or(last),
-        None => 0.0,
-    }
-}
-
-/// Catmull-Rom interpolation between `p1` and `p2`, with `p0` and `p3` as the outer control
-/// points. Matches `catmull_rom` in `loudness.wgsl` exactly, including the order of operations,
-/// so the two implementations agree to within f32 rounding.
-fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
-    let a = 2.0 * p1;
-    let b = p2 - p0;
-    let c = 2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3;
-    let d = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
-    0.5 * (a + b * t + c * t * t + d * t * t * t)
-}
-
 impl GpuContext {
-    /// Measures peak, RMS and estimated true peak with a WGSL compute shader.
+    /// Measures sample peak and RMS on the GPU, then true peak on the CPU.
     ///
     /// Each invocation reduces a fixed span of samples to a partial
-    /// (min, max, sum of squares, true peak); the host folds the partials together, summing in
-    /// `f64`. Channels longer than the device's storage-binding limit are split into chunks
-    /// that overlap by a sample on each side so the interpolator never sees a false edge.
+    /// (min, max, sum of squares); the host folds the partials together, summing in `f64`.
+    /// The FIR true-peak measurement runs on the CPU over each complete channel so GPU chunk
+    /// boundaries cannot change the result.
     ///
     /// Returns `None` on any wgpu failure; use [`analyze_loudness`] to fall back automatically.
     pub fn analyze_loudness(&self, buffer: &AudioBuffer) -> Option<LoudnessAnalysis> {
@@ -174,9 +143,8 @@ impl GpuContext {
             return Some(LoudnessAnalysis::silent());
         }
 
-        // Whole invocations only, and leave room for the samples the overlap adds.
-        let headroom = self.max_input_samples().saturating_sub(LOOK_AHEAD + 1);
-        let per_chunk = (headroom / SAMPLES_PER_INVOCATION).min(self.max_output_slots())
+        let per_chunk = (self.max_input_samples() / SAMPLES_PER_INVOCATION)
+            .min(self.max_output_slots())
             * SAMPLES_PER_INVOCATION;
         if per_chunk == 0 {
             log::debug!("auris-gpu: device limits leave no room for a loudness dispatch");
@@ -192,26 +160,22 @@ impl GpuContext {
             let mut start = 0;
             while start < samples.len() {
                 let active = per_chunk.min(samples.len() - start);
-                // Overlap by one sample behind and two ahead so that every interpolation this
-                // dispatch performs sees the same neighbours the CPU reference would.
-                let lead = usize::from(start > 0);
-                let tail = LOOK_AHEAD.min(samples.len() - start - active);
-                let chunk = samples.get(start - lead..start + active + tail)?;
+                let chunk = samples.get(start..start + active)?;
 
                 let params = Params {
                     sample_count: chunk.len() as u32,
-                    first_active: lead as u32,
-                    last_active: (lead + active) as u32,
+                    first_active: 0,
+                    last_active: active as u32,
                     span: SAMPLES_PER_INVOCATION as u32,
                 };
                 let slots = active.div_ceil(SAMPLES_PER_INVOCATION);
                 for slot in self.run_reduction(LABEL, SHADER, chunk, params, slots)? {
                     peak = peak.max(slot[0].abs()).max(slot[1].abs());
                     sum_squares += slot[2] as f64;
-                    true_peak = true_peak.max(slot[3]);
                 }
                 start += active;
             }
+            true_peak = true_peak.max(true_peak::measure_channel(samples));
             count += samples.len();
         }
 
@@ -280,13 +244,12 @@ mod tests {
 
     #[test]
     fn constant_signal_has_no_inter_sample_overshoot() {
-        // Catmull-Rom through four equal control points is that constant, so a DC buffer must
-        // not invent an overshoot.
+        // The phase taps are unity-normalised, so a DC buffer stays at its sample level.
         let buffer = AudioBuffer::from_planar(vec![vec![0.5; 64]], 48_000.0).unwrap();
         let analysis = analyze_loudness_cpu(&buffer);
         assert_eq!(analysis.peak, 0.5);
         assert_eq!(analysis.rms, 0.5);
-        assert_eq!(analysis.true_peak_estimate, 0.5);
+        assert!((analysis.true_peak_estimate - 0.5).abs() < 1e-6);
         // 0.5 -> 1.0 is exactly +6.0206 dB, so normalising to 0 dBFS doubles the signal.
         assert!((analysis.normalization_gain(0.0) - 2.0).abs() < 1e-4);
         assert!((analysis.normalization_gain(-6.0206) - 1.0).abs() < 1e-4);
@@ -295,8 +258,8 @@ mod tests {
     #[test]
     fn inter_sample_peak_exceeds_the_sample_peak() {
         // A quarter-rate sine offset by 45 degrees samples at +-0.70711 while the underlying
-        // waveform reaches 1.0, the classic inter-sample peak case. Catmull-Rom recovers
-        // 0.883883 of that: 0.5 * (2*p1 + (p2-p0)/2 - (2*p0-5*p1+4*p2-p3)/4) at t = 0.5.
+        // waveform reaches 1.0. FIR endpoint ringing may read a little higher on this finite
+        // block, but the meter must recover the missing crest.
         let buffer = sine(64, 4.0, 1.0, std::f32::consts::FRAC_PI_4);
         let analysis = analyze_loudness_cpu(&buffer);
         assert!(
@@ -304,13 +267,13 @@ mod tests {
             "{analysis:?}"
         );
         assert!(
-            (analysis.true_peak_estimate - 0.883_883_5).abs() < 1e-4,
+            (0.99..1.05).contains(&analysis.true_peak_estimate),
             "{analysis:?}"
         );
         assert!(analysis.true_peak_estimate > analysis.peak);
-        // The overshoot is about 1.94 dB above the sample peak.
+        // The overshoot is about 3 dB above the sample peak.
         assert!(
-            (analysis.true_peak_db() - analysis.peak_db() - 1.938).abs() < 1e-2,
+            (2.9..3.4).contains(&(analysis.true_peak_db() - analysis.peak_db())),
             "{analysis:?}"
         );
     }
@@ -377,14 +340,11 @@ mod tests {
         let Some(mut gpu) = GpuContext::new() else {
             return;
         };
-        // A real adapter swallows a whole channel in one dispatch, so the overlap logic — one
-        // sample behind and two ahead, so the interpolator never meets a false edge — is dead
-        // code in the other GPU test. One output slot per dispatch forces a chunk every
-        // SAMPLES_PER_INVOCATION samples instead.
+        // One output slot per dispatch forces a chunk every SAMPLES_PER_INVOCATION samples.
         gpu.constrain_for_test(usize::MAX, 1);
 
         // Deliberately full of inter-sample peaks: a quarter-rate sine at 45 degrees overshoots
-        // by 1.94 dB. The length is not a multiple of the chunk size. The second channel stays
+        // by about 3 dB. The length is not a multiple of the chunk size. The second channel stays
         // quieter than the first channel's *sample* peak of 1/sqrt(2), so the overshoot is what
         // sets `true_peak_estimate` for the whole buffer.
         let frames = 3 * SAMPLES_PER_INVOCATION + 1_234;
@@ -421,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn chunk_overlap_preserves_an_overshoot_that_straddles_the_boundary() {
+    fn gpu_chunking_preserves_an_overshoot_that_straddles_the_boundary() {
         let Some(mut gpu) = GpuContext::new() else {
             return;
         };
@@ -434,12 +394,9 @@ mod tests {
         // everywhere and the buffer maximum survives losing one sample's worth of it. So plant
         // exactly one overshoot in an otherwise silent buffer and put it on the seam.
         //
-        // `-A, A, A, -A` is the maximal Catmull-Rom case: it reaches 1.25 * A halfway between
-        // the two middle samples. Placed at `edge - 2`, the peak is evaluated at `edge - 1` —
-        // the last sample chunk 0 reduces — and needs `edge` and `edge + 1`, which only exist
-        // in that dispatch because of the two-sample look-ahead. Placed at `edge - 1`, the peak
-        // is evaluated at `edge`, the first sample chunk 1 reduces, and needs `edge - 1`, which
-        // is there only because of the one-sample look-behind.
+        // `-A, A, A, -A` has a large reconstructed overshoot. Place it on each side of the
+        // dispatch boundary to confirm that the host's complete-channel FIR measurement agrees
+        // with the CPU reference regardless of GPU chunking.
         const A: f32 = 0.8;
         for (name, first) in [("look-ahead", edge - 2), ("look-behind", edge - 1)] {
             let mut samples = vec![0.0f32; 2 * SAMPLES_PER_INVOCATION + 500];
@@ -450,16 +407,14 @@ mod tests {
             let buffer = AudioBuffer::from_planar(vec![samples], 48_000.0).unwrap();
 
             let expected = analyze_loudness_cpu(&buffer);
-            // The whole point of the buffer: its true peak is that one interpolated overshoot,
-            // 25% above the highest sample. Dropping a neighbour drops it to 1.1406 * A, which
-            // is far outside the 1e-4 tolerance below.
+            // The FIR peak is substantially above the highest stored sample.
             assert!(
                 (expected.peak - A).abs() < 1e-6,
                 "{name}: {expected:?} should peak at the sample value"
             );
             assert!(
-                (expected.true_peak_estimate - 1.25 * A).abs() < 1e-5,
-                "{name}: {expected:?} should overshoot to 1.25 * A"
+                expected.true_peak_estimate > 1.5 * A,
+                "{name}: {expected:?} should overshoot"
             );
 
             let actual = gpu

@@ -21,6 +21,35 @@
 
 use std::sync::Once;
 
+use crate::appearance::Appearance;
+
+/// Serialises tests that save the process-wide appearance preferences and restores them.
+pub(crate) struct AppearanceTestGuard {
+    _writer: std::sync::MutexGuard<'static, ()>,
+    original: Appearance,
+}
+
+static APPEARANCE_WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+impl AppearanceTestGuard {
+    /// Locks the preference file and remembers its current contents.
+    pub(crate) fn new() -> Self {
+        let writer = APPEARANCE_WRITER.lock().unwrap();
+        Self {
+            _writer: writer,
+            original: Appearance::load(),
+        }
+    }
+}
+
+impl Drop for AppearanceTestGuard {
+    fn drop(&mut self) {
+        self.original
+            .save()
+            .expect("restore isolated appearance after the test");
+    }
+}
+
 use auris_session::prelude::*;
 use gpui::{
     Entity, Modifiers, MouseButton, Pixels, Point, TestAppContext, VisualTestContext, point, px,

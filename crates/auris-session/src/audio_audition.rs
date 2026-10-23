@@ -62,7 +62,7 @@ pub struct ListeningResult {
 pub struct AuditionMeasurements {
     /// Sample peak before protecting the audition file, in dBFS (silence is -120).
     pub source_peak_dbfs: f32,
-    /// Estimated true peak before audition protection; 4x Catmull-Rom, not a BS.1770 meter.
+    /// Estimated true peak before audition protection; 4x FIR, not a certified BS.1770 meter.
     pub source_true_peak_estimate_dbfs: f32,
     /// Number of source samples at or above full scale; protection does not repair the mix.
     pub source_full_scale_samples: usize,

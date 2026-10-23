@@ -73,6 +73,7 @@ pub mod spectrogram;
 pub mod spectrum;
 pub mod stretch;
 pub mod timbre;
+pub mod true_peak;
 
 pub use adsr::{Adsr, EnvelopeStage};
 pub use biquad::{Biquad, BiquadCoefficients};

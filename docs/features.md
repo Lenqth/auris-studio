@@ -839,7 +839,7 @@ second, which is close to how a General MIDI patch already behaves.
 | `auris.fx.reverb` | Reverb | Freeverb-style comb/all-pass network |
 | `auris.fx.distortion` | Distortion | Soft clip, hard clip, wavefolder, bitcrusher |
 | `auris.fx.guitar_amp` | Guitar Amp | Eight-times oversampled saturation, tone stack, open/closed speaker coloration |
-| `auris.fx.limiter` | Limiter | Lookahead, so the ceiling is actually a ceiling — between samples too, as the true-peak meter reads it |
+| `auris.fx.limiter` | Limiter | Lookahead with 4x FIR peak detection and 0.1 dB guard band for inter-sample peaks |
 
 Effects can be chained on any track and on the master bus. A chain that looks ahead — the limiter
 does — hands its audio back late, so every other track is held back to match it and the parts stay

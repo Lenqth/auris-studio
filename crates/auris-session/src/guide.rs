@@ -164,7 +164,7 @@
 //! Measurements describe both the source and the exact decoded 16-bit WAV; audition
 //! protection never changes project faders or conceals a source overload. Temporary files
 //! live only for the request, and encoded bytes are hashed. The true-peak estimate uses
-//! 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+//! 4x FIR interpolation, not a certified BS.1770 meter.
 //!
 //! Cancellation is checked around render, encode and network stages. An HTTP request already
 //! in flight can finish up to its bounded timeout; stopped or stale work is never adopted.
