@@ -10,6 +10,7 @@ pub(super) enum Section {
     Language,
     Pointer,
     Autosave,
+    AutoUpdate,
     Snap,
     Dictionary,
     Singer,
@@ -24,12 +25,13 @@ pub(super) enum Section {
 }
 
 impl Section {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 17] = [
         Self::Agent,
         Self::Appearance,
         Self::Language,
         Self::Pointer,
         Self::Autosave,
+        Self::AutoUpdate,
         Self::Snap,
         Self::Dictionary,
         Self::Singer,
@@ -101,6 +103,7 @@ impl Section {
                 Key::PointerNote,
             ],
             Self::Autosave => &[Key::Autosave, Key::AutosaveNote],
+            Self::AutoUpdate => &[Key::AutoUpdate, Key::AutoUpdateNote],
             Self::Snap => &[Key::SnapNoteLengths, Key::SnapNoteLengthsNote],
             Self::Dictionary => &[Key::JapaneseDictionaryHeading, Key::JapaneseDictionaryNote],
             Self::Singer => &[
@@ -539,6 +542,8 @@ mod tests {
         assert!(matches("ミキサー", Section::Panels.keys()));
         assert!(matches("UI フォント", Section::Appearance.keys()));
         assert!(matches(" \t", Section::Autosave.keys()));
+        assert!(matches("automatic updates", Section::AutoUpdate.keys()));
+        assert!(matches("自動更新", Section::AutoUpdate.keys()));
         assert!(!matches("sample autosave", Section::Rate.keys()));
         assert!(!matches("unfindable-setting", Section::Panels.keys()));
     }

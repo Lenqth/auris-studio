@@ -91,11 +91,21 @@ jobs:
 
       - name: Build both architectures
         run: |
+          if cargo metadata --no-deps --format-version 1 --locked | grep -q '"name":"auris-update-helper"'; then
+            AURIS_UPDATE_HELPER=true
+          else
+            AURIS_UPDATE_HELPER=false
+          fi
+          echo "AURIS_UPDATE_HELPER=$AURIS_UPDATE_HELPER" >> "$GITHUB_ENV"
           for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            build_args=(--release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp)
+            if [ "${AURIS_UPDATE_HELPER}" = true ]; then
+              build_args+=(-p auris-update-helper)
+            fi
             if [ "$target" = x86_64-apple-darwin ] && [ -n "${ORT_INTEL_LIB_DIR:-}" ]; then
-              ORT_LIB_PATH="$ORT_INTEL_LIB_DIR" cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+              ORT_LIB_PATH="$ORT_INTEL_LIB_DIR" cargo build "${build_args[@]}"
             else
-              cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+              cargo build "${build_args[@]}"
             fi
           done
           arch -x86_64 target/x86_64-apple-darwin/release/auris help > /dev/null
@@ -107,8 +117,9 @@ jobs:
       - name: Fetch the shipped Japanese dictionary
         run: bash .release-tools/tools/fetch-dictionary.sh "$PWD/Dictionary"
 
-      # Keep all three executables inside one app bundle so installing or upgrading the app
-      # also installs the matching CLI and MCP server. Archive-root links keep portable use.
+      # Keep all four executables inside one app bundle so installing or upgrading the app
+      # also installs the matching CLI, MCP server and update helper. Archive-root links keep
+      # portable use.
       # Nothing is signed: this is a workflow with no certificate, and the release says what
       # Gatekeeper will make of that.
       - name: Assemble the archive
@@ -123,13 +134,20 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$plist"
 
-          for binary in auris-studio auris auris-mcp; do
+          binaries=(auris-studio auris auris-mcp)
+          if [ "${AURIS_UPDATE_HELPER:-false}" = true ]; then
+            binaries+=(auris-update-helper)
+          fi
+          for binary in "${binaries[@]}"; do
             lipo -create -output "$app/Contents/MacOS/$binary" \
               "target/aarch64-apple-darwin/release/$binary" \
               "target/x86_64-apple-darwin/release/$binary"
           done
           ln -s "Auris Studio.app/Contents/MacOS/auris" "$stage/auris"
           ln -s "Auris Studio.app/Contents/MacOS/auris-mcp" "$stage/auris-mcp"
+          if [ "${AURIS_UPDATE_HELPER:-false}" = true ]; then
+            ln -s "Auris Studio.app/Contents/MacOS/auris-update-helper" "$stage/auris-update-helper"
+          fi
 
           # The dictionary travels inside the app. The archive-root link keeps the old
           # portable layout usable without duplicating the files.
@@ -208,6 +226,10 @@ jobs:
           $metadataJson = cargo metadata --no-deps --format-version 1 --locked
           if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the checked-out Cargo workspace.' }
           $metadata = $metadataJson | ConvertFrom-Json
+          $helper = @($metadata.packages | Where-Object { $_.name -eq 'auris-update-helper' -and $_.id -in $metadata.workspace_members })
+          $hasHelper = $helper.Count -eq 1
+          $env:AURIS_UPDATE_HELPER = $hasHelper.ToString().ToLowerInvariant()
+          "AURIS_UPDATE_HELPER=$($env:AURIS_UPDATE_HELPER)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $asioFrontends = @(
             foreach ($name in $frontends) {
               $package = @($metadata.packages | Where-Object { $_.name -eq $name -and $_.id -in $metadata.workspace_members })
@@ -224,7 +246,11 @@ jobs:
           }
           foreach ($name in $frontends) { $buildArgs += @('-p', $name) }
           cargo @buildArgs
-          exit $LASTEXITCODE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($hasHelper) {
+            cargo build --release --locked -p auris-update-helper
+            exit $LASTEXITCODE
+          }
 
       - name: Fetch the shipped Japanese dictionary
         shell: pwsh
@@ -236,6 +262,9 @@ jobs:
           stage="auris-studio-${RELEASE_NAME}-windows-x86_64"
           mkdir -p "$stage"
           cp target/release/auris-studio.exe target/release/auris.exe target/release/auris-mcp.exe "$stage/"
+          if [ "${AURIS_UPDATE_HELPER:-false}" = true ]; then
+            cp target/release/auris-update-helper.exe "$stage/"
+          fi
           # Beside the binaries, which is the first place `auris_session::library` looks.
           cp -R Dictionary "$stage/Dictionary"
           cp README.md CHANGELOG.md LICENSE "$stage/"
@@ -272,7 +301,9 @@ jobs:
           $setup = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$installDir`"") -Wait -PassThru -WindowStyle Hidden
           if ($setup.ExitCode -ne 0) { throw "Installer exited with code $($setup.ExitCode)." }
           try {
-            foreach ($file in @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'Dictionary')) {
+            $files = @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'Dictionary')
+            if ($env:AURIS_UPDATE_HELPER -eq 'true') { $files += 'auris-update-helper.exe' }
+            foreach ($file in $files) {
               if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Missing installed file: $file" }
             }
             & (Join-Path $installDir 'auris.exe') help | Out-Null

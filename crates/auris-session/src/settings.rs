@@ -463,6 +463,11 @@ pub struct Settings {
     /// On unless turned off. The snapshot never replaces the user-chosen project file; see
     /// [`should_autosave`](crate::session::should_autosave).
     pub autosave: bool,
+    /// Check for and install desktop updates automatically when a release is available.
+    ///
+    /// On by default. Older settings files omit this field and receive the default so the
+    /// updater is enabled for existing installations as well.
+    pub auto_update: bool,
     /// Snap a note's right edge to the piano roll's editing grid while it is dragged.
     ///
     /// On by default. This is an editing preference rather than project data: two people can
@@ -528,6 +533,7 @@ impl Default for Settings {
             // and a settings file written before this field existed is filled in from exactly
             // this value.
             autosave: true,
+            auto_update: true,
             snap_note_lengths: true,
             piano_roll_grid: PianoRollGrid::default(),
             relative_note_snap: false,
@@ -896,6 +902,7 @@ mod tests {
         assert_eq!(settings.audio.host, None);
         assert_eq!(settings.audio.sample_rate, None);
         assert!(settings.snap_note_lengths);
+        assert!(settings.auto_update);
         assert_eq!(settings.piano_roll_grid, PianoRollGrid::Smart);
         assert!(!settings.relative_note_snap);
 
