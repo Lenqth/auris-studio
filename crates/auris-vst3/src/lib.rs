@@ -22,6 +22,7 @@ use auris_core::plugin::{
 };
 use crossbeam_queue::ArrayQueue;
 use thiserror::Error;
+use vst3_host::plugin::ProcessMode;
 use vst3_host::{
     BusAudioBuffers, BusDirection, MediaType, MidiChannel, MidiEvent, Parameter, Plugin, Vst3Host,
 };
@@ -740,12 +741,22 @@ impl Vst3Plugin {
     /// Creates an effect wrapper for the render graph.
     pub fn effect(&self) -> Result<Vst3Effect, Vst3Error> {
         self.service_teardowns();
-        Vst3Effect::new(&self.shared)
+        Vst3Effect::new(&self.shared, ProcessMode::Realtime)
+    }
+    /// Creates an effect wrapper for faster-than-realtime rendering.
+    pub fn offline_effect(&self) -> Result<Vst3Effect, Vst3Error> {
+        self.service_teardowns();
+        Vst3Effect::new(&self.shared, ProcessMode::Offline)
     }
     /// Creates an instrument wrapper for the render graph.
     pub fn instrument(&self) -> Result<Vst3Instrument, Vst3Error> {
         self.service_teardowns();
-        Vst3Instrument::new(&self.shared)
+        Vst3Instrument::new(&self.shared, ProcessMode::Realtime)
+    }
+    /// Creates an instrument wrapper for faster-than-realtime rendering.
+    pub fn offline_instrument(&self) -> Result<Vst3Instrument, Vst3Error> {
+        self.service_teardowns();
+        Vst3Instrument::new(&self.shared, ProcessMode::Offline)
     }
     /// Whether the plugin has a secondary input bus.
     pub fn wants_sidechain(&self) -> bool {
@@ -826,8 +837,8 @@ impl Vst3Effect {
         self.0.processing_failed
     }
 
-    fn new(shared: &Arc<Shared>) -> Result<Self, Vst3Error> {
-        Ok(Self(Bridge::new(shared)?))
+    fn new(shared: &Arc<Shared>, mode: ProcessMode) -> Result<Self, Vst3Error> {
+        Ok(Self(Bridge::new(shared, mode)?))
     }
 }
 
@@ -847,8 +858,8 @@ impl Vst3Instrument {
         self.0.processing_failed
     }
 
-    fn new(shared: &Arc<Shared>) -> Result<Self, Vst3Error> {
-        Ok(Self(Bridge::new(shared)?))
+    fn new(shared: &Arc<Shared>, mode: ProcessMode) -> Result<Self, Vst3Error> {
+        Ok(Self(Bridge::new(shared, mode)?))
     }
 }
 
@@ -877,7 +888,7 @@ struct Bridge {
 }
 
 impl Bridge {
-    fn new(shared: &Arc<Shared>) -> Result<Self, Vst3Error> {
+    fn new(shared: &Arc<Shared>, mode: ProcessMode) -> Result<Self, Vst3Error> {
         let state = shared
             .plugin
             .lock()
@@ -886,6 +897,9 @@ impl Bridge {
         let (mut plugin, _) =
             load_configured_plugin(&shared.path, &shared.class_id, &shared.prepare)?;
         plugin.load_state(&state)?;
+        if mode == ProcessMode::Offline {
+            plugin.set_process_mode(mode)?;
+        }
         // Capture the revision before its values. A concurrent publication after this load will
         // then leave a larger revision for the first render block to observe; reading the
         // revision afterwards could incorrectly declare a partly old snapshot up to date.
@@ -977,10 +991,30 @@ impl Bridge {
         })
     }
 
-    fn prepare(&mut self) {
+    fn prepare(&mut self, ctx: &PrepareContext) {
         if self.prepared || self.fatal_failure {
             return;
         }
+        let block_size = ctx.max_block_frames.max(1);
+        if self.plugin.sample_rate().to_bits() != ctx.sample_rate.to_bits()
+            || self.plugin.block_size() != block_size
+        {
+            let buffers = self
+                .plugin
+                .reconfigure(ctx.sample_rate, block_size)
+                .and_then(|()| self.plugin.create_bus_audio_buffers(block_size));
+            match buffers {
+                Ok(buffers) => {
+                    self.buffers = buffers;
+                    self.latency = self.plugin.latency_samples() as usize;
+                }
+                Err(error) => {
+                    self.fail(Vst3RenderFailure::from_host(&error));
+                    return;
+                }
+            }
+        }
+        self.prepare = *ctx;
         if let Err(error) = self
             .plugin
             .prepare_realtime_bus_processing(self.parameter_queue_capacity, PARAMETER_POINTS_PER_ID)
@@ -1331,8 +1365,8 @@ impl Effect for Vst3Effect {
     fn descriptor(&self) -> PluginDescriptor {
         self.0.descriptor.clone()
     }
-    fn prepare(&mut self, _ctx: &PrepareContext) {
-        self.0.prepare();
+    fn prepare(&mut self, ctx: &PrepareContext) {
+        self.0.prepare(ctx);
     }
     fn reset(&mut self) {
         self.0.reset_processing_state();
@@ -1370,8 +1404,8 @@ impl Instrument for Vst3Instrument {
     fn descriptor(&self) -> PluginDescriptor {
         self.0.descriptor.clone()
     }
-    fn prepare(&mut self, _ctx: &PrepareContext) {
-        self.0.prepare();
+    fn prepare(&mut self, ctx: &PrepareContext) {
+        self.0.prepare(ctx);
     }
     fn reset(&mut self) {
         self.0.reset_voices();

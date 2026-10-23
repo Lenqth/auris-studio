@@ -550,7 +550,7 @@ pub fn probe_drum_request(request: &DrumProbeRequest) -> Result<DrumKitAnalysis,
                     plugin.set_param(descriptor.id, *value)?;
                 }
             }
-            let mut instrument = plugin.instrument()?;
+            let mut instrument = plugin.offline_instrument()?;
             instrument.prepare(&prepare);
             let result = scan(&mut instrument, request, started, &mut || Ok(()));
             if instrument.processing_failed() {

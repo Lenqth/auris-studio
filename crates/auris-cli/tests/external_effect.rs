@@ -1,4 +1,4 @@
-//! Opt-in end-to-end rendering with an installed CLAP effect.
+//! Opt-in end-to-end rendering with installed CLAP and VST3 effects.
 
 use std::path::PathBuf;
 
@@ -8,10 +8,17 @@ use auris_session::{Session, SessionOptions};
 #[test]
 #[ignore = "requires AURIS_CLAP_EFFECT_SMOKE_PLUGIN to name an installed CLAP effect"]
 fn an_external_clap_effect_changes_a_session_render() {
-    let path = PathBuf::from(
-        std::env::var_os("AURIS_CLAP_EFFECT_SMOKE_PLUGIN")
-            .expect("AURIS_CLAP_EFFECT_SMOKE_PLUGIN must name a CLAP effect"),
-    );
+    external_effect("AURIS_CLAP_EFFECT_SMOKE_PLUGIN", false);
+}
+
+#[test]
+#[ignore = "requires AURIS_VST3_EFFECT_SMOKE_PLUGIN to name an installed VST3 effect"]
+fn an_external_vst3_effect_changes_a_session_render() {
+    external_effect("AURIS_VST3_EFFECT_SMOKE_PLUGIN", true);
+}
+
+fn external_effect(variable: &str, vst3: bool) {
+    let path = PathBuf::from(std::env::var_os(variable).expect("the plugin path is required"));
     let mut session = Session::new(SessionOptions::headless()).unwrap();
     let track = session
         .add_default_instrument_track("Effect probe")
@@ -28,16 +35,29 @@ fn an_external_clap_effect_changes_a_session_render() {
         .unwrap();
     assert!(baseline.peak() > 1.0e-5, "the source track must sound");
 
-    let effect = session
-        .hosted_plugins_in(&path)
-        .unwrap()
-        .into_iter()
-        .find(|info| info.kind == PluginKind::Effect)
-        .expect("the selected library must contain an effect");
-    eprintln!("rendering through {} {}", effect.vendor, effect.name);
-    session
-        .add_hosted_effect(Some(track), &path, &effect.clap_id)
-        .unwrap();
+    if vst3 {
+        let effect = session
+            .vst3_plugins_in(&path)
+            .unwrap()
+            .into_iter()
+            .find(|info| info.kind == PluginKind::Effect)
+            .expect("the selected bundle must contain an effect");
+        eprintln!("rendering through {} {}", effect.vendor, effect.name);
+        session
+            .add_vst3_effect(Some(track), &path, &effect.class_id)
+            .unwrap();
+    } else {
+        let effect = session
+            .hosted_plugins_in(&path)
+            .unwrap()
+            .into_iter()
+            .find(|info| info.kind == PluginKind::Effect)
+            .expect("the selected library must contain an effect");
+        eprintln!("rendering through {} {}", effect.vendor, effect.name);
+        session
+            .add_hosted_effect(Some(track), &path, &effect.clap_id)
+            .unwrap();
+    }
     let processed = session
         .render_job()
         .render(&OfflineOptions::default(), &mut RenderProgress::default())

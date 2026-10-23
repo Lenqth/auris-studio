@@ -346,6 +346,7 @@ impl Vst3Plugins {
         project: &Project,
         prepare: &PrepareContext,
         trust: &mut PluginTrust,
+        offline: bool,
     ) -> PlacedEffects {
         self.sweep();
         let wanted = effect_requests(project);
@@ -368,7 +369,13 @@ impl Vst3Plugins {
                         continue;
                     }
                 };
-                restore(slot, request.state).and_then(|()| slot.plugin.effect())
+                restore(slot, request.state).and_then(|()| {
+                    if offline {
+                        slot.plugin.offline_effect()
+                    } else {
+                        slot.plugin.effect()
+                    }
+                })
             };
             match rendered {
                 Ok(effect) => {
@@ -385,6 +392,7 @@ impl Vst3Plugins {
         project: &Project,
         prepare: &PrepareContext,
         trust: &mut PluginTrust,
+        offline: bool,
     ) -> PlacedInstruments {
         self.sweep();
         let wanted = instrument_requests(project);
@@ -406,7 +414,13 @@ impl Vst3Plugins {
                     continue;
                 }
             };
-            let rendered = restore(slot, request.state).and_then(|()| slot.plugin.instrument());
+            let rendered = restore(slot, request.state).and_then(|()| {
+                if offline {
+                    slot.plugin.offline_instrument()
+                } else {
+                    slot.plugin.instrument()
+                }
+            });
             match rendered {
                 Ok(instrument) => {
                     placed.insert(track, Box::new(instrument));
