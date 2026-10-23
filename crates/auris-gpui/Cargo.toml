@@ -42,6 +42,9 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 semver.workspace = true
 ureq.workspace = true
+hex.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
 # Decodes the file URLs macOS hands over when a project is double-clicked in Finder.
 url.workspace = true
 

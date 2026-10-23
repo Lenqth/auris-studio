@@ -26,10 +26,13 @@ SolidCompression=yes
 ChangesEnvironment=yes
 CloseApplications=yes
 
-; The staged directory also contains auris-update-helper.exe. Keeping the complete staged tree
-; here ensures the updater is replaced atomically with the desktop executable.
+; The helper is present in current releases and absent from historical tags that can be
+; repackaged through workflow_dispatch. Keep it conditional so recovery builds remain usable.
 [Files]
-Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "auris-update-helper.exe"; Flags: ignoreversion recursesubdirs createallsubdirs
+#ifexist "{#StageDir}\auris-update-helper.exe"
+Source: "{#StageDir}\auris-update-helper.exe"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 
 [Icons]
 Name: "{autoprograms}\Auris Studio"; Filename: "{app}\auris-studio.exe"

@@ -102,6 +102,9 @@ fn main() {
         window
             .update(cx, |view, _, cx| view.download_missing_soundfonts(cx))
             .ok();
+        window
+            .update(cx, |view, _, cx| view.start_auto_updates(cx))
+            .ok();
 
         // Quit is normally handled by the main window's view (`AurisApp::on_quit`) so an
         // unsaved document can stop it. But a Quit can also land where no view is listening —

@@ -1723,8 +1723,14 @@ pub struct AurisApp {
     pub(crate) menu_bar: Option<OpenMenu>,
     /// The open rename sheet, if any.
     pub(crate) prompt: Option<Prompt>,
-    /// Prevents duplicate network checks while a manual update request is running.
-    pub(crate) checking_updates: bool,
+    /// Background release check, verified download, or an update awaiting application.
+    pub(crate) update_phase: crate::ui::updates::UpdatePhase,
+    /// Rejects late results from update work that was canceled or superseded.
+    pub(crate) update_generation: u64,
+    /// Reopen after applying only when the user chose Restart and Update.
+    pub(crate) restart_after_update: bool,
+    /// Prevents duplicate helper processes if quit callbacks are repeated.
+    update_helper_started: bool,
     /// Crash-recovery snapshots discovered before this session was created, newest first.
     ///
     /// Discard walks this queue during the current launch. Recover and Cancel stop asking, so
@@ -1946,6 +1952,17 @@ impl AurisApp {
     /// Builds the application, starting audio and opening an empty document.
     pub fn new(cx: &mut Context<Self>) -> Self {
         cx.on_app_quit(|this, cx| {
+            if !this.update_helper_started
+                && let crate::ui::updates::UpdatePhase::Ready(update) = &this.update_phase
+            {
+                this.update_helper_started = true;
+                if let Err(error) =
+                    crate::update_check::spawn_update_helper(update, this.restart_after_update)
+                {
+                    log::error!("could not start update helper: {error}");
+                    crate::update_check::record_update_launch_failure(&error);
+                }
+            }
             let complete = this.flush_conversation_storage();
             cx.background_executor().spawn(async move {
                 if let Some(complete) = complete {
@@ -2167,7 +2184,10 @@ impl AurisApp {
             menu: None,
             menu_bar: None,
             prompt: None,
-            checking_updates: false,
+            update_phase: crate::ui::updates::UpdatePhase::Idle,
+            update_generation: 0,
+            restart_after_update: false,
+            update_helper_started: false,
             recovery_queue,
             palette: None,
             plugin_window: None,
@@ -3401,6 +3421,7 @@ impl AurisApp {
         let language = self.settings.language;
         let pointer = self.pointer;
         let autosave = self.session.autosave_enabled();
+        let auto_update = self.settings.auto_update;
         let snap_note_lengths = self.settings.snap_note_lengths;
         let toolbar = self.settings.toolbar.clone();
         let dictionary = self.settings.japanese_dictionary.clone();
@@ -3431,6 +3452,7 @@ impl AurisApp {
                         language,
                         pointer,
                         autosave,
+                        auto_update,
                         snap_note_lengths,
                         toolbar,
                         dictionary,

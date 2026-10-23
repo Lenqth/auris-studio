@@ -89,6 +89,8 @@ pub struct SettingsWindow {
     language: Language,
     /// Whether the document is written back over itself as it changes.
     autosave: bool,
+    /// Whether release updates are checked and installed automatically.
+    auto_update: bool,
     /// Whether dragging a note's right edge rounds its duration to the editing grid.
     snap_note_lengths: bool,
     toolbar: ToolbarPreferences,
@@ -168,6 +170,7 @@ impl SettingsWindow {
         language_preference: Option<Language>,
         pointer: PointerGestures,
         autosave: bool,
+        auto_update: bool,
         snap_note_lengths: bool,
         toolbar: ToolbarPreferences,
         japanese_dictionary: Option<std::path::PathBuf>,
@@ -186,6 +189,7 @@ impl SettingsWindow {
                 let main = main.read(cx);
                 let panels = main.panels.clone();
                 let voice_paths = main.settings.voice_paths.clone();
+                let auto_update = main.settings.auto_update;
                 let mut changed = false;
                 if this.panels != panels {
                     this.panels = panels;
@@ -193,6 +197,10 @@ impl SettingsWindow {
                 }
                 if this.voice_paths != voice_paths {
                     this.voice_paths = voice_paths;
+                    changed = true;
+                }
+                if this.auto_update != auto_update {
+                    this.auto_update = auto_update;
                     changed = true;
                 }
                 if changed {
@@ -217,6 +225,7 @@ impl SettingsWindow {
             language_preference,
             language: Language::resolve(language_preference),
             autosave,
+            auto_update,
             snap_note_lengths,
             toolbar,
             japanese_dictionary,
@@ -561,6 +570,26 @@ impl SettingsWindow {
                     )))
                     .child(note(self.t(Key::AutosaveNote), &theme))
             })
+            .when(self.matches_section(Section::AutoUpdate), |view| {
+                view.child(divider(&theme))
+                    .child(section_title(self.t(Key::AutoUpdate), &theme))
+                    .child(div().flex().gap_1().child(button(
+                        "auto-update",
+                        self.t(if self.auto_update {
+                            Key::ValueOn
+                        } else {
+                            Key::ValueOff
+                        }),
+                        ButtonStyle::Normal,
+                        self.auto_update,
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.apply_auto_update(!this.auto_update, cx);
+                        }),
+                    )))
+                    .child(note(self.t(Key::AutoUpdateNote), &theme))
+            })
             .when(self.matches_section(Section::Snap), |view| {
                 view.child(divider(&theme))
                     .child(section_title(self.t(Key::SnapNoteLengths), &theme))
@@ -825,6 +854,15 @@ impl SettingsWindow {
     fn apply_autosave(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.autosave = enabled;
         let _ = self.app.update(cx, |app, _| app.apply_autosave(enabled));
+        cx.notify();
+    }
+
+    /// Hands the automatic update choice to the application and remembers it.
+    fn apply_auto_update(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.auto_update = enabled;
+        let _ = self
+            .app
+            .update(cx, |app, cx| app.apply_auto_update(enabled, cx));
         cx.notify();
     }
 
