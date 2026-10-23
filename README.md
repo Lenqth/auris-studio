@@ -32,6 +32,7 @@ platform setup. See [physical instruments](docs/physical-instruments.md) for the
 - [Features and usage](docs/features.md)
 - [Automatic composition](docs/composition.md)
 - [Agent and MCP workflows](docs/agent-workflows.md)
+- [Installing the Auris composition agent skill](docs/agent-skills.md)
 - [Singing backends](docs/singing-backends.md)
 - [Development](docs/development.md) and [composition evaluation](docs/evaluation.md)
 - [Changelog and compatibility policy](CHANGELOG.md)

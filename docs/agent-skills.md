@@ -1,0 +1,40 @@
+# Agent skills
+
+## Auris composition skill
+
+`auris-composition` teaches a coding agent when and how to use Auris Studio for original game and video music: editable scores, loopable cues, themes, transitions, previews, renders, stems, and measurable delivery checks. It is distributed separately from the Auris desktop binary and does not install or update that binary.
+
+Install it globally for Codex with the `skills` CLI:
+
+```sh
+npx skills add uthree/auris-studio --skill auris-composition -a codex -g -y
+```
+
+To keep it in one project, omit `-g` and run the command from that project's directory:
+
+```sh
+npx skills add uthree/auris-studio --skill auris-composition -a codex -y
+```
+
+Check installed skills and update this skill with:
+
+```sh
+npx skills check
+npx skills update auris-composition -g -y
+```
+
+The exact `skills` CLI version may expose an interactive prompt; remove `-y` when choosing a different target or scope. The skill source is the `skills/auris-composition/` directory in this repository. It can also be invoked explicitly as `$auris-composition` after installation.
+
+## Auris runtime prerequisite
+
+Install Auris Studio separately from the [release page](https://github.com/uthree/auris-studio/releases), or build it from source. The skill only provides agent guidance; it does not provide `auris`, `auris-mcp`, a SoundFont library, or a desktop application. Confirm that `auris --help` works before choosing the headless CLI. For MCP, confirm that `auris-mcp` is reachable from the host's MCP configuration.
+
+## MCP composition group
+
+`auris-mcp` exposes common read-only discovery and help tools by default. If the server is configured with a restricted `AURIS_MCP_TOOL_GROUPS`, enable the `composition` group for generated compositions and the `manual` group for note-level editing. Add `mix` when the agent must change routing or normalize a delivery:
+
+```text
+AURIS_MCP_TOOL_GROUPS=composition,manual,mix
+```
+
+On Windows, set the variable in the MCP server process configuration rather than only in an unrelated terminal. On macOS/Linux, export it in the environment used to launch `auris-mcp`. Restart the server after changing it. A value of `all` enables every group; use the narrow groups above when the agent only needs music creation and delivery. The server reports a disabled group in its tool result, so the agent should correct configuration rather than inventing an unavailable tool.

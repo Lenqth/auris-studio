@@ -2,11 +2,13 @@
 
 ## Games
 
-Ask whether the cue is a loop, one-shot, adaptive layer, or transition. Keep loopable cues bar-aligned and provide a loop start/end in bars or samples. Export a full mix and, when requested, stems whose names describe their role (`music_drums.wav`, `music_harmony.wav`, `music_melody.wav`). Preserve the project and seed so a later cue can be regenerated consistently.
+Ask whether the cue is a loop, one-shot, adaptive layer, or transition. For an existing project, add a dedicated cue track or clip after checking occupied ranges and routing; preserve existing content. Keep loopable cues bar-aligned and provide a loop start/end in bars or samples. Export a full mix and, when requested, stems whose names describe their role (`music_drums.wav`, `music_harmony.wav`, `music_melody.wav`). Preserve the project and seed so a later cue can be regenerated consistently.
 
 ## Video
 
-Confirm frame rate, start time, duration, and whether the editor needs a two-pop or handle. Render a full-length WAV at the requested sample rate and provide stems only when they improve the edit. Check the final file's duration, peak, and loudness with Auris analysis/verification before reporting it as ready.
+Confirm frame rate, start time, duration, and whether the editor needs a two-pop or handle. Choose a tempo/meter and integer bar count that fits the requested seconds; disclose any small duration tradeoff. Render a full-length WAV at the requested sample rate and provide stems only when they improve the edit. Check the final file's duration, peak, and loudness with Auris analysis/verification before reporting it as ready.
+
+Preview files are disposable candidates for structure and rough listening. A final render is the delivery artifact and must be checked independently; do not report a preview as verified output.
 
 ## Verification report
 
