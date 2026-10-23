@@ -1789,7 +1789,11 @@ pub mod composition {
     //! [`set_drum_assignment`](crate::Session::set_drum_assignment) adds, replaces or removes a
     //! musical role's MIDI address without acoustic analysis. It preserves the other assignments
     //! and plugin state, records one undo step, and affects editor labels and future generation.
-    //! Existing clip recipes keep their saved maps, including on regeneration. Empty assignments
+    //! Existing clip recipes keep their saved maps, including on regeneration, unless
+    //! [`set_drum_assignment_remapping`](crate::Session::set_drum_assignment_remapping) is asked
+    //! for instead: in the same undo step it moves every generated drum voice, and the recipe
+    //! that wrote it, onto the map — the remap a measured map offers — leaving untagged hits
+    //! where they were. Regeneration is still a separate command. Empty assignments
     //! are stored explicitly; neither SoundFont conventions nor built-in defaults fill them in.
     //! [`drum_analysis_source_key`](crate::Session::drum_analysis_source_key) supports scheduling
     //! with a digest of source state, availability and render context. It excludes the score,
