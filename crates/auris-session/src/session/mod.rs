@@ -1101,9 +1101,9 @@ impl Session {
         );
         let trust = &mut self.plugin_trust;
         let mut placed = self.hosted.place(&project, &prepare, trust);
-        placed.extend(self.vst3.place(&project, &prepare, trust));
+        placed.extend(self.vst3.place(&project, &prepare, trust, true));
         let mut instruments = self.hosted.place_instruments(&project, &prepare, trust);
-        instruments.extend(self.vst3.place_instruments(&project, &prepare, trust));
+        instruments.extend(self.vst3.place_instruments(&project, &prepare, trust, true));
         RenderJob::new(
             project,
             self.bank.clone(),
@@ -1398,11 +1398,14 @@ impl Session {
         );
         let trust = &mut self.plugin_trust;
         let mut placed = self.hosted.place(&self.project, &prepare, trust);
-        placed.extend(self.vst3.place(&self.project, &prepare, trust));
+        placed.extend(self.vst3.place(&self.project, &prepare, trust, false));
         let mut instruments = self
             .hosted
             .place_instruments(&self.project, &prepare, trust);
-        instruments.extend(self.vst3.place_instruments(&self.project, &prepare, trust));
+        instruments.extend(
+            self.vst3
+                .place_instruments(&self.project, &prepare, trust, false),
+        );
 
         let mut graph = RenderGraph::build_with(
             &self.project,

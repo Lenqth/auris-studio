@@ -52,9 +52,13 @@ fn an_external_vst3_can_be_discovered_loaded_and_processed() {
 }
 
 fn smoke_instrument(plugin: &Vst3Plugin) {
-    let mut instrument = plugin
-        .instrument()
-        .expect("the instrument render adapter should start");
+    let offline = std::env::var_os("AURIS_VST3_SMOKE_OFFLINE").is_some();
+    let mut instrument = if offline {
+        plugin.offline_instrument()
+    } else {
+        plugin.instrument()
+    }
+    .expect("the instrument render adapter should start");
     instrument.prepare(&PrepareContext::new(SAMPLE_RATE, BLOCK_FRAMES, 2));
     let mut buffer = AudioBuffer::stereo(BLOCK_FRAMES, SAMPLE_RATE);
     let mut peak = 0.0_f32;
@@ -73,13 +77,16 @@ fn smoke_instrument(plugin: &Vst3Plugin) {
             },
         ];
         let events = if block == 0 { &note_on[..] } else { &[] };
-        let context = ProcessContext::realtime(
-            SAMPLE_RATE,
-            BLOCK_FRAMES,
-            (block * BLOCK_FRAMES) as u64,
-            120.0,
-            true,
-        );
+        let context = ProcessContext {
+            is_offline: offline,
+            ..ProcessContext::realtime(
+                SAMPLE_RATE,
+                BLOCK_FRAMES,
+                (block * BLOCK_FRAMES) as u64,
+                120.0,
+                true,
+            )
+        };
         instrument.process(events, &mut buffer, &context);
         assert_finite(&buffer);
         peak = peak.max(
@@ -88,10 +95,14 @@ fn smoke_instrument(plugin: &Vst3Plugin) {
                 .flatten()
                 .fold(0.0_f32, |peak, sample| peak.max(sample.abs())),
         );
+        if !offline {
+            std::thread::sleep(std::time::Duration::from_millis(11));
+        }
     }
     assert!(
         peak > 1.0e-6,
-        "the instrument should produce audible output"
+        "the instrument should produce audible output (peak={peak}, processing_failed={})",
+        instrument.processing_failed()
     );
     instrument.reset();
     let context = ProcessContext::realtime(
@@ -129,26 +140,51 @@ fn smoke_instrument(plugin: &Vst3Plugin) {
 }
 
 fn smoke_effect(plugin: &Vst3Plugin) {
-    let mut effect = plugin
-        .effect()
-        .expect("the effect render adapter should start");
+    let offline = std::env::var_os("AURIS_VST3_SMOKE_OFFLINE").is_some();
+    let mut effect = if offline {
+        plugin.offline_effect()
+    } else {
+        plugin.effect()
+    }
+    .expect("the effect render adapter should start");
     effect.prepare(&PrepareContext::new(SAMPLE_RATE, BLOCK_FRAMES, 2));
     let mut buffer = AudioBuffer::stereo(BLOCK_FRAMES, SAMPLE_RATE);
-    for channel in buffer.iter_channels_mut() {
-        for (frame, sample) in channel.iter_mut().enumerate() {
-            *sample =
-                (std::f32::consts::TAU * 440.0 * frame as f32 / SAMPLE_RATE as f32).sin() * 0.1;
+    let mut peak = 0.0_f32;
+    for block in 0..128 {
+        for channel in buffer.iter_channels_mut() {
+            for (frame, sample) in channel.iter_mut().enumerate() {
+                let index = block * BLOCK_FRAMES + frame;
+                *sample =
+                    (std::f32::consts::TAU * 440.0 * index as f32 / SAMPLE_RATE as f32).sin() * 0.1;
+            }
+        }
+        let context = ProcessContext {
+            is_offline: offline,
+            ..ProcessContext::realtime(
+                SAMPLE_RATE,
+                BLOCK_FRAMES,
+                (block * BLOCK_FRAMES) as u64,
+                120.0,
+                true,
+            )
+        };
+        effect.process(&mut buffer, &context);
+        assert_finite(&buffer);
+        peak = peak.max(
+            buffer
+                .iter_channels()
+                .flatten()
+                .fold(0.0_f32, |peak, sample| peak.max(sample.abs())),
+        );
+        if !offline {
+            std::thread::sleep(std::time::Duration::from_millis(11));
         }
     }
     let context = ProcessContext::realtime(SAMPLE_RATE, BLOCK_FRAMES, 0, 120.0, true);
-    effect.process(&mut buffer, &context);
-    assert_finite(&buffer);
     assert!(
-        buffer
-            .iter_channels()
-            .flatten()
-            .any(|sample| sample.abs() > 1.0e-6),
-        "the effect should return audio for an audible input"
+        peak > 1.0e-6,
+        "the effect should return audio for an audible input (peak={peak}, processing_failed={})",
+        effect.processing_failed()
     );
 
     effect.reset();

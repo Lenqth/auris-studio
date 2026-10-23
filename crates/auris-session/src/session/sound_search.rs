@@ -2137,7 +2137,7 @@ fn measure_sound(
                     if let Some(preset) = preset {
                         plugin.load_preset(preset).map_err(|e| e.to_string())?;
                     }
-                    let mut instrument = plugin.instrument().map_err(|e| e.to_string())?;
+                    let mut instrument = plugin.offline_instrument().map_err(|e| e.to_string())?;
                     render(&mut instrument)?
                 }
             };
