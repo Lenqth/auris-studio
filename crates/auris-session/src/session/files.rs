@@ -502,19 +502,29 @@ impl SaveJob {
 }
 
 impl Session {
-    /// Keeps a song picker's decoded font ready without importing it into the open document.
+    /// Registers a song picker's font in the shared library without editing the open document.
     ///
-    /// The caller reads it off-thread with [`read_soundfont`]. Cancellation leaves the document,
-    /// undo history and library references unchanged; composing later allocates the real font id.
+    /// The caller reads it off-thread with [`read_soundfont`]. Cancellation preserves the song's
+    /// edits and undo history. The application library registration survives cancellation of
+    /// the song dialog. Returns the registered path, display name and available presets.
     pub fn cache_song_soundfont(
         &mut self,
         path: &Path,
         font: LoadedFont,
-    ) -> (String, Vec<SoundFontPreset>) {
+    ) -> Result<(PathBuf, String, Vec<SoundFontPreset>), SessionError> {
         let name = font_name(&font.0, path);
         let presets = presets(&font.0);
-        self.cache_font(path, font.0, false);
-        (name, presets)
+        let path = if let Some(library) = &self.soundfont_library {
+            let entry = crate::library::soundfonts::register(library, path, name.clone())?;
+            self.adopt_loaded_library_font(&entry.path, font.0);
+            self.revision = self.revision.wrapping_add(1);
+            self.rebuild_graph();
+            entry.path
+        } else {
+            self.cache_font(path, font.0, false);
+            path.to_path_buf()
+        };
+        Ok((path, name, presets))
     }
 
     /// Replaces the document with an empty project holding one instrument track.
@@ -531,7 +541,7 @@ impl Session {
         // decoded buffers would hold them for the rest of the process.
         self.clear_sources();
         self.replace_project(project);
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         self.mark_saved();
     }
 
@@ -592,7 +602,7 @@ impl Session {
         self.path = None;
         self.clear_sources();
         self.replace_project(result.project);
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         // Dirty from the first frame: nothing on disk holds this document, and the `.mid` it came
         // from cannot hold it either.
         self.dirty = true;
@@ -826,7 +836,7 @@ impl Session {
         // path into the document, and only then does the id it already has match the file about
         // to be installed. The other way round, the same font would arrive twice under two ids —
         // and be held in memory twice, which for this font is four hundred megabytes.
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         self.rebuild_graph();
         // After the rebuild, because a hosted plugin cannot say where its parameters are until it
         // has been placed — and again afterwards when a lane moved, since the graph resolved the
@@ -875,7 +885,7 @@ impl Session {
         self.close_input_if_idle();
         self.adopt_project(result.project);
         let missing = self.install_prepared_assets(result.assets);
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         self.rebuild_graph();
         if self.realign_automation() {
             self.rebuild_graph();
@@ -1106,7 +1116,7 @@ impl Session {
         self.vst3.clear();
         self.adopt_project(project);
         let missing = self.reload_assets();
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         self.rebuild_graph();
         if self.realign_automation() {
             self.rebuild_graph();
@@ -1336,7 +1346,7 @@ impl Session {
         Ok(clip)
     }
 
-    /// Imports a SoundFont, making its sounds available to every track in the project.
+    /// Imports a SoundFont into the application library and makes it available to every track.
     ///
     /// The file is referred to where it lies rather than copied in — see [`Self::save_as`] for
     /// why — so what the document records is enough to recognise it again: the path, and the
@@ -1364,6 +1374,18 @@ impl Session {
     ) -> Result<SoundFontId, SessionError> {
         let font = font.0;
         let name = font_name(&font, path);
+        if let Some(library) = &self.soundfont_library {
+            // Persist before changing the live library: a failed write must not report a
+            // successful import that will disappear on the next launch.
+            let entry = crate::library::soundfonts::register(library, path, name)?;
+            let id = self.adopt_loaded_library_font(&entry.path, font);
+            if let Some(directory) = entry.path.parent() {
+                self.recover_fonts_from(directory);
+            }
+            self.revision = self.revision.wrapping_add(1);
+            self.rebuild_graph();
+            return Ok(id);
+        }
         let id = match self.project.soundfont_at(self.project_folder(), path) {
             Some(existing) => existing,
             None => {
@@ -1395,7 +1417,7 @@ impl Session {
     /// current document. The dirty flag is preserved, and loaded samples are cached for later
     /// documents. A missing reference with the same filename and size keeps its existing id.
     pub fn install_shipped_soundfont(&mut self, path: &Path, font: LoadedFont) -> SoundFontId {
-        let id = self.adopt_loaded_shipped_font(path, font.0);
+        let id = self.adopt_loaded_library_font(path, font.0);
         self.revision = self.revision.wrapping_add(1);
         // Rebuild even during a gesture: ending an otherwise unchanged gesture discards its
         // deferred rebuild, but this font can restore an already-playing track immediately.
@@ -1404,11 +1426,22 @@ impl Session {
     }
 
     /// Shares library availability with snapshots; the caller decides when to rebuild.
-    fn adopt_loaded_shipped_font(&mut self, path: &Path, font: Arc<SoundFont>) -> SoundFontId {
+    fn adopt_loaded_library_font(&mut self, path: &Path, font: Arc<SoundFont>) -> SoundFontId {
         self.cache_font(path, Arc::clone(&font), true);
-        let folder = self.project_folder().map(Path::to_path_buf);
         let name = font_name(&font, path);
         let size = byte_size(path);
+        self.adopt_library_reference(path, &name, size, Some(&font))
+    }
+
+    /// Adds availability to every history branch, reserving ids above all of them.
+    fn adopt_library_reference(
+        &mut self,
+        path: &Path,
+        name: &str,
+        size: u64,
+        samples: Option<&Arc<SoundFont>>,
+    ) -> SoundFontId {
+        let folder = self.project_folder().map(Path::to_path_buf);
 
         // Reserve above every branch, including Redo: the live counter may have gone backwards
         // with Undo. Probing a clone leaves every document's allocation state untouched.
@@ -1423,11 +1456,13 @@ impl Session {
         }
         let reserve = SoundFontId(next);
         let install = |project: &mut Project| {
-            install_library_reference(project, folder.as_deref(), path, &name, size, reserve)
+            install_library_reference(project, folder.as_deref(), path, name, size, reserve)
         };
         let ids = install(&mut self.project);
-        for id in &ids {
-            self.fonts.insert(*id, Arc::clone(&font));
+        if let Some(samples) = samples {
+            for id in &ids {
+                self.fonts.insert(*id, Arc::clone(samples));
+            }
         }
         self.history.for_each_project_mut(|project| {
             install(project);
@@ -1439,7 +1474,7 @@ impl Session {
         ids[0]
     }
 
-    /// Puts the SoundFonts the application ships with into the document, so their sounds are in
+    /// Puts shared and shipped SoundFonts into the document, so their sounds are in
     /// the library from the moment a project opens.
     ///
     /// Called wherever a document is created or opened rather than once at start-up, because a
@@ -1455,16 +1490,33 @@ impl Session {
     ///
     /// Only files already available on disk are read here. A font acquired later arrives through
     /// [`Self::install_shipped_soundfont`].
-    pub(super) fn install_shipped_fonts(&mut self) {
-        if !self.shipped_library {
-            return;
-        }
+    pub(super) fn install_library_fonts(&mut self) {
         let dirty = self.dirty;
         let mut installed_any = false;
-        for (font, path) in crate::library::installed_fonts() {
-            match self.adopt_font(&path) {
-                Some(_) => installed_any = true,
-                None => log::warn!("could not read the shipped {}", font.name),
+        if self.shipped_library {
+            for (font, path) in crate::library::installed_fonts() {
+                match self.adopt_font(&path) {
+                    Some(_) => installed_any = true,
+                    None => log::warn!("could not read the shipped {}", font.name),
+                }
+            }
+        }
+        if let Some(library) = &self.soundfont_library {
+            match crate::library::soundfonts::read(library) {
+                Ok(fonts) => {
+                    for font in fonts {
+                        if self.adopt_font(&font.path).is_none() {
+                            self.adopt_library_reference(
+                                &font.path,
+                                &font.name,
+                                font.byte_size,
+                                None,
+                            );
+                        }
+                        installed_any = true;
+                    }
+                }
+                Err(error) => log::warn!("{error}"),
             }
         }
         self.dirty = dirty;
@@ -1473,18 +1525,18 @@ impl Session {
         }
     }
 
-    /// Reads a font from the shipped library into the document without recording an edit.
+    /// Reads a library font into the document without recording an edit.
     ///
     /// The samples are cached by path in `font_cache`, so the second call — after a
     /// **File → New**, which empties the id-keyed bank — costs a map lookup rather than two
     /// hundred megabytes of file.
     fn adopt_font(&mut self, path: &Path) -> Option<SoundFontId> {
-        let font = self.shipped_font_data(path)?;
-        Some(self.adopt_loaded_shipped_font(path, font))
+        let font = self.library_font_data(path)?;
+        Some(self.adopt_loaded_library_font(path, font))
     }
 
-    /// A shipped font's samples, read from the file the first time and cached after that.
-    fn shipped_font_data(&mut self, path: &Path) -> Option<Arc<SoundFont>> {
+    /// A library font's samples, read from the file the first time and cached after that.
+    fn library_font_data(&mut self, path: &Path) -> Option<Arc<SoundFont>> {
         if let Some(font) = self.font_cache.get(path) {
             return Some(Arc::clone(&font.samples));
         }
@@ -1496,10 +1548,10 @@ impl Session {
     }
 
     /// Keeps the file identity alongside an id that a different history branch may reuse.
-    pub(super) fn cache_font(&mut self, path: &Path, samples: Arc<SoundFont>, shipped: bool) {
-        let shipped = shipped || self.font_cache.get(path).is_some_and(|font| font.shipped);
+    pub(super) fn cache_font(&mut self, path: &Path, samples: Arc<SoundFont>, shared: bool) {
+        let shared = shared || self.font_cache.get(path).is_some_and(|font| font.shared);
         self.font_cache
-            .insert(path.to_path_buf(), CachedFont { samples, shipped });
+            .insert(path.to_path_buf(), CachedFont { samples, shared });
     }
 
     /// Restores the current snapshot's font identities before its graph is rebuilt.
@@ -1508,7 +1560,11 @@ impl Session {
             let Some(path) = reference.path.resolve(self.project_folder()) else {
                 continue;
             };
-            if let Some(font) = self.font_cache.get(&path) {
+            if let Some(font) = self.font_cache.get(&path).or_else(|| {
+                std::fs::canonicalize(&path)
+                    .ok()
+                    .and_then(|path| self.font_cache.get(&path))
+            }) {
                 self.fonts.insert(reference.id, Arc::clone(&font.samples));
             } else {
                 self.fonts.remove(reference.id);
@@ -1529,7 +1585,7 @@ impl Session {
         }
         let font = crate::library::shipped(crate::library::GENERAL_MIDI)?;
         let path = crate::library::installed(font)?;
-        let data = self.shipped_font_data(&path)?;
+        let data = self.library_font_data(&path)?;
         let name = font_name(&data, &path);
         let id = project.add_soundfont(name, AssetPath::external(&path), byte_size(&path));
         // Into the bank now rather than when the document is swapped in. The swap rebuilds the
@@ -1651,9 +1707,13 @@ fn install_library_reference(
     let mut ids = Vec::new();
     for reference in project.soundfonts.values_mut() {
         let resolved = reference.path.resolve(folder);
-        if resolved.as_deref() == Some(path) {
+        if resolved
+            .as_deref()
+            .is_some_and(|file| same_font_file(file, path))
+        {
             ids.push(reference.id);
         } else if reference.path.file_name() == path.file_name()
+            && path.is_file()
             && (reference.byte_size == 0 || reference.byte_size == size)
             && !resolved.is_some_and(|file| file.is_file())
         {
@@ -1676,6 +1736,15 @@ fn install_library_reference(
         ids.push(reserve);
     }
     ids
+}
+
+/// Recognises existing project references written before library paths were canonicalised.
+fn same_font_file(left: &Path, right: &Path) -> bool {
+    left == right
+        || std::fs::canonicalize(left)
+            .ok()
+            .zip(std::fs::canonicalize(right).ok())
+            .is_some_and(|(left, right)| left == right)
 }
 
 /// Serialises cooperating writers across processes, including the optimistic disk check.

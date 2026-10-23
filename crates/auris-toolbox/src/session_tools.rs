@@ -78,7 +78,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                     };
                     let mut session = match project {
                         Some(project) => crate::opened(&project)?,
-                        None => auris_session::Session::new(auris_session::SessionOptions::headless().with_shipped_dictionary(true)).map_err(|e| e.to_string())?,
+                        None => crate::headless()?,
                     };
                     if let auris_session::live_agent::Command::InspectAudio {
                         start_bar,

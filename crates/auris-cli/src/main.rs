@@ -253,13 +253,15 @@ fn with_path(args: &[String], run: impl Fn(&Path) -> Result<(), String>) -> Resu
 /// Enables optional GM discovery and the Japanese dictionary, so the CLI and window share
 /// their asset policy. Tests opt out to make their sessions independent of installed files.
 fn headless() -> Result<Session, String> {
-    Session::new(
-        SessionOptions::headless()
-            .with_shipped_fonts(true)
-            .with_shipped_dictionary(true)
-            .with_plugin_paths(auris_session::Settings::load().plugin_paths),
-    )
-    .map_err(|error| error.to_string())
+    let mut options = SessionOptions::headless()
+        .with_shipped_fonts(true)
+        .with_soundfont_library(auris_session::config_dir().join("soundfonts.json"))
+        .with_shipped_dictionary(true)
+        .with_plugin_paths(auris_session::Settings::load().plugin_paths);
+    if cfg!(test) {
+        options.soundfont_library = None;
+    }
+    Session::new(options).map_err(|error| error.to_string())
 }
 
 /// Measures one instrument using a private worker process; applying its map is explicit.
@@ -1406,14 +1408,16 @@ fn new_project(args: &[String]) -> Result<(), String> {
         index += 1;
     }
 
-    let mut session = Session::new(
-        SessionOptions::headless()
-            .with_sample_rate(sample_rate)
-            .with_shipped_fonts(true)
-            .with_shipped_dictionary(true)
-            .with_plugin_paths(auris_session::Settings::load().plugin_paths),
-    )
-    .map_err(|error| error.to_string())?;
+    let mut options = SessionOptions::headless()
+        .with_sample_rate(sample_rate)
+        .with_shipped_fonts(true)
+        .with_soundfont_library(auris_session::config_dir().join("soundfonts.json"))
+        .with_shipped_dictionary(true)
+        .with_plugin_paths(auris_session::Settings::load().plugin_paths);
+    if cfg!(test) {
+        options.soundfont_library = None;
+    }
+    let mut session = Session::new(options).map_err(|error| error.to_string())?;
     session.set_bpm(bpm);
     session
         .add_default_instrument_track(messages::new_track_name(LANGUAGE, 1))

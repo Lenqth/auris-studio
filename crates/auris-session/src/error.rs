@@ -7,6 +7,9 @@ use thiserror::Error;
 /// Anything that can go wrong while driving a session.
 #[derive(Debug, Error)]
 pub enum SessionError {
+    /// The application's shared SoundFont catalog could not be read or saved.
+    #[error("SoundFont library: {0}")]
+    SoundFontLibrary(String),
     /// A saved sound name is empty or already used by another entry.
     #[error("choose a new, nonempty sound name")]
     SoundNameUnavailable,

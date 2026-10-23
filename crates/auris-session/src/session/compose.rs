@@ -589,7 +589,7 @@ impl Session {
             self.install_composed_hosted_source(track, source);
         }
         self.replace_project(project);
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         let (baseline, _) = self.composition_snapshot();
         self.project.composition_baseline = Some(baseline);
         // A balance job must be captured after the fonts are installed, so it measures the

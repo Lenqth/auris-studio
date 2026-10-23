@@ -1884,6 +1884,7 @@ fn session_options(settings: &Settings) -> SessionOptions {
         audio: live,
         gpu: live,
         shipped_fonts: live,
+        soundfont_library: live.then(|| auris_session::config_dir().join("soundfonts.json")),
         // Off in a test for the fonts' reason: a checkout with the dictionary fetched would
         // otherwise run a different suite than a CI machine without it.
         shipped_dictionary: live,
