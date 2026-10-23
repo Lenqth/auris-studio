@@ -9,6 +9,19 @@ fn session() -> Session {
     Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap()
 }
 
+fn voice_fixture_dir() -> tempfile::TempDir {
+    // macOS spells its temp directory through /var, a symlink to /private/var. Resolve that
+    // system alias before creating a fixture; automatic voice loading still rejects redirects
+    // inside the fixture itself. Leave Windows paths alone so they keep their local spelling.
+    let root = std::env::temp_dir();
+    let root = if cfg!(target_os = "macos") {
+        root.canonicalize().unwrap()
+    } else {
+        root
+    };
+    tempfile::Builder::new().tempdir_in(root).unwrap()
+}
+
 fn call(s: &mut Session, value: serde_json::Value) -> Result<serde_json::Value, String> {
     let text = s.agent_command(serde_json::from_value(value).unwrap())?;
     serde_json::from_str(&text).map_err(|e| e.to_string())
@@ -83,7 +96,7 @@ fn lyrics_follow_time_order_and_preserve_unfilled_notes_in_one_undo_step() {
 
 #[test]
 fn voice_selection_validates_speaker_and_rejects_stale_or_cancelled_loads() {
-    let folder = tempfile::tempdir().unwrap();
+    let folder = voice_fixture_dir();
     let path = voice(folder.path(), "http://127.0.0.1:1");
     let mut s = session();
     let track = s.add_singer_track("Singer");
@@ -139,7 +152,7 @@ fn voice_selection_validates_speaker_and_rejects_stale_or_cancelled_loads() {
 
 #[test]
 fn voice_discovery_pages_configured_libraries_without_loading_or_editing() {
-    let folder = tempfile::tempdir().unwrap();
+    let folder = voice_fixture_dir();
     let mut expected = Vec::new();
     for index in 0..20 {
         let path = folder
@@ -275,7 +288,7 @@ fn engine() -> (String, std::thread::JoinHandle<Vec<String>>) {
 
 #[test]
 fn live_vocal_workflow_publishes_real_audio_checks_staleness_and_preserves_undo() {
-    let folder = tempfile::tempdir().unwrap();
+    let folder = voice_fixture_dir();
     let (url, server) = engine();
     let path = voice(folder.path(), &url);
     let mut s = session();

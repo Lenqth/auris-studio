@@ -25,8 +25,8 @@ changes its faders or creates an Undo checkpoint.
 The session retains four immutable raw excerpts, identified by opaque IDs. An
 A/B request must use the same bars, tempo map and meter map. Its before/current
 files share one attenuation, chosen to protect both without masking their
-relative level change. The estimate targets -1 dB true peak using the existing
-4x Catmull-Rom analysis; it is not a certified BS.1770 measurement. The encoded
+relative level change. The estimate targets -1 dB true peak using 4x FIR
+analysis; it is not a certified BS.1770 measurement. The encoded
 files are decoded and checked before upload. Source overload, applied
 attenuation, encoded peaks/RMS and exact WAV hashes are reported separately.
 Audition protection does not repair an overdriven project.

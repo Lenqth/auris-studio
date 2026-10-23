@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 auris-core.workspace = true
+auris-dsp.workspace = true
 bytemuck.workspace = true
 log.workspace = true
 pollster.workspace = true

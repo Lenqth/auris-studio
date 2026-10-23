@@ -421,6 +421,7 @@ fn live_wire_updates_preserve_individual_selection_and_pointer_geometry(cx: &mut
 fn signal_motion_can_be_disabled_without_editing_the_mix_or_losing_selection(
     cx: &mut TestAppContext,
 ) {
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, cx) = open(cx);
     app.update(cx, |this, cx| {
         this.appearance.animate_mixer_signals = true;

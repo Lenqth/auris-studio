@@ -286,8 +286,8 @@ const PLUGIN_DESCRIPTIONS: &[(&str, &str)] = &[
         "レベル、定位、ステレオ幅、位相",
     ),
     (
-        "Look-ahead brickwall limiter with a guaranteed output ceiling",
-        "先読み型のブリックウォールリミッター。出力上限を保証します",
+        "Look-ahead limiter with four-times oversampled peak detection",
+        "4 倍オーバーサンプリングでピークを検出する先読み型リミッター",
     ),
     (
         "Schroeder reverb: eight damped combs into four all-passes per channel",

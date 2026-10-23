@@ -4,19 +4,6 @@ use gpui::{Entity, EntityInputHandler, TestAppContext, VisualTestContext, Window
 
 use super::*;
 
-// The harness isolates preferences per process, so persistence tests must share a writer lock.
-static APPEARANCE_WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-struct RestoreAppearance(Appearance);
-
-impl Drop for RestoreAppearance {
-    fn drop(&mut self) {
-        self.0
-            .save()
-            .expect("restore isolated appearance after the test");
-    }
-}
-
 fn open_appearance_settings(
     cx: &mut TestAppContext,
 ) -> (
@@ -47,9 +34,8 @@ fn open_appearance_settings(
 
 #[gpui::test]
 fn a_japanese_theme_is_committed_then_edited_without_losing_its_font(cx: &mut TestAppContext) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let before = app.read_with(cx, |this, _| this.appearance.clone());
     crate::harness::click("create-theme", cx);
@@ -192,9 +178,8 @@ fn cancelling_a_theme_draft_preserves_the_applied_appearance(cx: &mut TestAppCon
 
 #[gpui::test]
 fn palette_edits_apply_only_on_save_and_can_return_to_theme_defaults(cx: &mut TestAppContext) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let before = app.read_with(cx, |this, _| this.theme.track_palette);
     crate::harness::click("create-theme", cx);
@@ -301,9 +286,8 @@ fn invalid_theme_input_stays_open_for_correction(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn preset_selection_and_theme_base_changes_use_each_schemes_palette(cx: &mut TestAppContext) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let project = app.read_with(cx, |this, _| this.project().clone());
     for (index, scheme) in SCHEMES.iter().enumerate() {
@@ -369,9 +353,8 @@ fn preset_selection_and_theme_base_changes_use_each_schemes_palette(cx: &mut Tes
 
 #[gpui::test]
 fn chord_palette_editing_saves_degrees_without_changing_the_progression(cx: &mut TestAppContext) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let project = app.read_with(cx, |this, _| this.project().clone());
     let before = app.read_with(cx, |this, _| this.theme.chord_palette);
@@ -424,9 +407,8 @@ fn chord_palette_editing_saves_degrees_without_changing_the_progression(cx: &mut
 fn signal_editor_saves_overrides_preserves_base_edits_and_restores_fallbacks(
     cx: &mut TestAppContext,
 ) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let before = app.read_with(cx, |this, _| this.theme.playing);
     crate::harness::click("create-theme", cx);
@@ -476,9 +458,8 @@ fn signal_editor_saves_overrides_preserves_base_edits_and_restores_fallbacks(
 
 #[gpui::test]
 fn intermediate_gradient_points_edit_validate_persist_and_delete(cx: &mut TestAppContext) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let project = app.read_with(cx, |this, _| this.project().clone());
     let before = app.read_with(cx, |this, _| this.theme.velocity_color(0.6));
@@ -558,9 +539,8 @@ fn intermediate_gradient_points_edit_validate_persist_and_delete(cx: &mut TestAp
 
 #[gpui::test]
 fn velocity_gradient_edits_save_and_override_only_the_edited_endpoint(cx: &mut TestAppContext) {
-    let _writer = APPEARANCE_WRITER.lock().unwrap();
+    let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);
-    let _restore = RestoreAppearance(Appearance::load());
     let cx = &mut cx;
     let before = app.read_with(cx, |this, _| this.theme.velocity_soft);
     crate::harness::click("create-theme", cx);

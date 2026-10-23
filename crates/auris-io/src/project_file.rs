@@ -290,11 +290,17 @@ pub fn stage_file_bytes(path: &Path, bytes: &[u8]) -> Result<StagedFile> {
     })
 }
 
+/// The older format versions this build reads, carried forward by `serde(default)` and aliases.
+///
+/// Every version bump must decide whether the version it replaces joins this range. Version 32
+/// forgot to, and a project saved the day before would not open at all.
+const READABLE_OLDER: std::ops::RangeInclusive<u32> = 27..=31;
+
 /// Reads a project from `path`.
 ///
-/// The format version must match this build, version 30 without the latest extended chords,
-/// version 29 without eleventh chords, version 28 without named drum lanes, or version 27, whose
-/// volume contour is defaulted.
+/// The format version must match this build, or be one of the older versions it still reads:
+/// 31 with each track's single output, 30 without the latest extended chords, 29 without
+/// eleventh chords, 28 without named drum lanes, or 27, whose volume contour is defaulted.
 /// After parsing, the
 /// id counter is repaired, which is what stops freshly created tracks and clips from colliding
 /// with ids already in the document, and so is the routing — a file whose buses feed each other
@@ -303,7 +309,9 @@ pub fn load_project(path: &Path) -> Result<Project> {
     let bytes = read_project_source(path, MAX_PROJECT_FILE_BYTES)?;
 
     let probe: FormatVersionProbe = serde_json::from_slice(&bytes)?;
-    if probe.format_version != Project::FORMAT_VERSION && !matches!(probe.format_version, 27..=30) {
+    if probe.format_version != Project::FORMAT_VERSION
+        && !READABLE_OLDER.contains(&probe.format_version)
+    {
         return Err(IoError::ProjectVersionMismatch {
             found: probe.format_version,
             supported: Project::FORMAT_VERSION,
@@ -783,6 +791,50 @@ mod tests {
                 other => panic!("expected a version mismatch, got {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn every_older_readable_version_opens_rather_than_being_refused() {
+        // Version 32 was added without widening the range, which refused every project the
+        // previous build had saved. A current document stamped with each older number must at
+        // least get past the version gate.
+        let file = TempFile::new("older.auris");
+        let mut value = serde_json::to_value(demo_project()).unwrap();
+        for version in READABLE_OLDER {
+            value["format_version"] = serde_json::json!(version);
+            std::fs::write(file.path(), serde_json::to_vec(&value).unwrap()).unwrap();
+            let loaded = load_project(file.path())
+                .unwrap_or_else(|error| panic!("version {version} was refused: {error}"));
+            assert_eq!(loaded.format_version, Project::FORMAT_VERSION);
+        }
+        assert_eq!(
+            *READABLE_OLDER.end(),
+            Project::FORMAT_VERSION - 1,
+            "decide whether the version a bump replaces is still readable"
+        );
+    }
+
+    #[test]
+    fn version_31_loads_each_tracks_single_output_as_one_route() {
+        let file = TempFile::new("version-31.auris");
+        let mut expected = demo_project();
+        let bus = expected.add_bus_track("Bus");
+        let track = expected.add_instrument_track("Lead", "auris.synth.pulse");
+        expected.track_mut(track).unwrap().outputs = vec![auris_core::Output::Bus(bus)];
+        let mut value = serde_json::to_value(&expected).unwrap();
+        value["format_version"] = serde_json::json!(31);
+        for stored in value["tracks"].as_array_mut().unwrap() {
+            let fields = stored.as_object_mut().unwrap();
+            let outputs = fields.remove("outputs").unwrap();
+            fields.insert("output".into(), outputs[0].clone());
+        }
+        std::fs::write(file.path(), serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let loaded = load_project(file.path()).unwrap();
+        assert_eq!(
+            loaded.track(track).unwrap().outputs,
+            vec![auris_core::Output::Bus(bus)]
+        );
     }
 
     #[test]
