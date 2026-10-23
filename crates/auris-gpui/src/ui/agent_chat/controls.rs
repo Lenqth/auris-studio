@@ -78,6 +78,26 @@ pub(super) enum Approval {
     Reviewed,
 }
 
+/// Whether a mode takes the person at the keyboard out of the loop, and so has to say so on
+/// screen for as long as it is chosen rather than once when it is picked.
+pub(super) fn mode_warns(mode: Mode) -> bool {
+    matches!(mode, Mode::Bypass)
+}
+
+/// What an operation awaiting approval would do, in words, when its kind says so with
+/// certainty. `None` leaves the card to the operation's own name and arguments.
+pub(super) fn approval_summary(operation: &Operation) -> Option<Key> {
+    match operation.name.as_str() {
+        "cli_command" => Some(Key::AgentApprovalRunCommand),
+        "cli_file_change" => Some(Key::AgentApprovalChangeFiles),
+        "cli_file_read" => Some(Key::AgentApprovalReadOutside),
+        "search_internet" => Some(Key::AgentApprovalInternet),
+        _ if operation.mutating && operation.confirm => Some(Key::AgentApprovalReplaces),
+        _ if operation.mutating => Some(Key::AgentApprovalEdits),
+        _ => None,
+    }
+}
+
 fn mode_key(mode: Mode) -> Key {
     match mode {
         Mode::ReadOnly => Key::AgentReadOnly,
@@ -748,20 +768,13 @@ impl AurisApp {
             return div().into_any_element();
         };
         let theme = &self.theme;
-        let mut actions = div().flex().flex_wrap().gap_1();
-        for (id, key, answer) in [
-            ("agent-deny", Key::AgentDenyOnce, Approval::Deny),
-            ("agent-allow-once", Key::AgentAllowOnce, Approval::Once),
-            (
-                "agent-allow-always",
-                Key::AgentAllowAlways,
-                Approval::Always,
-            ),
-        ] {
-            actions = actions.child(button(
+        // One answer leads. "Always" outlives this request, so it is the quietest of the three,
+        // set apart at the far end rather than sitting beside "once" as its equal.
+        let respond = |id: &'static str, key: Key, style: ButtonStyle, answer: Approval| {
+            button(
                 id,
                 self.t(key),
-                ButtonStyle::Normal,
+                style,
                 false,
                 theme.accent,
                 theme,
@@ -769,8 +782,39 @@ impl AurisApp {
                     this.agent_approval(answer);
                     cx.notify();
                 }),
+            )
+        };
+        let actions = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_1()
+            .child(respond(
+                "agent-allow-once",
+                Key::AgentAllowOnce,
+                ButtonStyle::Primary,
+                Approval::Once,
+            ))
+            .child(respond(
+                "agent-deny",
+                Key::AgentDenyOnce,
+                ButtonStyle::Normal,
+                Approval::Deny,
+            ))
+            .child(div().flex_1())
+            .child(respond(
+                "agent-allow-always",
+                Key::AgentAllowAlways,
+                ButtonStyle::Ghost,
+                Approval::Always,
             ));
-        }
+        // Tables and commands in arguments line up only in a fixed-width face; one line per
+        // div, because a div's text collapses the newlines.
+        let arguments = serde_json::to_string_pretty(&pending.args).unwrap_or_default();
+        let mono = {
+            use gpui_component::ActiveTheme as _;
+            cx.theme().mono_font_family.clone()
+        };
         div()
             .id("agent-approval")
             .debug_selector(|| "agent-approval".into())
@@ -779,11 +823,27 @@ impl AurisApp {
             .flex_shrink_0()
             .gap_1()
             .p_2()
-            .border_t_1()
+            .border_t_2()
             .border_color(theme.warning)
             .bg(theme.surface_raised)
             .text_xs()
-            .child(self.t(Key::AgentApprovalTitle))
+            .text_color(theme.text_muted)
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.text)
+                    .child(self.t(Key::AgentApprovalTitle)),
+            )
+            .when_some(approval_summary(&pending.operation), |this, summary| {
+                this.child(
+                    div()
+                        .id("agent-approval-summary")
+                        .debug_selector(|| "agent-approval-summary".into())
+                        .text_color(theme.text)
+                        .child(self.t(summary)),
+                )
+            })
             .child(format!(
                 "{} — {}",
                 self.project().name,
@@ -793,14 +853,36 @@ impl AurisApp {
                 this.child(self.t(Key::AgentReviewing))
             })
             .when(pending.operation.name.starts_with("cli_"), |this| {
-                this.child(self.t(Key::AgentExternalOperation))
+                this.child(
+                    div()
+                        .text_color(theme.warning)
+                        .child(self.t(Key::AgentExternalOperation)),
+                )
             })
             .child(
                 div()
+                    .text_color(theme.text_faint)
+                    .child(self.t(Key::AgentToolArguments)),
+            )
+            .child(
+                div()
                     .id("agent-approval-details")
+                    .debug_selector(|| "agent-approval-details".into())
+                    .flex()
+                    .flex_col()
                     .max_h_32()
                     .overflow_y_scroll()
-                    .child(serde_json::to_string_pretty(&pending.args).unwrap_or_default()),
+                    .p_1()
+                    .rounded(Metrics::RADIUS_SM)
+                    .bg(theme.surface_sunken)
+                    .font_family(mono)
+                    .text_color(theme.text)
+                    .children(
+                        arguments
+                            .lines()
+                            .map(|line| div().child(line.to_string()))
+                            .collect::<Vec<_>>(),
+                    ),
             )
             .child(
                 self.t(Key::AgentApprovalKeys)
@@ -1197,7 +1279,14 @@ mod tests {
         });
         crate::harness::paint(&app, cx);
         assert!(cx.debug_bounds("agent-approval").is_some());
-        assert!(cx.debug_bounds("agent-allow-once").is_some());
+        assert!(
+            cx.debug_bounds("agent-approval-summary").is_some(),
+            "removing a track is described, not only named"
+        );
+        let once = cx.debug_bounds("agent-allow-once").unwrap();
+        let deny = cx.debug_bounds("agent-deny").unwrap();
+        assert!(once.left() < deny.left(), "allowing once leads");
+        assert!(cx.debug_bounds("agent-allow-always").is_some());
         crate::harness::click("agent-allow-once", cx);
         app.update(cx, |this, _| {
             this.agent_edit(command.clone()).unwrap();
@@ -1300,5 +1389,82 @@ mod tests {
         assert_eq!(effort.len(), 1);
         assert_eq!(effort[0].fill, "/effort high");
         assert!(slash_matches("write a chorus").is_empty());
+    }
+
+    #[test]
+    fn only_bypass_warns_and_summaries_name_only_what_is_certain() {
+        assert!(mode_warns(Mode::Bypass));
+        for mode in [Mode::ReadOnly, Mode::Edit, Mode::Plan, Mode::AutoReview] {
+            assert!(!mode_warns(mode), "{mode:?}");
+        }
+        let operation = |name: &str, mutating, confirm| Operation {
+            name: name.into(),
+            mutating,
+            confirm,
+        };
+        for (name, mutating, confirm, expected) in [
+            (
+                "cli_command",
+                true,
+                true,
+                Some(Key::AgentApprovalRunCommand),
+            ),
+            (
+                "cli_file_change",
+                true,
+                true,
+                Some(Key::AgentApprovalChangeFiles),
+            ),
+            (
+                "cli_file_read",
+                false,
+                true,
+                Some(Key::AgentApprovalReadOutside),
+            ),
+            (
+                "search_internet",
+                false,
+                true,
+                Some(Key::AgentApprovalInternet),
+            ),
+            (
+                "edit_project.remove_track",
+                true,
+                true,
+                Some(Key::AgentApprovalReplaces),
+            ),
+            (
+                "edit_project.add_track",
+                true,
+                false,
+                Some(Key::AgentApprovalEdits),
+            ),
+            ("edit_project.render", false, true, None),
+        ] {
+            assert_eq!(
+                approval_summary(&operation(name, mutating, confirm)),
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn bypass_mode_says_so_for_as_long_as_it_is_chosen(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent.policy.mode = Mode::Edit;
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-bypass-warning").is_none());
+
+        app.update(cx, |this, _| this.settings.agent.policy.mode = Mode::Bypass);
+        crate::harness::paint(&app, cx);
+        let warning = cx
+            .debug_bounds("agent-bypass-warning")
+            .expect("bypass is announced");
+        let composer = cx.debug_bounds("agent-composer").unwrap();
+        assert!(warning.top() >= composer.top() && warning.bottom() <= composer.bottom());
     }
 }

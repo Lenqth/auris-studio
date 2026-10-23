@@ -526,6 +526,37 @@ fn note_colour(key: Key, theme: &Theme) -> gpui::Hsla {
     }
 }
 
+/// Why the composer cannot send right now.
+///
+/// Decided before the attempt, so the window can say it beside the composer and switch the
+/// button off, instead of accepting a press and answering with a note at the far end of the
+/// transcript.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SendBlocker {
+    /// The agent rewrote the project while the window held unsaved edits.
+    PendingChanges,
+    /// No model has been chosen to talk to.
+    NoModel,
+}
+
+/// The first thing standing between the composer and a send, in the order `agent_send` checks.
+fn send_blocker(model_chosen: bool, pending_reload: bool) -> Option<SendBlocker> {
+    if pending_reload {
+        Some(SendBlocker::PendingChanges)
+    } else if !model_chosen {
+        Some(SendBlocker::NoModel)
+    } else {
+        None
+    }
+}
+
+/// Whether a drag carries at least one file the composer would attach.
+fn drop_offers_attachment(paths: &[PathBuf]) -> bool {
+    paths
+        .iter()
+        .any(|path| auris_agent::attachment_kind(path).is_some())
+}
+
 /// A tool cancellation is terminal without pretending the tool itself failed.
 fn tool_mark(ok: bool, line: &str) -> &'static str {
     if line.is_empty() {
@@ -1819,6 +1850,14 @@ impl AurisApp {
     }
 
     /// Whether Stop can abandon work without interrupting an irreversible history deletion.
+    /// What would stop a send right now. A model picked in a settings form that is still open
+    /// counts as chosen, because `agent_send` applies that form before it asks.
+    fn agent_send_blocker(&self) -> Option<SendBlocker> {
+        let model_chosen = self.settings.agent.is_configured()
+            || (self.agent_chat.configuring && self.agent_chat.preferences().is_configured());
+        send_blocker(model_chosen, self.agent_chat.pending_reload.is_some())
+    }
+
     fn agent_cancelable(&self) -> bool {
         self.agent_chat.busy
             || self.agent_chat.pending_send.is_some()
@@ -3117,7 +3156,6 @@ impl AurisApp {
             })
             .collect();
         let operation_busy = self.agent_operation_busy();
-        let pending_reload = self.agent_chat.pending_reload.is_some();
         let drop_bounds = self.agent_chat.drop_bounds.clone();
         let accepts_drop = !composer_locked;
         let accent = theme.accent;
@@ -3137,18 +3175,10 @@ impl AurisApp {
                 this.agent_attach_files(paths.paths(), cx);
                 cx.stop_propagation();
             }))
-            .drag_over::<gpui::ExternalPaths>(move |style, paths, _, _| {
-                if accepts_drop
-                    && paths
-                        .paths()
-                        .iter()
-                        .any(|path| auris_agent::attachment_kind(path).is_some())
-                {
-                    style.border_color(accent).bg(drop_background)
-                } else {
-                    style
-                }
-            })
+            .group("agent-panel-drop")
+            // Changes nothing itself; registering it is what repaints the panel as a drag
+            // enters and leaves, so the overlay at the end follows the pointer.
+            .drag_over::<gpui::ExternalPaths>(|style, _, _, _| style)
             .child(
                 gpui::canvas(
                     move |bounds, _, _| {
@@ -3249,20 +3279,6 @@ impl AurisApp {
                                 }),
                             ))
                             .child(div().flex_1())
-                            .when(pending_reload, |this| {
-                                this.child(button(
-                                    "agent-reload",
-                                    self.t(Key::AgentReload),
-                                    ButtonStyle::Normal,
-                                    true,
-                                    theme.warning,
-                                    &theme,
-                                    cx.listener(|this, _, _, cx| {
-                                        this.agent_reload(cx);
-                                        cx.notify();
-                                    }),
-                                ))
-                            })
                             .child(button_enabled(
                                 "agent-configure",
                                 self.t(Key::AgentConfigure),
@@ -3363,6 +3379,36 @@ impl AurisApp {
             )
             .child(self.agent_slash_completions(cx))
             .child(self.agent_input_row(input_focus, stop_focus, cx))
+            // Drawn over everything, hidden until a drag carrying something attachable is over
+            // the panel. A recolour of the panel itself was covered by the header and composer.
+            .child(
+                div()
+                    .id("agent-drop-overlay")
+                    .debug_selector(|| "agent-drop-overlay".to_string())
+                    .absolute()
+                    .inset_0()
+                    .invisible()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .p_4()
+                    .rounded(Metrics::RADIUS_LG)
+                    .border_2()
+                    .border_color(accent)
+                    .bg(drop_background)
+                    .text_sm()
+                    .text_color(theme.text)
+                    .child(self.t(Key::AgentDropFiles))
+                    .can_drop(move |value, _, _| {
+                        accepts_drop
+                            && value
+                                .downcast_ref::<gpui::ExternalPaths>()
+                                .is_some_and(|paths| drop_offers_attachment(paths.paths()))
+                    })
+                    .group_drag_over::<gpui::ExternalPaths>("agent-panel-drop", |style| {
+                        style.visible()
+                    }),
+            )
             .into_any_element()
     }
     /// The context gauge and token counters, over the input the way picocode sets its status
@@ -4330,6 +4376,8 @@ impl AurisApp {
         .get_or_insert_with(|| cx.focus_handle().tab_index(0).tab_stop(true))
         .clone()
         .tab_stop(!self.agent_operation_busy());
+        let warns =
+            id == "agent-mode-menu" && controls::mode_warns(self.settings.agent.policy.mode);
         menu_picker(
             id,
             bounded_picker_label(current),
@@ -4357,6 +4405,8 @@ impl AurisApp {
                 cx.stop_propagation();
             }),
         )
+        .when(warns, |this| this.text_color(theme.warning))
+        .when(warns && !open, |this| this.border_color(theme.warning))
         .when(open, |this| this.border_color(theme.accent))
         .on_action(cx.listener(|this, _: &NavigateAgentModel, _, cx| {
             this.agent_chat.controls.mode_menu = false;
@@ -4501,11 +4551,14 @@ impl AurisApp {
         let empty = self.agent_chat.input.content().is_empty();
         let placeholder = self.t(Key::AgentComposerPlaceholder).to_owned();
         let attachments = self.agent_chat.attachments.clone();
+        let blocker = self.agent_send_blocker();
         let can_send = !self.agent_operation_busy()
+            && blocker.is_none()
             && !self.agent_chat.input.content().trim().is_empty()
             && self.agent_chat.input.marked().is_none();
         let cancelable = self.agent_cancelable();
         let send_label = self.t(Key::AgentSend).to_owned();
+        let bypass = controls::mode_warns(self.settings.agent.policy.mode);
         div()
             .id("agent-composer")
             .debug_selector(|| "agent-composer".to_owned())
@@ -4522,8 +4575,60 @@ impl AurisApp {
             .border_1()
             .border_color(if focused && !locked {
                 theme.accent
+            } else if bypass {
+                theme.warning
             } else {
                 theme.border_subtle
+            })
+            .when(bypass, |this| {
+                this.child(
+                    div()
+                        .id("agent-bypass-warning")
+                        .debug_selector(|| "agent-bypass-warning".to_owned())
+                        .px_1p5()
+                        .text_xs()
+                        .text_color(theme.warning)
+                        .child(format!("⚠ {}", self.t(Key::AgentBypassWarning))),
+                )
+            })
+            .when_some(blocker, |this, blocker| {
+                let (message, action) = match blocker {
+                    SendBlocker::PendingChanges => (Key::AgentReloadOffer, Key::AgentReload),
+                    SendBlocker::NoModel => (Key::AgentNotConfigured, Key::AgentChooseModel),
+                };
+                this.child(
+                    div()
+                        .id("agent-send-blocked")
+                        .debug_selector(|| "agent-send-blocked".to_owned())
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_1()
+                        .px_1p5()
+                        .text_xs()
+                        .text_color(theme.warning)
+                        .child(div().flex_1().min_w(px(80.0)).child(self.t(message)))
+                        .child(button(
+                            "agent-send-blocked-action",
+                            self.t(action),
+                            ButtonStyle::Normal,
+                            false,
+                            theme.accent,
+                            &theme,
+                            cx.listener(move |this, _, window, cx| {
+                                match blocker {
+                                    SendBlocker::PendingChanges => this.agent_reload(cx),
+                                    SendBlocker::NoModel => {
+                                        this.open_agent_model_menu();
+                                        if let Some(focus) = &this.agent_chat.model_focus {
+                                            window.focus(focus);
+                                        }
+                                    }
+                                }
+                                cx.notify();
+                            }),
+                        )),
+                )
             })
             .when_some(self.agent_chat.attachment_error.clone(), |this, error| {
                 this.child(
@@ -4565,33 +4670,39 @@ impl AurisApp {
                                 .unwrap_or_default()
                                 .to_string_lossy()
                                 .into_owned();
-                            let label = self.t(Key::AgentRemoveAttachment).replace("{name}", &name);
-                            button_enabled(
-                                ("agent-attachment", index),
-                                "",
-                                ButtonStyle::Ghost,
-                                ButtonState::available(false, !locked),
-                                theme.accent,
-                                &theme,
-                                cx.listener(move |this, _, _, cx| {
-                                    if index < this.agent_chat.attachments.len() {
-                                        this.agent_chat.attachments.remove(index);
-                                        this.agent_chat.attachment_error = None;
-                                    }
-                                    cx.notify();
-                                }),
-                            )
-                            .w_full()
-                            .min_w_0()
-                            .flex_shrink_0()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_1()
-                                    .w_full()
-                                    .h_full()
+                            let remove_tip =
+                                self.t(Key::AgentRemoveAttachment).replace("{name}", &name);
+                            let open_tip = self
+                                .t(Key::AgentOpenAttachment)
+                                .replace("{path}", &path.to_string_lossy());
+                            let path = path.clone();
+                            // Only the cross removes. The whole chip used to, so a click meant to
+                            // check which file this was threw the reference away.
+                            div()
+                                .id(("agent-attachment", index))
+                                .debug_selector(move || format!("agent-attachment-{index}"))
+                                .flex()
+                                .items_center()
+                                .w_full()
+                                .min_w_0()
+                                .flex_shrink_0()
+                                .rounded(Metrics::RADIUS_SM)
+                                .bg(theme.surface_sunken)
+                                .child(
+                                    button_enabled(
+                                        ("agent-attachment-open", index),
+                                        "",
+                                        ButtonStyle::Ghost,
+                                        ButtonState::available(false, true),
+                                        theme.accent,
+                                        &theme,
+                                        cx.listener(move |this, _, _, cx| {
+                                            this.open_agent_attachment(path.clone(), cx);
+                                        }),
+                                    )
+                                    .flex_1()
                                     .min_w_0()
+                                    .justify_start()
                                     .child(
                                         div()
                                             .flex_1()
@@ -4599,17 +4710,32 @@ impl AurisApp {
                                             .h_full()
                                             .child(bounded_picker_label(name)),
                                     )
-                                    .child(
-                                        div()
-                                            .id(("agent-attachment-remove", index))
-                                            .debug_selector(move || {
-                                                format!("agent-attachment-remove-{index}")
-                                            })
-                                            .flex_shrink_0()
-                                            .child(icon(Icon::Cross, px(12.0), theme.text_muted)),
-                                    ),
-                            )
-                            .tooltip(crate::ui::tooltip::keyed_tip(label, "", &theme))
+                                    .tooltip(crate::ui::tooltip::keyed_tip(open_tip, "", &theme)),
+                                )
+                                .child(
+                                    button_enabled(
+                                        ("agent-attachment-remove", index),
+                                        "",
+                                        ButtonStyle::Ghost,
+                                        ButtonState::available(false, !locked),
+                                        theme.accent,
+                                        &theme,
+                                        cx.listener(move |this, _, _, cx| {
+                                            if index < this.agent_chat.attachments.len() {
+                                                this.agent_chat.attachments.remove(index);
+                                                this.agent_chat.attachment_error = None;
+                                            }
+                                            cx.notify();
+                                        }),
+                                    )
+                                    .w(Metrics::CONTROL_HEIGHT)
+                                    .flex_shrink_0()
+                                    .px_0()
+                                    .gap_0()
+                                    .justify_center()
+                                    .child(icon(Icon::Cross, px(12.0), theme.text_muted))
+                                    .tooltip(crate::ui::tooltip::keyed_tip(remove_tip, "", &theme)),
+                                )
                         })),
                 )
             })
@@ -5190,9 +5316,24 @@ mod tests {
             );
         });
 
+        // Without a model the composer says so before the attempt: the button is off and the
+        // reason sits beside it with the way out.
         app.update(cx, |this, _| this.agent_chat.entries.clear());
         crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-send-blocked").is_some());
         crate::harness::click("agent-send", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "再生してみて。");
+            assert!(this.agent_chat.entries.is_empty());
+        });
+        crate::harness::click("agent-send-blocked-action", cx);
+        app.read_with(cx, |this, _| assert!(this.agent_chat.model_menu));
+
+        // Enter still goes through the send path and says why out loud.
+        app.update(cx, |this, _| {
+            this.agent_chat.model_menu = false;
+            this.agent_send();
+        });
         app.read_with(cx, |this, _| {
             assert_eq!(this.agent_chat.input.content(), "再生してみて。");
             assert!(this.agent_chat.configuring);
@@ -6669,7 +6810,12 @@ mod tests {
             })
         });
         crate::harness::paint(&app, cx);
-        crate::harness::click("agent-attachment-1", cx);
+        // Clicking a reference's name inspects it; only its cross takes it off the message.
+        crate::harness::click("agent-attachment-open-1", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.attachments.len(), 3)
+        });
+        crate::harness::click("agent-attachment-remove-1", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
                 this.agent_chat.attachments,
@@ -7593,5 +7739,56 @@ mod tests {
         );
         assert!(!chat.busy);
         assert!(matches!(chat.entries.last(), Some(ChatEntry::Error(_))));
+    }
+
+    #[test]
+    fn send_blockers_follow_the_order_send_checks_them() {
+        assert_eq!(send_blocker(true, false), None);
+        assert_eq!(send_blocker(false, false), Some(SendBlocker::NoModel));
+        assert_eq!(send_blocker(false, true), Some(SendBlocker::PendingChanges));
+        assert_eq!(send_blocker(true, true), Some(SendBlocker::PendingChanges));
+    }
+
+    #[test]
+    fn only_attachable_files_raise_the_drop_overlay() {
+        assert!(drop_offers_attachment(&[
+            PathBuf::from("setup.exe"),
+            PathBuf::from("take.wav"),
+        ]));
+        assert!(!drop_offers_attachment(&[PathBuf::from("setup.exe")]));
+        assert!(!drop_offers_attachment(&[]));
+    }
+
+    #[gpui::test]
+    fn pending_changes_switch_send_off_and_offer_the_accept_beside_the_composer(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent.model = "gpt-6.1-sol".into();
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.input = TextField::new("もう少し明るく");
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-send-blocked").is_none());
+
+        app.update(cx, |this, _| {
+            this.agent_chat.pending_reload = Some(PathBuf::from("Song/Song.auris"));
+        });
+        crate::harness::paint(&app, cx);
+        let banner = cx
+            .debug_bounds("agent-send-blocked")
+            .expect("the reason is shown before sending");
+        let composer = cx.debug_bounds("agent-composer").unwrap();
+        assert!(banner.top() >= composer.top() && banner.bottom() <= composer.bottom());
+        assert!(cx.debug_bounds("agent-send-blocked-action").is_some());
+        crate::harness::click("agent-send", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "もう少し明るく");
+            assert!(this.agent_chat.entries.is_empty());
+        });
     }
 }

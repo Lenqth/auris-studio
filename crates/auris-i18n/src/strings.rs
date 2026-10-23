@@ -1940,6 +1940,13 @@ new のオプション
     AgentAllowOnce { en: "Allow once", ja: "今回のみ許可" }
     AgentAllowAlways { en: "Always allow this operation", ja: "この操作を常に許可" }
     AgentDenyOnce { en: "Deny", ja: "拒否" }
+    AgentApprovalRunCommand { en: "Runs a command on this computer.", ja: "このコンピューターでコマンドを実行します。" }
+    AgentApprovalChangeFiles { en: "Changes files on this computer.", ja: "このコンピューター上のファイルを変更します。" }
+    AgentApprovalReadOutside { en: "Reads a file outside the project folder.", ja: "プロジェクトフォルダ外のファイルを読み取ります。" }
+    AgentApprovalInternet { en: "Searches the internet.", ja: "インターネットを検索します。" }
+    AgentApprovalReplaces { en: "May remove or replace existing content in this song.", ja: "曲の既存の内容を削除または置き換える可能性があります。" }
+    AgentApprovalEdits { en: "Edits this song.", ja: "曲を編集します。" }
+    AgentBypassWarning { en: "Bypass: the agent runs operations without asking. Deny rules still apply.", ja: "バイパス中：エージェントは確認なしで操作を実行します。禁止ルールは引き続き有効です。" }
     AgentAwaitingApproval { en: "Waiting for approval", ja: "操作の承認待ち" }
     AgentCompact { en: "Summarize context", ja: "会話を要約" }
     AgentCompacting { en: "Summarizing earlier conversation…", ja: "過去の会話を要約中…" }
