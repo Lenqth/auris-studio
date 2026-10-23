@@ -1,7 +1,7 @@
 name: Release
 
 # Tagging is what publishes. `v0.1.0` on a commit that has already been through CI builds the
-# three archives and creates the release from the matching section of CHANGELOG.md.
+# three portable archives, two desktop installers and the matching release notes.
 #
 # `workflow_dispatch` builds from a branch or an existing release tag and stops before publishing.
 # Select one platform to recover a failed archive without moving the tag or rebuilding the others.
@@ -40,6 +40,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Name branch dry-run artifacts from Cargo version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag == '' }}
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)
+          test -n "$version"
+          echo "RELEASE_NAME=v$version" >> "$GITHUB_ENV"
 
       # A dispatched recovery can keep the application at an immutable tag while taking
       # corrected packaging helpers from the commit that supplied this workflow.
@@ -100,8 +107,8 @@ jobs:
       - name: Fetch the shipped Japanese dictionary
         run: bash .release-tools/tools/fetch-dictionary.sh "$PWD/Dictionary"
 
-      # `Auris Studio.app` around the desktop binary, with the command line tool, the MCP
-      # server and the LLM agent beside it.
+      # Keep all three executables inside one app bundle so installing or upgrading the app
+      # also installs the matching CLI and MCP server. Archive-root links keep portable use.
       # Nothing is signed: this is a workflow with no certificate, and the release says what
       # Gatekeeper will make of that.
       - name: Assemble the archive
@@ -117,14 +124,15 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$plist"
 
           for binary in auris-studio auris auris-mcp; do
-            lipo -create -output "$stage/$binary" \
+            lipo -create -output "$app/Contents/MacOS/$binary" \
               "target/aarch64-apple-darwin/release/$binary" \
               "target/x86_64-apple-darwin/release/$binary"
           done
-          mv "$stage/auris-studio" "$app/Contents/MacOS/auris-studio"
+          ln -s "Auris Studio.app/Contents/MacOS/auris" "$stage/auris"
+          ln -s "Auris Studio.app/Contents/MacOS/auris-mcp" "$stage/auris-mcp"
 
-          # The dictionary travels inside the app. A symlink lets the CLI beside the bundle
-          # read the same resources without a second copy.
+          # The dictionary travels inside the app. The archive-root link keeps the old
+          # portable layout usable without duplicating the files.
           mkdir -p "$app/Contents/Resources"
           cp crates/auris-gpui/assets/auris-studio.icns "$app/Contents/Resources/auris-studio.icns"
           cp -R Dictionary "$app/Contents/Resources/Dictionary"
@@ -137,10 +145,21 @@ jobs:
           cp -R docs "$stage/docs"
           tar -czf "$stage.tar.gz" "$stage"
 
+          # Dragging the app from the disk image to Applications installs GUI, CLI and MCP
+          # together. Retain the archive above for users who want a portable layout.
+          dmg_stage="${stage}-dmg"
+          mkdir -p "$dmg_stage"
+          cp -R "$app" "$dmg_stage/Auris Studio.app"
+          ln -s /Applications "$dmg_stage/Applications"
+          hdiutil create -volname "Auris Studio" -srcfolder "$dmg_stage" \
+            -format UDZO -ov "$stage.dmg"
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: auris-studio-*-macos-universal.tar.gz
+          path: |
+            auris-studio-*-macos-universal.tar.gz
+            auris-studio-*-macos-universal.dmg
           if-no-files-found: error
 
   windows:
@@ -154,6 +173,14 @@ jobs:
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
+      - name: Name branch dry-run artifacts from Cargo version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag == '' }}
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)
+          test -n "$version"
+          echo "RELEASE_NAME=v$version" >> "$GITHUB_ENV"
+
       - name: Load packaging helpers
         uses: actions/checkout@v4
         with:
@@ -162,6 +189,7 @@ jobs:
           sparse-checkout: |
             tools/fetch-dictionary.sh
             tools/fetch-dictionary.ps1
+            tools/installer/auris-studio.iss
           sparse-checkout-cone-mode: false
 
       - uses: ilammy/msvc-dev-cmd@v1
@@ -217,10 +245,52 @@ jobs:
           cp -R docs "$stage/docs"
           7z a "$stage.zip" "$stage"
 
+      - name: Build the per-user installer
+        shell: pwsh
+        run: |
+          $compiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
+          if (-not $compiler) {
+            $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          }
+          if (-not (Test-Path -LiteralPath $compiler)) { throw 'Inno Setup 6 compiler was not found.' }
+          $stage = (Resolve-Path "auris-studio-${env:RELEASE_NAME}-windows-x86_64").Path
+          $icon = (Resolve-Path 'crates/auris-gpui/assets/auris-studio.ico').Path
+          $script = (Resolve-Path '.release-tools/tools/installer/auris-studio.iss').Path
+          $output = (Get-Location).Path
+          $version = $env:RELEASE_NAME -replace '^v', ''
+          & $compiler "/DStageDir=$stage" "/DOutputDir=$output" "/DAppVersion=$version" "/DIconPath=$icon" $script
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
+          $installer = Join-Path $output "auris-studio-v$version-windows-x86_64-setup.exe"
+          if (-not (Test-Path -LiteralPath $installer)) { throw "Installer was not created: $installer" }
+
+      - name: Smoke-test the Windows installer
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_NAME -replace '^v', ''
+          $installer = (Resolve-Path "auris-studio-v$version-windows-x86_64-setup.exe").Path
+          $installDir = Join-Path $env:RUNNER_TEMP 'auris-installer-smoke'
+          $setup = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$installDir`"") -Wait -PassThru -WindowStyle Hidden
+          if ($setup.ExitCode -ne 0) { throw "Installer exited with code $($setup.ExitCode)." }
+          try {
+            foreach ($file in @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'Dictionary')) {
+              if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Missing installed file: $file" }
+            }
+            & (Join-Path $installDir 'auris.exe') help | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Installed auris CLI exited with code $LASTEXITCODE." }
+          } finally {
+            $uninstaller = Join-Path $installDir 'unins000.exe'
+            if (Test-Path -LiteralPath $uninstaller) {
+              $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru -WindowStyle Hidden
+              if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)." }
+            }
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: auris-studio-*-windows-x86_64.zip
+          path: |
+            auris-studio-*-windows-x86_64.zip
+            auris-studio-*-windows-x86_64-setup.exe
           if-no-files-found: error
 
   # The command line tool only. The desktop application ships for macOS and Windows; CI does not
@@ -236,6 +306,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Name branch dry-run artifacts from Cargo version
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag == '' }}
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)
+          test -n "$version"
+          echo "RELEASE_NAME=v$version" >> "$GITHUB_ENV"
 
       - name: Load packaging helpers
         uses: actions/checkout@v4
@@ -320,8 +397,10 @@ jobs:
 
           | File | What it holds |
           | --- | --- |
-          | `…-macos-universal.tar.gz` | `Auris Studio.app`, `auris`, and `auris-mcp` — Apple Silicon and Intel universal binaries |
-          | `…-windows-x86_64.zip` | `auris-studio.exe`, `auris.exe`, and `auris-mcp.exe` |
+          | `…-macos-universal.dmg` | Drag `Auris Studio.app` to Applications; CLI and MCP are inside the app |
+          | `…-windows-x86_64-setup.exe` | Per-user installer for the desktop, CLI and MCP |
+          | `…-macos-universal.tar.gz` | Portable app, CLI and MCP for Apple Silicon and Intel |
+          | `…-windows-x86_64.zip` | Portable desktop, CLI and MCP executables |
           | `…-linux-x86_64.tar.gz` | the `auris` command line tool only |
 
           Every archive includes a `Dictionary` directory with the **NAIST Japanese dictionary**

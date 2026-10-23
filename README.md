@@ -7,14 +7,10 @@ and render singing voices. CLI, MCP and agent frontends share the desktop's edit
 
 ## Install
 
-Download binaries from the [releases page](https://github.com/uthree/auris-studio/releases):
-the desktop application, `auris` and `auris-mcp` for macOS and Windows,
-and `auris` for Linux. Built-in physical instruments are ready to play.
-
-On macOS 13.4 or later, drag `Auris Studio.app` to `/Applications`. The binaries are unsigned;
-if macOS blocks the downloaded app, remove its quarantine attribute with
-`xattr -dr com.apple.quarantine "Auris Studio.app"`. On Windows, SmartScreen may require
-**More info → Run anyway**.
+Download the Windows installer or macOS disk image from the
+[releases page](https://github.com/uthree/auris-studio/releases). The desktop, `auris` CLI and
+`auris-mcp` ship together. Linux has a CLI archive. See [Installation](docs/installation.md)
+for portable downloads and command-line paths. Built-in physical instruments are ready to play.
 
 To build from source with Rust 1.95 or newer:
 
@@ -32,6 +28,7 @@ platform setup. See [physical instruments](docs/physical-instruments.md) for the
 - [Features and usage](docs/features.md)
 - [Automatic composition](docs/composition.md)
 - [Agent and MCP workflows](docs/agent-workflows.md)
+- [Installation and portable releases](docs/installation.md)
 - [Singing backends](docs/singing-backends.md)
 - [Development](docs/development.md) and [composition evaluation](docs/evaluation.md)
 - [Changelog and compatibility policy](CHANGELOG.md)
