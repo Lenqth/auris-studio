@@ -2,8 +2,9 @@
 
 The [release page](https://github.com/uthree/auris-studio/releases) offers desktop installers
 and portable archives. Desktop releases contain the application, the `auris` CLI, the
-`auris-mcp` server and the Japanese dictionary from one build. Linux releases contain the CLI
-and dictionary. Built-in physical instruments do not require a separate sound library.
+`auris-mcp` server, the update helper and the Japanese dictionary from one build. Linux releases
+contain the CLI and dictionary. Built-in physical instruments do not require a separate sound
+library.
 
 In the desktop app, **Help → Check for Updates** compares the installed version with the
 latest published release. If an update is available, choose **Open Release Page** to download
@@ -16,7 +17,8 @@ Run `auris-studio-v<version>-windows-x86_64-setup.exe`. The installer uses the c
 administrator account. It creates a Start Menu shortcut and offers a desktop shortcut. The
 command-line tools are added to the **user** `PATH` by default; open a new terminal after
 installation to use `auris` and `auris-mcp` by name. The installer places the dictionary beside
-the executables, where both tools find it.
+the executables, where both tools find it. The update helper is installed beside
+`auris-studio.exe` and is used by the desktop application's updater.
 
 Run a newer setup file to upgrade the same installation. Use Windows **Installed apps** to
 uninstall it. Uninstall removes the files and the `PATH` entry added by the installer; projects
@@ -41,7 +43,8 @@ directory already on the user's `PATH`; agents can also use the paths above dire
 the application in Applications with a newer version to upgrade it. The portable tar.gz keeps
 root-level `auris` and `auris-mcp` links to the same executables inside its app bundle.
 
-The application is currently unsigned and not notarized. macOS may block its first launch;
+The application bundle also contains the update helper beside `auris-studio`. The application is
+currently unsigned and not notarized. macOS may block its first launch;
 see the release notes for the current manual opening instructions. macOS 13.4 or newer is
 required.
 

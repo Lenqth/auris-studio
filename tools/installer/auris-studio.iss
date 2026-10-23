@@ -26,6 +26,8 @@ SolidCompression=yes
 ChangesEnvironment=yes
 CloseApplications=yes
 
+; The staged directory also contains auris-update-helper.exe. Keeping the complete staged tree
+; here ensures the updater is replaced atomically with the desktop executable.
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

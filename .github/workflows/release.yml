@@ -93,9 +93,9 @@ jobs:
         run: |
           for target in aarch64-apple-darwin x86_64-apple-darwin; do
             if [ "$target" = x86_64-apple-darwin ] && [ -n "${ORT_INTEL_LIB_DIR:-}" ]; then
-              ORT_LIB_PATH="$ORT_INTEL_LIB_DIR" cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+              ORT_LIB_PATH="$ORT_INTEL_LIB_DIR" cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp -p auris-update-helper
             else
-              cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp
+              cargo build --release --locked --target "$target" -p auris-gpui -p auris-cli -p auris-mcp -p auris-update-helper
             fi
           done
           arch -x86_64 target/x86_64-apple-darwin/release/auris help > /dev/null
@@ -107,8 +107,9 @@ jobs:
       - name: Fetch the shipped Japanese dictionary
         run: bash .release-tools/tools/fetch-dictionary.sh "$PWD/Dictionary"
 
-      # Keep all three executables inside one app bundle so installing or upgrading the app
-      # also installs the matching CLI and MCP server. Archive-root links keep portable use.
+      # Keep all four executables inside one app bundle so installing or upgrading the app
+      # also installs the matching CLI, MCP server and update helper. Archive-root links keep
+      # portable use.
       # Nothing is signed: this is a workflow with no certificate, and the release says what
       # Gatekeeper will make of that.
       - name: Assemble the archive
@@ -123,13 +124,14 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$plist"
 
-          for binary in auris-studio auris auris-mcp; do
+          for binary in auris-studio auris auris-mcp auris-update-helper; do
             lipo -create -output "$app/Contents/MacOS/$binary" \
               "target/aarch64-apple-darwin/release/$binary" \
               "target/x86_64-apple-darwin/release/$binary"
           done
           ln -s "Auris Studio.app/Contents/MacOS/auris" "$stage/auris"
           ln -s "Auris Studio.app/Contents/MacOS/auris-mcp" "$stage/auris-mcp"
+          ln -s "Auris Studio.app/Contents/MacOS/auris-update-helper" "$stage/auris-update-helper"
 
           # The dictionary travels inside the app. The archive-root link keeps the old
           # portable layout usable without duplicating the files.
@@ -224,6 +226,8 @@ jobs:
           }
           foreach ($name in $frontends) { $buildArgs += @('-p', $name) }
           cargo @buildArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release --locked -p auris-update-helper
           exit $LASTEXITCODE
 
       - name: Fetch the shipped Japanese dictionary
@@ -235,7 +239,7 @@ jobs:
         run: |
           stage="auris-studio-${RELEASE_NAME}-windows-x86_64"
           mkdir -p "$stage"
-          cp target/release/auris-studio.exe target/release/auris.exe target/release/auris-mcp.exe "$stage/"
+          cp target/release/auris-studio.exe target/release/auris.exe target/release/auris-mcp.exe target/release/auris-update-helper.exe "$stage/"
           # Beside the binaries, which is the first place `auris_session::library` looks.
           cp -R Dictionary "$stage/Dictionary"
           cp README.md CHANGELOG.md LICENSE "$stage/"
@@ -272,7 +276,7 @@ jobs:
           $setup = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$installDir`"") -Wait -PassThru -WindowStyle Hidden
           if ($setup.ExitCode -ne 0) { throw "Installer exited with code $($setup.ExitCode)." }
           try {
-            foreach ($file in @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'Dictionary')) {
+            foreach ($file in @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'auris-update-helper.exe', 'Dictionary')) {
               if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Missing installed file: $file" }
             }
             & (Join-Path $installDir 'auris.exe') help | Out-Null
