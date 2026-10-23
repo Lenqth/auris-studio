@@ -93,6 +93,370 @@ fn performance_measurements_are_bounded_and_pitch_curves_are_not_called_inaudibl
     );
 }
 
+#[test]
+fn slide_and_glide_report_effective_performed_changes_separately() {
+    let (mut session, clip) = fixture();
+    session
+        .replace_notes(
+            clip,
+            vec![
+                Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+                Note::new(67, Ticks::QUARTER, Ticks::QUARTER),
+            ],
+        )
+        .unwrap();
+    let result = edit(&mut session, clip, json!({"slide":1.0}), None).unwrap();
+    let stages = result["note_effects"]["stages"].as_array().unwrap();
+    let slide = stages
+        .iter()
+        .find(|stage| stage["stage"] == "slide")
+        .unwrap();
+    assert_eq!(slide["slide"]["added_notes"], 1);
+    assert_eq!(slide["slide"]["effective"], true);
+    let result = edit(
+        &mut session,
+        clip,
+        json!({"reset":["slide"],"pitch":{"glide_ms":100.0}}),
+        None,
+    )
+    .unwrap();
+    let pitch = result["note_effects"]["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|stage| stage["stage"] == "pitch")
+        .unwrap();
+    assert_eq!(pitch["pitch"]["effective"], true);
+    assert!(pitch["pitch"]["max_semitone_delta"].as_f64().unwrap() > 0.0);
+}
+
+#[test]
+fn repeated_slide_and_gapped_glide_report_why_they_did_nothing() {
+    let (mut session, clip) = fixture();
+    session
+        .replace_notes(
+            clip,
+            vec![
+                Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+                Note::new(60, Ticks::QUARTER, Ticks::QUARTER),
+            ],
+        )
+        .unwrap();
+    let repeated = edit(&mut session, clip, json!({"slide":1.0}), None).unwrap();
+    let slide = repeated["note_effects"]["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|stage| stage["stage"] == "slide")
+        .unwrap();
+    assert_eq!(slide["slide"]["added_notes"], 0);
+    assert_eq!(slide["slide"]["ineligible_reasons"]["same_or_semitone"], 1);
+
+    session
+        .replace_notes(
+            clip,
+            vec![
+                Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+                Note::new(67, Ticks::QUARTER * 2, Ticks::QUARTER),
+            ],
+        )
+        .unwrap();
+    let gapped = edit(
+        &mut session,
+        clip,
+        json!({"reset":["slide"],"pitch":{"glide_ms":100.0}}),
+        None,
+    )
+    .unwrap();
+    let pitch = gapped["note_effects"]["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|stage| stage["stage"] == "pitch")
+        .unwrap();
+    assert_eq!(pitch["pitch"]["effective"], false);
+    assert_eq!(pitch["pitch"]["eligibility"]["eligible_transitions"], 0);
+    assert_eq!(pitch["pitch"]["eligibility"]["maximum_gap_ms"], 500.0);
+}
+
+#[test]
+fn authored_bend_does_not_mask_an_ineffective_glide() {
+    let (mut session, clip) = fixture();
+    session.set_curve_point(clip, auris_core::project::ClipCurve::Bend, Ticks(200), 0.7);
+    session
+        .replace_notes(
+            clip,
+            vec![
+                Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+                Note::new(67, Ticks::QUARTER * 2, Ticks::QUARTER),
+            ],
+        )
+        .unwrap();
+    let result = edit(
+        &mut session,
+        clip,
+        json!({"pitch":{"glide_ms":100.0}}),
+        None,
+    )
+    .unwrap();
+    let pitch = result["note_effects"]["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|stage| stage["stage"] == "pitch")
+        .unwrap();
+    assert_eq!(pitch["pitch"]["effective"], false);
+    assert_eq!(pitch["pitch"]["max_semitone_delta"], 0.0);
+}
+
+#[test]
+fn same_pitch_glide_is_reported_as_ineffective_with_a_reason() {
+    let (mut session, clip) = fixture();
+    session
+        .replace_notes(
+            clip,
+            vec![
+                Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+                Note::new(60, Ticks::QUARTER, Ticks::QUARTER),
+            ],
+        )
+        .unwrap();
+    let result = edit(
+        &mut session,
+        clip,
+        json!({"pitch":{"glide_ms":100.0}}),
+        None,
+    )
+    .unwrap();
+    let pitch = result["pitch_effects"][0]["report"].clone();
+    assert_eq!(pitch["effective"], false);
+    assert_eq!(pitch["eligibility"]["ineligible_reasons"]["same_pitch"], 1);
+}
+
+#[test]
+fn pitch_measurement_counts_hidden_notes_before_applying_the_note_bound() {
+    let mut clip = MidiClip::new(ClipId(9), "Hidden", Ticks::ZERO, Ticks::QUARTER * 4);
+    clip.notes = (0..2050)
+        .map(|index| Note::new(60, Ticks::QUARTER * 4 + Ticks(index), Ticks::QUARTER))
+        .collect();
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                glide_ms: 100.0,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    let report = &result["pitch_effects"][0]["report"];
+    assert_eq!(report["measured"], false);
+}
+
+#[test]
+fn pitch_measurement_stops_before_a_clip_longer_than_sixty_four_beats() {
+    let clip = MidiClip::new(ClipId(10), "Long", Ticks::ZERO, Ticks::QUARTER * 65);
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                glide_ms: 100.0,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    let report = &result["pitch_effects"][0]["report"];
+    assert_eq!(report["measured"], false);
+}
+
+#[test]
+fn dense_authored_curve_is_reported_unmeasured_instead_of_ineffective() {
+    let mut clip = MidiClip::new(ClipId(11), "Dense", Ticks::ZERO, Ticks::QUARTER * 4);
+    clip.notes = vec![
+        Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+        Note::new(67, Ticks::QUARTER, Ticks::QUARTER),
+    ];
+    clip.bend = (0..2050)
+        .map(|index| auris_core::project::CurvePoint {
+            at: Ticks(index),
+            value: 0.0,
+        })
+        .collect();
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                glide_ms: 100.0,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    let report = &result["pitch_effects"][0]["report"];
+    assert_eq!(report["measured"], false);
+    assert!(report["effective"].is_null());
+}
+
+#[test]
+fn whole_drum_scope_does_not_claim_to_measure_nested_writer_stages() {
+    let mut clip = MidiClip::new(ClipId(12), "Kit", Ticks::ZERO, Ticks::QUARTER * 4);
+    let mut note = Note::new(36, Ticks::ZERO, Ticks::QUARTER);
+    note.drum_voice = "kick".into();
+    clip.notes.push(note);
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::ForDrumVoice {
+            voice: "kick".into(),
+            transforms: vec![NoteTransform::Gate { amount: 0.5 }],
+        }],
+        None,
+        &project,
+    );
+    assert_eq!(result["complete"], false);
+    assert_eq!(result["stages"][0]["stage"], "for_drum_voice");
+    assert!(
+        result["stages"][0]["warnings"].as_array().unwrap()[0]
+            .as_str()
+            .unwrap()
+            .contains("Select drum_voice")
+    );
+}
+
+#[test]
+fn modulation_reports_an_effect_even_when_glide_is_zero() {
+    let mut clip = MidiClip::new(ClipId(13), "Modulation", Ticks::ZERO, Ticks::QUARTER * 4);
+    clip.notes
+        .push(Note::new(60, Ticks::ZERO, Ticks::QUARTER * 2));
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                modulation: 0.5,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    let report = &result["pitch_effects"][0]["report"];
+    assert_eq!(report["effective"], false);
+    assert_eq!(report["generated_curves"]["modulation"]["effective"], true);
+}
+
+#[test]
+fn short_notes_do_not_report_a_volume_swell_from_the_default_full_volume() {
+    let mut clip = MidiClip::new(ClipId(16), "Short volume", Ticks::ZERO, Ticks::QUARTER * 4);
+    clip.notes.push(Note::new(60, Ticks::ZERO, Ticks(480)));
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                volume_swell: 0.8,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    assert_eq!(
+        result["pitch_effects"][0]["report"]["generated_curves"]["volume_swell"]["effective"],
+        false
+    );
+}
+
+#[test]
+fn pitch_time_and_generated_sample_bounds_remain_unknown() {
+    for (beats, bpm) in [(64, 60.0), (32, 120.0)] {
+        let length = Ticks::QUARTER * beats;
+        let mut clip = MidiClip::new(ClipId(17), "Bounded", Ticks::ZERO, length);
+        let half = Ticks(length.raw() / 2);
+        clip.notes.push(Note::new(60, Ticks::ZERO, half));
+        clip.notes.push(Note::new(67, half, half));
+        let mut project = Project::new("Probe", 48_000.0);
+        project.tempo_map.set_point(Ticks::ZERO, bpm);
+        let result = effects::measure(
+            &clip,
+            &[NoteTransform::Pitch {
+                settings: PitchPerformance {
+                    glide_ms: 120.0,
+                    ..Default::default()
+                },
+            }],
+            None,
+            &project,
+        );
+        let report = &result["pitch_effects"][0]["report"];
+        assert_eq!(report["measured"], false, "{result}");
+        assert!(report["effective"].is_null(), "{result}");
+        assert_eq!(result["complete"], false);
+    }
+}
+
+#[test]
+fn same_pitch_glide_stays_ineffective_with_authored_bend_and_vibrato() {
+    let mut clip = MidiClip::new(ClipId(14), "Same pitch", Ticks::ZERO, Ticks::QUARTER * 4);
+    clip.notes = vec![
+        Note::new(60, Ticks::ZERO, Ticks::QUARTER),
+        Note::new(60, Ticks::QUARTER, Ticks::QUARTER),
+    ];
+    clip.bend.push(auris_core::project::CurvePoint {
+        at: Ticks(120),
+        value: 0.7,
+    });
+    let project = Project::new("Probe", 48_000.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                glide_ms: 100.0,
+                vibrato: 0.4,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    let report = &result["pitch_effects"][0]["report"];
+    assert_eq!(report["effective"], false);
+    assert_eq!(report["eligibility"]["ineligible_reasons"]["same_pitch"], 1);
+}
+
+#[test]
+fn glide_eligibility_uses_tempo_map_seconds_at_each_note_boundary() {
+    let mut clip = MidiClip::new(ClipId(15), "Tempo", Ticks::ZERO, Ticks::QUARTER * 4);
+    clip.notes = vec![
+        Note::new(60, Ticks::ZERO, Ticks(480)),
+        Note::new(67, Ticks(600), Ticks(960)),
+    ];
+    let mut project = Project::new("Probe", 48_000.0);
+    project.tempo_map.set_point(Ticks::ZERO, 120.0);
+    project.tempo_map.set_point(Ticks(480), 600.0);
+    let result = effects::measure(
+        &clip,
+        &[NoteTransform::Pitch {
+            settings: PitchPerformance {
+                glide_ms: 100.0,
+                ..Default::default()
+            },
+        }],
+        None,
+        &project,
+    );
+    let report = &result["pitch_effects"][0]["report"];
+    assert_eq!(report["eligibility"]["eligible_transitions"], 1);
+    assert_eq!(report["effective"], true);
+}
+
 fn fixture() -> (Session, ClipId) {
     let mut session = Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
     let track = session.add_default_instrument_track("Lead").unwrap();
@@ -114,6 +478,7 @@ fn fixture() -> (Session, ClipId) {
             ClipRecipe::new(ClipPreset::Lead, 42),
         )
         .unwrap();
+    session.set_clip_transforms(clip, Vec::new()).unwrap();
     session
         .replace_notes(
             clip,

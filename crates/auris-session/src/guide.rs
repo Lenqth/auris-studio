@@ -2503,6 +2503,14 @@ pub mod harmony {
     //! a separate Undo transaction per call, and identical retries record no step. Reference
     //! grooves share the UI's snapshot capture path. Native model APIs, Codex and Claude Code
     //! expose the same typed commands and permissions.
+    //! Inspection also measures the first performed pass. Note-event diagnostics explain
+    //! whether strum offsets attacks and whether slide inserts intermediate notes. Continuous
+    //! pitch connections use `pitch.glide_ms`, not the discrete `slide` articulation. Bounded
+    //! pitch diagnostics compare rendered control curves with only that gesture disabled,
+    //! retaining authored curves and other gestures. An incomplete measurement remains unknown;
+    //! a changed curve is not proof that an external instrument responds. Agents independently
+    //! read back the measured effect and compare the same audio range before claiming an
+    //! audible change. These diagnostics never bake performance into the score.
     //! Every wander draws from a seed
     //! the transform stores, through the same named streams the composer draws from
     //! ([`auris_core::rng`]), and it draws per loop pass — a repeated bar is loose differently

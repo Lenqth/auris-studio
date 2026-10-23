@@ -36,9 +36,10 @@ impl ToolGroups {
     pub fn instructions(&self) -> String {
         if self.0.is_empty() || self.0.iter().any(|g| g == "all") {
             return format!(
-                "{INSTRUCTIONS}{}{}{}",
+                "{INSTRUCTIONS}{}{}{}{}",
                 crate::MELODY_PHRASING_INSTRUCTIONS,
                 crate::ACCOMPANIMENT_INSTRUCTIONS,
+                crate::PERFORMANCE_INSTRUCTIONS,
                 crate::arrangement_instructions()
             );
         }
@@ -60,6 +61,9 @@ impl ToolGroups {
         }
         if self.allows("accompaniment") {
             text.push_str(crate::ACCOMPANIMENT_INSTRUCTIONS);
+        }
+        if self.allows("set_performance") {
+            text.push_str(crate::PERFORMANCE_INSTRUCTIONS);
         }
         if self
             .0
@@ -313,6 +317,16 @@ mod tests {
         assert!(!manual.instructions().contains("spec_reference"));
         assert!(manual.allows("accompaniment"));
         assert!(manual.allows("suggest_harmony"));
+        assert!(
+            manual
+                .instructions()
+                .contains(crate::PERFORMANCE_INSTRUCTIONS)
+        );
+        assert!(
+            ToolGroups::default()
+                .instructions()
+                .contains(crate::PERFORMANCE_INSTRUCTIONS)
+        );
         assert!(
             manual
                 .instructions()

@@ -240,6 +240,11 @@ impl Session {
                 _ => None,
             }))
             .collect();
+        let note_effects = effects::measure(target, &stack, voice, self.project());
+        let pitch_effects = note_effects
+            .get("pitch_effects")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!([]));
         Ok(serde_json::json!({
             "clip": clip.0,
             "drum_voice": voice,
@@ -248,7 +253,8 @@ impl Session {
             "melodic_pitch_supported": melodic,
             "stage_order": stack.iter().filter_map(family).take(64).collect::<Vec<_>>(),
             "stage_count": stack.len(),
-            "note_effects": effects::measure(target, &stack, voice, self.project()),
+            "note_effects": note_effects,
+            "pitch_effects": pitch_effects,
             "units": {
                 "ratios": "0..1",
                 "swing_percent": "50..75 percent",
@@ -614,7 +620,9 @@ pub struct PerformancePatch {
     /// Ghost velocity at the panel's scale, 0..1 maps to 0..0.3 relative gain.
     #[schemars(range(min = 0, max = 1))]
     pub brush: Option<f32>,
-    /// Intermediate-note strength, 0..1.
+    /// Discrete intermediate-note strength, 0..1. This inserts a short performed note between
+    /// eligible monophonic attacks; it is not a continuous pitch bend. Inspect `note_effects`
+    /// for the inserted-note count and ineligible transition reasons.
     #[schemars(range(min = 0, max = 1))]
     pub slide: Option<f32>,
     /// Non-destructive transposition in semitones.
@@ -751,7 +759,11 @@ pub struct PitchPatch {
     /// Release fall duration in milliseconds.
     #[schemars(range(min = 10, max = 500))]
     pub fall_ms: Option<f32>,
-    /// Connection duration on each side of the note boundary.
+    /// Connection duration on each side of a qualifying melodic note boundary. This creates a
+    /// continuous pitch bend and is distinct from `slide`, which inserts an intermediate note.
+    /// Connections require a monophonic performed line, a gap of at most 60 ms, an interval of at
+    /// most two octaves, and notes at least 80 ms long. Inspect `note_effects` for curve ablation
+    /// (`glide_ms` enabled versus disabled); a stored setting alone is not evidence of effect.
     #[schemars(range(min = 0, max = 250))]
     pub glide_ms: Option<f32>,
     /// Modulation wheel depth, 0..1.

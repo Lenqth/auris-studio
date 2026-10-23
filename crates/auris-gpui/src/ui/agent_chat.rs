@@ -30,6 +30,8 @@ use crate::ui::widgets::{
 };
 
 #[cfg(test)]
+mod articulation_eval;
+#[cfg(test)]
 mod composition_eval;
 pub(crate) mod controls;
 mod conversations;

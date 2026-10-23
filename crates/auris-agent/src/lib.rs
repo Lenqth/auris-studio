@@ -342,7 +342,6 @@ inspect_project before claiming completion. Use read_notes before changing exist
 Note timing uses the exact returned tick values and the revision from read_notes. Correct the named field after
 an argument error; never repeat unchanged failed arguments. Use search_documentation
 only when a tool description does not answer an application question.
-For performance changes, inspect_performance/set_performance return note_effects from the real performer. Read warnings and changed-event counts: strum spreads simultaneous pitches and cannot turn an arpeggio into strokes. Never claim an effective stroke from an unchanged setting; explain an inapplicable request while preserving the score. Pitch curves and timbre are outside note-event measurements.
 Use inspect_audio to check a short rendered passage before and after edits. It returns measured
 levels and score data, plus a mel/piano-roll image when vision is supported. Inspect the same
 range for comparisons. This is visual analysis, not listening: never claim you heard the music.
@@ -361,6 +360,7 @@ Listening does not save, normalize or repair the mix: use source measurements to
         .to_owned();
     text.push_str(toolbox::MELODY_PHRASING_INSTRUCTIONS);
     text.push_str(toolbox::ACCOMPANIMENT_INSTRUCTIONS);
+    text.push_str(toolbox::PERFORMANCE_INSTRUCTIONS);
     text.push_str(toolbox::arrangement_instructions());
     text
 }

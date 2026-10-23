@@ -241,14 +241,14 @@ pub enum Command {
         #[schemars(length(min = 1, max = 256))]
         edits: Vec<InstrumentControl>,
     },
-    /// Read one MIDI clip's non-destructive performance, stage order and editable settings. Optional drum_voice addresses one named writer in a drum kit; omit it for the whole clip. Notes, curves and generation recipes are unchanged. Use this before set_performance and read back afterward.
+    /// Read a MIDI clip's non-destructive settings and measured note/pitch effects, including whether slide/glide actually contributes. Optional drum_voice addresses one named writer in a drum kit; omit it for the whole clip. Read completeness and warnings: stored settings alone are not verification. Notes, curves and generation recipes are unchanged. Use this before set_performance and independently read back afterward.
     InspectPerformance {
         /// Stable MIDI clip ID from inspect_project or read_notes.
         clip: u64,
         /// Exact drum writer name from the clip's notes or recipe; omit for the whole clip.
         drum_voice: Option<String>,
     },
-    /// Adjust only supplied non-destructive performance settings on a MIDI clip. Read inspect_performance first. Ratios use 0..1, swing 50..75 percent, times milliseconds and pitch semitones. Strum spreads simultaneous pitches; it cannot make chord strokes from single-note arpeggios. Read note_effects and warnings before claiming an effective change. Omitted fields, stored notes, curves and recipes are preserved. settings.reset removes selected stages. Optional drum_voice scopes edits to one writer. More specific expression/ghost fields override humanize/brush. Edits validate atomically; identical retries are no-ops.
+    /// Adjust only supplied non-destructive playing controls and return measured note/pitch effects. Read inspect_performance first and independently afterward. Ratios use 0..1, swing 50..75 percent, times milliseconds and pitch semitones. slide inserts a discrete intermediate note; pitch.glide_ms creates a continuous pitch connection. Strum spreads simultaneous pitches, not single-note arpeggios. Check note_effects, pitch_effects, completeness and warnings before claiming an effective change. Omitted fields, stored notes, curves and recipes are preserved. settings.reset removes selected stages. Optional drum_voice scopes edits to one writer. More specific expression/ghost fields override humanize/brush. Edits validate atomically; identical retries are no-ops.
     SetPerformance {
         /// Stable MIDI clip ID.
         clip: u64,
