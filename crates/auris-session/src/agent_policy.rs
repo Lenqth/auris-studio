@@ -189,6 +189,7 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.accompaniment",
     "edit_project.arrangement",
     "edit_project.analyze_lyrics",
     "edit_project.diagnose_song",
@@ -399,6 +400,37 @@ impl Policy {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn accompaniment_is_one_edit_operation_in_every_live_policy_mode() {
+        use super::*;
+        let operation = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{
+                "action":"accompaniment","expected_revision":"revision","protected_clips":[1],
+                "operation":{"kind":"regenerate","clips":[2]}
+            }}),
+        )
+        .unwrap();
+        assert!(operation.mutating);
+        for mode in [Mode::ReadOnly, Mode::Plan] {
+            assert!(matches!(
+                Policy {
+                    mode,
+                    ..Default::default()
+                }
+                .decide(&operation),
+                Decision::Deny(_)
+            ));
+        }
+        assert_eq!(
+            Policy {
+                mode: Mode::Edit,
+                ..Default::default()
+            }
+            .decide(&operation),
+            Decision::Allow
+        );
+    }
     #[test]
     fn live_history_read_is_inspection_and_reversal_requires_edit_permission() {
         use super::*;

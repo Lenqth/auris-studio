@@ -2400,6 +2400,17 @@ pub mod harmony {
     //!
     //! # Clips that write themselves
     //!
+    //! The shared agent `accompaniment` command keeps explicit foreground clip IDs protected
+    //! while generating backing on existing tracks, using the same phrase writer as the editor.
+    //! It also accepts explicit generated backing clip IDs and an optional bounded harmony
+    //! replacement: only those clips are rewritten, and their IDs, seeds, recipe controls,
+    //! authored curves and performance stacks survive. Hand-edited and frozen targets are refused.
+    //! A detached [`accompaniment::Job`](crate::accompaniment::Job) prepares a project snapshot;
+    //! the owner checks document identity, numeric/content revisions, folder and cancellation
+    //! before applying the complete result as one Undo. Saved execution uses the same worker
+    //! protocol and checkpointed save. No implicit regeneration follows an ordinary harmony edit.
+    //! `docs/agent-accompaniment.md` describes the bounded request and response contract.
+    //!
     //! A [`MidiClip`](auris_core::MidiClip) may carry a
     //! [`ClipRecipe`](auris_core::ClipRecipe): a preset, a seed and a few dials saying how the
     //! notes in it were written. Melodic presets read the harmony underneath; drum presets read

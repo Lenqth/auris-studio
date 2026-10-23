@@ -23,6 +23,11 @@ for the selected operation's full field explanations and examples.
 
 ## Exact authored notes
 
+For an authored foreground with generated backing, use
+[`accompaniment`](agent-accompaniment.md). It protects explicit melody clip IDs, delegates
+backing to Auris writers, and can change harmony while regenerating only selected backing
+clips in one edit. It is available in both the `manual` and `composition` groups.
+
 Add a track with an explicit kind and name, then `add_clip` with its numeric track,
 intended clip name, one-based `start_bar` and duration `bars`. Read the clip with
 the returned `clip` address, not the owning `track`. `inspect_project` uses

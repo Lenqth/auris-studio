@@ -507,29 +507,33 @@ impl Session {
         recipe: &ClipRecipe,
         excluded: Option<ClipId>,
     ) -> Vec<Note> {
-        let mut notes = auris_compose::write_phrase(
-            &self.project.harmony,
-            start,
-            length,
-            // The meter the clip begins in. `write_phrase` builds every figure on one grid, so a
-            // clip is written in one meter however many the timeline holds.
-            self.project.signatures.signature_at(start),
-            // No tempo goes along any more: the humanisation that needed one to turn its
-            // milliseconds into ticks lives on the clip's transform stack now, where the
-            // renderer hands it the tempo actually in force at playback.
-            recipe,
-            self.project.sections.section_at(start),
-        );
-        super::lyrics::arrange_generated_backing(
-            &self.project,
-            start,
-            length,
-            recipe,
-            excluded,
-            &mut notes,
-        );
-        notes
+        project_phrase(&self.project, start, length, recipe, excluded)
     }
+}
+
+/// The same writer and backing adjustment for live edits and detached agent jobs.
+pub(super) fn project_phrase(
+    project: &auris_core::Project,
+    start: Ticks,
+    length: Ticks,
+    recipe: &ClipRecipe,
+    excluded: Option<ClipId>,
+) -> Vec<Note> {
+    let mut notes = auris_compose::write_phrase(
+        &project.harmony,
+        start,
+        length,
+        // The meter the clip begins in. `write_phrase` builds every figure on one grid, so a
+        // clip is written in one meter however many the timeline holds.
+        project.signatures.signature_at(start),
+        // No tempo goes along any more: the humanisation that needed one to turn its
+        // milliseconds into ticks lives on the clip's transform stack now, where the
+        // renderer hands it the tempo actually in force at playback.
+        recipe,
+        project.sections.section_at(start),
+    );
+    super::lyrics::arrange_generated_backing(project, start, length, recipe, excluded, &mut notes);
+    notes
 }
 
 /// A generated wander follows its take's seed while retaining any edited amount or custom seed.

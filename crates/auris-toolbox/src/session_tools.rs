@@ -154,6 +154,61 @@ mod tests {
     use serde_json::{Value, json};
 
     #[test]
+    fn saved_accompaniment_preserves_melody_and_selective_regeneration_survives_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Backing.auris");
+        let mut session = crate::headless().unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let lead = session
+            .add_midi_clip(track, "Melody", Ticks::ZERO, Ticks::QUARTER * 16)
+            .unwrap();
+        session
+            .add_note(lead, Note::new(67, Ticks(13), Ticks(997)))
+            .unwrap();
+        let bass = session.add_default_instrument_track("Bass").unwrap();
+        let pad = session.add_default_instrument_track("Pad").unwrap();
+        session.stamp_progression(&Chart::parse("| I | IV | V | I |").unwrap(), Ticks::ZERO, 4);
+        session.save(&path).unwrap();
+        let revision = crate::opened(path.to_str().unwrap())
+            .unwrap()
+            .agent_document_revision()
+            .unwrap();
+        let args = json!({"project":path,"expected_revision":revision,"protected_clips":[lead.0],"operation":{"kind":"generate","parts":[
+            {"track":bass.0,"name":"Bass","part":"bass","start_bar":1,"bars":4,"seed":23},
+            {"track":pad.0,"name":"Pad","part":"pad","start_bar":1,"bars":4,"seed":42}
+        ]}});
+        let groups = crate::ToolGroups::parse("manual").unwrap();
+        let result = crate::runtime::call_saved(&groups, "accompaniment", args.clone()).unwrap();
+        let report: Value = serde_json::from_str(&result).unwrap();
+        assert!(!result.contains("\"notes\":"));
+        let before = crate::opened(path.to_str().unwrap()).unwrap();
+        assert_eq!(before.midi_clip(lead), session.midi_clip(lead));
+        assert_eq!(
+            report["revision"],
+            before.agent_document_revision().unwrap()
+        );
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(crate::runtime::call_saved(&groups, "accompaniment", args).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let id = ClipId(report["clips"][0]["clip"].as_u64().unwrap());
+        let untouched = ClipId(report["clips"][1]["clip"].as_u64().unwrap());
+        crate::runtime::call_saved(&groups,"accompaniment",json!({"project":path,"expected_revision":report["revision"],"protected_clips":[lead.0],"operation":{
+            "kind":"regenerate","clips":[id.0],"harmony":{"start_bar":1,"bars":4,"key":"D major","chords":"| Imaj7 | IVsus4 | viidim7 | V7 |"}
+        }})).unwrap();
+        let after = crate::opened(path.to_str().unwrap()).unwrap();
+        assert_eq!(after.midi_clip(lead), session.midi_clip(lead));
+        assert_eq!(after.midi_clip(untouched), before.midi_clip(untouched));
+        assert_ne!(
+            after.midi_clip(id).unwrap().notes,
+            before.midi_clip(id).unwrap().notes
+        );
+        assert_eq!(
+            after.midi_clip(id).unwrap().recipe.as_ref().unwrap().seed,
+            23
+        );
+    }
+
+    #[test]
     fn lyric_drafts_are_diagnosed_without_a_project_and_large_reports_are_paged() {
         let call = |name, args| {
             crate::runtime::call_saved(&crate::ToolGroups::default(), name, args).unwrap()

@@ -53,6 +53,16 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Generate backing parts on existing tracks, or change harmony and regenerate only explicit backing clips, while preserving protected melody clips and every other clip. Uses Auris writers, not model-authored note arrays. Read inspect_project for expected_revision. Operations run on a worker and apply atomically as one Undo; stale/cancelled work and hand-edited regeneration targets are refused. Returns compact recipe summaries, not notes. Split targets at meter/section boundaries first; read tool_help for limits.
+    Accompaniment {
+        /// Content revision from inspect_project or read_notes.
+        expected_revision: String,
+        /// 1..16 distinct melody clip IDs to protect; never inferred from names.
+        #[schemars(length(min = 1, max = 16))]
+        protected_clips: Vec<u64>,
+        /// Generate configured backing clips or explicitly regenerate selected recipes.
+        operation: crate::session::accompaniment::Operation,
+    },
     /// Inspect a passage's verified instrument capabilities and phrase conditions, validate a bounded arrangement proposal on an immutable snapshot, or apply its exact plan_id as one Undo edit. Requires explicit AURIS_ARRANGEMENT_HARNESS=1. Read first; validation returns changes, warnings and a fifteen-minute process-local plan bound to this document/revision. Only an explicit breath edit may shorten notes or omit named pickups; lyrics, harmony and timeline maps remain intact. Independently read back and compare the same rendered bars; structural readiness is not musical improvement.
     Arrangement {
         /// Inspect, validate or apply. Copy stable clip IDs and native parameter addresses from inspection.
@@ -503,7 +513,8 @@ impl Command {
             self,
             Self::Arrangement {
                 operation: crate::arrangement::Operation::Validate { .. }
-            } | Self::ListVoices { .. }
+            } | Self::Accompaniment { .. }
+                | Self::ListVoices { .. }
                 | Self::SetSingerVoice { .. }
                 | Self::Sing { .. }
                 | Self::Render { .. }
@@ -742,7 +753,8 @@ impl Session {
             Command::InspectSinger { track, offset } => {
                 self.agent_inspect_singer(TrackId(track), offset)
             }
-            command @ (Command::ListVoices { .. }
+            command @ (Command::Accompaniment { .. }
+            | Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }
             | Command::Sing { .. }
             | Command::Render { .. }

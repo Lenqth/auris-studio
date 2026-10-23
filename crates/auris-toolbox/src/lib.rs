@@ -149,6 +149,17 @@ WAV or stems; verify_render checks the actual file against requested loudness, p
 Treat FAIL as unfinished. Use read_report to page an immutable large report instead of repeating an edit.
 Search documentation for application questions. Preserve unrelated score data and report incomplete work honestly.";
 
+/// Shared live/saved workflow for authored melody with algorithmic backing.
+pub const ACCOMPANIMENT_INSTRUCTIONS: &str = "\nFor a song with a foreground melody, keep authored note edits focused on the melody and delegate backing to accompaniment.
+Inspect the project, explicitly identify protected melody clip IDs and use separate configured backing tracks with written harmony.
+Call accompaniment with expected_revision, protected_clips and operation {kind:generate,parts:[{track,name,part,start_bar,bars,seed,settings}]}.
+Use recipe controls rather than sending backing note arrays. Drum tracks need assigned sounds first.
+For chord changes, operation {kind:regenerate,clips:[...],harmony:{start_bar,bars,key,chords}} changes harmony and only those generated backing clips in one edit; omit harmony after an independent harmony edit.
+Keep returned IDs and recipes. Hand-edited or frozen backing requires separate explicit handling.
+Split targets at meter/section boundaries; each target is limited to 256 quarter notes and the batch to 1024. Protected and unselected clips remain intact.
+Rich chords (7th, sus4, diminished) should serve the motif and harmonic movement; do not impose a complexity quota.
+Read compact clip/recipe summaries and inspect_audio on the same bars; structural success alone is not evidence of better music.\n";
+
 /// Canonical session tools for live and saved execution.
 pub mod live_agent;
 
@@ -185,6 +196,10 @@ pub mod search_documentation {
         (
             "docs/agent-workflows.md",
             include_str!("../../../docs/agent-workflows.md"),
+        ),
+        (
+            "docs/agent-accompaniment.md",
+            include_str!("../../../docs/agent-accompaniment.md"),
         ),
         (
             "docs/arrangement-harness.md",

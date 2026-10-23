@@ -30,6 +30,7 @@
 //! as they always did — the split opened up nothing except a handful of helpers that two files
 //! now share.
 
+pub mod accompaniment;
 mod accompany;
 mod agent_history;
 pub mod arrangement;
