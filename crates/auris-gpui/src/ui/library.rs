@@ -1369,11 +1369,11 @@ impl AurisApp {
                     .gap_1p5()
                     .w_full()
                     .min_w_0()
-                    .child(div().flex_shrink_0().child(icon(
-                        Icon::Microphone,
-                        px(14.0),
-                        if enabled { accent } else { theme.text_muted },
-                    )))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .child(icon(Icon::Microphone, px(14.0), accent)),
+                    )
                     .child(
                         div()
                             .flex_1()
@@ -2603,7 +2603,9 @@ impl AurisApp {
             self.row_style(
                 theme.text,
                 Some(match branch {
-                    Branch::Instruments | Branch::SoundFonts => LibraryRole::Instrument,
+                    Branch::Instruments | Branch::SoundFonts | Branch::UserSounds => {
+                        LibraryRole::Instrument
+                    }
                     Branch::Effects => LibraryRole::Effect,
                     Branch::Voices => LibraryRole::Voice,
                     _ => LibraryRole::File,
@@ -2872,11 +2874,11 @@ impl AurisApp {
                     .hover(|this| this.bg(theme.surface_hover))
             })
             .tooltip(tooltip)
-            .child(div().flex_shrink_0().child(icon(
-                role.icon(),
-                px(14.0),
-                if enabled { accent } else { theme.text_muted },
-            )))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .child(icon(role.icon(), px(14.0), accent)),
+            )
             .child(
                 div()
                     .flex()
@@ -2997,11 +2999,11 @@ impl AurisApp {
                     .hover(|this| this.bg(theme.surface_hover))
             })
             .tooltip(tooltip)
-            .child(div().flex_shrink_0().child(icon(
-                Icon::Wave,
-                px(14.0),
-                if enabled { accent } else { theme.text_muted },
-            )))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .child(icon(Icon::Wave, px(14.0), accent)),
+            )
             .child(
                 div()
                     .flex()
