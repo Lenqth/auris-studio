@@ -27,7 +27,7 @@ The exact `skills` CLI version may expose an interactive prompt; remove `-y` whe
 
 ## Auris runtime prerequisite
 
-Install Auris Studio separately from the [release page](https://github.com/uthree/auris-studio/releases), or build it from source. The skill only provides agent guidance; it does not provide `auris`, `auris-mcp`, a SoundFont library, or a desktop application. Confirm that `auris --help` works before choosing the headless CLI. For MCP, confirm that `auris-mcp` is reachable from the host's MCP configuration.
+Install Auris Studio separately from the [release page](https://github.com/uthree/auris-studio/releases), or build it from source. The skill only provides agent guidance; it does not provide `auris`, `auris-mcp`, a SoundFont library, or a desktop application. Confirm that `auris --help` works before choosing the headless CLI. If the installer did not add PATH entries, use `/Applications/Auris Studio.app/Contents/MacOS/auris` or `~/Applications/Auris Studio.app/Contents/MacOS/auris` on macOS, and `%LOCALAPPDATA%\\Programs\\Auris Studio\\auris.exe` on Windows; the matching `auris-mcp` path is beside it. For MCP, confirm that `auris-mcp` is reachable from the host's MCP configuration. The skill does not auto-install a missing runtime; use the release page when no binary is found.
 
 ## MCP composition group
 
