@@ -8,9 +8,57 @@ note counts and recipe summaries rather than complete note arrays.
 Inspect the project first. Identify the foreground by its musical role and copy its clip IDs
 into `protected_clips`. Protection preserves the entire clips, including authored notes,
 curves, lyrics, performance and recipes. It does not infer a new progression from the melody.
-Choose harmony deliberately with `edit_harmony`; existing phrase-writing and backing-adjustment
+Choose harmony deliberately with `suggest_harmony` and `edit_harmony`; existing phrase-writing and backing-adjustment
 algorithms perform the score. A seventh, suspension or diminished chord is a musical choice,
 not a required proportion of the chart.
+
+## Propose harmony from the motif
+
+Call the read-only `suggest_harmony` tool before changing a progression:
+
+```json
+{
+  "request": {
+    "melody_clips": [10],
+    "start_bar": 1,
+    "bars": 4,
+    "mood": "dreamy",
+    "ending": "settled"
+  }
+}
+```
+
+The project key is used unless `request.key` explicitly supplies another one. Mood names are
+`neutral`, `bright`, `dark`, `calm`, `driving`, `epic`, `dreamy`, `tense` and `funky`.
+`ending` is `settled` (prefer a tonic arrival when compatible) or `open` (allow continuation).
+Mood adjusts the cost of supported colour and harmonic changes; it never changes the key.
+
+The result contains up to three distinct candidates, ordered by heuristic fit, always including
+the strongest plain major/minor-triad alternative. Long notes and accented notes count more than
+short passing notes. Sevenths need melodic support; suspensions need a fourth followed by a
+third; diminished harmony needs melodic support and a following chord with small pitch-class
+motion. Repeated motifs encourage related harmony. Every added tone or within-bar change has a
+cost, including in a tense mood. If colour offers no meaningful improvement over the plain
+alternative, the result contains only that alternative. There is no complexity target.
+
+Each candidate reports chord names, per-bar reasons, weighted melodic fit and salient notes
+outside the chord. These are symbolic heuristics, not listening results or artistic ratings.
+The analysis reads authored notes within clip windows, including loops; performance transforms,
+bends, timbre and audio are outside its evidence. Audition unresolved tensions in context.
+
+The response's `revision` and `protected_clips`, plus a chosen candidate's `harmony` object,
+feed directly into `accompaniment` with `operation.kind = "regenerate"` and explicit backing
+clip IDs. This applies harmony and rewrites only those clips in one Undo step. If the project
+changes before acceptance, request fresh suggestions. For new backing, apply the selected
+chart with `edit_harmony`, inspect the updated revision, then generate. Suggestions themselves
+change neither the document nor history, including through saved-project MCP calls.
+
+Requests cover 1–16 bars, at most 128 quarter notes, with 1–8 distinct pitched melody clips and
+at most 4096 stored/expanded notes. Split at key or meter changes. The supported keys are major,
+natural/harmonic/melodic minor, Dorian, Lydian, Mixolydian and Phrygian. A phrase with no melody
+notes is rejected; rests within a phrase retain the preceding harmony.
+
+## Generate and regenerate backing
 
 Create separate backing tracks and select their sounds using the normal track tools.
 For drums, assign the track's sounds before generating. Copy track IDs and the current

@@ -2400,6 +2400,15 @@ pub mod harmony {
     //!
     //! # Clips that write themselves
     //!
+    //! The read-only `suggest_harmony` command collects a bounded authored melody passage,
+    //! including clip windows and loops, and delegates musical search to
+    //! [`auris_compose::harmony_suggestions`]. Duration and metric salience support colour;
+    //! suspensions and diminished chords require resolving successors. Mood adjusts costs,
+    //! never a complexity quota or the declared key. A plain comparison always remains.
+    //! Reports contain per-bar evidence, a content revision and literal harmony objects for
+    //! explicit acceptance through `accompaniment`; neither notes nor metadata change during
+    //! suggestion. Performed transforms and audio are not evidence for this symbolic search.
+    //!
     //! The shared agent `accompaniment` command keeps explicit foreground clip IDs protected
     //! while generating backing on existing tracks, using the same phrase writer as the editor.
     //! It also accepts explicit generated backing clip IDs and an optional bounded harmony

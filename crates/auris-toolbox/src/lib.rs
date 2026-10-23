@@ -151,6 +151,7 @@ Search documentation for application questions. Preserve unrelated score data an
 
 /// Shared live/saved workflow for authored melody with algorithmic backing.
 pub const ACCOMPANIMENT_INSTRUCTIONS: &str = "\nFor a song with a foreground melody, keep authored note edits focused on the melody and delegate backing to accompaniment.
+When choosing or revising harmony, call suggest_harmony with request {melody_clips,start_bar,bars,mood,ending} using the actual motif clips. Mood is neutral/bright/dark/calm/driving/epic/dreamy/tense/funky; ending is settled/open. Compare its recommended and plain candidates, read per-bar melodic tensions and resolution reasons, and keep simple harmony when colour has no benefit. This read-only step returns harmony objects and a revision for explicit accompaniment regeneration; never apply a proposal just because it contains more extended chords. A score is a heuristic comparison, not evidence of better music. Split requests at meter/key changes.
 Inspect the project, explicitly identify protected melody clip IDs and use separate configured backing tracks with written harmony.
 Call accompaniment with expected_revision, protected_clips and operation {kind:generate,parts:[{track,name,part,start_bar,bars,seed,settings}]}.
 Use recipe controls rather than sending backing note arrays. Drum tracks need assigned sounds first.

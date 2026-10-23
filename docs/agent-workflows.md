@@ -27,6 +27,11 @@ For an authored foreground with generated backing, use
 [`accompaniment`](agent-accompaniment.md). It protects explicit melody clip IDs, delegates
 backing to Auris writers, and can change harmony while regenerating only selected backing
 clips in one edit. It is available in both the `manual` and `composition` groups.
+Before revising harmony, `suggest_harmony` reads the selected melody and proposes short
+progressions with per-bar reasons, tensions and a plain alternative. Mood affects how much
+supported colour earns its cost; no proportion of 7th, sus4 or diminished chords is required.
+The proposal's revision and harmony object can be passed to selective backing regeneration.
+It is read-only and available in the same two tool groups.
 
 Add a track with an explicit kind and name, then `add_clip` with its numeric track,
 intended clip name, one-based `start_bar` and duration `bars`. Read the clip with

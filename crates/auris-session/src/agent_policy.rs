@@ -189,6 +189,7 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.suggest_harmony",
     "edit_project.accompaniment",
     "edit_project.arrangement",
     "edit_project.analyze_lyrics",
@@ -400,6 +401,29 @@ impl Policy {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn harmony_suggestions_are_available_in_read_only_and_plan_modes() {
+        use super::*;
+        let operation = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{
+                "action":"suggest_harmony","request":{"melody_clips":[1],"start_bar":1,"bars":4}
+            }}),
+        )
+        .unwrap();
+        assert!(!operation.mutating);
+        for mode in [Mode::ReadOnly, Mode::Plan, Mode::Edit] {
+            assert_eq!(
+                Policy {
+                    mode,
+                    ..Default::default()
+                }
+                .decide(&operation),
+                Decision::Allow
+            );
+        }
+    }
+
     #[test]
     fn accompaniment_is_one_edit_operation_in_every_live_policy_mode() {
         use super::*;

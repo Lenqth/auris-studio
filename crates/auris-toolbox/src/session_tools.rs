@@ -162,9 +162,14 @@ mod tests {
         let lead = session
             .add_midi_clip(track, "Melody", Ticks::ZERO, Ticks::QUARTER * 16)
             .unwrap();
-        session
-            .add_note(lead, Note::new(67, Ticks(13), Ticks(997)))
-            .unwrap();
+        for (i, pitch) in [60, 64, 67, 71].into_iter().enumerate() {
+            session
+                .add_note(
+                    lead,
+                    Note::new(pitch, Ticks::QUARTER * i as i64, Ticks::QUARTER),
+                )
+                .unwrap();
+        }
         let bass = session.add_default_instrument_track("Bass").unwrap();
         let pad = session.add_default_instrument_track("Pad").unwrap();
         session.stamp_progression(&Chart::parse("| I | IV | V | I |").unwrap(), Ticks::ZERO, 4);
@@ -192,9 +197,20 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
         let id = ClipId(report["clips"][0]["clip"].as_u64().unwrap());
         let untouched = ClipId(report["clips"][1]["clip"].as_u64().unwrap());
-        crate::runtime::call_saved(&groups,"accompaniment",json!({"project":path,"expected_revision":report["revision"],"protected_clips":[lead.0],"operation":{
-            "kind":"regenerate","clips":[id.0],"harmony":{"start_bar":1,"bars":4,"key":"D major","chords":"| Imaj7 | IVsus4 | viidim7 | V7 |"}
-        }})).unwrap();
+        let suggestions: Value = serde_json::from_str(&crate::runtime::call_saved(&groups,"suggest_harmony",json!({
+            "project":path,"request":{"melody_clips":[lead.0],"start_bar":1,"bars":4,"mood":"dreamy"}
+        })).unwrap()).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(suggestions["revision"], report["revision"]);
+        assert_eq!(
+            suggestions["candidates"][0]["harmony"]["chords"],
+            "| Imaj7 | Imaj7 | Imaj7 | Imaj7 |"
+        );
+        let apply = json!({"project":path,"expected_revision":suggestions["revision"],"protected_clips":suggestions["protected_clips"],"operation":{
+            "kind":"regenerate","clips":[id.0],"harmony":suggestions["candidates"][0]["harmony"]
+        }});
+        crate::runtime::call_saved(&groups, "accompaniment", apply.clone()).unwrap();
+        assert!(crate::runtime::call_saved(&groups, "accompaniment", apply).is_err());
         let after = crate::opened(path.to_str().unwrap()).unwrap();
         assert_eq!(after.midi_clip(lead), session.midi_clip(lead));
         assert_eq!(after.midi_clip(untouched), before.midi_clip(untouched));

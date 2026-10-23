@@ -4,6 +4,7 @@ use crate::{Session, prelude::*};
 pub mod automation;
 pub mod document_editing;
 pub mod file_jobs;
+pub mod harmony_suggestions;
 mod jobs;
 pub mod recipes;
 pub mod vocal_editing;
@@ -53,6 +54,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Suggest up to three melody-aware chord progressions without changing notes or harmony. Pass request with melody_clips, start_bar, bars and optional key/mood/ending. Keeps a plain alternative; 7th, sus4 and diminished colour needs melodic evidence and appropriate resolution, never a complexity quota. Returns explanations, tensions, a content revision and harmony objects usable by accompaniment. Read tool_help for bounds. These are heuristic proposals; compare and audition before claiming musical improvement.
+    SuggestHarmony {
+        /// Explicit foreground clips and musical intent for one short phrase.
+        request: harmony_suggestions::Request,
+    },
     /// Generate backing parts on existing tracks, or change harmony and regenerate only explicit backing clips, while preserving protected melody clips and every other clip. Uses Auris writers, not model-authored note arrays. Read inspect_project for expected_revision. Operations run on a worker and apply atomically as one Undo; stale/cancelled work and hand-edited regeneration targets are refused. Returns compact recipe summaries, not notes. Split targets at meter/section boundaries first; read tool_help for limits.
     Accompaniment {
         /// Content revision from inspect_project or read_notes.
@@ -489,6 +495,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::SuggestHarmony { .. }
             | Self::AnalyzeLyrics { .. }
             | Self::DiagnoseSong { .. }
             | Self::InspectInstrument { .. }
@@ -583,6 +590,7 @@ impl Session {
             );
         }
         match command {
+            Command::SuggestHarmony { request } => self.agent_suggest_harmony(request),
             Command::Arrangement {
                 operation:
                     operation @ (crate::arrangement::Operation::Inspect { .. }

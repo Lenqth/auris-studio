@@ -28,7 +28,8 @@ impl ToolGroups {
             || self.0.iter().any(|g| g == "all" || g == tool_group(name))
             || (matches!(name, "analyze_lyrics" | "diagnose_song")
                 && self.0.iter().any(|g| g == "composition"))
-            || (name == "accompaniment" && self.0.iter().any(|g| g == "manual"))
+            || (matches!(name, "accompaniment" | "suggest_harmony")
+                && self.0.iter().any(|g| g == "manual"))
             || tool_group(name) == "common"
     }
     /// Workflow text for only the selected groups.
@@ -97,6 +98,7 @@ pub fn tool_group(name: &str) -> &'static str {
         | "list_presets"
         | "generate_phrase"
         | "accompaniment"
+        | "suggest_harmony"
         | "accompany" => "composition",
         "arrangement"
         | "create_project"
@@ -310,6 +312,7 @@ mod tests {
         assert!(!manual.allows("compose"));
         assert!(!manual.instructions().contains("spec_reference"));
         assert!(manual.allows("accompaniment"));
+        assert!(manual.allows("suggest_harmony"));
         assert!(
             manual
                 .instructions()
@@ -317,6 +320,7 @@ mod tests {
         );
         let composition = ToolGroups::parse("composition").unwrap();
         assert!(composition.allows("accompaniment"));
+        assert!(composition.allows("suggest_harmony"));
         assert!(
             composition
                 .instructions()
@@ -324,6 +328,7 @@ mod tests {
         );
         let mix = ToolGroups::parse("mix").unwrap();
         assert!(!mix.allows("accompaniment"));
+        assert!(!mix.allows("suggest_harmony"));
         assert!(
             !mix.instructions()
                 .contains(crate::ACCOMPANIMENT_INSTRUCTIONS)
