@@ -2621,6 +2621,11 @@ pub mod platforms {
     //! The menu is one table rendered two ways, so a command added to it reaches both platforms
     //! without being written twice and drifting.
     //!
+    //! macOS builds require 13.4 or later, matching the shipped Core ML ONNX Runtime library.
+    //! Cargo's deployment target and the application bundle declare the same floor. Native
+    //! termination requests (including Dock Quit) are cancelled before GPUI's irrevocable quit
+    //! notification, then routed through the desktop's ordinary Save/Discard/Cancel guard.
+    //!
     //! [`auris_gpu`] uses wgpu's Metal and Vulkan backends. It is optional analysis that steps
     //! aside when no backend is present, so a machine without Vulkan still works — everything
     //! simply runs on the CPU.

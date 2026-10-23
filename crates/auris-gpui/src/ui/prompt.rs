@@ -1579,7 +1579,7 @@ impl AurisApp {
             PendingAction::ImportMidiPicked => self.pick_and_import_midi(cx),
             PendingAction::StartRecording => self.toggle_recording(window, cx),
             PendingAction::CloseWindow => window.remove_window(),
-            PendingAction::Quit => cx.quit(),
+            PendingAction::Quit => crate::termination::quit(cx),
         }
     }
 

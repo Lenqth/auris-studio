@@ -23,6 +23,7 @@ impl AurisApp {
         dials: &SongDials,
         sheet_width: Pixels,
         window: &mut Window,
+        focus_region: &mut usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let theme = self.theme.clone();
@@ -59,42 +60,54 @@ impl AurisApp {
             let source = self.song_part_source_label(part);
             let role = self.t(role_key(part.role));
             let name = format!("{} · {role}", part.name);
+            let focus_index = *focus_region;
+            *focus_region += 1;
+            // The whole matrix can be taller than the viewport. Reveal the instrument row
+            // that owns focus instead of aligning the matrix's bottom and hiding that row.
             labels = labels.child(
-                div()
-                    .debug_selector(move || format!("song-matrix-row-{index}"))
-                    .h(ROW_HEIGHT)
-                    .flex_shrink_0()
-                    .flex()
-                    .flex_col()
-                    .justify_center()
-                    .gap_1()
-                    .px_2()
-                    .border_t_1()
-                    .border_color(theme.border_subtle)
-                    .child(
-                        div()
-                            .h(px(16.0))
-                            .text_xs()
-                            .text_color(theme.text)
-                            .child(bounded_picker_label(name.clone()))
-                            .id(("song-matrix-part-label", index))
-                            .tooltip(keyed_tip(name, "", &theme)),
-                    )
-                    .child(
-                        button(
-                            ("song-matrix-instrument", index),
-                            "",
-                            ButtonStyle::Normal,
-                            false,
-                            theme.accent,
-                            &theme,
-                            cx.listener(move |this, _, _, cx| this.open_song_library(index, cx)),
+                self.song_focus_region(
+                    div()
+                        .debug_selector(move || format!("song-matrix-row-{index}"))
+                        .h(ROW_HEIGHT)
+                        .flex_shrink_0()
+                        .flex()
+                        .flex_col()
+                        .justify_center()
+                        .gap_1()
+                        .px_2()
+                        .border_t_1()
+                        .border_color(theme.border_subtle)
+                        .child(
+                            div()
+                                .h(px(16.0))
+                                .text_xs()
+                                .text_color(theme.text)
+                                .child(bounded_picker_label(name.clone()))
+                                .id(("song-matrix-part-label", index))
+                                .tooltip(keyed_tip(name, "", &theme)),
                         )
-                        .w_full()
-                        .min_w_0()
-                        .child(bounded_picker_label(source.clone()))
-                        .tooltip(keyed_tip(source, "", &theme)),
-                    ),
+                        .child(
+                            button(
+                                ("song-matrix-instrument", index),
+                                "",
+                                ButtonStyle::Normal,
+                                false,
+                                theme.accent,
+                                &theme,
+                                cx.listener(move |this, _, _, cx| {
+                                    this.open_song_library(index, cx)
+                                }),
+                            )
+                            .w_full()
+                            .min_w_0()
+                            .child(bounded_picker_label(source.clone()))
+                            .tooltip(keyed_tip(source, "", &theme)),
+                        )
+                        .into_any_element(),
+                    focus_index,
+                    false,
+                    cx,
+                ),
             );
         }
 

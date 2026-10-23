@@ -2127,16 +2127,18 @@ impl AurisApp {
         let delta = event.delta.pixel_delta(px(24.0));
         if event.modifiers.control {
             let anchor = event.position.y - self.roll_origin().y;
-            let factor = if delta.y > px(0.0) { 1.12 } else { 1.0 / 1.12 };
-            self.pitch.zoom_by(factor, anchor);
+            if let Some(factor) = crate::gestures::wheel_zoom_factor(delta.y) {
+                self.pitch.zoom_by(factor, anchor);
+            }
         } else if event.modifiers.alt {
             // The same origin the vertical branch above uses, and the same one the painter does.
             // `KEYBOARD_WIDTH` is only half of it — the roll starts after the panel's own padding
             // as well — so the anchor was a constant off, and the notes slid sideways on every
             // zoom notch instead of staying put under the pointer.
             let anchor = event.position.x - self.roll_origin().x;
-            let factor = if delta.y > px(0.0) { 1.12 } else { 1.0 / 1.12 };
-            self.timeline.zoom_by(factor, anchor);
+            if let Some(factor) = crate::gestures::wheel_zoom_factor(delta.y) {
+                self.timeline.zoom_by(factor, anchor);
+            }
         } else if event.modifiers.shift {
             self.timeline.scroll_by(-delta.y - delta.x);
         } else {

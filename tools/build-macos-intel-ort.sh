@@ -23,7 +23,7 @@ test "$(git -C "$source_dir" rev-parse HEAD)" = da9b5e364c465de65c49d91e696cd648
 "$source_dir/build.sh" --build_dir "$build_dir" --config Release --build_shared_lib \
   --update --build --skip_tests --parallel 3 --use_coreml \
   --osx_arch x86_64 --compile_no_warning_as_error \
-  --cmake_extra_defines CMAKE_OSX_DEPLOYMENT_TARGET=13.3 \
+  --cmake_extra_defines CMAKE_OSX_DEPLOYMENT_TARGET=13.4 \
   CMAKE_POLICY_VERSION_MINIMUM=3.5 \
   onnxruntime_BUILD_UNIT_TESTS=OFF
 
@@ -49,7 +49,7 @@ int main() {
 }
 CPP
 clang_runtime=$(xcrun --sdk macosx clang -print-libgcc-file-name)
-c++ -std=c++20 -arch x86_64 -mmacosx-version-min=13.3 \
+c++ -std=c++20 -arch x86_64 -mmacosx-version-min=13.4 \
   -I "$lib_dir/include" "$work/check.cc" \
   "$lib_dir/libonnxruntime.a" "$clang_runtime" -framework Foundation -framework CoreML \
   -o "$work/check"

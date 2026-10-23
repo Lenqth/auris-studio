@@ -30,9 +30,9 @@
     <string>0.9.0</string>
     <key>CFBundleVersion</key>
     <string>0.9.0</string>
-    <!-- gpui's Metal renderer, and the Apple Silicon half of the universal binary. -->
+    <!-- Matches Cargo's deployment target and the shipped Core ML ONNX Runtime. -->
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>13.4</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

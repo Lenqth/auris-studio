@@ -71,7 +71,8 @@ impl AurisApp {
         self.lyrics_edit = None;
     }
 
-    fn song_focus_region(
+    /// Track a compact group of controls for keyboard-driven scroll revelation.
+    pub(super) fn song_focus_region(
         &self,
         child: AnyElement,
         index: usize,
@@ -160,11 +161,8 @@ impl AurisApp {
         let lyrics_rows = self.song_focus_regions(lyrics_rows, &mut focus_region, false, cx);
         let advanced = if self.song_advanced {
             let matrix = self
-                .song_participation_matrix(&dials, width, window, cx)
+                .song_participation_matrix(&dials, width, window, &mut focus_region, cx)
                 .into_any_element();
-            let matrix_index = focus_region;
-            focus_region += 1;
-            let matrix = self.song_focus_region(matrix, matrix_index, false, cx);
             let harmony = self.song_harmony_rows(&dials, cx);
             let harmony = self.song_focus_regions(harmony, &mut focus_region, false, cx);
             let performance = self.song_performance_rows(&dials, cx);

@@ -3266,18 +3266,21 @@ impl AurisApp {
                                     }),
                                 ))
                             })
-                            .child(bounded_button_enabled(
-                                "agent-new-conversation",
-                                self.t(Key::AgentNewConversation),
-                                ButtonStyle::Normal,
-                                ButtonState::available(false, true),
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.start_new_agent_conversation(cx);
-                                    cx.notify();
-                                }),
-                            ))
+                            .child(
+                                bounded_button_enabled(
+                                    "agent-new-conversation",
+                                    self.t(Key::AgentNewConversation),
+                                    ButtonStyle::Normal,
+                                    ButtonState::available(false, true),
+                                    theme.accent,
+                                    &theme,
+                                    cx.listener(|this, _, _, cx| {
+                                        this.start_new_agent_conversation(cx);
+                                        cx.notify();
+                                    }),
+                                )
+                                .w(px(160.0)),
+                            )
                             .child(div().flex_1())
                             .child(self.render_active_conversation_actions(cx))
                             .child(button_enabled(
@@ -7397,6 +7400,7 @@ mod tests {
     ) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
+            this.language = auris_i18n::Language::Japanese;
             this.panels.show(crate::dock::Panel::Agent);
             this.panels
                 .set_size(crate::dock::Dock::Right, crate::dock::PanelLayout::MIN_SIDE);

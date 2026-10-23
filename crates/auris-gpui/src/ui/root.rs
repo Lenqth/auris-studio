@@ -2639,12 +2639,21 @@ impl AurisApp {
         cx.notify();
     }
 
-    fn on_quit(&mut self, _: &actions::Quit, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_quit(&mut self, _: &actions::Quit, window: &mut Window, cx: &mut Context<Self>) {
+        self.quit_asking(window, cx);
+    }
+
+    /// Apply the same save guard to keyboard, menu and native macOS termination requests.
+    pub(crate) fn quit_asking(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        crate::termination::activate(window, cx);
+        if self.compose_progress.is_some() {
+            return;
+        }
         // Handled here rather than on the application, because `App::quit` does not run the
         // window's close guard and a document with unsaved changes has to get its say.
         if self.confirm_discard(crate::ui::prompt::PendingAction::Quit) {
             self.save_window_placement();
-            cx.quit();
+            crate::termination::quit(cx);
         }
         cx.notify();
     }
@@ -3618,6 +3627,74 @@ mod window_tests {
     use crate::harness::{WINDOW, click, open, paint, resize, with_a_clip};
 
     #[gpui::test]
+    fn rename_accepts_the_native_line_start_shortcut(cx: &mut TestAppContext) {
+        let (app, cx, track, _) = with_a_clip(cx);
+        app.update(cx, |this, _| this.prompt_to_rename_track(track));
+        paint(&app, cx);
+        cx.simulate_input("alpha beta");
+        cx.simulate_keystrokes(if cfg!(target_os = "macos") {
+            "secondary-left"
+        } else {
+            "home"
+        });
+        cx.simulate_input("X");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.project().track(track).unwrap().name, "Xalpha beta");
+        });
+    }
+
+    #[gpui::test]
+    fn horizontal_and_ended_trackpad_events_do_not_change_timeline_zoom(cx: &mut TestAppContext) {
+        let (app, cx, _, _) = with_a_clip(cx);
+        let (position, zoom) = app.read_with(cx, |this, _| {
+            (
+                this.canvas.lanes.get().unwrap().center(),
+                this.timeline.zoom_fraction(),
+            )
+        });
+        for horizontal in [0.0, 24.0] {
+            cx.simulate_event(gpui::ScrollWheelEvent {
+                position,
+                delta: gpui::ScrollDelta::Pixels(gpui::point(px(horizontal), px(0.0))),
+                touch_phase: gpui::TouchPhase::Ended,
+                modifiers: gpui::Modifiers::alt(),
+            });
+            paint(&app, cx);
+            app.read_with(cx, |this, _| {
+                assert_eq!(this.timeline.zoom_fraction(), zoom)
+            });
+        }
+    }
+
+    #[gpui::test]
+    fn native_quit_requests_keep_dirty_work_when_the_question_is_cancelled(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, track, _) = with_a_clip(cx);
+        for _ in 0..2 {
+            cx.update(|window, cx| app.update(cx, |this, cx| this.quit_asking(window, cx)));
+            paint(&app, cx);
+            app.read_with(cx, |this, _| {
+                assert!(matches!(
+                    this.prompt.as_ref().map(|prompt| &prompt.body),
+                    Some(crate::ui::prompt::PromptBody::Ask(
+                        crate::ui::prompt::Question::Unsaved(
+                            crate::ui::prompt::PendingAction::Quit
+                        )
+                    ))
+                ));
+            });
+            cx.simulate_keystrokes("escape");
+            app.read_with(cx, |this, _| {
+                assert!(this.prompt.is_none());
+                assert!(this.session.is_dirty());
+                assert!(this.project().track(track).is_some());
+            });
+        }
+    }
+
+    #[gpui::test]
     fn transport_shortcuts_do_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         let transport_commands = std::rc::Rc::new(std::cell::Cell::new(0));
@@ -3838,7 +3915,10 @@ mod window_tests {
         resize(&app, cx, size(px(640.0), px(480.0)));
 
         cx.dispatch_action(actions::ComposeSong);
-        app.update(cx, |this, _| this.song_advanced = true);
+        app.update(cx, |this, _| {
+            this.language = auris_i18n::Language::Japanese;
+            this.song_advanced = true;
+        });
         paint(&app, cx);
         cx.update(|window, cx| {
             app.read_with(cx, |this, _| {
@@ -3878,7 +3958,7 @@ mod window_tests {
         assert!(
             song_bounds.top() >= song_viewport.top()
                 && song_bounds.bottom() <= song_viewport.bottom(),
-            "Tab reveals the focused song row: {song_bounds:?} in {song_viewport:?}"
+            "Tab reveals song row {song_target}: {song_bounds:?} in {song_viewport:?}"
         );
         cx.simulate_keystrokes("escape");
         app.read_with(cx, |this, _| assert!(this.song_sheet.is_none()));
