@@ -144,27 +144,35 @@ pub(super) fn effort_choices(openai: bool) -> &'static [ReasoningEffort] {
     }
 }
 
+const SLASH_COMMANDS: &[(&str, bool, Key)] = &[
+    ("/mode", true, Key::AgentSlashMode),
+    ("/effort", true, Key::AgentSlashEffort),
+    ("/permissions", false, Key::AgentSlashPermissions),
+    ("/allow", true, Key::AgentSlashAllow),
+    ("/deny", true, Key::AgentSlashDeny),
+    ("/default", true, Key::AgentSlashDefault),
+    ("/compact", false, Key::AgentSlashCompact),
+    ("/read-only", false, Key::AgentSlashMode),
+    ("/edit", false, Key::AgentSlashMode),
+    ("/plan", false, Key::AgentSlashMode),
+    ("/auto-review", false, Key::AgentSlashMode),
+    ("/bypass", false, Key::AgentSlashMode),
+];
+
+/// Whether the text is handled locally before model and project-reload checks.
+pub(super) fn is_control_command(text: &str) -> bool {
+    let command = text.split_once(' ').map_or(text, |(command, _)| command);
+    SLASH_COMMANDS.iter().any(|(name, _, _)| *name == command)
+}
+
 pub(super) fn slash_matches(value: &str) -> Vec<SlashMatch> {
     if !value.starts_with('/') || value.contains('\n') {
         return Vec::new();
     }
-    let commands = [
-        ("/mode", true, Key::AgentSlashMode),
-        ("/effort", true, Key::AgentSlashEffort),
-        ("/permissions", false, Key::AgentSlashPermissions),
-        ("/allow", true, Key::AgentSlashAllow),
-        ("/deny", true, Key::AgentSlashDeny),
-        ("/default", true, Key::AgentSlashDefault),
-        ("/compact", false, Key::AgentSlashCompact),
-        ("/read-only", false, Key::AgentSlashMode),
-        ("/edit", false, Key::AgentSlashMode),
-        ("/plan", false, Key::AgentSlashMode),
-        ("/auto-review", false, Key::AgentSlashMode),
-        ("/bypass", false, Key::AgentSlashMode),
-    ];
     let Some((command, argument)) = value.split_once(' ') else {
-        return commands
-            .into_iter()
+        return SLASH_COMMANDS
+            .iter()
+            .copied()
             .filter(|(name, _, _)| name.starts_with(value))
             .map(|(name, takes_argument, description)| SlashMatch {
                 fill: format!("{name}{}", if takes_argument { " " } else { "" }),

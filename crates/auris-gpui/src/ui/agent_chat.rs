@@ -1853,6 +1853,9 @@ impl AurisApp {
     /// What would stop a send right now. A model picked in a settings form that is still open
     /// counts as chosen, because `agent_send` applies that form before it asks.
     fn agent_send_blocker(&self) -> Option<SendBlocker> {
+        if controls::is_control_command(self.agent_chat.input.content().trim()) {
+            return None;
+        }
         let model_chosen = self.settings.agent.is_configured()
             || (self.agent_chat.configuring && self.agent_chat.preferences().is_configured());
         send_blocker(model_chosen, self.agent_chat.pending_reload.is_some())
@@ -5155,6 +5158,7 @@ mod tests {
     fn manual_compaction_is_available_through_the_composer(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
+            this.settings.agent.model.clear();
             this.panels.show(crate::dock::Panel::Agent);
             this.agent_chat.models_loaded = true;
             this.agent_chat.input = TextField::new("/compact");
@@ -5169,6 +5173,31 @@ mod tests {
                     .entries
                     .contains(&ChatEntry::Note(Key::AgentCompactEmpty))
             );
+        });
+    }
+
+    #[gpui::test]
+    fn local_permissions_command_can_run_while_external_changes_wait(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let pending = PathBuf::from("Song/Song.auris");
+        app.update(cx, |this, _| {
+            this.settings.agent.model.clear();
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.pending_reload = Some(pending.clone());
+            this.agent_chat.controls.rules_open = false;
+            this.agent_chat.input = TextField::new("/permissions");
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("agent-send-blocked").is_none());
+        crate::harness::click("agent-send", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(this.agent_chat.controls.rules_open);
+            assert_eq!(this.agent_chat.pending_reload, Some(pending));
+            assert!(this.agent_chat.link.is_none());
         });
     }
 
