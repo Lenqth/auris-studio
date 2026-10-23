@@ -393,6 +393,12 @@ pub mod architecture {
     //! section revoicing transfers complete clips to a copied mixer/routing strip. Both tool
     //! adapters use this same contract; `AURIS_ARRANGEMENT_HARNESS=1` enables the tool and its
     //! model workflow together. Structural verification never substitutes for audio comparison.
+    //! Breathing inspection merges authored and performed note intervals across clips and seeded
+    //! loop passes, with an explicit role, rest threshold and phrase endings. An explicit `Breath`
+    //! proposal may shorten releases or omit named original note indices; its exact changes are
+    //! previewed before the same one-Undo application. Vocal data, protected notes and possible
+    //! same-pitch ties are refused. Curves and recipes stay intact, so regeneration remains an
+    //! explicit replacement of the repaired score. Performed gaps do not establish audible silence.
     //!
     //! One-time approvals bind the exact command to the current document revision. Standalone MCP
     //! adapts the shared command catalog to saved projects and does not consult this live policy.

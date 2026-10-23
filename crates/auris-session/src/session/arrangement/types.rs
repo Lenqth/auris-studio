@@ -8,6 +8,24 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    /// Measure foreground phrase space across clip joins and bounded loop passes, without editing.
+    InspectBreathing {
+        /// Existing instrument track ID; confirm its musical role instead of inferring from its name.
+        track: u64,
+        /// Whether this is a foreground lead or an intentionally sustained texture.
+        role: MelodicRole,
+        /// Absolute inclusive passage start.
+        start_tick: i64,
+        /// Absolute exclusive passage end; at most 128 quarter notes after start.
+        end_tick: i64,
+        /// Minimum gap treated as a phrase rest, in ticks; choose for this style and tempo.
+        #[schemars(range(min = 1, max = 7680))]
+        min_rest_ticks: i64,
+        /// Explicit phrase endings to inspect, absolute ticks, up to 32.
+        #[serde(default)]
+        #[schemars(length(max = 32))]
+        phrase_ends: Vec<i64>,
+    },
     /// Read instrument capabilities, phrase conditions and diagnostics without editing.
     Inspect {
         /// One-based first bar.
@@ -44,7 +62,7 @@ impl Operation {
     /// Whether the operation accesses external files or commits a compound edit.
     pub fn requires_confirmation(&self) -> bool {
         match self {
-            Self::Inspect { .. } => false,
+            Self::Inspect { .. } | Self::InspectBreathing { .. } => false,
             Self::Apply { .. } => true,
             Self::Validate { changes, .. } => changes.iter().any(|change| {
                 matches!(
@@ -56,11 +74,11 @@ impl Operation {
     }
 }
 
-/// One explicitly motivated edit; notes, harmony, lyrics and timeline maps are retained.
+/// One explicitly motivated edit. Only an explicit Breath edit may change authored notes.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Change {
-    /// Short musical purpose, for example "Lift the second chorus without changing the melody".
+    /// One short musical purpose, at most 256 UTF-8 bytes. Do not restate the whole request.
     pub purpose: String,
     /// Exact edit with stable document IDs and timeline ticks.
     pub edit: Action,
@@ -70,6 +88,27 @@ pub struct Change {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    /// Create explicit phrase rests by shortening crossing notes and explicitly omitting named pickups.
+    /// Pitches, attacks and velocities of retained notes, lyrics, curves and song length stay intact.
+    Breath {
+        /// One to sixteen complete foreground instrument clips on the same track.
+        #[schemars(length(min = 1, max = 16))]
+        clips: Vec<u64>,
+        /// One to sixteen nonoverlapping absolute rest windows, within the selected passage.
+        #[schemars(length(min = 1, max = 16))]
+        rests: Vec<RestWindow>,
+        /// Shortened notes must retain at least this many ticks, 1..3840.
+        #[schemars(range(min = 1, max = 3840))]
+        min_note_ticks: i64,
+        /// Original read_notes indices of intentional legato/tied notes that must stay intact.
+        #[serde(default)]
+        #[schemars(length(max = 256))]
+        protected_notes: Vec<NoteAddress>,
+        /// Exact original indices to omit. Without this list, an attack inside a rest is refused.
+        #[serde(default)]
+        #[schemars(length(max = 256))]
+        omit_notes: Vec<NoteAddress>,
+    },
     /// Change only the clip's performance; authored notes and controllers remain intact.
     Performance {
         /// Existing MIDI clip ID.
@@ -143,6 +182,36 @@ pub enum Action {
         /// Whether this clip is silent.
         muted: bool,
     },
+}
+
+/// Musical role explicitly supplied for phrase-space diagnosis.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MelodicRole {
+    /// A foreground line whose phrase endings may need breathing space.
+    Lead,
+    /// An intentionally sustained texture; occupancy alone causes no breathing suggestion.
+    Texture,
+}
+
+/// An absolute half-open interval intended to be free of foreground note events.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RestWindow {
+    /// Inclusive start tick.
+    pub start_tick: i64,
+    /// Exclusive end tick, usually the next phrase's entry.
+    pub end_tick: i64,
+}
+
+/// An editable original note index, bound to the proposal's content revision.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NoteAddress {
+    /// Existing clip ID.
+    pub clip: u64,
+    /// Original zero-based storage index from read_notes.
+    pub index: usize,
 }
 
 /// Native transition sounds requiring no external assets.

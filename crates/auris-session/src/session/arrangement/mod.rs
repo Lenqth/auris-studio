@@ -4,6 +4,7 @@
 //! prepares a private candidate; applying its process-local ID checks document identity,
 //! content revision, asset ownership and expiry before a single ordinary Undo edit.
 
+mod breathing;
 mod diagnostics;
 mod prepare;
 #[cfg(test)]
@@ -23,7 +24,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
-pub use types::{Action, Alignment, Change, Operation, Transition};
+pub use types::{
+    Action, Alignment, Change, MelodicRole, NoteAddress, Operation, RestWindow, Transition,
+};
 
 const MAX_PLAN_BYTES: usize = 64 * 1024 * 1024;
 const MAX_CACHE_BYTES: usize = 256 * 1024 * 1024;
@@ -143,6 +146,26 @@ impl Session {
 
     pub(crate) fn agent_arrangement(&mut self, operation: Operation) -> Result<String, String> {
         match operation {
+            Operation::InspectBreathing {
+                track,
+                role,
+                start_tick,
+                end_tick,
+                min_rest_ticks,
+                phrase_ends,
+            } => {
+                let mut value = breathing::inspect(
+                    &self.project,
+                    track,
+                    role,
+                    start_tick,
+                    end_tick,
+                    min_rest_ticks,
+                    &phrase_ends,
+                )?;
+                value["revision"] = self.agent_document_revision()?.into();
+                Ok(value.to_string())
+            }
             Operation::Inspect {
                 start_bar,
                 bars,
@@ -327,6 +350,14 @@ impl Session {
                 }
                 other => {
                     match &other {
+                        Action::Breath { clips, .. } => {
+                            if clips.is_empty() || clips.len() > 16 {
+                                return Err("Breath requires 1..16 foreground clips".into());
+                            }
+                            for clip in clips {
+                                claim(*clip)?;
+                            }
+                        }
                         Action::ClipMute { clip, .. } => {
                             claim(*clip)?;
                         }

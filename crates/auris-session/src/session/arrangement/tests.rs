@@ -3,7 +3,7 @@ use crate::session::fixtures::session;
 use auris_core::{Note, TrackId};
 
 static SERIAL: Mutex<()> = Mutex::new(());
-fn serial() -> std::sync::MutexGuard<'static, ()> {
+pub(super) fn serial() -> std::sync::MutexGuard<'static, ()> {
     SERIAL
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)

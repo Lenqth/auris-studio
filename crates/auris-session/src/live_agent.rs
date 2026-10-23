@@ -53,7 +53,7 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
-    /// Inspect a passage's verified instrument capabilities and phrase conditions, validate a bounded arrangement proposal on an immutable snapshot, or apply its exact plan_id as one Undo edit. Requires explicit AURIS_ARRANGEMENT_HARNESS=1. Read first; validation returns changes, warnings and a fifteen-minute process-local plan bound to this document/revision. Preserve authored notes, lyrics, harmony and timeline maps. Independently read back and compare the same rendered bars; structural readiness is not musical improvement.
+    /// Inspect a passage's verified instrument capabilities and phrase conditions, validate a bounded arrangement proposal on an immutable snapshot, or apply its exact plan_id as one Undo edit. Requires explicit AURIS_ARRANGEMENT_HARNESS=1. Read first; validation returns changes, warnings and a fifteen-minute process-local plan bound to this document/revision. Only an explicit breath edit may shorten notes or omit named pickups; lyrics, harmony and timeline maps remain intact. Independently read back and compare the same rendered bars; structural readiness is not musical improvement.
     Arrangement {
         /// Inspect, validate or apply. Copy stable clip IDs and native parameter addresses from inspection.
         operation: crate::arrangement::Operation,
@@ -575,6 +575,7 @@ impl Session {
             Command::Arrangement {
                 operation:
                     operation @ (crate::arrangement::Operation::Inspect { .. }
+                    | crate::arrangement::Operation::InspectBreathing { .. }
                     | crate::arrangement::Operation::Apply { .. }),
             } => self.agent_arrangement(operation),
             Command::AnalyzeLyrics { text, readings } => {

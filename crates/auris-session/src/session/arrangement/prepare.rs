@@ -26,6 +26,20 @@ impl ArrangementJob {
             check(cancelled)?;
             let change = index + 1;
             let result = match pending {
+                Pending::Other(Action::Breath {
+                    clips,
+                    rests,
+                    min_note_ticks,
+                    protected_notes,
+                    omit_notes,
+                }) => breathing::repair(
+                    &mut self.project,
+                    &clips,
+                    &rests,
+                    min_note_ticks,
+                    &protected_notes,
+                    &omit_notes,
+                )?,
                 Pending::Performance { clip, voice, stack } => {
                     let before = self
                         .project
@@ -267,7 +281,7 @@ impl ArrangementJob {
         }
         let id = crate::transient_id::transient_id("arrangement");
         let report = json!({"status":"ready","plan_id":id,"revision":self.revision,"expires_in_seconds":TTL.as_secs(),
-            "document_unchanged":true,"changes":output,"issues":issues,"preserved":["authored pitches and timing","authored clip curves","harmony","lyrics","tempo/meter","unselected clips"],
+            "document_unchanged":true,"changes":output,"issues":issues,"preserved":["authored pitches and timing except explicitly previewed Breath edits","authored clip curves","harmony","lyrics","tempo/meter","unselected clips"],
             "next":"Review these changes and warnings, then apply this plan_id with its original revision. Read back independently and compare the same rendered bars; ready is structural validation, not a listening verdict."});
         let plan = PreparedPlan {
             id,

@@ -45,6 +45,142 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
 }
 
 #[gpui::test]
+#[ignore = "real melody breathing inference; requires harness opt-in and AURIS_TOOL_SURFACE_EVAL config"]
+fn installed_agent_repairs_lead_breathing_and_preserves_generated_phrases(
+    cx: &mut gpui::TestAppContext,
+) {
+    assert!(auris_session::arrangement::enabled());
+    let config: Evaluation = serde_json::from_slice(
+        &fs::read(std::env::var_os("AURIS_TOOL_SURFACE_EVAL").unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert!(config.output.is_absolute() && !config.output.exists());
+    fs::create_dir_all(&config.output).unwrap();
+    let (app, cx) = crate::harness::open(cx);
+    let (lead,pad,generated,clips,before)=app.update(cx,|this,_| {
+        let lead=this.session.add_instrument_track("Foreground lead","auris.synth.chiptune").unwrap();
+        let mut clips=Vec::new();
+        for phrase in 0..2 {
+            let clip=this.session.add_midi_clip(lead,"Manual phrase",Ticks(phrase*15360),Ticks(15360)).unwrap();
+            for index in 0..16 {
+                this.session.add_note(clip,Note::new(60+phrase as u8*5+(index%5) as u8,Ticks(index*960),Ticks(960))).unwrap();
+            }
+            clips.push(clip);
+        }
+        let pad=this.session.add_instrument_track("Continuous pad","auris.synth.chiptune").unwrap();
+        let clip=this.session.add_midi_clip(pad,"Intentional texture",Ticks::ZERO,Ticks(30720)).unwrap();
+        this.session.add_note(clip,Note::new(48,Ticks::ZERO,Ticks(30720))).unwrap();
+        this.session.set_param(auris_session::ParamTarget::TrackGain(pad),-18.0);
+        this.session.agent_command(auris_session::live_agent::Command::EditHarmony {start_bar:1,bars:8,key:Some("C major".into()),chords:Some("| I | IV | V | I |".into()),section:None,clear_chords:false}).unwrap();
+        let generated=this.session.add_instrument_track("Generated reference","auris.physical.clarinet").unwrap();
+        this.session.agent_command(auris_session::live_agent::Command::GeneratePhrase {track:generated.0,part:"lead".into(),start_bar:1,bars:8,seed:42}).unwrap();
+        this.session.set_param(auris_session::ParamTarget::TrackGain(generated),-24.0);
+        this.session.forget_history();
+        let before=this.session.project().clone();
+        this.settings.agent=auris_session::AgentPreferences {backend:config.backend.clone(),model:config.model.clone(),provider:config.provider.clone().unwrap_or_default(),url:config.url.clone().unwrap_or_default(),api_key_env:config.api_key_env.clone().unwrap_or_default(),context_tokens:config.context_tokens,thinking:config.thinking,policy:Policy {mode:Mode::Bypass,..Default::default()},..Default::default()};
+        this.agent_chat.load_preferences(&this.settings.agent.clone());
+        this.panels.show(crate::dock::Panel::Agent);
+        this.agent_chat.input=TextField::new(format!(
+            "主旋律の息継ぎ修正試験です。8小節の未保存曲で、主旋律track {}の2クリップ {:?} は音符がつながって鳴り続けています。inspect_projectとread_notesで確認し、arrangementのinspect_breathingでrole lead、範囲tick 0〜30720、min_rest_ticks 480、phrase_ends [15360,30720]の発音を診断してください。track {}は意図的な持続Padなのでrole textureとして診断し、変更しません。track {}は既存の自動生成旋律で、role leadとして同じフレーズ末尾を診断するだけにし、再生成も修正もしません。主旋律だけ、各4小節フレーズの最終音を480tickへ短くし、休符 [14880,15360) と [30240,30720) を作ってください。その他の音符・音高・発音位置・ベロシティ・曲構造・レシピ・コントローラーは保持します。各クリップの元のindex 0は保護対象です。省略する音符はありません。arrangementのbreath編集を一つの案として目的付きでvalidateし、note_changesを確認してからplan_idと同じrevisionでapplyしてください。全体をgateで短くしないでください。適用後はread_notesとinspect_breathingで独立して読み戻してください。inspect_audioで4小節目の1小節を主旋律track指定のstemとtrack省略のmix、それぞれ適用前後の計4回測定してください。この試験ではlisten・音声の書き出し・曲の保存は行わず、音声測定から聴感が改善したとは断定しないでください。",
+            lead.0,clips.iter().map(|c|c.0).collect::<Vec<_>>(),pad.0,generated.0));
+        this.agent_send();
+        (lead,pad,generated,clips,before)
+    });
+    crate::harness::paint(&app, cx);
+    let started = Instant::now();
+    let mut snapshot = Instant::now() - Duration::from_secs(5);
+    let failure = loop {
+        app.update(cx, |this, cx| this.drain_agent(cx));
+        cx.run_until_parked();
+        let (finished, error, pending) = app.read_with(cx, |this, _| {
+            (
+                !this.agent_chat.busy
+                    && this
+                        .agent_chat
+                        .entries
+                        .iter()
+                        .any(|e| matches!(e, ChatEntry::Agent(_))),
+                this.agent_chat.entries.iter().find_map(|e| {
+                    if let ChatEntry::Error(text) = e {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                }),
+                this.agent_chat.has_pending_approval(),
+            )
+        });
+        if snapshot.elapsed() >= Duration::from_secs(5) {
+            let entries = app.read_with(cx, |this, _| transcript(&this.agent_chat.entries));
+            fs::write(
+                config.output.join("transcript.json"),
+                serde_json::to_vec_pretty(&entries).unwrap(),
+            )
+            .unwrap();
+            eprintln!(
+                "{} breathing {:.1}s, {} entries",
+                config.backend,
+                started.elapsed().as_secs_f64(),
+                entries.len()
+            );
+            snapshot = Instant::now();
+        }
+        if error.is_some() {
+            break error;
+        }
+        if pending {
+            break Some("Unexpected approval in isolated bypass fixture".to_owned());
+        }
+        if finished {
+            break None;
+        }
+        if started.elapsed() > Duration::from_secs(config.timeout_seconds) {
+            break Some("Breathing trial timed out".to_owned());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let report=app.update(cx,|this,cx| {
+        let entries=transcript(&this.agent_chat.entries);
+        this.agent_stop(cx);
+        let after=this.session.project().clone();
+        let mut expected=before.clone();
+        for clip in &clips {expected.midi_clip_mut(*clip).unwrap().notes[15].length=Ticks(480);}
+        let exact_repair=after==expected;
+        let references_preserved=after.track(pad)==before.track(pad)&&after.track(generated)==before.track(generated);
+        let calls:Vec<_>=entries.iter().filter(|e|e["kind"]=="tool").collect();
+        let args=|e:&Value|e["args"].as_str().and_then(|s|serde_json::from_str::<Value>(s).ok()).unwrap_or_else(||e["args"].clone());
+        let applied=calls.iter().position(|e|e["name"]=="arrangement"&&e["ok"]==true&&args(e)["operation"]["kind"]=="apply");
+        let before_after_audio=applied.is_some_and(|index|[&calls[..index],&calls[index+1..]].iter().all(|slice|[Some(lead.0),None].iter().all(|track|slice.iter().any(|e|e["name"]=="inspect_audio"&&e["ok"]==true&&args(e)["start_bar"]==4&&args(e)["bars"]==1&&args(e)["track"].as_u64()==*track))));
+        let role_diagnostics=[(lead.0,"lead"),(pad.0,"texture"),(generated.0,"lead")].iter().all(|(track,role)|calls.iter().any(|e|e["name"]=="arrangement"&&e["ok"]==true&&args(e)["operation"]["kind"]=="inspect_breathing"&&args(e)["operation"]["track"]==*track&&args(e)["operation"]["role"]==*role));
+        let readback=applied.is_some_and(|index|["read_notes","arrangement"].iter().all(|name|calls[index+1..].iter().any(|e|e["name"]==*name&&e["ok"]==true)));
+        let undo=this.session.undo().is_some()&&this.session.project()==&before&&!this.session.can_undo();
+        let redo=this.session.redo().is_some()&&this.session.project()==&after;
+        for (name,project) in [("project-before.json",&before),("project-after.json",&after)] {fs::write(config.output.join(name),serde_json::to_vec_pretty(project).unwrap()).unwrap();}
+        json!({"backend":config.backend,"model":config.model,"elapsed_seconds":started.elapsed().as_secs_f64(),"failure":failure,"exact_repair":exact_repair,"references_preserved":references_preserved,"before_after_stem_and_mix":before_after_audio,"role_diagnostics":role_diagnostics,"independent_readback":readback,"one_undo":undo,"redo":redo,"unsaved":this.session.path().is_none(),"tool_errors":calls.iter().filter(|e|e["ok"]==false).count(),"transcript":entries})
+    });
+    let evidence = config.output.join("report.json");
+    fs::write(&evidence, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+    assert!(
+        report["failure"].is_null(),
+        "{}; evidence {}",
+        report["failure"],
+        evidence.display()
+    );
+    for key in [
+        "exact_repair",
+        "references_preserved",
+        "before_after_stem_and_mix",
+        "role_diagnostics",
+        "independent_readback",
+        "one_undo",
+        "redo",
+        "unsaved",
+    ] {
+        assert_eq!(report[key], true, "{key}; evidence {}", evidence.display());
+    }
+}
+
+#[gpui::test]
 #[ignore = "real arrangement inference; requires AURIS_ARRANGEMENT_HARNESS=1 and AURIS_TOOL_SURFACE_EVAL config"]
 fn installed_agent_arranges_sections_with_performance_automation_and_sfx(
     cx: &mut gpui::TestAppContext,

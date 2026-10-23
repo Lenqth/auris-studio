@@ -360,6 +360,8 @@ pub mod tool_help {
         let mut examples = match name {
             "arrangement" => serde_json::json!([
                 {"project":project,"operation":{"kind":"inspect","start_bar":1,"bars":8}},
+                {"project":project,"operation":{"kind":"inspect_breathing","track":1,"role":"lead","start_tick":0,"end_tick":15360,"min_rest_ticks":480,"phrase_ends":[15360]}},
+                {"project":project,"operation":{"kind":"validate","expected_revision":"copy-from-current-inspection","changes":[{"purpose":"Release the lead phrase before its answer","edit":{"kind":"breath","clips":[2],"rests":[{"start_tick":14880,"end_tick":15360}],"min_note_ticks":120,"protected_notes":[],"omit_notes":[]}}]}},
                 {"project":project,"operation":{"kind":"validate","expected_revision":"copy-from-inspection","changes":[{"purpose":"Spread chorus guitar attacks","edit":{"kind":"performance","clip":2,"settings":{"strum":{"spread_ms":25}}}}]}},
                 {"project":project,"operation":{"kind":"apply","plan_id":"copy-from-validation","expected_revision":"same-original-revision"}}
             ]),

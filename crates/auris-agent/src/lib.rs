@@ -359,6 +359,7 @@ If the server is unavailable or the critic cannot judge, report that limitation 
 unchanged unless the user's request or other evidence supports an edit. Never invent a review.
 Listening does not save, normalize or repair the mix: use source measurements to correct overloads."
         .to_owned();
+    text.push_str(toolbox::MELODY_PHRASING_INSTRUCTIONS);
     text.push_str(toolbox::arrangement_instructions());
     text
 }

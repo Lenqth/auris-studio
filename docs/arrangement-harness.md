@@ -2,7 +2,8 @@
 
 The arrangement harness connects instrument capabilities, phrase conditions, section
 orchestration, parameter movement and SFX to the shared session editing path. It retains
-authored notes, lyrics, harmony, tempo and meter. A proposal is an ephemeral prepared
+authored notes, lyrics, harmony, tempo and meter, except for exact releases or pickup
+omissions explicitly previewed by a `breath` edit. A proposal is an ephemeral prepared
 document, not a new project format.
 
 ## Enable and inspect
@@ -73,6 +74,7 @@ Supported edits:
 
 | Edit | Contract |
 | --- | --- |
+| `breath` | Explicit phrase-rest windows, shortened note releases and exact optional pickup omissions. Protected/vocal notes and possible ties are refused; performed space is verified before application. |
 | `performance` | Partial `set_performance` settings on an existing clip; optional exact drum writer scope. Source notes and authored curves remain intact. |
 | `automation` | One existing native parameter, 1–128 unique points strictly inside a passage. Existing boundary values, interpolation and outside curves remain unchanged. |
 | `revoice` | Transfer 1–16 complete clips from one instrument/drum track to a new sound. `layer:true` retains the originals and reissues copied clip IDs. |
@@ -172,8 +174,9 @@ to two and report unresolved musical or resource conditions.
 
 Rests, call-and-response, selective layering and send automation can provide contrast
 without replacing every sound. Preserve deliberate repetition and phrase identity.
-The [melody breathing plan](melody-breathing-plan.md) adds diagnosis and explicit repair
-for a foreground melody that plays continuously, including clip joins, sustain and tails.
+[Melody breathing](melody-breathing-plan.md) documents the implemented diagnosis and
+explicit repair for a foreground melody that plays continuously, including clip joins,
+sustain and tails.
 
 ## Validation
 

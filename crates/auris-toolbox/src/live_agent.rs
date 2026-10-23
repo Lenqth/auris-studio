@@ -384,7 +384,10 @@ mod tests {
             .iter()
             .map(|b| b["properties"]["kind"]["const"].as_str().unwrap())
             .collect();
-        assert_eq!(kinds, vec!["inspect", "validate", "apply"]);
+        assert_eq!(
+            kinds,
+            vec!["inspect_breathing", "inspect", "validate", "apply"]
+        );
         let validation = branches
             .iter()
             .find(|b| b["properties"]["kind"]["const"] == "validate")
