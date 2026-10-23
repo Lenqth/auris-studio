@@ -181,11 +181,13 @@ impl ToolHost {
         if reply["event"] != "edit_result" {
             return Err("The edit response did not match the pending request".into());
         }
-        if matches!(name, "analyze_lyrics" | "diagnose_song" | "repair_lyrics")
-            && reply["ok"] == true
+        if matches!(
+            name,
+            "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement"
+        ) && reply["ok"] == true
             && let Some(text) = reply["text"].as_str()
         {
-            reply["text"] = toolbox::present_lyric_report(text)?.into();
+            reply["text"] = toolbox::present_domain_report(text)?.into();
         }
         Ok(reply)
     }

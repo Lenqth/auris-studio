@@ -578,7 +578,7 @@ mod tests {
         assert_eq!(info.server_info.name, "auris-mcp");
         assert_eq!(
             info.instructions.as_deref(),
-            Some(toolbox::INSTRUCTIONS),
+            Some(toolbox::ToolGroups::default().instructions().as_str()),
             "both doors hand a model the same standing instructions"
         );
     }

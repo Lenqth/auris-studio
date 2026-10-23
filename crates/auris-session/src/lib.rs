@@ -126,6 +126,7 @@ pub use registry::{DEFAULT_INSTRUMENT, default_registry, plugin_catalogue};
 pub use render::{ExportSummary, RenderJob, StemRenderFailure, StemSummary, stem_tracks};
 pub use session::InstalledPluginFiles;
 pub use session::NoteSelectionPreview;
+pub use session::arrangement;
 pub use session::lyric_harness;
 pub use session::prepare_output_preview;
 pub use session::{

@@ -33,7 +33,11 @@ impl ToolGroups {
     /// Workflow text for only the selected groups.
     pub fn instructions(&self) -> String {
         if self.0.is_empty() || self.0.iter().any(|g| g == "all") {
-            return INSTRUCTIONS.into();
+            return format!(
+                "{INSTRUCTIONS}{}{}",
+                crate::MELODY_PHRASING_INSTRUCTIONS,
+                crate::arrangement_instructions()
+            );
         }
         let mut text = String::from(
             "Control saved Auris projects. Respond in the user's language. Use project_id from create_project/open_project in project arguments; paths also work. Make dependent edits sequentially. Use tool_help for exact fields and examples after an error; correct arguments before retrying. Use inspect_project for stable numeric track/clip IDs. Read large reports with read_report instead of repeating a write. Never invent successful results. ",
@@ -47,6 +51,16 @@ impl ToolGroups {
                 "composition" => "For generated compositions, fetch spec_reference, validate syntax with check_spec and lyric fit with diagnose_song before compose; regeneration is an explicit edit. ",
                 _ => "",
             });
+        }
+        if self.allows("arrangement") {
+            text.push_str(crate::arrangement_instructions());
+        }
+        if self
+            .0
+            .iter()
+            .any(|g| matches!(g.as_str(), "manual" | "composition"))
+        {
+            text.push_str(crate::MELODY_PHRASING_INSTRUCTIONS);
         }
         text
     }
@@ -78,7 +92,8 @@ pub fn tool_group(name: &str) -> &'static str {
         | "list_presets"
         | "generate_phrase"
         | "accompany" => "composition",
-        "create_project"
+        "arrangement"
+        | "create_project"
         | "import_audio"
         | "import_midi"
         | "setup_tracks"

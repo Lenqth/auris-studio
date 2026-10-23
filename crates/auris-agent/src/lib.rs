@@ -301,7 +301,7 @@ fn parse_command(
 /// What the model is told once, before the conversation: the shared workflow, plus what only
 /// this frontend knows — where it is standing, and who it is talking to.
 fn preamble() -> String {
-    "You edit the document currently open in Auris Studio. Answer in the user's language.
+    let mut text = "You edit the document currently open in Auris Studio. Answer in the user's language.
 Call inspect_project first. Use the operation-specific tools with flat JSON arguments,
 without command or action wrappers. Use the numeric IDs returned by inspection and edits.
 For a song request, choose the harmony, melody, rhythm and arrangement yourself.
@@ -358,7 +358,10 @@ Report that a separate audio critic reviewed the recording; do not claim you per
 If the server is unavailable or the critic cannot judge, report that limitation and keep the music
 unchanged unless the user's request or other evidence supports an edit. Never invent a review.
 Listening does not save, normalize or repair the mix: use source measurements to correct overloads."
-        .into()
+        .to_owned();
+    text.push_str(toolbox::MELODY_PHRASING_INSTRUCTIONS);
+    text.push_str(toolbox::arrangement_instructions());
+    text
 }
 
 /// A tool's refusal, carried as an error the runtime can classify.

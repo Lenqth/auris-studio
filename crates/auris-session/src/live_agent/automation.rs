@@ -98,7 +98,10 @@ impl Operation {
 }
 
 impl Session {
-    fn agent_control_target(&mut self, target: &ControlTarget) -> Result<ParamTarget, String> {
+    pub(crate) fn agent_control_target(
+        &mut self,
+        target: &ControlTarget,
+    ) -> Result<ParamTarget, String> {
         let track_exists = |id| {
             self.project()
                 .track(TrackId(id))

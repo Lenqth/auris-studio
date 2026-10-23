@@ -383,6 +383,25 @@ pub mod architecture {
     //! Saved policy deserialization migrates known retired operation names before validation.
     //! Retired grants return to the mode's defaults rather than granting a broader command;
     //! retired denials cover their successors. Unknown rules still fail closed.
+    //!
+    //! The opt-in [`arrangement`](crate::arrangement) harness prepares capability-aware edits on
+    //! an immutable document copy. Its worker loads selected sounds and copies/decodes SFX;
+    //! the originating owner validates revision, identity and cancellation before retaining a
+    //! bounded, expiring plan. Applying that exact plan makes one ordinary Undo edit. Native
+    //! controller support is separate from instrument-family recommendations and actual audible
+    //! response. Scoped automation retains its original boundary values and outside curve;
+    //! section revoicing transfers complete clips to a copied mixer/routing strip. Both tool
+    //! adapters use this same contract; `AURIS_ARRANGEMENT_HARNESS=1` enables the tool and its
+    //! model workflow together. Structural verification never substitutes for audio comparison.
+    //! Breathing inspection merges authored and performed note intervals across clips and seeded
+    //! loop passes, with an explicit role, rest threshold and phrase endings. An explicit `Breath`
+    //! proposal may shorten releases, omit named original indices, or hold an explicitly named
+    //! arrival earlier in place of exact contiguous approach indices in an independent clip. All changes
+    //! are previewed before one-Undo application. Vocal data, protected notes and possible ties are
+    //! refused. Curves/recipes stay intact; regeneration explicitly replaces the score. Ending guidance
+    //! reads native envelope controls from the registered implementation. Compare instrument decay and
+    //! the following entry in stem and mix; performed gaps do not establish audible silence.
+    //!
     //! One-time approvals bind the exact command to the current document revision. Standalone MCP
     //! adapts the shared command catalog to saved projects and does not consult this live policy.
     //! Auto-review mode delegates operations needing confirmation to a separate conversation

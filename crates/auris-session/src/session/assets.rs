@@ -34,11 +34,34 @@ use super::Session;
 const WAVEFORM_BUCKET: u32 = 256;
 
 /// Decoded audio with waveform and render-rate conversion prepared away from the UI.
+#[derive(Clone)]
 pub struct PreparedAudioSource {
     pub(super) buffer: Arc<AudioBuffer>,
     render: Arc<AudioBuffer>,
     pub(super) render_rate: f64,
     waveform: Arc<WaveformPeaks>,
+}
+
+impl PreparedAudioSource {
+    /// Retained sample and peak allocations, counting a shared render buffer only once.
+    pub(super) fn retained_bytes(&self) -> usize {
+        let samples = |buffer: &AudioBuffer| {
+            buffer.channels().iter().fold(0usize, |sum, channel| {
+                sum.saturating_add(channel.capacity())
+            })
+        };
+        let render = if Arc::ptr_eq(&self.buffer, &self.render) {
+            0
+        } else {
+            samples(&self.render)
+        };
+        samples(&self.buffer)
+            .saturating_add(render)
+            .saturating_add(self.waveform.min.capacity())
+            .saturating_add(self.waveform.max.capacity())
+            .saturating_add(self.waveform.rms.capacity())
+            .saturating_mul(std::mem::size_of::<f32>())
+    }
 }
 
 /// Prepare the expensive parts of importing one source without accessing a session.

@@ -1,0 +1,1303 @@
+{
+  "schema": 1,
+  "date": "2026-10-23",
+  "baseline_commit": "28a5360d",
+  "scope": "Opt-in arrangement harness, explicit held arrivals and instrument-tail-aware workflow; no composer or DSP defaults changed",
+  "fixture": {
+    "sample_rate": 24000,
+    "excerpt_seconds": 6,
+    "wav_bits": 24,
+    "excerpt_start_seconds": 4,
+    "unmodified_control": "Continuous score retained separately",
+    "following_entry_seconds": 8,
+    "baseline": "Previous shortening-only breath repair",
+    "ticks_per_quarter": 960,
+    "channels": 2,
+    "gain_policy": "Common gain, no normalization or limiting",
+    "tempo_bpm": 120
+  },
+  "implementation": [
+    "Native envelope descriptors plus saved overrides and automation flags in inspect_breathing",
+    "Explicit original-index landing replaces contiguous named approach notes with a held arrival of the same pitch/velocity",
+    "Protect vocal data, possible ties, protected indices and other authored voices; reject repeated passes for landings",
+    "Keep curves/recipes and outside automation; prepare/apply atomically with one Undo"
+  ],
+  "attempts": [
+    {
+      "records": [
+        {
+          "instrument": "auris.synth.chiptune",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 0.004999999888241291,
+              "key": "attack",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.11999999731779099,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.699999988079071,
+              "key": "sustain",
+              "unit": "Percent"
+            },
+            {
+              "automated": false,
+              "base_value": 0.15000000596046448,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio to compare the two versions and provide the requested analysis.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio to be able to compare the two versions and provide the requested analysis.",
+              "scope": "mix"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.piano",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 11.498040199279785,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.20000000298023224,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio to perform the requested analysis.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio files to perform the requested analysis.",
+              "scope": "mix"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.clarinet",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 0.07919199764728546,
+              "key": "attack",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.23999999463558197,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio to compare the two versions and provide the requested analysis.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio to perform the requested analysis and comparison.",
+              "scope": "mix"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.violin",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 10.46019458770752,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 1.5,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 12
+                },
+                "replace_notes": [
+                  10,
+                  11
+                ],
+                "start_tick": 9600
+              }
+            ],
+            "omit_notes": [
+              {
+                "clip": 2,
+                "index": 13
+              },
+              {
+                "clip": 2,
+                "index": 14
+              },
+              {
+                "clip": 2,
+                "index": 15
+              }
+            ],
+            "rests": [
+              {
+                "end_tick": 15360,
+                "start_tick": 12000
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot perform the requested comparison. The audio provided is not audible or recognizable as musical content. Therefore, I am unable to describe any musical details, state uncertainty, or suggest any local changes.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Please provide the audio recordings you are referring to. I need the audio to compare the two versions and provide the requested analysis.",
+              "scope": "mix"
+            }
+          ]
+        }
+      ],
+      "label": "held-arrival-only"
+    },
+    {
+      "records": [
+        {
+          "instrument": "auris.synth.chiptune",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 0.004999999888241291,
+              "key": "attack",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.11999999731779099,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.699999988079071,
+              "key": "sustain",
+              "unit": "Percent"
+            },
+            {
+              "automated": false,
+              "base_value": 0.15000000596046448,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audio provided. Therefore, I am unable to determine which sounds more settled or describe any audible decay or abruptness.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audible music present. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "before_rms": 0.27371189659439654,
+            "after_rms": 0.1119265403278006,
+            "delta_db": -7.767211882558014,
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 0.0,
+            "pre_entry_after_rms": 0.0,
+            "following_entry_rms": 0.14477102949737178,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ]
+          },
+          "explicit_scoped_taper": {
+            "outside_and_next_entry": "original gain restored at 15360 after native release",
+            "start_tick": 13920,
+            "target": "track_gain",
+            "end_tick": 15360,
+            "points": [
+              {
+                "at_tick": 14880,
+                "value": -9
+              },
+              {
+                "at_tick": 15120,
+                "value": -18
+              },
+              {
+                "at_tick": 15359,
+                "value": -18
+              }
+            ]
+          },
+          "files": [
+            {
+              "bytes": 864068,
+              "sha256": "c9e1bcdc2e65cd8f35cbf1f22ffe9dee020f0f1e1ab2facd09308d5421382359",
+              "name": "synth-continuous-stem.wav"
+            },
+            {
+              "bytes": 96078,
+              "sha256": "5f6d00d26d328e04329d7c6117d5338cfd8d567438867e5495c2f61c19a7a7f2",
+              "name": "synth-held-control-mono16.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "0fe1e0fab8224697f7cec4dda43a435718ef4c922ef9374ca4044372aa8f324b",
+              "name": "synth-held-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "af1730cec597490c84931afc42a3e3bdc5cc32af2d5692700ec54a1f6ba54b46",
+              "name": "synth-held-stem.wav"
+            },
+            {
+              "bytes": 96078,
+              "sha256": "bf1e879c05bda35fff4c653ac994adf8818e03c939606b78ef076daf192fc61a",
+              "name": "synth-shortened-control-mono16.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "792ee4ee3f784b94ff8d0cfbc0596488a672c2c334e2457bc145cacfbfe42a35",
+              "name": "synth-shortened-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "88027d4d36c28ec198c637b20843dfa8c41716a50d5e1a03d34298be9bab4778",
+              "name": "synth-shortened-stem.wav"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.piano",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 11.498040199279785,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.20000000298023224,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings or determine which sounds more settled. The audio provided is too brief to make such a comparison.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as I do not have access to the audio. Therefore, I am unable to determine which sounds more settled or describe any audible decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "before_rms": 0.035647816195590015,
+            "after_rms": 0.015271956172849183,
+            "delta_db": -7.362765216622825,
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 8.370587467671166E-09,
+            "pre_entry_after_rms": 4.2320986445039575E-09,
+            "following_entry_rms": 0.04554493923720327,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ]
+          },
+          "explicit_scoped_taper": null,
+          "files": [
+            {
+              "bytes": 864068,
+              "sha256": "8d9c51ed2473aa404e12d8eac22ce05e4a0ae6a433feb1596960f03af87a2d79",
+              "name": "piano-continuous-stem.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "36b7e696f9801e8256630d97900f6ac17b773dd11abb849841dcc47f22539418",
+              "name": "piano-held-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "ac6550dde9162b14ca0d8a53bc64a798cc5bdc42500d95639c8cfdd3bfc4b3f5",
+              "name": "piano-held-stem.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "5e8cfa435510c6b5ce8bec99b3cde5d1e9d09040834f4d93920937c850f79386",
+              "name": "piano-shortened-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "bb07f2f422d200aacb3f6b4239c093a3f2c835b045998a0dfc54dbe17c4ec4d7",
+              "name": "piano-shortened-stem.wav"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.clarinet",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 0.07919199764728546,
+              "key": "attack",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.23999999463558197,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings or determine which sounds more settled. The audio provided is too short and lacks sufficient musical context for such an analysis.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audible music present. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "before_rms": 0.3076024868299202,
+            "after_rms": 0.12577152397512778,
+            "delta_db": -7.768150378438811,
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 5.3814199117146176E-05,
+            "pre_entry_after_rms": 6.765097831810378E-06,
+            "following_entry_rms": 0.07588640607481488,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ]
+          },
+          "explicit_scoped_taper": {
+            "outside_and_next_entry": "original gain restored at 15360 after native release",
+            "start_tick": 13920,
+            "target": "track_gain",
+            "end_tick": 15360,
+            "points": [
+              {
+                "at_tick": 14880,
+                "value": -9
+              },
+              {
+                "at_tick": 15120,
+                "value": -18
+              },
+              {
+                "at_tick": 15359,
+                "value": -18
+              }
+            ]
+          },
+          "files": [
+            {
+              "bytes": 864068,
+              "sha256": "2f211157a5ceace74da7fa60ba4503ae0f55c4d19f2f476b9a4fb6c91f2a9a4d",
+              "name": "clarinet-continuous-stem.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "495db16826a66440d6e106776cc5d114a46b8a4c988d6e7f6e6e826395056460",
+              "name": "clarinet-held-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "ca743f622fe0117f2e4efb1ea300bb0e51fce40cacadca56378eb0fe8dc0dec1",
+              "name": "clarinet-held-stem.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "257e69a58f4fb41f7e815f134d5d361eb0b0260ec8b670022de02ad4c190859e",
+              "name": "clarinet-shortened-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "60fe549d1d15521c65717b23c0c942f553d5e0bfe18e405206810b6bc34f5696",
+              "name": "clarinet-shortened-stem.wav"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.violin",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 10.46019458770752,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 1.5,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  10,
+                  11,
+                  12,
+                  13,
+                  14
+                ],
+                "start_tick": 9600
+              }
+            ],
+            "rests": [
+              {
+                "end_tick": 15360,
+                "start_tick": 12000
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no discernible melody present in the audio. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audio provided. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "before_rms": 0.02276104000692785,
+            "after_rms": 2.666678379363109E-10,
+            "delta_db": -158.62442924676057,
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 0.0026142563684664042,
+            "pre_entry_after_rms": 3.602087402654276E-17,
+            "following_entry_rms": 0.00954655711161473,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ]
+          },
+          "explicit_scoped_taper": null,
+          "files": [
+            {
+              "bytes": 864068,
+              "sha256": "44dbfca3aabcba4991a7076be247ed131dea3cd11e40a2f32bf2208e7e312f9b",
+              "name": "violin-continuous-stem.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "355e9c645dcc5984d598424b3b6d703c4cbd38d4ddd40816874ef2dbf648baca",
+              "name": "violin-held-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "b1f1941c3f900dc06a8bd2f9ae8ea96e6fb375723171828d08e95fe5fb1a1b6a",
+              "name": "violin-held-stem.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "9d284ca212b2e3cd874e6f10c7288417ffa6e342bf8b113e8d37fb51b86c1b35",
+              "name": "violin-shortened-mix.wav"
+            },
+            {
+              "bytes": 864068,
+              "sha256": "e1bc4619232943987a31e87e8601b919d225af3601c611d4564815c361612bee",
+              "name": "violin-shortened-stem.wav"
+            }
+          ]
+        }
+      ],
+      "label": "held-arrival-and-scoped-sustained-taper"
+    },
+    {
+      "reason": "The conservative violin gap was excessive: measured native decay fell below -100 dBFS about 0.7 seconds after release. Keep a 0.75-second interval instead of 1.75 seconds, preserving the same arrival pitch.",
+      "label": "final-measured-tail-budget",
+      "records": [
+        {
+          "instrument": "auris.synth.chiptune",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 0.004999999888241291,
+              "key": "attack",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.11999999731779099,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.699999988079071,
+              "key": "sustain",
+              "unit": "Percent"
+            },
+            {
+              "automated": false,
+              "base_value": 0.15000000596046448,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audio provided. Therefore, I am unable to determine which sounds more settled or describe any audible decay or abruptness.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audible music present. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 0.0,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ],
+            "delta_db": -7.767211882558014,
+            "following_entry_rms": 0.14477102949737178,
+            "before_rms": 0.27371189659439654,
+            "after_rms": 0.1119265403278006,
+            "pre_entry_after_rms": 0.0
+          },
+          "explicit_scoped_taper": {
+            "target": "track_gain",
+            "points": [
+              {
+                "at_tick": 14880,
+                "value": -9
+              },
+              {
+                "at_tick": 15120,
+                "value": -18
+              },
+              {
+                "at_tick": 15359,
+                "value": -18
+              }
+            ],
+            "start_tick": 13920,
+            "outside_and_next_entry": "original gain restored at 15360 after native release",
+            "end_tick": 15360
+          },
+          "files": [
+            {
+              "bytes": 864068,
+              "name": "synth-continuous-stem.wav",
+              "sha256": "c9e1bcdc2e65cd8f35cbf1f22ffe9dee020f0f1e1ab2facd09308d5421382359"
+            },
+            {
+              "bytes": 864068,
+              "name": "synth-held-mix.wav",
+              "sha256": "0fe1e0fab8224697f7cec4dda43a435718ef4c922ef9374ca4044372aa8f324b"
+            },
+            {
+              "bytes": 864068,
+              "name": "synth-held-stem.wav",
+              "sha256": "af1730cec597490c84931afc42a3e3bdc5cc32af2d5692700ec54a1f6ba54b46"
+            },
+            {
+              "bytes": 864068,
+              "name": "synth-shortened-mix.wav",
+              "sha256": "792ee4ee3f784b94ff8d0cfbc0596488a672c2c334e2457bc145cacfbfe42a35"
+            },
+            {
+              "bytes": 864068,
+              "name": "synth-shortened-stem.wav",
+              "sha256": "88027d4d36c28ec198c637b20843dfa8c41716a50d5e1a03d34298be9bab4778"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.piano",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 11.498040199279785,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.20000000298023224,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings or determine which sounds more settled. The audio provided is too brief to make such a comparison.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as I do not have access to the audio. Therefore, I am unable to determine which sounds more settled or describe any audible decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 8.370587467671166E-09,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ],
+            "delta_db": -7.362765216622825,
+            "following_entry_rms": 0.04554493923720327,
+            "before_rms": 0.035647816195590015,
+            "after_rms": 0.015271956172849183,
+            "pre_entry_after_rms": 4.2320986445039575E-09
+          },
+          "explicit_scoped_taper": null,
+          "files": [
+            {
+              "bytes": 864068,
+              "name": "piano-continuous-stem.wav",
+              "sha256": "8d9c51ed2473aa404e12d8eac22ce05e4a0ae6a433feb1596960f03af87a2d79"
+            },
+            {
+              "bytes": 864068,
+              "name": "piano-held-mix.wav",
+              "sha256": "36b7e696f9801e8256630d97900f6ac17b773dd11abb849841dcc47f22539418"
+            },
+            {
+              "bytes": 864068,
+              "name": "piano-held-stem.wav",
+              "sha256": "ac6550dde9162b14ca0d8a53bc64a798cc5bdc42500d95639c8cfdd3bfc4b3f5"
+            },
+            {
+              "bytes": 864068,
+              "name": "piano-shortened-mix.wav",
+              "sha256": "5e8cfa435510c6b5ce8bec99b3cde5d1e9d09040834f4d93920937c850f79386"
+            },
+            {
+              "bytes": 864068,
+              "name": "piano-shortened-stem.wav",
+              "sha256": "bb07f2f422d200aacb3f6b4239c093a3f2c835b045998a0dfc54dbe17c4ec4d7"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.clarinet",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 0.07919199764728546,
+              "key": "attack",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 0.23999999463558197,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  14
+                ],
+                "start_tick": 13440
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings or determine which sounds more settled. The audio provided is too short and lacks sufficient musical context for such an analysis.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no audible music present. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 5.3814199117146176E-05,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ],
+            "delta_db": -7.768150378438811,
+            "following_entry_rms": 0.07588640607481488,
+            "before_rms": 0.3076024868299202,
+            "after_rms": 0.12577152397512778,
+            "pre_entry_after_rms": 6.765097831810378E-06
+          },
+          "explicit_scoped_taper": {
+            "target": "track_gain",
+            "points": [
+              {
+                "at_tick": 14880,
+                "value": -9
+              },
+              {
+                "at_tick": 15120,
+                "value": -18
+              },
+              {
+                "at_tick": 15359,
+                "value": -18
+              }
+            ],
+            "start_tick": 13920,
+            "outside_and_next_entry": "original gain restored at 15360 after native release",
+            "end_tick": 15360
+          },
+          "files": [
+            {
+              "bytes": 864068,
+              "name": "clarinet-continuous-stem.wav",
+              "sha256": "2f211157a5ceace74da7fa60ba4503ae0f55c4d19f2f476b9a4fb6c91f2a9a4d"
+            },
+            {
+              "bytes": 864068,
+              "name": "clarinet-held-mix.wav",
+              "sha256": "495db16826a66440d6e106776cc5d114a46b8a4c988d6e7f6e6e826395056460"
+            },
+            {
+              "bytes": 864068,
+              "name": "clarinet-held-stem.wav",
+              "sha256": "ca743f622fe0117f2e4efb1ea300bb0e51fce40cacadca56378eb0fe8dc0dec1"
+            },
+            {
+              "bytes": 864068,
+              "name": "clarinet-shortened-mix.wav",
+              "sha256": "257e69a58f4fb41f7e815f134d5d361eb0b0260ec8b670022de02ad4c190859e"
+            },
+            {
+              "bytes": 864068,
+              "name": "clarinet-shortened-stem.wav",
+              "sha256": "60fe549d1d15521c65717b23c0c942f553d5e0bfe18e405206810b6bc34f5696"
+            }
+          ]
+        },
+        {
+          "instrument": "auris.physical.violin",
+          "envelope_controls": [
+            {
+              "automated": false,
+              "base_value": 10.46019458770752,
+              "key": "decay",
+              "unit": "Seconds"
+            },
+            {
+              "automated": false,
+              "base_value": 1.5,
+              "key": "release",
+              "unit": "Seconds"
+            }
+          ],
+          "edits": {
+            "landings": [
+              {
+                "note": {
+                  "clip": 2,
+                  "index": 15
+                },
+                "replace_notes": [
+                  13,
+                  14
+                ],
+                "start_tick": 12480
+              }
+            ],
+            "rests": [
+              {
+                "end_tick": 15360,
+                "start_tick": 13920
+              }
+            ]
+          },
+          "reviews": [
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as there is no discernible melody present in the audio. Therefore, I cannot determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "stem"
+            },
+            {
+              "audio_sent": true,
+              "model": "gemma4:e2b",
+              "review": "Based on the provided audio excerpts, I cannot compare the melody endings as I have not heard any audio. Therefore, I am unable to determine which sounds more settled or describe any decay or abruptness.",
+              "scope": "mix"
+            }
+          ],
+          "numeric": {
+            "pre_entry_window_seconds": [
+              7.95,
+              8
+            ],
+            "pre_entry_before_rms": 0.0026142563684664042,
+            "near_baseline_release_window_seconds": [
+              7.7,
+              7.75
+            ],
+            "delta_db": -39.31189167813853,
+            "following_entry_rms": 0.009550970114074847,
+            "before_rms": 0.02276104000692785,
+            "after_rms": 0.0002463754997609194,
+            "pre_entry_after_rms": 1.0555982127241051E-05
+          },
+          "explicit_scoped_taper": null,
+          "files": [
+            {
+              "bytes": 864068,
+              "name": "violin-continuous-stem.wav",
+              "sha256": "44dbfca3aabcba4991a7076be247ed131dea3cd11e40a2f32bf2208e7e312f9b"
+            },
+            {
+              "bytes": 864068,
+              "name": "violin-held-mix.wav",
+              "sha256": "f0c82e0fd8f9d7e7bc040a781f1b947056c60744df842d9756f156775966671e"
+            },
+            {
+              "bytes": 864068,
+              "name": "violin-held-stem.wav",
+              "sha256": "0ce7afab207156618c60b999eb105a9dc5d5e4cfe246273ad2961f3d70052ec9"
+            },
+            {
+              "bytes": 864068,
+              "name": "violin-shortened-mix.wav",
+              "sha256": "9d284ca212b2e3cd874e6f10c7288417ffa6e342bf8b113e8d37fb51b86c1b35"
+            },
+            {
+              "bytes": 864068,
+              "name": "violin-shortened-stem.wav",
+              "sha256": "e1bc4619232943987a31e87e8601b919d225af3601c611d4564815c361612bee"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "format_controls": [
+    {
+      "response": {
+        "id": "chatcmpl-371",
+        "object": "chat.completion",
+        "created": 1792740897,
+        "model": "gemma4:e2b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "The provided input is a string of characters that does not form recognizable words or a coherent request. Therefore, I am unable to describe any audible sounds. Please provide a clear request or input."
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 97,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 39,
+          "total_tokens": 136
+        }
+      },
+      "case": {
+        "files": [
+          "synth-held-stem.wav"
+        ],
+        "prompt": "Describe the audible sounds briefly.",
+        "label": "single24"
+      }
+    },
+    {
+      "response": {
+        "id": "chatcmpl-281",
+        "object": "chat.completion",
+        "created": 1792740901,
+        "model": "gemma4:e2b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "The provided input appears to be a string of characters that doesn't form a recognizable word or phrase in English. Therefore, I am unable to describe any audible sounds. Please provide a clear input."
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 97,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 41,
+          "total_tokens": 138
+        }
+      },
+      "case": {
+        "files": [
+          "synth-held-control-mono16.wav"
+        ],
+        "prompt": "Describe the audible sounds briefly.",
+        "label": "single16"
+      }
+    },
+    {
+      "response": {
+        "id": "chatcmpl-272",
+        "object": "chat.completion",
+        "created": 1792740904,
+        "model": "gemma4:e2b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Please provide the endings of A and B so I can compare them for you."
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 186,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 17,
+          "total_tokens": 203
+        }
+      },
+      "case": {
+        "files": [
+          "synth-shortened-control-mono16.wav",
+          "synth-held-control-mono16.wav"
+        ],
+        "prompt": "Compare the endings of A and B. Which sounds more settled?",
+        "label": "pair16"
+      }
+    },
+    {
+      "response": {
+        "id": "chatcmpl-265",
+        "object": "chat.completion",
+        "created": 1792740906,
+        "model": "gemma4:e2b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Please provide the endings of A and B so I can compare them for you."
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 186,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 17,
+          "total_tokens": 203
+        }
+      },
+      "case": {
+        "files": [
+          "synth-held-control-mono16.wav",
+          "synth-shortened-control-mono16.wav"
+        ],
+        "prompt": "Compare the endings of A and B. Which sounds more settled?",
+        "label": "pair16-reversed"
+      }
+    }
+  ],
+  "initial_short_focus": [
+    {
+      "response": {
+        "id": "chatcmpl-837",
+        "object": "chat.completion",
+        "created": 1792740489,
+        "model": "gemma4:e2b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Based on the provided audio excerpts, the melody ending in excerpt A sounds more settled than the melody ending in excerpt B. The ending in A has a gradual decay, while the ending in B is more abrupt."
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 245,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 43,
+          "total_tokens": 288
+        }
+      },
+      "scope": "stem"
+    },
+    {
+      "response": {
+        "id": "chatcmpl-780",
+        "object": "chat.completion",
+        "created": 1792740491,
+        "model": "gemma4:e2b",
+        "system_fingerprint": "fp_ollama",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Based on the provided audio excerpts, I cannot compare the melody endings or determine which sounds more settled. I need the audio to perform this analysis. Please provide the audio."
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 245,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens": 35,
+          "total_tokens": 280
+        }
+      },
+      "scope": "mix"
+    }
+  ],
+  "subjective_result": "Inconclusive. The critic frequently requested missing audio or could not recognize musical content despite valid nonzero PCM. No model quality pass is claimed.",
+  "validation": {
+    "paired_audio_and_numeric_assertions": "Passed for all four instruments; eight actual audio uploads",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings: passed",
+    "workspace": "4409 passed, 29 ignored with --test-threads=1",
+    "focused_arrangement_tests": "Final 30 passed, 2 ignored, including model-facing automation address deserialization and resolution after the address adjustment",
+    "rustdoc": "RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps: passed",
+    "format": "cargo fmt --all and git diff --check: passed",
+    "scope_note": "Full workspace test pass preceded the final automation-address serialization adjustment; focused arrangement tests and workspace Clippy were rerun after it. Audio rendering was unchanged by that adjustment."
+  }
+}

@@ -189,6 +189,7 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.arrangement",
     "edit_project.analyze_lyrics",
     "edit_project.diagnose_song",
     "edit_project.repair_lyrics",
@@ -284,7 +285,8 @@ impl Operation {
                 });
             }
             let mutating = parsed.is_mutating();
-            let confirm = matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
+            let confirm = matches!(&parsed, crate::live_agent::Command::Arrangement { operation } if operation.requires_confirmation())
+                || matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
                 || matches!(&parsed, crate::live_agent::Command::History { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
                 || matches!(&parsed, crate::live_agent::Command::EditNotes { edits, .. } if edits.iter().any(crate::live_agent::note_editing::NoteEdit::requires_confirmation))
@@ -418,6 +420,32 @@ mod tests {
         assert!(undo.confirm);
     }
     use super::*;
+
+    #[test]
+    fn arrangement_preparation_is_read_only_but_compound_application_requires_edit_permission() {
+        let inspect=Operation::parse("edit_project",&serde_json::json!({"command":{"action":"arrangement","operation":{"kind":"inspect","start_bar":1,"bars":4}}})).unwrap();
+        let validate=Operation::parse("edit_project",&serde_json::json!({"command":{"action":"arrangement","operation":{"kind":"validate","expected_revision":"revision","changes":[{"purpose":"Shape articulation","edit":{"kind":"performance","clip":1,"settings":{"gate":0.5}}}]}}})).unwrap();
+        let apply=Operation::parse("edit_project",&serde_json::json!({"command":{"action":"arrangement","operation":{"kind":"apply","plan_id":"plan","expected_revision":"revision"}}})).unwrap();
+        assert!(!inspect.mutating && !inspect.confirm);
+        assert!(!validate.mutating && !validate.confirm);
+        assert!(apply.mutating && apply.confirm);
+        for mode in [Mode::ReadOnly, Mode::Plan] {
+            let policy = Policy {
+                mode,
+                allow: vec!["*".into()],
+                ..Default::default()
+            };
+            assert_eq!(policy.decide(&inspect), Decision::Allow);
+            assert!(matches!(policy.decide(&apply), Decision::Deny(_)));
+        }
+        assert_eq!(Policy::default().decide(&apply), Decision::Ask);
+        let deny = Policy {
+            mode: Mode::Bypass,
+            deny: vec!["edit_project.arrangement".into()],
+            ..Default::default()
+        };
+        assert!(matches!(deny.decide(&apply), Decision::Deny(_)));
+    }
 
     #[test]
     fn all_retired_rules_migrate_without_widening_grants_or_losing_denials() {

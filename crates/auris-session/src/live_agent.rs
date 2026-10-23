@@ -53,6 +53,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Inspect a passage's verified instrument capabilities and phrase conditions, validate a bounded arrangement proposal on an immutable snapshot, or apply its exact plan_id as one Undo edit. Requires explicit AURIS_ARRANGEMENT_HARNESS=1. Read first; validation returns changes, warnings and a fifteen-minute process-local plan bound to this document/revision. Only an explicit breath edit may shorten notes or omit named pickups; lyrics, harmony and timeline maps remain intact. Independently read back and compare the same rendered bars; structural readiness is not musical improvement.
+    Arrangement {
+        /// Inspect, validate or apply. Copy stable clip IDs and native parameter addresses from inspection.
+        operation: crate::arrangement::Operation,
+    },
     /// Analyze Japanese lyrics into source-located phrases, readings and moras without editing. Explicit kana readings are diagnostic-only; use repair_lyrics to apply a pronunciation to existing note slots.
     AnalyzeLyrics {
         /// Original Japanese lyric, up to 65536 UTF-8 bytes.
@@ -464,6 +469,7 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::Arrangement { operation } => operation.is_mutating(),
             Self::RepairLyrics { request } => request.apply,
             Self::History { operation } => !matches!(operation, HistoryOperation::Read),
             Self::Checkpoints { operation, .. } => operation.is_mutating(),
@@ -495,7 +501,9 @@ impl Command {
     pub fn needs_worker(&self) -> bool {
         matches!(
             self,
-            Self::ListVoices { .. }
+            Self::Arrangement {
+                operation: crate::arrangement::Operation::Validate { .. }
+            } | Self::ListVoices { .. }
                 | Self::SetSingerVoice { .. }
                 | Self::Sing { .. }
                 | Self::Render { .. }
@@ -558,7 +566,18 @@ impl Session {
         plugin_paths: &[std::path::PathBuf],
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
+        if matches!(&command, Command::Arrangement { .. }) && !crate::arrangement::enabled() {
+            return Err(
+                "Arrangement harness is disabled; opt in with AURIS_ARRANGEMENT_HARNESS=1".into(),
+            );
+        }
         match command {
+            Command::Arrangement {
+                operation:
+                    operation @ (crate::arrangement::Operation::Inspect { .. }
+                    | crate::arrangement::Operation::InspectBreathing { .. }
+                    | crate::arrangement::Operation::Apply { .. }),
+            } => self.agent_arrangement(operation),
             Command::AnalyzeLyrics { text, readings } => {
                 serde_json::to_string(&self.analyze_lyrics(&text, &readings)?)
                     .map_err(|e| e.to_string())
@@ -732,7 +751,10 @@ impl Session {
             | Command::VerifyRender { .. }
             | Command::ImportAudio { .. }
             | Command::ImportMidi { .. }
-            | Command::Checkpoints { .. }) => {
+            | Command::Checkpoints { .. }
+            | Command::Arrangement {
+                operation: crate::arrangement::Operation::Validate { .. },
+            }) => {
                 let cancelled = std::sync::atomic::AtomicBool::new(false);
                 let mut job = self.begin_agent_job(command, crate::Settings::load())?;
                 loop {

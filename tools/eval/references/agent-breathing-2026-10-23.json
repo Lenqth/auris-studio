@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-23",
+  "feature": "Foreground melody breathing",
+  "opt_in": "AURIS_ARRANGEMENT_HARNESS=1",
+  "contracts": [
+    "Read-only authored/performed occupancy with explicit role, threshold and phrase endings",
+    "Exact note releases and named pickup omissions in an atomic prepared proposal",
+    "Protection of vocal data, explicit notes, possible ties and unrequested loop passes",
+    "Independent score and rendered stem/mix comparison; no implicit regeneration"
+  ],
+  "checks": {
+    "breathing_unit_tests": "12 passed; 1 critic test ignored by default; the ignored critic trial also passed explicitly",
+    "workspace_tests": "passed: cargo test --workspace -- --test-threads=1; 4405 passed, 28 ignored; followed by focused breathing regressions after the final loop-scope refinement",
+    "clippy": "passed: cargo clippy --workspace --all-targets -- -D warnings",
+    "documentation": "passed: RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps",
+    "format": "passed"
+  },
+  "real_agent": {
+    "backend": "codex",
+    "model": "gpt-6.1-sol",
+    "elapsed_seconds": 81.974037,
+    "failure": null,
+    "exact_repair": true,
+    "references_preserved": true,
+    "before_after_stem_and_mix": true,
+    "role_diagnostics": true,
+    "independent_readback": true,
+    "one_undo": true,
+    "redo": true,
+    "unsaved": true,
+    "tool_errors": 1
+  },
+  "rendered_energy": {
+    "representation": "sum of squared samples in the final 4000 frames per channel at 48 kHz",
+    "before": 603.1614978749743,
+    "after": 0
+  },
+  "audio_review": {
+    "test": "installed_audio_critic_compares_breathing_stem_and_mix",
+    "elapsed_seconds": 16.72,
+    "delivery_passed": true,
+    "musical_improvement": "not established",
+    "reviews": [
+      {
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "review": "Based on the provided audio excerpts, I can offer the following observations:\n\n**Breathing Space:** In the \"Before\" recording, the ending of the foreground melody appears to have a natural sense of breathing space. In the \"After\" recording, the ending of the melody seems more abrupt, with less apparent breathing space.\n\n**Motif Recognition:** The repeated motif remains recognizable in both recordings.\n\n**Staccato:** The change in the \"After\" recording does introduce a more staccato quality to the melody, which could be perceived as unwanted.\n\n**Uncertainty:** I am uncertain about the intent behind the change. It is possible that the change was intentional, but it is not immediately apparent.\n\n**Context:** As mentioned, a sustained background may continue intentionally. I do not assume the edited version is better.",
+        "scope": "foreground"
+      },
+      {
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "review": "Okay, I will compare the two recordings.\n\n**Recording 1 (Before):**\nThe ending of the foreground melody in this recording appears to have some breathing space. The repeated motif is recognizable.\n\n**Recording 2 (After):**\nIn this recording, the ending of the foreground melody seems to lack the breathing space present in the first recording. The repeated motif is still recognizable. The change in the ending sounds more like a staccato.\n\n**Uncertainty:**\nI am uncertain about the intent behind the change. It is possible that the change was intentional, but it is also possible that it was an unintended effect.\n\n**Suggestion:**\nI do not suggest any concrete local change.",
+        "scope": "mix with unchanged pad"
+      }
+    ],
+    "wav_measurements": [
+      {
+        "file": "stem-before.wav",
+        "sha256": "34bbbfe7b0319f22a7f55f0670b2e3e9c182487c3e92e88a3edff43fc3cf2998",
+        "last_125ms_rms": 0.2737288453458871,
+        "duration_seconds": 4
+      },
+      {
+        "file": "stem-after.wav",
+        "sha256": "12f3f3fbfede61126c9736168baa5e43f0162900bf3f25368df77594ff6505a9",
+        "last_125ms_rms": 2.3315501693414466E-05,
+        "duration_seconds": 4
+      },
+      {
+        "file": "mix-before.wav",
+        "sha256": "65785bf07e7e2e1147226c098a0fe858d73714a397794c96ef0c0634080b8b69",
+        "last_125ms_rms": 0.2755911705321229,
+        "duration_seconds": 4
+      },
+      {
+        "file": "mix-after.wav",
+        "sha256": "359e391c2d821028b18d8eaea5fd77310891ed4198988bc2724e155dbed4a437",
+        "last_125ms_rms": 0.03489213817665479,
+        "duration_seconds": 4
+      }
+    ],
+    "interpretation": "The critic flagged an abrupt/staccato ending and was uncertain about intent. Measured note/PCM space increased, but that does not establish natural phrasing. Shared agent guidance recommends a held arrival, an explicitly scoped taper or a revised arrival, then bounded comparison. The raw model observations are fallible evidence."
+  },
+  "evidence_root": ".local-evaluations/breathing-2026-10-23",
+  "regression_notes": [
+    "The default parallel workspace run stalled in existing GPU tests and was terminated. The GPU suite passed all 30 tests serially.",
+    "An intermediate serial run used the old MCP introduction assertion. It was updated to compare the complete shared workflow, including new phrasing guidance.",
+    "No composer writer, DSP algorithm or project format changed. The original reported project was unavailable; the fixtures reproduce classes of continuous and masked phrasing.",
+    "Both real-agent trials recovered from one validation refusal because their Japanese purpose exceeded the existing 256 UTF-8 byte limit. The limit is now stated in the shared workflow and Change.purpose help."
+  ],
+  "real_agent_recheck": {
+    "backend": "codex",
+    "model": "gpt-6.1-sol",
+    "elapsed_seconds": 59.9922424,
+    "failure": null,
+    "exact_repair": true,
+    "references_preserved": true,
+    "before_after_stem_and_mix": true,
+    "role_diagnostics": true,
+    "independent_readback": true,
+    "one_undo": true,
+    "redo": true,
+    "unsaved": true,
+    "tool_errors": 1
+  }
+}
