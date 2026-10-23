@@ -62,6 +62,7 @@ mod groove;
 mod harmony;
 mod hosted;
 mod levels;
+pub mod lyric_harness;
 mod lyrics;
 mod mixer;
 mod mixture;

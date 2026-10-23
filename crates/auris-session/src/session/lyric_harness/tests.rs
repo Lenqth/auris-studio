@@ -1,0 +1,439 @@
+use super::*;
+use crate::{SessionOptions, live_agent::Command, prelude::*};
+
+fn session() -> Session {
+    let mut session = Session::new(SessionOptions::headless()).unwrap();
+    session.japanese = None;
+    session
+}
+
+fn verses(second: &str) -> SongSpec {
+    SongSpec::parse(&format!("form='verse verse2'\n[section.verse]\nbars=4\nlyrics='ずっときみと、はるがきた'\n[section.verse2]\nbars=4\nmelody_from='verse'\nlyrics='{second}'")).unwrap()
+}
+
+#[test]
+fn analysis_keeps_original_unicode_locations_and_special_moras() {
+    let session = session();
+    let text = " きゃっと、\r\n  コーヒー！\n漢字";
+    let before = session.project().clone();
+    let analysis = session.analyze_lyrics(text, &[]).unwrap();
+    assert!(!analysis.complete);
+    assert!(!analysis.dictionary_available);
+    assert_eq!(
+        analysis
+            .phrases
+            .iter()
+            .map(|p| p.moras.len())
+            .collect::<Vec<_>>(),
+        [3, 4, 0]
+    );
+    assert_eq!(
+        analysis.phrases.iter().map(|p| p.line).collect::<Vec<_>>(),
+        [1, 2, 3]
+    );
+    for phrase in &analysis.phrases {
+        assert_eq!(
+            text.chars()
+                .skip(phrase.start_char)
+                .take(phrase.end_char - phrase.start_char)
+                .collect::<String>(),
+            phrase.text
+        );
+    }
+    assert!(analysis.phrases[0].moras[1].closure);
+    assert!(analysis.phrases[1].moras[1].long_vowel_mark);
+    let explicit = session
+        .analyze_lyrics(
+            text,
+            &[PhraseReading {
+                phrase: 3,
+                kana: "かんじ".into(),
+            }],
+        )
+        .unwrap();
+    assert!(explicit.complete);
+    assert_eq!(explicit.phrases[2].text, "漢字");
+    assert_eq!(explicit.phrases[2].reading_source, ReadingSource::Explicit);
+    assert!(explicit.phrases[2].moras[1].nasal);
+    assert_eq!(session.project(), &before);
+}
+
+#[test]
+fn readings_reject_ambiguous_addresses_and_phrase_breaks() {
+    let session = session();
+    for readings in [
+        vec![PhraseReading {
+            phrase: 0,
+            kana: "あ".into(),
+        }],
+        vec![PhraseReading {
+            phrase: 2,
+            kana: "あ".into(),
+        }],
+        vec![PhraseReading {
+            phrase: 1,
+            kana: "あ、い".into(),
+        }],
+        vec![PhraseReading {
+            phrase: 1,
+            kana: "漢字".into(),
+        }],
+        vec![
+            PhraseReading {
+                phrase: 1,
+                kana: "あ".into(),
+            },
+            PhraseReading {
+                phrase: 1,
+                kana: "い".into(),
+            },
+        ],
+    ] {
+        assert!(session.analyze_lyrics("漢字", &readings).is_err());
+    }
+}
+
+#[test]
+fn diagnosis_reports_each_phrase_even_when_total_moras_match() {
+    let session = session();
+    let spec = verses("きっとあう、あさがきたよ");
+    let report = session.diagnose_song_lyrics(&spec).unwrap();
+    assert_eq!(report.status, "fail");
+    assert!(report.complete);
+    let mismatches: Vec<_> = report
+        .issues
+        .iter()
+        .filter(|i| i.code == "mora_count_mismatch")
+        .collect();
+    assert_eq!(mismatches.len(), 2);
+    assert_eq!(mismatches[0].phrase, Some(1));
+    assert_eq!(mismatches[1].phrase, Some(2));
+    assert_eq!(report, session.diagnose_song_lyrics(&spec).unwrap());
+    assert!(session.validate_song_lyrics(&spec).is_err());
+}
+
+#[test]
+fn closures_are_checked_separately_from_counts_and_unreadable_phrases() {
+    let session = session();
+    let spec = verses("きみとあえる、漢字");
+    let report = session.diagnose_song_lyrics(&spec).unwrap();
+    assert_eq!(report.status, "fail");
+    assert!(!report.complete);
+    assert_eq!(
+        report
+            .issues
+            .iter()
+            .filter(|i| i.code == "unreadable_phrase")
+            .count(),
+        1
+    );
+    let closure = report
+        .issues
+        .iter()
+        .find(|i| i.code == "closure_position_mismatch")
+        .unwrap();
+    assert_eq!(closure.expected, Some(serde_json::json!([2])));
+    assert_eq!(closure.actual, Some(serde_json::json!([])));
+    assert!(
+        !report
+            .issues
+            .iter()
+            .any(|i| i.code == "mora_count_mismatch")
+    );
+}
+
+#[test]
+fn unreadable_original_is_incomplete_instead_of_a_silent_composition_pass() {
+    let session = session();
+    let spec = SongSpec::parse("form='verse'\n[section.verse]\nlyrics='漢字'").unwrap();
+    assert_eq!(
+        session.diagnose_song_lyrics(&spec).unwrap().status,
+        "incomplete"
+    );
+    assert!(session.validate_song_lyrics(&spec).is_err());
+}
+
+#[test]
+fn matched_and_intentionally_independent_sections_pass() {
+    let session = session();
+    let mut spec = verses("きっとあえる、あさがきた");
+    assert_eq!(session.diagnose_song_lyrics(&spec).unwrap().status, "pass");
+    session.validate_song_lyrics(&spec).unwrap();
+    spec.sections.get_mut("verse2").unwrap().melody_from = None;
+    spec.sections.get_mut("verse2").unwrap().lyrics = "あした".into();
+    assert_eq!(session.diagnose_song_lyrics(&spec).unwrap().status, "pass");
+}
+
+fn singer_pair(session: &mut Session) -> (NoteSpan, NoteSpan) {
+    let track = session.add_singer_track("Vocal");
+    let mut spans = Vec::new();
+    for (i, text) in ["ずっときみと", "きみとあえる"].iter().enumerate() {
+        let clip = session
+            .add_midi_clip(track, "Verse", Ticks(i as i64 * 7680), Ticks(7680))
+            .unwrap();
+        let notes = (0..6)
+            .map(|i| Note::new(60 + i % 3, Ticks(i as i64 * 960), Ticks(800)))
+            .collect();
+        session.replace_notes(clip, notes).unwrap();
+        session
+            .write_lyrics(clip, &[0, 1, 2, 3, 4, 5], text)
+            .unwrap();
+        spans.push(NoteSpan {
+            clip: clip.0,
+            notes: vec![0, 1, 2, 3, 4, 5],
+        });
+    }
+    (spans.remove(0), spans.remove(0))
+}
+
+#[test]
+fn repair_previews_then_changes_only_target_words_in_one_undo() {
+    let mut session = session();
+    let (reference, target) = singer_pair(&mut session);
+    for id in [reference.clip, target.clip] {
+        let notes = &mut session.project.midi_clip_mut(ClipId(id)).unwrap().notes;
+        notes[0].scoop = Some(Scoop {
+            depth: 1.5,
+            seconds: 0.1,
+        });
+        notes[0].phoneme_seconds = vec![0.1, 0.2];
+        notes[1].phoneme_seconds = vec![0.1];
+    }
+    let before = session.project().clone();
+    let revision = session.agent_document_revision().unwrap();
+    let request = RepairRequest {
+        target: target.clone(),
+        reference: Some(reference.clone()),
+        expected_revision: revision.clone(),
+        candidates: vec![
+            LyricCandidate {
+                text: "きみとあえる".into(),
+                reading: None,
+            },
+            LyricCandidate {
+                text: "きっとあえる".into(),
+                reading: None,
+            },
+        ],
+        required_keywords: vec!["あえる".into()],
+        apply: false,
+    };
+    let preview = session.repair_lyrics(&request).unwrap();
+    assert_eq!(preview["selected_candidate"], 2);
+    assert_eq!(preview["applied"], false);
+    assert_eq!(session.project(), &before);
+    assert_eq!(session.agent_document_revision().unwrap(), revision);
+    let command = Command::RepairLyrics {
+        request: RepairRequest {
+            apply: true,
+            ..request
+        },
+    };
+    assert!(command.is_mutating());
+    let result: serde_json::Value =
+        serde_json::from_str(&session.agent_command(command).unwrap()).unwrap();
+    assert_eq!(result["applied"], true);
+    let mut expected = before.clone();
+    let moras = split_kana_lyric("きっとあえる").unwrap();
+    for (note, (text, phonemes)) in expected
+        .midi_clip_mut(ClipId(target.clip))
+        .unwrap()
+        .notes
+        .iter_mut()
+        .zip(moras)
+    {
+        if note.lyric != text || note.phonemes != phonemes {
+            note.lyric = text;
+            note.phonemes = phonemes;
+            note.phoneme_seconds.clear();
+        }
+    }
+    assert_eq!(session.project(), &expected);
+    assert_eq!(
+        session
+            .diagnose_clip_lyrics(&[ClipComparison { reference, target }])
+            .unwrap()
+            .status,
+        "pass"
+    );
+    session.undo().unwrap();
+    assert_eq!(session.project(), &before);
+}
+
+#[test]
+fn rejected_stale_and_keyword_breaking_repairs_leave_the_whole_project_unchanged() {
+    let mut session = session();
+    let (reference, target) = singer_pair(&mut session);
+    let before = session.project().clone();
+    let mut request = RepairRequest {
+        target,
+        reference: Some(reference),
+        expected_revision: session.agent_document_revision().unwrap(),
+        candidates: vec![LyricCandidate {
+            text: "きっとあえる".into(),
+            reading: None,
+        }],
+        required_keywords: vec!["きみ".into()],
+        apply: true,
+    };
+    let result = session.repair_lyrics(&request).unwrap();
+    assert_eq!(result["applied"], false);
+    assert_eq!(session.project(), &before);
+    request.required_keywords.clear();
+    request.expected_revision = "stale".into();
+    assert!(session.repair_lyrics(&request).is_err());
+    assert_eq!(session.project(), &before);
+}
+
+#[test]
+fn explicit_readings_and_long_vowels_are_applied_without_losing_phonemes() {
+    let mut session = session();
+    let track = session.add_singer_track("Vocal");
+    let clip = session
+        .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks(7680))
+        .unwrap();
+    session
+        .replace_notes(
+            clip,
+            (0..4)
+                .map(|i| Note::new(60, Ticks(i * 960), Ticks(800)))
+                .collect(),
+        )
+        .unwrap();
+    session
+        .write_lyrics(clip, &[0, 1, 2, 3], "あいうえ")
+        .unwrap();
+    let request = RepairRequest {
+        target: NoteSpan {
+            clip: clip.0,
+            notes: vec![3, 2, 1, 0],
+        },
+        reference: None,
+        expected_revision: session.agent_document_revision().unwrap(),
+        candidates: vec![LyricCandidate {
+            text: "珈琲".into(),
+            reading: Some("コーヒー".into()),
+        }],
+        required_keywords: vec!["珈琲".into()],
+        apply: true,
+    };
+    assert_eq!(session.repair_lyrics(&request).unwrap()["applied"], true);
+    let notes = &session.midi_clip(clip).unwrap().notes;
+    assert_eq!(notes[1].phonemes, ["o"]);
+    assert_eq!(notes[3].phonemes, ["i"]);
+    assert_eq!(notes[0].lyric, "珈琲");
+    assert_eq!(notes[1].lyric, "+");
+    let span = request.target.clone();
+    let report = session
+        .diagnose_clip_lyrics(&[ClipComparison {
+            reference: span.clone(),
+            target: span,
+        }])
+        .unwrap();
+    assert_eq!(report.status, "pass");
+    assert_eq!(report.sections[0].analysis.phrases[0].text, "珈琲");
+    assert_eq!(
+        report.sections[0].analysis.phrases[0].reading.as_deref(),
+        Some("こおひい")
+    );
+    let before = session.project().clone();
+    let mut again = request;
+    again.expected_revision = session.agent_document_revision().unwrap();
+    assert_eq!(session.repair_lyrics(&again).unwrap()["applied"], false);
+    assert_eq!(session.project(), &before);
+}
+
+#[test]
+fn diagnosis_and_repair_do_not_hide_musical_or_alignment_mismatches() {
+    let mut session = session();
+    let (reference, target) = singer_pair(&mut session);
+    session.set_note_lyric(ClipId(target.clip), 0, "").unwrap();
+    let report = session
+        .diagnose_clip_lyrics(&[ClipComparison {
+            reference: reference.clone(),
+            target: target.clone(),
+        }])
+        .unwrap();
+    assert_eq!(report.status, "incomplete");
+    session
+        .project
+        .midi_clip_mut(ClipId(target.clip))
+        .unwrap()
+        .notes[0]
+        .pitch += 1;
+    let report = session
+        .diagnose_clip_lyrics(&[ClipComparison {
+            reference: reference.clone(),
+            target: target.clone(),
+        }])
+        .unwrap();
+    assert_eq!(report.status, "fail");
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.code == "musical_slot_mismatch")
+    );
+    let before = session.project().clone();
+    let request = RepairRequest {
+        target,
+        reference: Some(reference),
+        expected_revision: session.agent_document_revision().unwrap(),
+        candidates: vec![LyricCandidate {
+            text: "きっとあえる".into(),
+            reading: None,
+        }],
+        required_keywords: Vec::new(),
+        apply: true,
+    };
+    assert!(session.repair_lyrics(&request).is_err());
+    assert_eq!(session.project(), &before);
+}
+
+#[test]
+fn stored_one_mora_phonemes_establish_slots_for_original_text_and_plus_labels() {
+    let mut session = session();
+    let (reference, target) = singer_pair(&mut session);
+    session
+        .write_lyrics(ClipId(target.clip), &[0, 1, 2, 3, 4, 5], "きっとあえる")
+        .unwrap();
+    let clip = session
+        .project
+        .midi_clip_mut(ClipId(reference.clip))
+        .unwrap();
+    clip.notes[0].lyric = "ずっと君と".into();
+    for note in &mut clip.notes[1..] {
+        note.lyric = "+".into();
+    }
+    let report = session
+        .diagnose_clip_lyrics(&[ClipComparison { reference, target }])
+        .unwrap();
+    assert_eq!(report.status, "pass");
+    assert_eq!(report.sections[0].analysis.phrases[0].text, "ずっと君と");
+    assert_eq!(report.sections[0].analysis.phrases[0].moras.len(), 6);
+}
+
+#[test]
+fn phrase_count_and_capacity_diagnostics_use_the_actual_fixed_bar_allocator() {
+    let session = session();
+    let mut spec = verses("きっとあえる");
+    let report = session.diagnose_song_lyrics(&spec).unwrap();
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.code == "phrase_count_mismatch")
+    );
+    let section = spec.sections.get_mut("verse2").unwrap();
+    section.melody_from = None;
+    section.bars = 1;
+    section.lyrics = "あ".repeat(100);
+    let report = session.diagnose_song_lyrics(&spec).unwrap();
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.code == "lyric_capacity_exceeded" && i.section == "verse2")
+    );
+    assert!(session.validate_song_lyrics(&spec).is_err());
+}

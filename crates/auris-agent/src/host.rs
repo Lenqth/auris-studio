@@ -171,12 +171,21 @@ impl ToolHost {
         let command = toolbox::live_agent::command(name, &args)?
             .ok_or_else(|| format!("Unknown live tool: {name}"))?;
         permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
-        let reply = self
+        if let auris_session::live_agent::Command::RepairLyrics { request } = &command {
+            self.bridge.reserve_lyric_repair(request)?;
+        }
+        let mut reply = self
             .bridge
             .exchange(json!({"event":"edit", "command":command}))
             .await?;
         if reply["event"] != "edit_result" {
             return Err("The edit response did not match the pending request".into());
+        }
+        if matches!(name, "analyze_lyrics" | "diagnose_song" | "repair_lyrics")
+            && reply["ok"] == true
+            && let Some(text) = reply["text"].as_str()
+        {
+            reply["text"] = toolbox::present_lyric_report(text)?.into();
         }
         Ok(reply)
     }
@@ -489,6 +498,10 @@ mod tests {
                 json!({"track":1,"voice":"/voice/test.voicevox.json"}),
             ),
             ("write_lyrics", json!({"clip":2,"text":"さくら"})),
+            (
+                "repair_lyrics",
+                json!({"target":{"clip":2,"notes":[0]},"expected_revision":"r1","candidates":[{"text":"あ"}],"apply":true}),
+            ),
             ("sing", json!({"track":1})),
         ] {
             let (bridge, commands, events) = crate::worker::test_bridge();

@@ -167,6 +167,7 @@ struct Channels {
     commands: Mutex<async_mpsc::UnboundedReceiver<String>>,
     exchange: Mutex<()>,
     tools: Mutex<()>,
+    lyric_repairs: std::sync::Mutex<crate::lyric_repair::Budget>,
     vision: AtomicBool,
     visual: std::sync::Mutex<Option<Message>>,
     audio_references: std::sync::Mutex<attachments::AudioReferences>,
@@ -213,6 +214,9 @@ impl VisualTurn {
     pub(super) fn new(bridge: Option<Bridge>) -> Self {
         if let Some(bridge) = &bridge {
             bridge.clear_visual();
+            if let Ok(mut budget) = bridge.0.lyric_repairs.lock() {
+                budget.reset();
+            }
         }
         Self(bridge)
     }
@@ -226,6 +230,16 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(super) fn reserve_lyric_repair(
+        &self,
+        request: &auris_session::lyric_harness::RepairRequest,
+    ) -> Result<(), String> {
+        self.0
+            .lyric_repairs
+            .lock()
+            .map_err(|_| "Lyric repair budget unavailable".to_string())?
+            .reserve(request)
+    }
     pub(super) fn retain_audio(
         &self,
         file: Arc<tempfile::NamedTempFile>,
@@ -347,6 +361,9 @@ impl Bridge {
         let starts_turn = serde_json::from_str::<serde_json::Value>(&message)
             .ok()
             .is_some_and(|wire| wire.get("say").is_some() || wire["compact"] == true);
+        if starts_turn && let Ok(mut budget) = self.0.lyric_repairs.lock() {
+            budget.reset();
+        }
         if starts_turn && let Some(root) = &self.0.execution_root {
             let result = (|| {
                 let mut lease = self
@@ -444,6 +461,7 @@ impl Worker {
             commands: Mutex::new(incoming),
             exchange: Mutex::new(()),
             tools: Mutex::new(()),
+            lyric_repairs: std::sync::Mutex::new(crate::lyric_repair::Budget::default()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
             execution_root,
@@ -532,6 +550,7 @@ pub(crate) fn test_bridge() -> (
             commands: Mutex::new(incoming),
             exchange: Mutex::new(()),
             tools: Mutex::new(()),
+            lyric_repairs: std::sync::Mutex::new(crate::lyric_repair::Budget::default()),
             vision: AtomicBool::new(false),
             visual: std::sync::Mutex::new(None),
             execution_root: None,
@@ -980,6 +999,7 @@ mod tests {
             commands: Mutex::new(incoming),
             exchange: Mutex::new(()),
             tools: Mutex::new(()),
+            lyric_repairs: std::sync::Mutex::new(crate::lyric_repair::Budget::default()),
             vision: AtomicBool::new(true),
             visual: std::sync::Mutex::new(None),
             execution_root: None,
