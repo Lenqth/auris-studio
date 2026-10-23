@@ -79,8 +79,13 @@ pub struct ExpressionSpan {
 pub struct PreparedCurves<C> {
     /// Resolved pitch in Hz, including context frames.
     pub pitch_hz: Vec<f64>,
-    /// Resolved energy, including context frames.
+    /// Resolved energy, including context frames. A backend's predicted energy is returned
+    /// unedited: it conditions the decoder, and scaling it changes articulation as well as level.
     pub energy: Vec<f64>,
+    /// Velocity times expression per frame, including context frames, for a backend that
+    /// predicts energy to apply to its decoded audio. All ones where the host owns energy,
+    /// whose curve already carries those dynamics.
+    pub gain: Vec<f64>,
     /// Frames to remove from the start of the decoded audio.
     pub leading_frames: usize,
     /// Frames to remove from the end of the decoded audio.
@@ -129,7 +134,9 @@ impl<C> CurvePrediction<C> {
     /// Resolves host curves and predicted curves using the same musical-edit contract.
     ///
     /// Predicted pitch is multiplied by the host pitch / score-key frequency, preserving
-    /// natural variation and voicing. Predicted energy is multiplied by velocity/expression.
+    /// natural variation and voicing. Predicted energy stays as predicted; velocity times
+    /// expression becomes [`PreparedCurves::gain`] for the decoded audio, because a decoder
+    /// conditioned on quieter energy also articulates worse — a soft /b/ is heard as /m/.
     /// Controls extend backwards across rests for anticipated consonants and forwards into
     /// trailing context for releases. Predicted energy remains responsible for silence.
     /// Host-generated curves are copied verbatim, with silence in context frames.
@@ -172,7 +179,8 @@ impl<C> CurvePrediction<C> {
             )),
         };
         let mut pitch = resolve(self.pitch_hz, &frames.f0_hz, sources.pitch)?;
-        let mut energy = resolve(self.energy, &frames.energy, sources.energy)?;
+        let energy = resolve(self.energy, &frames.energy, sources.energy)?;
+        let mut gain = vec![1.0; count];
         let mut controls = vec![None; count];
         let mut offset = self.leading_frames;
         for note in &score.notes {
@@ -223,21 +231,27 @@ impl<C> CurvePrediction<C> {
         }
         let mut previous = (1.0, 0.0);
         for (index, control) in controls.into_iter().enumerate() {
-            let (ratio, gain) = control.unwrap_or(previous);
-            previous = (ratio, gain);
+            let (ratio, control_gain) = control.unwrap_or(previous);
+            previous = (ratio, control_gain);
             if sources.pitch == CurveSource::Backend {
                 pitch[index] *= ratio;
             }
             if sources.energy == CurveSource::Backend {
-                energy[index] *= gain;
+                gain[index] = control_gain;
             }
         }
-        if pitch.iter().chain(&energy).any(|v| !v.is_finite()) {
+        if pitch
+            .iter()
+            .chain(&energy)
+            .chain(&gain)
+            .any(|v| !v.is_finite())
+        {
             return Err(invalid("expression produced nonfinite acoustic values"));
         }
         Ok(PreparedCurves {
             pitch_hz: pitch,
             energy,
+            gain,
             leading_frames: self.leading_frames,
             trailing_frames: self.trailing_frames,
             context: self.context,
@@ -333,9 +347,17 @@ mod tests {
         assert_eq!(
             prepared.energy,
             if ENERGY {
-                vec![0.0, 0.02, 0.2, 0.05, 0.0, 0.0, 0.0, 0.0]
+                vec![0.0, 0.04, 0.4, 0.2, 0.3, 0.0, 0.0, 0.0]
             } else {
                 vec![0.0, 0.0, 0.5, 0.25, 0.0, 0.0, 0.0, 0.0]
+            }
+        );
+        assert_eq!(
+            prepared.gain,
+            if ENERGY {
+                vec![0.5, 0.5, 0.5, 0.25, 0.0, 0.0, 0.0, 0.0]
+            } else {
+                vec![1.0; 8]
             }
         );
     }
@@ -379,13 +401,18 @@ mod tests {
             .unwrap();
         assert_eq!(&prepared.pitch_hz[3..5], &[200.0; 2]);
         assert!(
-            prepared.energy[3..5]
+            prepared.gain[3..5]
                 .iter()
-                .all(|gain| (*gain - 0.4).abs() < 1e-6)
+                .all(|gain| (*gain - 0.8).abs() < 1e-6)
         );
         assert_eq!(
-            prepared.energy[2], 0.0,
+            prepared.gain[2], 0.0,
             "the preceding vowel still follows its own zero velocity"
+        );
+        assert_eq!(
+            prepared.energy,
+            vec![0.5; 9],
+            "the decoder's energy is not edited"
         );
     }
 
@@ -540,6 +567,7 @@ mod tests {
         let prepared = prediction
             .apply_expression(&frames, &score, Predictor::<true, true>::SOURCES)
             .unwrap();
-        assert_eq!(prepared.energy[6], 0.05);
+        assert_eq!(prepared.energy[6], 0.1);
+        assert_eq!(prepared.gain[6], 0.5);
     }
 }

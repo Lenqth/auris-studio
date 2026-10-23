@@ -2038,8 +2038,10 @@ pub mod singing {
     //! and trailing frame counts. Optional [`auris_singer::ExpressionSpan`] ranges associate an
     //! anticipated articulation with its owning note's controls. The common preparation step
     //! validates the frame grid,
-    //! modulates predicted pitch relative to score keys, scales predicted energy, and copies
-    //! host-owned curves unchanged. Controls extend into rests for anticipated consonants
+    //! modulates predicted pitch relative to score keys, returns velocity times expression as
+    //! a per-frame gain for the decoded audio, and copies host-owned curves unchanged.
+    //! Predicted energy is not scaled: VOICEVOX reads its volume as articulation, and a
+    //! quieter volume changes the consonant it sings rather than only its level. Controls extend into rests for anticipated consonants
     //! and trailing decoder context; predicted energy still determines silence. A consonant
     //! that overlaps the preceding note still uses its own note's velocity and pitch edits,
     //! so a quiet preceding vowel cannot mute it or apply a different bend. VOICEVOX uses
