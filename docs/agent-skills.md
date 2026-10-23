@@ -16,10 +16,10 @@ To keep it in one project, omit `-g` and run the command from that project's dir
 npx skills add uthree/auris-studio --skill auris-composition -a codex -y
 ```
 
-Check installed skills and update this skill with:
+List installed skills and update this skill with:
 
 ```sh
-npx skills check
+npx skills list -g
 npx skills update auris-composition -g -y
 ```
 
