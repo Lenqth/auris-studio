@@ -69,6 +69,18 @@ The adapter now sends the predicted volume unchanged and applies velocity × exp
 decoded audio. The gain is interpolated between frame centres. Consonants that anticipate their
 vowel still take the gain of their own note.
 
+A same-take comparison isolates the change. It uses 72 queries (24 phrases × 3 takes,
+四国めたん / ノーマル), and each one is decoded with its volume scaled and with its audio scaled.
+
+| Level | Volume scaled (before) | Audio scaled (now) |
+| ---: | ---: | ---: |
+| 0.8 | 11.9 % | 11.4 % |
+| 0.5 | 19.0 % | 11.7 % |
+
+At 0.5, audio scaling was better on 20 takes and worse on 8. The errors it removed are consonant
+substitutions (さしすせそ heard as しじせぞ, ざじずぜぞ as ざみでぞ, ぽすと as ぼすと). The
+remaining error rate is the same as at full volume.
+
 Two properties of Engine 0.25.2 limit these comparisons. `sing_frame_audio_query` predicts phoneme
 durations deterministically, but its f0 and volume differ on every request, so two renders of the
 same score are two takes. A fair comparison therefore synthesises the same query twice;
