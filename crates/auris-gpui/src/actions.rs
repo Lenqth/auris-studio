@@ -47,6 +47,8 @@ actions!(
         OpenRecent,
         /// Show what this build is.
         ShowAbout,
+        /// Compare this build with the latest published desktop release.
+        CheckForUpdates,
         /// Start or stop playback.
         TogglePlay,
         /// Move the playhead to the beginning.
@@ -540,7 +542,8 @@ bindable! {
         // the conversation is typed into, a panel whose key is a letter would be a panel that
         // reopens itself while somebody writes about it.
         "view.agent",           GroupView,      CmdShowAgent,          "secondary-alt-a" => ToggleAgent;
-        "view.about",           GroupView,      CmdAbout,              "" => ShowAbout;
+        "view.about",           GroupHelp,      CmdAbout,              "" => ShowAbout;
+        "help.check_updates",   GroupHelp,      CmdCheckForUpdates,    "" => CheckForUpdates;
         // The three strips over the arrangement. Out on `secondary-alt-` because they are
         // arrangement furniture rather than things reached mid-take, and because the plain and
         // shifted forms of these letters are all spoken for.

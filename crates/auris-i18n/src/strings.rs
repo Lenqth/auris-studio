@@ -540,6 +540,7 @@ strings! {
     // of file operations, under a label that named the *file* route to it.
     GroupCompose { en: "Compose", ja: "作曲" }
     GroupView { en: "View", ja: "表示" }
+    GroupHelp { en: "Help", ja: "ヘルプ" }
 
     // ------------------------------------------------------------------ commands
     CmdPlayStop { en: "Play / Stop", ja: "再生 / 停止" }
@@ -592,6 +593,11 @@ strings! {
     AutosaveNote {
         en: "Keeps a recovery copy in private working storage about every 30 seconds. The project file is changed only when you save it.",
         ja: "約30秒ごとに、復旧用のコピーを作業用キャッシュへ保存します。プロジェクト本体は、手動で保存したときだけ更新されます。"
+    }
+    AutoUpdate { en: "Automatic Updates", ja: "自動更新" }
+    AutoUpdateNote {
+        en: "Downloads new releases in the background and installs them after the app exits.",
+        ja: "バックグラウンドで新しいリリースを取得し、アプリの終了後にインストールします。"
     }
     PianoRollSnap { en: "Piano Roll Snap…", ja: "ピアノロールのスナップ…" }
     SnapShort { en: "Snap", ja: "スナップ" }
@@ -1294,6 +1300,19 @@ strings! {
     DialogPluginFolder { en: "Choose a plugin folder", ja: "プラグインのフォルダを選択" }
     CmdOpenRecent { en: "Open Recent", ja: "最近のプロジェクト" }
     CmdAbout { en: "About Auris Studio", ja: "Auris Studio について" }
+    CmdCheckForUpdates { en: "Check for Updates", ja: "更新を確認" }
+    UpdateChecking { en: "Checking for updates…", ja: "更新を確認しています…" }
+    UpdateAvailable { en: "Auris Studio {version} is available. You have {current}.", ja: "Auris Studio {version} を利用できます。現在のバージョン: {current}" }
+    UpdateCurrent { en: "Auris Studio {version} is up to date.", ja: "Auris Studio {version} は最新版です。" }
+    UpdateNoRelease { en: "No published release is available yet.", ja: "公開済みのリリースはまだありません。" }
+    UpdateFailed { en: "Could not check for updates. Please try again later.", ja: "更新を確認できませんでした。時間をおいて再度お試しください。" }
+    UpdateOpenRelease { en: "Open Release Page", ja: "リリースページを開く" }
+    UpdateDownloading { en: "Downloading Auris Studio {version}: {percent}%", ja: "Auris Studio {version} をダウンロード中: {percent}%" }
+    UpdateReady { en: "Auris Studio {version} is ready. It will install when you quit.", ja: "Auris Studio {version} の準備ができました。終了時にインストールされます。" }
+    UpdateRestartBody { en: "Auris Studio {version} is ready. Restart now to install it, or close the app later.", ja: "Auris Studio {version} の準備ができました。今すぐ再起動してインストールするか、後でアプリを終了してください。" }
+    UpdateRestartNow { en: "Restart and Update", ja: "再起動して更新" }
+    UpdateDownloadFailed { en: "Could not download the update. Please try again later.", ja: "更新をダウンロードできませんでした。時間をおいて再度お試しください。" }
+    UpdateInstallFailed { en: "Could not install the update. Use Help → Check for Updates to try again.", ja: "更新をインストールできませんでした。ヘルプの「更新を確認」から再度お試しください。" }
     MenuNoRecentProjects { en: "Nothing opened yet", ja: "まだ何も開いていません" }
     MenuForgetRecent { en: "Forget This List", ja: "履歴を消去" }
     DialogComposeSpec { en: "Compose from specification", ja: "仕様書から作曲" }

@@ -30,6 +30,7 @@ mod startup_soundfonts;
 mod termination;
 mod theme;
 mod titlebar;
+mod update_check;
 mod voice_setup_window;
 
 mod ui;
@@ -100,6 +101,9 @@ fn main() {
         // its progress belongs in a responsive window. The test harness never enters `main`.
         window
             .update(cx, |view, _, cx| view.download_missing_soundfonts(cx))
+            .ok();
+        window
+            .update(cx, |view, _, cx| view.start_auto_updates(cx))
             .ok();
 
         // Quit is normally handled by the main window's view (`AurisApp::on_quit`) so an

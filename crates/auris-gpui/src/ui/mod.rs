@@ -61,6 +61,7 @@ pub mod tooltip;
 pub(crate) mod track_grid;
 pub mod transport_bar;
 pub mod typing_panel;
+pub(crate) mod updates;
 pub(crate) mod visualizer;
 pub(crate) mod volume_contour;
 pub mod widgets;
