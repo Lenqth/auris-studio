@@ -550,28 +550,29 @@ mod tests {
 
     #[test]
     fn parser_accepts_the_documented_contract() {
+        let directory = std::env::temp_dir();
+        let package = directory.join("auris-studio-v1-windows-x86_64-setup.exe");
+        let app = directory.join("auris-studio.exe");
+        let result_file = directory.join("update-result.json");
         let parsed = parse_args(vec![
             "helper".into(),
             "apply".into(),
             "--parent-pid".into(),
             "42".into(),
             "--package".into(),
-            "C:\\tmp\\auris-studio-v1-windows-x86_64-setup.exe".into(),
+            package.into_os_string(),
             "--app".into(),
-            "C:\\Programs\\Auris Studio\\auris-studio.exe".into(),
+            app.into_os_string(),
             "--sha256".into(),
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
             "--result-file".into(),
-            "C:\\Programs\\Auris Studio\\update-result.json".into(),
+            result_file.clone().into_os_string(),
             "--restart".into(),
         ])
         .unwrap();
         assert_eq!(parsed.parent_pid, 42);
         assert!(parsed.restart);
-        assert_eq!(
-            parsed.result_file.as_deref(),
-            Some(Path::new("C:\\Programs\\Auris Studio\\update-result.json"))
-        );
+        assert_eq!(parsed.result_file.as_deref(), Some(result_file.as_path()));
         assert_eq!(
             parsed.package.file_name().unwrap(),
             "auris-studio-v1-windows-x86_64-setup.exe"
