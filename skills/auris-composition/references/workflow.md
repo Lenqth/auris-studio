@@ -11,10 +11,12 @@ auris compose --preset <name> -o <output.auris> [--seed <integer>]
 auris compose <song.asong> --print
 auris compose <song.asong> -o <output.auris> [--seed <integer>]
 auris info <project.auris>
-auris render <project.auris> -o <preview.wav> [--stems <directory>]
+auris render <project.auris> -o <mix.wav>
+auris render <project.auris> --stems <directory>
+auris render <project.auris> -o <loop.wav> --loop
 ```
 
-The CLI's exact flags are authoritative for the installed version. `--print` parses a specification and prints normalized TOML without writing a project; use it as the headless syntax check. Run `auris help` when a command rejects an argument. A Save As path may become a nested `<name>/<name>.auris` project; use the path printed by the command or `auris info` rather than guessing.
+The CLI's exact flags are authoritative for the installed version. `--print` parses a specification and prints normalized TOML without writing a project; use it as the headless syntax check. Mix and stem exports are separate modes: when `--stems` is supplied, the command writes stems to that directory and does not write the mix `-o` file. `--loop` renders the loop region already stored in the project; it fails when no loop has been set. Run `auris help` when a command rejects an argument. A Save As path may become a nested `<name>/<name>.auris` project; use the path printed by the command or `auris info` rather than guessing.
 
 ## Saved-project MCP sequence
 
