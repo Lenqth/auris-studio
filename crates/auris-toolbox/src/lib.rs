@@ -63,6 +63,12 @@ pub use project_files::create_project;
 pub use recognition::{analyze_audio, analyze_chords, analyze_instruments};
 pub use track_editing::convert_track_to_audio;
 
+/// Page a lyric harness response without dropping any analysis or candidate diagnostics.
+pub fn present_lyric_report(text: &str) -> Result<String, String> {
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    reports::publish(value)
+}
+
 /// A saved document to inspect without editing it.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -93,7 +99,14 @@ add_track requires kind instrument, drum, singer, audio or bus and the intended 
 search_instruments accepts request with mode text and query, similar and reference id, or bounded browse.
 Copy returned sound IDs into set_instrument sound_id. Sound IDs expire after refresh/library changes.
 Use inspect_instrument for native control keys/ranges; set_instrument_params applies a bounded batch.
-For generated music, preview_composition/check_spec validate a plan before compose. generate_phrase writes
+For generated music, check_spec validates syntax/settings; diagnose_song checks lyric readings, phrase counts,
+mora counts, closures and fixed-bar capacity before compose. analyze_lyrics shows source-located readings.
+Explicit analysis readings are diagnostic-only. repair_lyrics applies a reading to existing note slots.
+For a local lyric repair, read_notes and diagnose_song first, preserve target/template/required_keywords,
+preview up to three alternatives, then apply only a passing one with the same revision. Stop after three
+alternatives; report remaining diagnostics instead of changing the melody or retrying indefinitely.
+Recheck every related phrase after the edit, then sing if the take is stale. A pass checks structural fit,
+not semantic preservation or artistic quality. preview_composition checks layout. generate_phrase writes
 one new clip on an existing track with explicit start_bar/bars and seed. Write harmony and named sections
 with edit_harmony first; inspect_project verifies the result. Recipe edits explicitly regenerate notes.
 Performance edits use inspect_performance/set_performance and preserve authored notes, curves and recipes.
@@ -380,7 +393,7 @@ pub mod check_spec {
     pub const DESCRIPTION: &str = "Validates a specification without composing anything. A \
         rejected spec answers with every complaint at once, line numbers where they exist; a \
         valid one answers with the full document, every default filled in — the cheap way to \
-        see what a draft actually means. Use preview_composition to inspect actual bar count and merged tracks before compose.";
+        see what a draft actually means. This checks syntax/settings; use diagnose_song for vocal lyric fit and preview_composition for actual bar count and merged tracks before compose.";
 
     /// The three-field spec triangle, unchanged.
     pub use crate::SpecArgs as Args;

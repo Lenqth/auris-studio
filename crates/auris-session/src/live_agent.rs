@@ -53,6 +53,28 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Analyze Japanese lyrics into source-located phrases, readings and moras without editing. Explicit kana readings are diagnostic-only; use repair_lyrics to apply a pronunciation to existing note slots.
+    AnalyzeLyrics {
+        /// Original Japanese lyric, up to 65536 UTF-8 bytes.
+        text: String,
+        /// Optional request-local readings, addressed by one-based musical phrase.
+        #[serde(default)]
+        readings: Vec<crate::lyric_harness::PhraseReading>,
+    },
+    /// Diagnose lyrics before composition or compare explicit singer-clip phrases. Pass exactly one of spec (an .asong TOML document) or comparisons. Returns all independent complaints and the live document revision. No audio synthesis or document edits.
+    DiagnoseSong {
+        /// Full .asong text; shared relationships are declared with melody_from.
+        spec: Option<String>,
+        /// Existing one-mora-per-note singer phrases to compare, at most sixteen.
+        #[serde(default)]
+        comparisons: Vec<crate::lyric_harness::ClipComparison>,
+    },
+    /// Preview or atomically apply a local lyric repair using 1..3 candidates. Keep the same target, template and required keywords throughout the repair round. Only a passing candidate may change target lyrics/phonemes; pitches, timing, ornaments and all other notes are preserved. Stop after three alternatives and report unresolved diagnostics. Read notes first; stale revisions are rejected.
+    RepairLyrics {
+        /// Bounded alternatives, immutable musical template, keywords and revision.
+        #[serde(flatten)]
+        request: crate::lyric_harness::RepairRequest,
+    },
     /// Read or undo/redo one complete user request in the live session. First use operation {"kind":"read"}; then supply its available_group and numeric revision. Human edits and open gestures are boundaries. Use this for "undo that change" instead of rewriting old notes. Does not save. Session-local; unavailable for saved-project calls.
     History {
         /// Read, undo or redo; reversal requires the exact group and revision.
@@ -339,7 +361,7 @@ pub enum Command {
         #[schemars(length(min = 1, max = 16))]
         edits: Vec<note_editing::NoteEdit>,
     },
-    /// Read 1..8 MIDI clip pages in one call. Copy each clip from inspect_project tracks[].clips[].clip or add_clip's clip result, never tracks[].track or add_track's track result. Track IDs and clip IDs are different addresses. Each request is {clip:<returned clip ID>,offset:0}; offset defaults to zero. Returns one shared revision and clips containing up to 128 notes each with exact clip-relative ticks, normalized velocity 0..1 and original zero-based storage indices. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
+    /// Read 1..8 MIDI clip pages in one call. Copy each clip from inspect_project tracks[].clips[].clip or add_clip's clip result, never tracks[].track or add_track's track result. Track IDs and clip IDs are different addresses. Each request is `{clip:<returned clip ID>,offset:0}`; offset defaults to zero. Returns one shared revision and clips containing up to 128 notes each with exact clip-relative ticks, normalized velocity 0..1 and original zero-based storage indices. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
     ReadNotes {
         /// Up to eight distinct clip pages; omitted offset starts at zero.
         #[schemars(length(min = 1, max = 8))]
@@ -442,6 +464,7 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::RepairLyrics { request } => request.apply,
             Self::History { operation } => !matches!(operation, HistoryOperation::Read),
             Self::Checkpoints { operation, .. } => operation.is_mutating(),
             Self::Automation { operation, .. } => !operation.is_read_only(),
@@ -450,6 +473,8 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::AnalyzeLyrics { .. }
+            | Self::DiagnoseSong { .. }
             | Self::InspectInstrument { .. }
             | Self::InspectPerformance { .. }
             | Self::ListVoices { .. }
@@ -534,6 +559,30 @@ impl Session {
     ) -> Result<String, String> {
         let error = |error: crate::SessionError| error.to_string();
         match command {
+            Command::AnalyzeLyrics { text, readings } => {
+                serde_json::to_string(&self.analyze_lyrics(&text, &readings)?)
+                    .map_err(|e| e.to_string())
+            }
+            Command::DiagnoseSong { spec, comparisons } => {
+                if spec.is_some() == !comparisons.is_empty() {
+                    return Err("Pass exactly one of spec or nonempty comparisons".into());
+                }
+                let report = if let Some(source) = spec {
+                    if source.len() > 262144 {
+                        return Err("Song specifications are limited to 262144 bytes".into());
+                    }
+                    let spec = SongSpec::parse(&source).map_err(|e| format!("{e:?}"))?;
+                    self.diagnose_song_lyrics(&spec)?
+                } else {
+                    self.diagnose_clip_lyrics(&comparisons)?
+                };
+                let mut value = serde_json::to_value(report).map_err(|e| e.to_string())?;
+                value["revision"] = self.agent_document_revision()?.into();
+                Ok(value.to_string())
+            }
+            Command::RepairLyrics { request } => {
+                self.repair_lyrics(&request).map(|v| v.to_string())
+            }
             Command::History { operation } => self.agent_history(operation),
             Command::EditVocalNotes {
                 clip,

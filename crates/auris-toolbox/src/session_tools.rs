@@ -45,10 +45,13 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
         })
         .map(|tool| {
             let name = tool.name;
+            let optional_project = matches!(name.as_str(), "analyze_lyrics" | "diagnose_song");
             let mut parameters = tool.parameters;
             parameters["properties"].as_object_mut().expect("session object schema").insert("project".into(), serde_json::json!({"type":"string","description":"Project path or project_id from open_project/create_project."}));
             if parameters.get("required").is_none() { parameters["required"] = serde_json::json!([]); }
-            parameters["required"].as_array_mut().expect("required session fields").push("project".into());
+            if !optional_project {
+                parameters["required"].as_array_mut().expect("required session fields").push("project".into());
+            }
             let action = name.clone();
             ToolDefinition {
                 name,
@@ -56,10 +59,10 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                 parameters,
                 call: Box::new(move |mut args| {
                     let object = args.as_object_mut().ok_or("Expected argument object")?;
-                    let project = object
-                        .remove("project")
-                        .and_then(|value| value.as_str().map(str::to_owned))
-                        .ok_or("Invalid arguments: project is required")?;
+                    let project = object.remove("project").map(|value| value.as_str().map(str::to_owned).ok_or("project must be a string")).transpose()?;
+                    if project.is_none() && !optional_project {
+                        return Err("Invalid arguments: project is required".into());
+                    }
                     let command = if action == "edit_notes" {
                         serde_json::from_value::<crate::score_input::Args>(args)
                             .map_err(|e| format!("Invalid arguments: {e}"))?
@@ -73,7 +76,10 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                     } else {
                         live_agent::command(&action, &args)?.ok_or("Unknown session tool")?
                     };
-                    let mut session = crate::opened(&project)?;
+                    let mut session = match project {
+                        Some(project) => crate::opened(&project)?,
+                        None => auris_session::Session::new(auris_session::SessionOptions::headless().with_shipped_dictionary(true)).map_err(|e| e.to_string())?,
+                    };
                     if let auris_session::live_agent::Command::InspectAudio {
                         start_bar,
                         bars,
@@ -131,6 +137,9 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                         object.insert("unsaved".into(), session.is_dirty().into());
                         return Ok(value.to_string());
                     }
+                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics") {
+                        return crate::present_lyric_report(&text);
+                    }
                     Ok(text)
                 }),
             }
@@ -143,6 +152,98 @@ mod tests {
     use super::*;
     use auris_session::prelude::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn lyric_drafts_are_diagnosed_without_a_project_and_large_reports_are_paged() {
+        let call = |name, args| {
+            crate::runtime::call_saved(&crate::ToolGroups::default(), name, args).unwrap()
+        };
+        let analysis: Value = serde_json::from_str(&call(
+            "analyze_lyrics",
+            json!({"text":"きゃっと、コーヒー"}),
+        ))
+        .unwrap();
+        assert_eq!(analysis["complete"], true);
+        let spec = "form='verse verse2'\n[section.verse]\nlyrics='ずっときみと'\n[section.verse2]\nmelody_from='verse'\nlyrics='きみとあえる'";
+        let report: Value =
+            serde_json::from_str(&call("diagnose_song", json!({"spec":spec}))).unwrap();
+        assert_eq!(report["status"], "fail");
+        assert!(
+            report["issues"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|i| i["code"] == "closure_position_mismatch")
+        );
+        let paged: Value = serde_json::from_str(&call(
+            "analyze_lyrics",
+            json!({"text":"あいうえお\n".repeat(100)}),
+        ))
+        .unwrap();
+        assert!(paged["report_id"].is_string());
+    }
+
+    #[test]
+    fn saved_lyric_preview_never_saves_and_repair_preserves_musical_notes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Lyrics.auris");
+        let mut session =
+            auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
+        let track = session.add_singer_track("Vocal");
+        let mut ids = Vec::new();
+        for (i, text) in ["ずっときみと", "きみとあえる"].iter().enumerate() {
+            let clip = session
+                .add_midi_clip(track, "Verse", Ticks(i as i64 * 7680), Ticks(7680))
+                .unwrap();
+            session
+                .replace_notes(
+                    clip,
+                    (0..6)
+                        .map(|i| Note::new(60, Ticks(i * 960), Ticks(800)))
+                        .collect(),
+                )
+                .unwrap();
+            session
+                .write_lyrics(clip, &[0, 1, 2, 3, 4, 5], text)
+                .unwrap();
+            ids.push(clip);
+        }
+        session.save(&path).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let call = |name, args| -> Value {
+            serde_json::from_str(
+                &crate::runtime::call_saved(&crate::ToolGroups::default(), name, args).unwrap(),
+            )
+            .unwrap()
+        };
+        let report = call(
+            "diagnose_song",
+            json!({"project":path,"comparisons":[{
+                "reference":{"clip":ids[0].0,"notes":[0,1,2,3,4,5]},
+                "target":{"clip":ids[1].0,"notes":[0,1,2,3,4,5]}
+            }]}),
+        );
+        let mut args = json!({"project":path,"target":{"clip":ids[1].0,"notes":[0,1,2,3,4,5]},
+            "reference":{"clip":ids[0].0,"notes":[0,1,2,3,4,5]},"expected_revision":report["revision"],
+            "candidates":[{"text":"きっとあえる"}],"apply":false});
+        let preview = call("repair_lyrics", args.clone());
+        assert_eq!(preview["selected_candidate"], 1);
+        assert_eq!(preview["applied"], false);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        args["apply"] = true.into();
+        assert_eq!(call("repair_lyrics", args)["applied"], true);
+        let reopened = crate::opened(path.to_str().unwrap()).unwrap();
+        for id in ids {
+            let original = &session.midi_clip(id).unwrap().notes;
+            let repaired = &reopened.midi_clip(id).unwrap().notes;
+            for (a, b) in original.iter().zip(repaired) {
+                assert_eq!(
+                    (a.pitch, a.start, a.length, a.velocity),
+                    (b.pitch, b.start, b.length, b.velocity)
+                );
+            }
+        }
+    }
 
     #[test]
     fn saved_creation_ids_are_direct_inputs_to_the_shared_editors() {

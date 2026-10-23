@@ -17,8 +17,8 @@ use crate::error::SessionError;
 use super::Session;
 
 /// One musical phrase of a lyric: its moras, and what each asks of the melody.
-struct LyricPhrase {
-    moras: Vec<SungMora>,
+pub(super) struct LyricPhrase {
+    pub(super) moras: Vec<SungMora>,
     contours: Vec<Contour>,
     group_starts: Vec<usize>,
 }
@@ -66,7 +66,7 @@ fn lyric_rhythm(phrases: &[LyricPhrase], meter: TimeSignature) -> VocalRhythm {
     rhythm_with_closures(&counts, &closure_positions(phrases), meter)
 }
 
-fn fitted_lyric_rhythm(
+pub(super) fn fitted_lyric_rhythm(
     phrases: &[LyricPhrase],
     meter: TimeSignature,
     bars: usize,
@@ -104,7 +104,7 @@ fn fitted_lyric_rhythm(
 }
 
 /// A shared melody must fit the shortest section that sings it.
-fn vocal_bars(spec: &auris_compose::SongSpec, source: &str) -> usize {
+pub(super) fn vocal_bars(spec: &auris_compose::SongSpec, source: &str) -> usize {
     spec.form
         .iter()
         .filter_map(|name| spec.sections.get(name))
@@ -335,59 +335,21 @@ impl Session {
     /// Checks vocal density and shared phrases before composing can replace the document.
     /// Different verses must fit the same note slots, including phrase boundaries.
     pub fn validate_song_lyrics(&self, spec: &auris_compose::SongSpec) -> Result<(), SessionError> {
-        for name in &spec.form {
-            let Some(section) = spec.sections.get(name) else {
-                continue;
-            };
-            let Some(source) = &section.melody_from else {
-                if !section.lyrics.trim().is_empty()
-                    && let Ok(phrases) = read_lyrics(&section.lyrics, self.japanese.as_ref())
-                    && fitted_lyric_rhythm(
-                        &phrases,
-                        spec.meter,
-                        vocal_bars(spec, name),
-                        spec.writing_style,
-                        spec.seed,
-                    )
-                    .is_none()
-                {
-                    return Err(SessionError::SongLyrics(format!(
-                        "{name}: too many syllables for the fixed section length; shorten the lyrics or reduce phrase breaks"
-                    )));
-                }
-                continue;
-            };
-            if section.lyrics.trim().is_empty() {
-                continue;
-            }
-            let original = spec
-                .sections
-                .get(source)
-                .filter(|s| s.melody_from.is_none() && source != name && spec.form.contains(source))
-                .ok_or_else(|| {
-                    SessionError::SongLyrics(format!(
-                        "{name}: original section `{source}` must be in the form"
-                    ))
-                })?;
-            let original_phrases = read_lyrics(&original.lyrics, self.japanese.as_ref())?;
-            let repeated_phrases = read_lyrics(&section.lyrics, self.japanese.as_ref())?;
-            let counts = |phrases: &[LyricPhrase]| -> Vec<usize> {
-                phrases.iter().map(|phrase| phrase.moras.len()).collect()
-            };
-            let expected = counts(&original_phrases);
-            let actual = counts(&repeated_phrases);
-            if expected.is_empty() || expected != actual {
-                return Err(SessionError::SongLyrics(format!(
-                    "{name} → {source}: notes per phrase must match; expected {expected:?}, got {actual:?}"
-                )));
-            }
-            if closure_positions(&original_phrases) != closure_positions(&repeated_phrases) {
-                return Err(SessionError::SongLyrics(format!(
-                    "{name} → {source}: closure positions per phrase must match"
-                )));
-            }
+        let report = self
+            .diagnose_song_lyrics(spec)
+            .map_err(SessionError::SongLyrics)?;
+        if report.status == "pass" {
+            Ok(())
+        } else {
+            Err(SessionError::SongLyrics(
+                report
+                    .issues
+                    .iter()
+                    .map(|i| i.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ))
         }
-        Ok(())
     }
 
     /// Writes the singer track a composed piece's lyrics ask for, into a project still
@@ -397,9 +359,9 @@ impl Session {
     /// part of the same single edit. Each original melody is written once over its first
     /// playing's harmony. A section with `melody_from` reuses those notes with its own words,
     /// after validation has proved that every mora fits. There is one clip per playing.
-    /// Words are fitted to the section's fixed bars. A lyric that cannot be read at
-    /// all (kanji with no dictionary anywhere) costs its sections, never the piece: their
-    /// names come back for the report. Answers `(sung notes, clips, unsung sections)`.
+    /// Words are fitted to the section's fixed bars after validation establishes their
+    /// pronunciation and capacity. Answers `(sung notes, clips, unsung sections)`;
+    /// defensive preparation failures are retained in the report.
     pub(super) fn write_spec_vocal(
         &self,
         project: &mut auris_core::Project,
@@ -607,7 +569,7 @@ impl Session {
 /// [`lyric_phonemes`](auris_vocal::lyric_phonemes)'s order, on purpose: the phonemes come
 /// out identical either way (that equality is a tested contract of `auris-vocal`), and only
 /// the dictionary knows the accent, which here is the whole point.
-fn read_lyrics(
+pub(super) fn read_lyrics(
     lyrics: &str,
     dictionary: Option<&auris_vocal::JapaneseDictionary>,
 ) -> Result<Vec<LyricPhrase>, SessionError> {

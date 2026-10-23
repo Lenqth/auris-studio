@@ -80,6 +80,9 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "edit_project.analyze_lyrics",
+    "edit_project.diagnose_song",
+    "edit_project.repair_lyrics",
     "edit_project.edit_harmony",
     "edit_project.list_voices",
     "edit_project.inspect_singer",
@@ -360,6 +363,7 @@ mod tests {
             serde_json::json!({"action":"set_performance","clip":1,"settings":{"swing_percent":62}}),
             serde_json::json!({"action":"set_singer_voice","track":1,"voice":"/voice/test.voicevox.json"}),
             serde_json::json!({"action":"write_lyrics","clip":2,"text":"さくら"}),
+            serde_json::json!({"action":"repair_lyrics","target":{"clip":2,"notes":[0]},"expected_revision":"r1","candidates":[{"text":"あ"}],"apply":true}),
             serde_json::json!({"action":"sing","track":1}),
         ] {
             let operation =

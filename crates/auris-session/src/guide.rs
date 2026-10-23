@@ -1431,6 +1431,30 @@ pub mod composition {
     //! excluded from pitch search and ornaments; its pitch follows a neighbouring sung note.
     //! Shared melodies require closures in the same positions as well as matching mora counts.
     //!
+    //! [`Session::analyze_lyrics`](crate::Session::analyze_lyrics) exposes source-located musical
+    //! phrases, established readings, moras and pronunciation provenance without changing the
+    //! document. Explicit kana readings are request-local diagnostics, not saved pronunciations.
+    //! [`Session::diagnose_song_lyrics`](crate::Session::diagnose_song_lyrics) reports independent
+    //! phrase-count, mora-count, closure and fixed-bar capacity violations together. Composition
+    //! uses this same check before adoption; unreadable lyrics are incomplete, never a pass.
+    //! Source offsets count Unicode scalars in the original lyric. Dictionary output does not
+    //! establish character-to-mora alignment, so no such alignment is guessed.
+    //!
+    //! Existing singer phrases are compared through explicit
+    //! [`ClipComparison`](crate::lyric_harness::ClipComparison) relationships. Each selected span
+    //! is a contiguous monophonic run with one established mora per note. Pitch, relative onset,
+    //! duration and ornaments must agree when a shared melody is requested. Unknown alignment
+    //! is reported as incomplete. These relationships are request-local, not inferred from labels.
+    //! [`Session::repair_lyrics`](crate::Session::repair_lyrics) checks up to three alternatives
+    //! against an immutable note-slot/closure template, literal keywords and a document revision.
+    //! A preview changes no history; application writes only a passing candidate's lyrics
+    //! and phonemes, retaining original non-kana text or explicitly read text on the first note
+    //! with `+` continuation labels. It clears obsolete timing pins on changed notes as one Undo step. Every other
+    //! authored field is retained. A structural pass does not establish semantic or artistic
+    //! quality; the agent reviews meaning and rechecks related phrases before synthesizing a take.
+    //! The live agent's per-user-turn budget retains the template and keywords across previews
+    //! and application, allowing at most three distinct alternatives for a target and revision.
+    //!
     //! Presets give later verses their own section names (`verse2`, `chorus2`) and lyrics.
     //! `melody_from = "verse"` shares the original vocal's pitches, onsets, durations and
     //! ornaments. The session validates mora counts phrase by phrase before replacing a
