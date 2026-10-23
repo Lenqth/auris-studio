@@ -1175,6 +1175,30 @@ mod tests {
     }
 
     #[gpui::test]
+    fn saved_retired_permission_rules_allow_live_inspection_and_composition_edits(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent.policy = serde_json::from_value(serde_json::json!({
+                "mode":"bypass", "allow":["edit_project.listen", "edit_project.remove_notes"]
+            }))
+            .unwrap();
+            this.agent_edit(serde_json::json!({"action":"inspect"}))
+                .unwrap();
+            let tracks = this.project().tracks.len();
+            this.agent_edit(serde_json::json!({
+                "action":"add_track", "name":"Summer vocal", "kind":"instrument"
+            }))
+            .unwrap();
+            assert_eq!(this.project().tracks.len(), tracks + 1);
+            assert!(this.session.path().is_none());
+            this.session.undo();
+            assert_eq!(this.project().tracks.len(), tracks);
+        });
+    }
+
+    #[gpui::test]
     fn approval_is_visible_and_allows_exactly_one_edit(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         let (command, track) = app.update(cx, |this, _| {
