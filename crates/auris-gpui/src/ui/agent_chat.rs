@@ -3263,6 +3263,7 @@ impl AurisApp {
                                     }),
                                 ))
                             })
+                            .child(self.render_active_conversation_actions(cx))
                             .child(button_enabled(
                                 "agent-configure",
                                 self.t(Key::AgentConfigure),
@@ -3280,7 +3281,6 @@ impl AurisApp {
                             )),
                     ),
             )
-            .child(self.render_active_conversation_title(cx))
             .child(
                 self.scrolling(
                     ScrollPanel::Agent,

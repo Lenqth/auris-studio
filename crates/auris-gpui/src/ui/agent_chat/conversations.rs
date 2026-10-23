@@ -1014,12 +1014,13 @@ impl AurisApp {
         body.into_any_element()
     }
 
-    pub(super) fn render_active_conversation_title(
+    /// Keeps conversation commands in the header; the list already presents the title.
+    pub(super) fn render_active_conversation_actions(
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
-        let mut row = div().flex().items_center().gap_1().px_2().py_1().min_w_0();
+        let mut row = div().flex().items_center().gap_1().min_w_0();
         if let Some(info) = self
             .agent_chat
             .conversations
@@ -1028,34 +1029,25 @@ impl AurisApp {
             .map(|c| &c.info)
         {
             let id = info.id.clone();
-            row = row
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .text_xs()
-                        .text_color(theme.text_muted)
-                        .child(conversation_title(info, self.language())),
+            row = row.child(
+                button(
+                    "agent-active-conversation-menu",
+                    "⋯",
+                    ButtonStyle::Ghost,
+                    false,
+                    theme.accent,
+                    &theme,
+                    cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
+                        this.open_conversation_menu(id.clone(), event.position());
+                        cx.notify();
+                    }),
                 )
-                .child(
-                    button(
-                        "agent-active-conversation-menu",
-                        "⋯",
-                        ButtonStyle::Ghost,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
-                            this.open_conversation_menu(id.clone(), event.position());
-                            cx.notify();
-                        }),
-                    )
-                    .tooltip(crate::ui::tooltip::keyed_tip(
-                        self.t(Key::AgentConversationActions),
-                        "",
-                        &theme,
-                    )),
-                );
+                .tooltip(crate::ui::tooltip::keyed_tip(
+                    self.t(Key::AgentConversationActions),
+                    "",
+                    &theme,
+                )),
+            );
         }
         if let Some(error) = self.agent_chat.conversations.error.clone() {
             row = row.child(div().text_xs().text_color(theme.danger).child(error));
@@ -1193,6 +1185,56 @@ mod tests {
             std::thread::yield_now();
         }
         paint(app, cx);
+    }
+
+    #[gpui::test]
+    fn active_conversation_actions_share_the_header_without_repeating_the_request(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        paint(&app, cx);
+        settle(&app, cx);
+        let request =
+            "夏をテーマにした歌ものの楽曲を作詞・作曲して。歌はVOICEVOXを使って音声合成して。";
+        app.update(cx, |this, _| {
+            this.agent_chat.entries = vec![ChatEntry::user(request.into())];
+            this.conversation_operation(Operation::Save);
+        });
+        settle(&app, cx);
+        app.read_with(cx, |this, _| {
+            let active = this.agent_chat.conversations.active.as_ref().unwrap();
+            assert_eq!(active.info.title, request);
+            assert_eq!(this.agent_chat.entries, [ChatEntry::user(request.into())]);
+        });
+
+        for (scheme, language, font_size) in [
+            ("midnight", auris_i18n::Language::English, 16.0),
+            ("daylight", auris_i18n::Language::Japanese, 24.0),
+        ] {
+            app.update(cx, |this, _| {
+                this.theme = crate::theme::Theme::named(scheme);
+                this.language = language;
+                this.panels
+                    .set_size(crate::dock::Dock::Right, crate::dock::PanelLayout::MIN_SIDE);
+            });
+            cx.update(|window, _| window.set_rem_size(gpui::px(font_size)));
+            crate::harness::resize(&app, cx, gpui::size(gpui::px(720.0), gpui::px(720.0)));
+            let header = cx.debug_bounds("agent-panel-header").unwrap();
+            let actions = cx.debug_bounds("agent-active-conversation-menu").unwrap();
+            assert!(
+                actions.top() >= header.top() && actions.bottom() <= header.bottom(),
+                "Conversation actions belong in the header, without a second row repeating the request"
+            );
+            assert!(actions.left() >= header.left() && actions.right() <= header.right());
+        }
+        click("agent-active-conversation-menu", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.menu.as_ref().unwrap().title.as_ref(), request);
+        });
     }
 
     #[gpui::test]
