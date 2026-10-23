@@ -9,6 +9,8 @@ use std::sync::atomic::AtomicBool;
 
 /// Owned work that can run without accessing the live document.
 pub enum AgentJob {
+    /// Capability-aware preparation of an immutable arrangement candidate.
+    Arrangement(Box<crate::arrangement::ArrangementJob>),
     /// Voice discovery, model loading or synthesis.
     Vocal(Box<VocalJob>),
     /// File encoding, audio export or encoded-file measurement.
@@ -19,6 +21,8 @@ pub enum AgentJob {
 
 /// A worker result returned to its originating owner for validation and publication.
 pub enum AgentResult {
+    /// A complete arrangement candidate awaiting its original owner.
+    Arrangement(Box<crate::arrangement::ArrangementResult>),
     /// A voice worker's result.
     Vocal(VocalResult),
     /// A staged file operation's result.
@@ -39,6 +43,9 @@ impl AgentJob {
     /// Perform detached work with cooperative cancellation.
     pub fn run(self, cancelled: &AtomicBool) -> Result<AgentResult, String> {
         match self {
+            Self::Arrangement(job) => job
+                .run(cancelled)
+                .map(|result| AgentResult::Arrangement(Box::new(result))),
             Self::History(job) => job
                 .run(cancelled)
                 .map(|result| AgentResult::History(Box::new(result))),
@@ -56,6 +63,22 @@ impl Session {
         settings: Settings,
     ) -> Result<AgentJob, String> {
         match command {
+            Command::Arrangement {
+                operation:
+                    crate::arrangement::Operation::Validate {
+                        expected_revision,
+                        changes,
+                    },
+            } => {
+                if !crate::arrangement::enabled() {
+                    return Err(
+                        "Arrangement harness is disabled; opt in with AURIS_ARRANGEMENT_HARNESS=1"
+                            .into(),
+                    );
+                }
+                self.begin_arrangement(expected_revision, changes, &settings.plugin_paths)
+                    .map(|job| AgentJob::Arrangement(Box::new(job)))
+            }
             Command::Checkpoints {
                 operation,
                 expected_revision,
@@ -91,6 +114,9 @@ impl Session {
             return Err("Agent operation cancelled before publication".into());
         }
         match result {
+            AgentResult::Arrangement(result) => self
+                .continue_arrangement(*result, cancelled)
+                .map(AgentStep::Done),
             AgentResult::History(result) => self
                 .continue_agent_checkpoints(*result, cancelled)
                 .map(AgentStep::Done),

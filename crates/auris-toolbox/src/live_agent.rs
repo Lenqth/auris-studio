@@ -137,6 +137,10 @@ pub mod transcription_import {
 /// Small per-action schemas replace the model-facing tagged union. The advanced TOML command
 /// remains an internal command, but is not offered to the model.
 pub fn definitions() -> Vec<Definition> {
+    definitions_with_arrangement(auris_session::arrangement::enabled())
+}
+
+fn definitions_with_arrangement(arrangement_enabled: bool) -> Vec<Definition> {
     // Keep enum simplification, inlining and numeric annotations identical to the MCP catalog.
     let root = super::parameter_schema::<Command>();
     let mut tools = Vec::new();
@@ -146,6 +150,9 @@ pub fn definitions() -> Vec<Definition> {
                 continue;
             };
             if action == "compose" {
+                continue;
+            }
+            if action == "arrangement" && !arrangement_enabled {
                 continue;
             }
             if action == transcription_import::NAME {
@@ -359,6 +366,45 @@ pub(crate) fn argument_hint(schema: &Value, value: &Value, path: &str) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrangement_catalog_is_opt_in_and_keeps_typed_bounded_operations() {
+        assert!(
+            !definitions_with_arrangement(false)
+                .iter()
+                .any(|d| d.name == "arrangement")
+        );
+        let definition = definitions_with_arrangement(true)
+            .into_iter()
+            .find(|d| d.name == "arrangement")
+            .unwrap();
+        let operation = &definition.parameters["properties"]["operation"];
+        let branches = operation["oneOf"].as_array().unwrap();
+        let kinds: Vec<_> = branches
+            .iter()
+            .map(|b| b["properties"]["kind"]["const"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, vec!["inspect", "validate", "apply"]);
+        let validation = branches
+            .iter()
+            .find(|b| b["properties"]["kind"]["const"] == "validate")
+            .unwrap();
+        assert_eq!(validation["properties"]["changes"]["maxItems"], 16);
+        assert!(
+            validation["required"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("expected_revision"))
+        );
+        let mut compact = definition.parameters;
+        crate::compact_parameters(&mut compact);
+        let bytes = serde_json::to_vec(&compact).unwrap().len();
+        eprintln!("arrangement compact parameter schema: {bytes} bytes");
+        assert!(
+            bytes < 32 * 1024,
+            "arrangement schema grew beyond 32 KiB: {bytes}"
+        );
+    }
 
     #[test]
     fn recipe_constraints_survive_the_native_controller_schema() {

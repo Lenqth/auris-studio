@@ -137,8 +137,8 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                         object.insert("unsaved".into(), session.is_dirty().into());
                         return Ok(value.to_string());
                     }
-                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics") {
-                        return crate::present_lyric_report(&text);
+                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement") {
+                        return crate::present_domain_report(&text);
                     }
                     Ok(text)
                 }),

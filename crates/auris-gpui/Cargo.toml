@@ -51,5 +51,6 @@ embed-resource = "3.0"
 # not linked into the binary — and `test-support` is also what turns `debug_selector` from a
 # no-op into the hook `VisualTestContext::debug_bounds` reads.
 [dev-dependencies]
+hound.workspace = true
 gpui = { version = "=0.2.2", features = ["runtime_shaders", "test-support"] }
 tempfile.workspace = true

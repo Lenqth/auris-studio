@@ -63,8 +63,17 @@ pub use project_files::create_project;
 pub use recognition::{analyze_audio, analyze_chords, analyze_instruments};
 pub use track_editing::convert_track_to_audio;
 
-/// Page a lyric harness response without dropping any analysis or candidate diagnostics.
-pub fn present_lyric_report(text: &str) -> Result<String, String> {
+/// Additional workflow only when the arrangement harness is explicitly enabled.
+pub fn arrangement_instructions() -> &'static str {
+    if auris_session::arrangement::enabled() {
+        "\nFor arrangement requests, use arrangement operation kind inspect on the intended bars first. Read verified sound capabilities and actual phrase conditions; unknown MIDI mappings are not support. Choose section-specific performance, scoped parameter motion, complete-clip revoice/layers, transitions or copied local SFX with explicit musical purposes. Preserve authored melody, lyrics, harmony, tempo and length. Validate the bounded proposal with the current revision, review every change/warning, then apply the returned plan_id with that original revision. Read back notes/performance/automation independently and inspect_audio/preview the same bars before and after. Revoice requires fresh search_instruments IDs and section clips; split at phrase boundaries using edit_clip before validating when necessary. Native riser is a bowed crescendo, not a noise/reverse-cymbal sample. Use audio_sfx for actual local source recordings and align start/peak/end explicitly. For a foreground melody, plan phrase endings and audible breathing space, not just more attacks. Check direct note writing, performed gate/overlap, sustain and release/effect tails separately. Preserve intentional legato, drones and lyric slots; a uniform gate reduction is not phrase design. Consider rests, call-and-response, gradual layering and send automation as alternatives to constant sound replacement. Score repairs require explicit note edits and independent readback; performance/revoice proposals preserve authored notes. Restrict local revisions to two attempts; report unresolved conditions. Structural readiness, changed settings and numeric audio differences do not prove musical improvement; use listen when available and report its limitations.\n"
+    } else {
+        ""
+    }
+}
+
+/// Page structured domain diagnostics without dropping any analyses or prepared changes.
+pub fn present_domain_report(text: &str) -> Result<String, String> {
     let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
     reports::publish(value)
 }
@@ -173,6 +182,14 @@ pub mod search_documentation {
         (
             "docs/agent-workflows.md",
             include_str!("../../../docs/agent-workflows.md"),
+        ),
+        (
+            "docs/arrangement-harness.md",
+            include_str!("../../../docs/arrangement-harness.md"),
+        ),
+        (
+            "docs/melody-breathing-plan.md",
+            include_str!("../../../docs/melody-breathing-plan.md"),
         ),
         ("README.md", include_str!("../../../README.md")),
         ("CHANGELOG.md", include_str!("../../../CHANGELOG.md")),

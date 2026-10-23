@@ -74,6 +74,11 @@ refused. Empty requests add no step. Checkpoints serve separately named mileston
 
 ## Arrangement, curves and timeline
 
+With `AURIS_ARRANGEMENT_HARNESS=1`, use `arrangement` to inspect capabilities and phrase
+conditions, prepare a bounded section-specific proposal, and apply its exact plan as one
+Undo edit. See [arrangement proposals](arrangement-harness.md) for revoicing/layers,
+scoped automation, SFX alignment, permissions and verification.
+
 `edit_clip` takes `clip` and a typed `operation` with `kind`. Move/copy/split/resize
 positions use absolute timeline ticks. Copy preserves the source; optional
 transposition freezes only the copied recipe. Resize changes the playback window

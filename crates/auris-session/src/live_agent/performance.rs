@@ -142,6 +142,25 @@ fn has_update(value: &serde_json::Value) -> bool {
     }
 }
 
+pub(crate) fn measure_arrangement_performance(
+    clip: &MidiClip,
+    project: &Project,
+    voice: Option<&str>,
+) -> serde_json::Value {
+    let stack = voice
+        .and_then(|voice| {
+            clip.transforms.iter().find_map(|stage| match stage {
+                NoteTransform::ForDrumVoice {
+                    voice: held,
+                    transforms,
+                } if held == voice => Some(transforms.as_slice()),
+                _ => None,
+            })
+        })
+        .unwrap_or(&clip.transforms);
+    effects::measure(clip, stack, voice, project)
+}
+
 impl Session {
     fn performance_scope(
         &self,
@@ -315,6 +334,22 @@ impl Session {
         voice: Option<&str>,
         patch: PerformancePatch,
     ) -> Result<String, String> {
+        let outer = self.prepare_agent_performance(clip, voice, patch)?;
+        self.begin_transaction(crate::Edit::SetClipTransforms(clip));
+        let result = self
+            .set_clip_transforms(clip, outer)
+            .map_err(|e| e.to_string());
+        self.end_transaction();
+        result?;
+        self.agent_inspect_performance(clip, voice)
+    }
+
+    pub(crate) fn prepare_agent_performance(
+        &self,
+        clip: ClipId,
+        voice: Option<&str>,
+        patch: PerformancePatch,
+    ) -> Result<Vec<NoteTransform>, String> {
         patch.validate()?;
         if !has_update(&serde_json::to_value(&patch).map_err(|e| e.to_string())?) {
             return Err(
@@ -550,13 +585,7 @@ impl Session {
         } else {
             outer = stack;
         }
-        self.begin_transaction(crate::Edit::SetClipTransforms(clip));
-        let result = self
-            .set_clip_transforms(clip, outer)
-            .map_err(|e| e.to_string());
-        self.end_transaction();
-        result?;
-        self.agent_inspect_performance(clip, voice)
+        Ok(outer)
     }
 }
 

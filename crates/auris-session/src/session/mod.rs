@@ -32,6 +32,7 @@
 
 mod accompany;
 mod agent_history;
+pub mod arrangement;
 mod composition_inspection;
 mod composition_preview;
 pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
