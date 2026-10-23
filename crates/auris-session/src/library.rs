@@ -1,7 +1,8 @@
 //! Optional sound libraries and language/voice assets.
 //!
 //! Native physical instruments and synthesizers are registered by the session and carry no
-//! sample assets. SoundFont imports belong to the session's bank. The optional General MIDI
+//! sample assets. SoundFont imports register in the persistent application catalog and populate
+//! each session's bank. The optional General MIDI
 //! manifest supports discovering a manually installed library and resolving existing asset
 //! references. `library_roots` searches beside the executable, inside macOS Resources, above
 //! development binaries and in the configuration directory; `AURIS_SOUNDFONTS` overrides it.
@@ -12,6 +13,7 @@ use std::path::{Path, PathBuf};
 use crate::settings::config_dir;
 
 mod download;
+pub(crate) mod soundfonts;
 
 pub use download::{
     FETCH_SOUNDFONTS_VAR, FontDownload, FontDownloadError, download_font, font_downloads,

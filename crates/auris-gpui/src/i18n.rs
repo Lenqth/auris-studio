@@ -275,6 +275,7 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
             Key::ErrorRecoveryUnavailable.get(language).to_string()
         }
         SessionError::Io(inner) => with(Key::ErrorFile, io_error_text(inner, language)),
+        SessionError::SoundFontLibrary(detail) => with(Key::ErrorFile, detail.clone()),
         SessionError::Engine(inner) => with(Key::ErrorEngine, engine_error_text(inner, language)),
         // The plugin's own words: it names a file, an id or a refusal that came from somebody
         // else's binary, and paraphrasing that would lose the only part worth reading.

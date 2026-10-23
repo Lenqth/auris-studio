@@ -169,9 +169,8 @@ impl AurisApp {
                 .spawn(async move { auris_session::read_soundfont(&source_path) })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                match loaded {
-                    Ok(font) => {
-                        let (name, presets) = this.session.cache_song_soundfont(&path, font);
+                match loaded.and_then(|font| this.session.cache_song_soundfont(&path, font)) {
+                    Ok((path, name, presets)) => {
                         let count = presets.len();
                         let id = this.remember_song_library_font(path, name.clone(), presets);
                         if let Some(browser) = this

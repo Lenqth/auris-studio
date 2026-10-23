@@ -1345,7 +1345,7 @@ impl Session {
         self.saved_edit_project = unsaved_baseline;
         self.adopt_project(project);
         let missing = self.install_prepared_assets(assets);
-        self.install_shipped_fonts();
+        self.install_library_fonts();
         self.rebuild_graph();
         if self.realign_automation() {
             self.rebuild_graph();

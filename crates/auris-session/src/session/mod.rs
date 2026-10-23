@@ -80,6 +80,8 @@ mod readiness;
 mod recognition;
 mod record;
 mod rhythm;
+#[cfg(test)]
+mod shared_font_tests;
 mod singer;
 mod spectrogram;
 mod timbre;
@@ -196,6 +198,11 @@ pub struct SessionOptions {
     /// the machine, and a document that holds a font on a developer's laptop and none on a CI
     /// runner is a document two test runs would disagree about. Native instruments need no files.
     pub shipped_fonts: bool,
+    /// Persistent shared SoundFont catalog. `None` keeps imports local to this session.
+    ///
+    /// Defaults to `soundfonts.json` in the application configuration directory. Headless
+    /// tests opt out so they neither read nor change the user's library.
+    pub soundfont_library: Option<PathBuf>,
     /// Set a composed piece's levels by rendering it and measuring what came out.
     ///
     /// On, because a level the composer guessed is a guess about an instrument nobody had heard
@@ -232,6 +239,7 @@ impl Default for SessionOptions {
             audio_preferences: AudioPreferences::default(),
             sample_rate: 48_000.0,
             shipped_fonts: true,
+            soundfont_library: Some(crate::settings::config_dir().join("soundfonts.json")),
             balance_composed: true,
             autosave: true,
             shipped_dictionary: true,
@@ -250,6 +258,7 @@ impl SessionOptions {
             audio: false,
             gpu: false,
             shipped_fonts: false,
+            soundfont_library: None,
             autosave: false,
             shipped_dictionary: false,
             ..Self::default()
@@ -259,6 +268,12 @@ impl SessionOptions {
     /// Whether to discover optional GM libraries for unsupported sound hints.
     pub fn with_shipped_fonts(mut self, shipped_fonts: bool) -> Self {
         self.shipped_fonts = shipped_fonts;
+        self
+    }
+
+    /// Uses the persistent application SoundFont catalog, including in a headless frontend.
+    pub fn with_soundfont_library(mut self, path: impl Into<PathBuf>) -> Self {
+        self.soundfont_library = Some(path.into());
         self
     }
 
@@ -344,13 +359,15 @@ pub struct Session {
     ///
     /// [`Self::fonts`] is emptied whenever the document is replaced, because it is keyed by ids
     /// that belong to a document. These are not: the same file is the same samples whichever
-    /// project is open. Built-in fonts survive **File → New**; imported fonts stay only while
-    /// this document's history may need them. Paths also distinguish two history branches that
+    /// project is open. Shared library fonts survive **File → New**; document-only fonts stay
+    /// while this document's history may need them. Paths also distinguish two history branches that
     /// reused one id for different fonts.
     font_cache: HashMap<PathBuf, CachedFont>,
     /// Whether this session reads the shipped library at all — see
     /// [`SessionOptions::shipped_fonts`].
     shipped_library: bool,
+    /// Persistent catalog shared across documents and application launches.
+    soundfont_library: Option<PathBuf>,
     /// Whether composing ends by measuring the piece — see [`SessionOptions::balance_composed`].
     balance_composed: bool,
     registry: Arc<PluginRegistry>,
@@ -590,7 +607,7 @@ struct Transaction {
 /// Samples keyed by file, with the lifetime of their owning library.
 struct CachedFont {
     samples: Arc<SoundFont>,
-    shipped: bool,
+    shared: bool,
 }
 
 impl Session {
@@ -651,6 +668,7 @@ impl Session {
             fonts,
             font_cache: HashMap::new(),
             shipped_library: options.shipped_fonts,
+            soundfont_library: options.soundfont_library,
             balance_composed: options.balance_composed,
             registry,
             device: Some(device),
@@ -706,7 +724,7 @@ impl Session {
             vst3: vst3::Vst3Plugins::default(),
             plugin_trust: plugin_trust::PluginTrust::new(&options.plugin_paths),
         };
-        session.install_shipped_fonts();
+        session.install_library_fonts();
         session.install_shipped_dictionary();
         session.rebuild_graph();
         Ok(session)

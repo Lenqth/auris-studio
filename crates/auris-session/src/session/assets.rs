@@ -435,7 +435,7 @@ impl Session {
         self.render_bank = AudioSourceBank::new();
         self.waveforms.clear();
         self.fonts.clear();
-        self.font_cache.retain(|_, font| font.shipped);
+        self.font_cache.retain(|_, font| font.shared);
     }
 
     /// Drops decoded sources that neither the current document nor undo/redo can restore.

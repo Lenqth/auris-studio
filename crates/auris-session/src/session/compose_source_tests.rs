@@ -69,8 +69,9 @@ fn a_picker_import_leaves_the_open_document_and_undo_history_untouched() {
     session.forget_history();
     let before = session.project().clone();
     let dirty = session.is_dirty();
-    let (name, presets) =
-        session.cache_song_soundfont(&path, crate::read_soundfont(&path).unwrap());
+    let (_, name, presets) = session
+        .cache_song_soundfont(&path, crate::read_soundfont(&path).unwrap())
+        .unwrap();
     assert_eq!(name, "Test Font");
     assert_eq!((presets[0].bank, presets[0].patch), (0, 0));
     assert_eq!(session.project(), &before);

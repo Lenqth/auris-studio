@@ -1207,6 +1207,15 @@ pub mod plugins {
     //! inside a plugin can be built the same way; what must not happen is the resource travelling
     //! through the state.
     //!
+    //! SoundFont imports also register their absolute file identity in the application's
+    //! `soundfonts.json` catalog. Every new or opened document adopts these library entries
+    //! without creating an undo step or making the project dirty. The file itself stays at its
+    //! original location; collecting project assets remains the opt-in way to copy it. Missing
+    //! library files stay listed as unavailable and never prevent a project from opening.
+    //! Decoded library samples survive document changes, but document ids are allocated anew.
+    //! [`crate::SessionOptions::soundfont_library`] selects the catalog; headless tests disable
+    //! it or supply an isolated temporary file.
+    //!
     //! It is also why [`PluginRegistry::set_default_instrument`](auris_core::registry::PluginRegistry::set_default_instrument)
     //! exists. A new track takes
     //! [`default_instrument_id`](auris_core::registry::PluginRegistry::default_instrument_id),
@@ -2629,7 +2638,7 @@ pub mod platforms {
     //!
     //! [`config_dir`](crate::config_dir) answers `~/.config/auris-studio` on macOS and on Windows
     //! as well as on Linux, rather than `~/Library/Application Support` and `%APPDATA%`.
-    //! Five files live there — `settings.json` and `progressions.json` from this crate,
+    //! Six files live there — `settings.json`, `progressions.json` and `soundfonts.json` from this crate,
     //! `keymap.json`, `appearance.json` and `layout.json` from the desktop frontend — and they
     //! are small, hand-editable and worth version controlling. The people who do that keep a
     //! dotfiles repository checked out over `~/.config`, and a file in `%APPDATA%` cannot join
@@ -2666,10 +2675,11 @@ mod tests {
     fn every_configuration_file_is_named_in_the_account_of_the_directory() {
         let account = account();
 
-        // The two this crate writes, asked of the code rather than written out a second time.
+        // The catalogs this account names, asked of the code rather than written out again.
         for path in [
             crate::Settings::path(),
             crate::progressions::ProgressionBook::path(),
+            crate::SessionOptions::default().soundfont_library.unwrap(),
         ] {
             let name = path
                 .file_name()
@@ -2692,7 +2702,7 @@ mod tests {
         }
 
         assert!(
-            account.contains("Five files live there"),
+            account.contains("Six files live there"),
             "the count and the list are one claim, so they have to move together"
         );
     }

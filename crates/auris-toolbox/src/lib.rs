@@ -950,15 +950,17 @@ fn save_checkpointed(session: &mut Session) -> Result<(), String> {
 /// for are in that library.
 fn headless() -> Result<Session, String> {
     cancellation::check()?;
-    Session::new(
-        SessionOptions::headless()
-            .with_shipped_fonts(true)
-            .with_shipped_dictionary(true)
-            // The plugin folders the window uses, so a project opened here loads the same
-            // plugins and no others.
-            .with_plugin_paths(auris_session::Settings::load().plugin_paths),
-    )
-    .map_err(|error| error.to_string())
+    let mut options = SessionOptions::headless()
+        .with_shipped_fonts(true)
+        .with_soundfont_library(auris_session::config_dir().join("soundfonts.json"))
+        .with_shipped_dictionary(true)
+        // The plugin folders the window uses, so a project opened here loads the same
+        // plugins and no others.
+        .with_plugin_paths(auris_session::Settings::load().plugin_paths);
+    if cfg!(test) {
+        options.soundfont_library = None;
+    }
+    Session::new(options).map_err(|error| error.to_string())
 }
 
 /// The project file a path means: absolute, and reaching inside the folder a project becomes.
