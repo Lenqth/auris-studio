@@ -395,10 +395,12 @@ pub mod architecture {
     //! model workflow together. Structural verification never substitutes for audio comparison.
     //! Breathing inspection merges authored and performed note intervals across clips and seeded
     //! loop passes, with an explicit role, rest threshold and phrase endings. An explicit `Breath`
-    //! proposal may shorten releases or omit named original note indices; its exact changes are
-    //! previewed before the same one-Undo application. Vocal data, protected notes and possible
-    //! same-pitch ties are refused. Curves and recipes stay intact, so regeneration remains an
-    //! explicit replacement of the repaired score. Performed gaps do not establish audible silence.
+    //! proposal may shorten releases, omit named original indices, or hold an explicitly named
+    //! arrival earlier in place of exact contiguous approach indices in an independent clip. All changes
+    //! are previewed before one-Undo application. Vocal data, protected notes and possible ties are
+    //! refused. Curves/recipes stay intact; regeneration explicitly replaces the score. Ending guidance
+    //! reads native envelope controls from the registered implementation. Compare instrument decay and
+    //! the following entry in stem and mix; performed gaps do not establish audible silence.
     //!
     //! One-time approvals bind the exact command to the current document revision. Standalone MCP
     //! adapts the shared command catalog to saved projects and does not consult this live policy.

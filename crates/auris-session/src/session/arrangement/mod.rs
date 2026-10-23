@@ -25,7 +25,8 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 pub use types::{
-    Action, Alignment, Change, MelodicRole, NoteAddress, Operation, RestWindow, Transition,
+    Action, Alignment, Change, MelodicRole, NoteAddress, Operation, PhraseLanding, RestWindow,
+    Transition,
 };
 
 const MAX_PLAN_BYTES: usize = 64 * 1024 * 1024;
@@ -163,6 +164,8 @@ impl Session {
                     min_rest_ticks,
                     &phrase_ends,
                 )?;
+                value["ending_guidance"]["envelope_controls"] =
+                    breathing::envelope_controls(self.registry(), &self.project, track);
                 value["revision"] = self.agent_document_revision()?.into();
                 Ok(value.to_string())
             }

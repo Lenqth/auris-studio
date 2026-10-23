@@ -52,6 +52,113 @@ fn proposal(session: &mut Session, clip: ClipId, extra: Value) -> Result<Value, 
 }
 
 #[test]
+fn held_arrival_replaces_only_explicit_approach_and_remains_one_undo() {
+    let (mut session, track, clip) = lead();
+    let original = session.project().clone();
+    let plan = proposal(&mut session, clip, json!({"landings":[{"note":{"clip":clip.0,"index":15},"start_tick":13440,"replace_notes":[14]}]})).unwrap();
+    assert_eq!(session.project(), &original);
+    session
+        .apply_arrangement(
+            plan["plan_id"].as_str().unwrap(),
+            plan["revision"].as_str().unwrap(),
+        )
+        .unwrap();
+    let mut expected = original.clone();
+    let notes = &mut expected.midi_clip_mut(clip).unwrap().notes;
+    notes[15].start = Ticks(13440);
+    notes[15].length = Ticks(1440);
+    notes.remove(14);
+    assert_eq!(session.project(), &expected);
+    assert_eq!(read(&session, track, 480)["performed"]["rest_count"], 1);
+    session.undo();
+    assert_eq!(session.project(), &original);
+    assert!(!session.can_undo());
+}
+
+#[test]
+fn unsafe_landings_refuse_without_publishing_a_partial_candidate() {
+    for extra in [
+        json!({"protected_notes":[{"clip":1,"index":14}]}),
+        json!({"lyric":true}),
+        json!({"loop":true}),
+        json!({"overlap":true}),
+        json!({"replace_notes":[13]}),
+        json!({"replace_notes":[14,14]}),
+    ] {
+        let (mut session, _, clip) = lead();
+        let mut edit = json!({"landings":[{"note":{"clip":clip.0,"index":15},"start_tick":13440,"replace_notes":[14]}]});
+        if extra.get("protected_notes").is_some() {
+            edit["protected_notes"] = json!([{"clip":clip.0,"index":14}]);
+        }
+        if extra["lyric"] == true {
+            session.project.midi_clip_mut(clip).unwrap().notes[14].lyric = "protected".into();
+        }
+        if extra["loop"] == true {
+            session.project.midi_clip_mut(clip).unwrap().loop_end = Ticks(30720);
+        }
+        if extra["overlap"] == true {
+            session
+                .project
+                .midi_clip_mut(clip)
+                .unwrap()
+                .notes
+                .push(Note::new(70, Ticks(13440), Ticks(960)));
+        }
+        if let Some(indices) = extra.get("replace_notes") {
+            edit["landings"][0]["replace_notes"] = indices.clone();
+        }
+        let before = session.project().clone();
+        assert!(proposal(&mut session, clip, edit).is_err(), "{extra}");
+        assert_eq!(session.project(), &before);
+        assert!(!session.can_undo());
+    }
+}
+
+#[test]
+fn earlier_landing_can_release_before_its_old_attack_to_allow_a_long_tail() {
+    let (mut session, track, clip) = lead();
+    let plan = proposal(&mut session, clip, json!({"rests":[{"start_tick":12000,"end_tick":15360}],"landings":[{"note":{"clip":clip.0,"index":15},"start_tick":9600,"replace_notes":[10,11,12,13,14]}]})).unwrap();
+    session
+        .apply_arrangement(
+            plan["plan_id"].as_str().unwrap(),
+            plan["revision"].as_str().unwrap(),
+        )
+        .unwrap();
+    let notes = &session.project().midi_clip(clip).unwrap().1.notes;
+    assert_eq!(notes.len(), 11);
+    assert_eq!(notes[10], Note::new(60, Ticks(9600), Ticks(2400)));
+    assert_eq!(read(&session, track, 3360)["performed"]["rest_count"], 1);
+}
+
+#[test]
+fn ending_controls_use_registered_defaults_and_distinguish_instrument_decay() {
+    for (id, family, release) in [
+        ("auris.synth.chiptune", "synth", 0.15),
+        ("auris.physical.piano", "keys", 0.2),
+        ("auris.physical.clarinet", "winds", 0.24),
+        ("auris.physical.violin", "bowed_strings", 1.5),
+    ] {
+        let mut session = session();
+        let track = session.add_instrument_track("Lead", id).unwrap();
+        let controls = envelope_controls(session.registry(), session.project(), track.0);
+        let value = controls
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["key"] == "release")
+            .unwrap();
+        let address: automation::ControlTarget =
+            serde_json::from_value(value["target"].clone()).unwrap();
+        assert!(session.agent_control_target(&address).is_ok());
+        assert!((value["base_value"].as_f64().unwrap() - release).abs() < 1e-5);
+        assert_eq!(
+            endings::guidance(session.project(), session.project().track(track).unwrap())["family"],
+            family
+        );
+    }
+}
+
+#[test]
 fn continuous_and_merely_detached_notes_have_no_phrase_breath() {
     let (mut session, track, clip) = lead();
     let before = session.project().clone();
@@ -566,6 +673,174 @@ fn installed_audio_critic_compares_breathing_stem_and_mix() {
     assert_eq!(reviews.len(), 2, "see {}", folder.display());
     assert!(
         reviews.iter().all(|r| r["audio_sent"] == true),
+        "see {}",
+        folder.display()
+    );
+}
+
+#[test]
+#[ignore = "renders four native instruments and sends paired audio; requires fresh AURIS_BREATHING_REVIEW_OUTPUT"]
+fn installed_audio_critic_compares_natural_phrase_endings() {
+    let _serial = super::super::tests::serial();
+    let folder =
+        PathBuf::from(std::env::var_os("AURIS_BREATHING_REVIEW_OUTPUT").expect("explicit output"));
+    assert!(folder.is_absolute() && !folder.exists());
+    std::fs::create_dir_all(&folder).unwrap();
+    let settings = crate::audio_review::AudioReviewOptions::from_env().unwrap();
+    let mut records = Vec::new();
+    for (name, id, bowed) in [
+        ("synth", "auris.synth.chiptune", false),
+        ("piano", "auris.physical.piano", false),
+        ("clarinet", "auris.physical.clarinet", false),
+        ("violin", "auris.physical.violin", true),
+    ] {
+        let (mut session, track, clip) = lead();
+        session
+            .project
+            .track_mut(track)
+            .unwrap()
+            .kind
+            .as_instrument_mut()
+            .unwrap()
+            .instrument_id = id.into();
+        session.project.midi_clip_mut(clip).unwrap().length = Ticks(19200);
+        session
+            .add_note(clip, Note::new(67, Ticks(15360), Ticks(960)))
+            .unwrap();
+        let original = session.project().clone();
+        let controls = envelope_controls(session.registry(), &original, track.0);
+        let options = crate::prelude::OfflineOptions {
+            start_frames: 96000,
+            end_frames: Some(240000),
+            sample_rate: Some(24000.0),
+            include_tail: false,
+            ..Default::default()
+        };
+        let write = |session: &mut Session, variant: &str| {
+            let buffer = session
+                .render_job()
+                .render(&options, &mut crate::prelude::RenderProgress::default())
+                .unwrap();
+            let path = folder.join(format!("{name}-{variant}.wav"));
+            auris_io::write_wav(&path, &buffer, &auris_io::WavExportSettings::default()).unwrap();
+            // Time bins retain the real decay trajectory, without gain normalization.
+            let bins: Vec<f64> = buffer.channels()[0]
+                .chunks(1200)
+                .map(|samples| {
+                    (samples.iter().map(|s| f64::from(*s).powi(2)).sum::<f64>()
+                        / samples.len() as f64)
+                        .sqrt()
+                })
+                .collect();
+            (path, bins)
+        };
+        let continuous = write(&mut session, "continuous-stem");
+        let hard = proposal(&mut session, clip, json!({})).unwrap();
+        session
+            .apply_arrangement(
+                hard["plan_id"].as_str().unwrap(),
+                hard["revision"].as_str().unwrap(),
+            )
+            .unwrap();
+        let hard_project = session.project().clone();
+        let hard_stem = write(&mut session, "shortened-stem");
+        session.undo();
+        assert_eq!(session.project(), &original);
+        let edits = if bowed {
+            json!({"rests":[{"start_tick":13920,"end_tick":15360}],"landings":[{"note":{"clip":clip.0,"index":15},"start_tick":12480,"replace_notes":[13,14]}]})
+        } else {
+            json!({"landings":[{"note":{"clip":clip.0,"index":15},"start_tick":13440,"replace_notes":[14]}]})
+        };
+        let mut edit = json!({"kind":"breath","clips":[clip.0],"rests":[{"start_tick":14880,"end_tick":15360}],"min_note_ticks":120});
+        edit.as_object_mut()
+            .unwrap()
+            .extend(edits.as_object().unwrap().clone());
+        let mut changes =
+            vec![json!({"purpose":"Hold the arrival and allow its release","edit":edit})];
+        // Sustained synth/wind voices receive an explicit taper. Piano resonance keeps
+        // its own decay, while the bowed string gets a longer release budget.
+        if name == "synth" || name == "clarinet" {
+            changes.push(json!({"purpose":"Ease the sustained ending before release","edit":{"kind":"automation","target":{"kind":"track_gain","track":track.0},"start_tick":13920,"end_tick":15360,"points":[{"at_tick":14880,"value":-9.0},{"at_tick":15120,"value":-18.0},{"at_tick":15359,"value":-18.0}]}}));
+        }
+        let prepared = session
+            .begin_arrangement(
+                session.agent_document_revision().unwrap(),
+                serde_json::from_value(json!(changes)).unwrap(),
+                &[],
+            )
+            .unwrap()
+            .run(&AtomicBool::new(false))
+            .unwrap();
+        let plan: Value = serde_json::from_str(
+            &session
+                .continue_arrangement(prepared, &AtomicBool::new(false))
+                .unwrap(),
+        )
+        .unwrap();
+        session
+            .apply_arrangement(
+                plan["plan_id"].as_str().unwrap(),
+                plan["revision"].as_str().unwrap(),
+            )
+            .unwrap();
+        let natural_project = session.project().clone();
+        let natural_stem = write(&mut session, "held-stem");
+        assert_eq!(natural_stem.1.len(), 120);
+        assert!(natural_stem.1.iter().all(|v| v.is_finite()));
+        assert!(
+            natural_stem.1[80] > 1e-6,
+            "following entry was lost: {name}"
+        );
+        if name == "synth" || name == "clarinet" {
+            assert!(
+                natural_stem.1[74] < hard_stem.1[74] * 0.6,
+                "ending did not ease before release: {name}"
+            );
+        }
+        if bowed {
+            assert!(
+                natural_stem.1[79] < hard_stem.1[79] * 0.01,
+                "bow tail still fills the next entry"
+            );
+        }
+        let pad = session
+            .add_instrument_track("Unchanged background", "auris.synth.chiptune")
+            .unwrap();
+        let pad_clip = session
+            .add_midi_clip(pad, "Texture", Ticks::ZERO, Ticks(19200))
+            .unwrap();
+        session
+            .add_note(pad_clip, Note::new(48, Ticks::ZERO, Ticks(19200)))
+            .unwrap();
+        session.set_param(ParamTarget::TrackGain(pad), -18.0);
+        let natural_mix = write(&mut session, "held-mix");
+        session.project.midi_clip_mut(clip).unwrap().notes =
+            hard_project.midi_clip(clip).unwrap().1.notes.clone();
+        session.project.automation = hard_project.automation.clone();
+        let hard_mix = write(&mut session, "shortened-mix");
+        let mut reviews = Vec::new();
+        for (scope, a, b) in [
+            ("stem", &hard_stem.0, &natural_stem.0),
+            ("mix", &hard_mix.0, &natural_mix.0),
+        ] {
+            eprintln!("Reviewing {name} {scope}");
+            let reviewed = crate::audio_review::review_audio(
+                &[("A", a.as_path()), ("B", b.as_path())],
+                "Compare the melody endings. Which sounds more settled? Describe audible decay or abruptness briefly. State uncertainty.",
+                &settings,
+            );
+            reviews.push(match reviewed { Ok(r) => json!({"scope":scope,"model":r.model,"audio_sent":r.audio_sent,"review":r.review}), Err(e) => json!({"scope":scope,"error":e}) });
+        }
+        records.push(json!({"instrument":id,"name":name,"envelope_controls":controls,"edits":edits,"plan":plan,"original_score":original,"held_score":natural_project,
+            "rms_50ms":{"continuous_stem":continuous.1,"shortened_stem":hard_stem.1,"held_stem":natural_stem.1,"shortened_mix":hard_mix.1,"held_mix":natural_mix.1},"reviews":reviews}));
+        std::fs::write(folder.join("review.json"), serde_json::to_vec_pretty(&json!({"comparison":"A = prior shortening-only repair; B = held arrival and instrument-tail budget","limitation":"Separate model observations, not a human listening judgment. Common gain; no normalization or limiting.","records":records})).unwrap()).unwrap();
+    }
+    assert!(
+        records.iter().all(|r| r["reviews"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v["audio_sent"] == true)),
         "see {}",
         folder.display()
     );

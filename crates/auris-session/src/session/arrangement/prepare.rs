@@ -32,6 +32,7 @@ impl ArrangementJob {
                     min_note_ticks,
                     protected_notes,
                     omit_notes,
+                    landings,
                 }) => breathing::repair(
                     &mut self.project,
                     &clips,
@@ -39,6 +40,7 @@ impl ArrangementJob {
                     min_note_ticks,
                     &protected_notes,
                     &omit_notes,
+                    &landings,
                 )?,
                 Pending::Performance { clip, voice, stack } => {
                     let before = self

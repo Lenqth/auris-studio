@@ -2,8 +2,8 @@
 
 The arrangement harness connects instrument capabilities, phrase conditions, section
 orchestration, parameter movement and SFX to the shared session editing path. It retains
-authored notes, lyrics, harmony, tempo and meter, except for exact releases or pickup
-omissions explicitly previewed by a `breath` edit. A proposal is an ephemeral prepared
+authored notes, lyrics, harmony, tempo and meter, except for exact releases, pickup
+omissions or held arrivals explicitly previewed by a `breath` edit. A proposal is an ephemeral prepared
 document, not a new project format.
 
 ## Enable and inspect
@@ -74,7 +74,7 @@ Supported edits:
 
 | Edit | Contract |
 | --- | --- |
-| `breath` | Explicit phrase-rest windows, shortened note releases and exact optional pickup omissions. Protected/vocal notes and possible ties are refused; performed space is verified before application. |
+| `breath` | Explicit phrase rests, shortened releases, named pickup omissions and optional held arrivals replacing exact approach indices. Protected/vocal notes and possible ties are refused; performed space is verified before application. |
 | `performance` | Partial `set_performance` settings on an existing clip; optional exact drum writer scope. Source notes and authored curves remain intact. |
 | `automation` | One existing native parameter, 1–128 unique points strictly inside a passage. Existing boundary values, interpolation and outside curves remain unchanged. |
 | `revoice` | Transfer 1–16 complete clips from one instrument/drum track to a new sound. `layer:true` retains the originals and reissues copied clip IDs. |

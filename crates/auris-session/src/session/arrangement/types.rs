@@ -89,7 +89,8 @@ pub struct Change {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
     /// Create explicit phrase rests by shortening crossing notes and explicitly omitting named pickups.
-    /// Pitches, attacks and velocities of retained notes, lyrics, curves and song length stay intact.
+    /// Optional explicit landings hold a named arrival earlier in place of named approach notes.
+    /// Other pitches, attacks and velocities, lyrics, curves and song length stay intact.
     Breath {
         /// One to sixteen complete foreground instrument clips on the same track.
         #[schemars(length(min = 1, max = 16))]
@@ -108,6 +109,10 @@ pub enum Action {
         #[serde(default)]
         #[schemars(length(max = 256))]
         omit_notes: Vec<NoteAddress>,
+        /// Up to sixteen explicit held arrivals, using original read_notes indices. No looped clips.
+        #[serde(default)]
+        #[schemars(length(max = 16))]
+        landings: Vec<PhraseLanding>,
     },
     /// Change only the clip's performance; authored notes and controllers remain intact.
     Performance {
@@ -202,6 +207,19 @@ pub struct RestWindow {
     pub start_tick: i64,
     /// Exclusive end tick, usually the next phrase's entry.
     pub end_tick: i64,
+}
+
+/// Hold an existing arrival earlier instead of clipping a newly attacked ending note.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PhraseLanding {
+    /// Original arrival note; its pitch and velocity are preserved.
+    pub note: NoteAddress,
+    /// Earlier absolute attack tick, exactly at the start of the replaced approach.
+    pub start_tick: i64,
+    /// Original indices of one to sixteen contiguous approach notes replaced by the held arrival.
+    #[schemars(length(min = 1, max = 16))]
+    pub replace_notes: Vec<usize>,
 }
 
 /// An editable original note index, bound to the proposal's content revision.

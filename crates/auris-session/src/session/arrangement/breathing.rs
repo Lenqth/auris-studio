@@ -3,12 +3,35 @@
 use super::*;
 use auris_core::project::{ClipCurve, Track, loop_passes};
 
+mod endings;
 #[cfg(test)]
 mod tests;
 
 const NOTE_LIMIT: usize = 8192;
 const CLIP_LIMIT: usize = 32;
 type Interval = (i64, i64);
+
+/// Native envelope controls are read from the registered implementation, never copied defaults.
+pub(super) fn envelope_controls(registry: &PluginRegistry, project: &Project, track: u64) -> Value {
+    let Some(source) = project
+        .track(auris_core::TrackId(track))
+        .and_then(|t| t.kind.as_instrument())
+    else {
+        return Value::Null;
+    };
+    let id = source.instrument_id.as_str();
+    if !(id.starts_with("auris.physical.") || id == "auris.synth.chiptune") {
+        return Value::Null;
+    }
+    let Ok(instrument) = registry.create_instrument(id) else {
+        return Value::Null;
+    };
+    json!(instrument.parameters().iter().filter(|p| ["attack", "decay", "sustain", "release"].contains(&p.key.as_ref())).map(|p| {
+        let target = ParamTarget::Instrument { track: auris_core::TrackId(track), param: p.id };
+        json!({"key":p.key,"base_value":p.clamp(source.instrument_state.params.get(p.key.as_ref()).copied().unwrap_or(p.default)),"unit":p.unit,
+            "automated":project.automation.lane(target).is_some(),"target":automation::ControlTarget::Instrument { track, param: p.key.to_string() }})
+    }).collect::<Vec<_>>())
+}
 
 fn window(start: i64, end: i64) -> Result<(), String> {
     if start < 0 || end <= start || end - start > 128 * 960 {
@@ -219,6 +242,7 @@ pub(super) fn inspect(
         "complete":observed.complete,"truncated":!observed.complete,"clip_limit":CLIP_LIMIT,"note_limit_per_representation":NOTE_LIMIT,
         "pass_policy":"All bounded passes, using the playback performer and its actual pass seeds; clip/loop joins are measured together",
         "authored":authored,"performed":performed,"clips":observed.clips,"suggestions":suggestions,
+        "ending_guidance":endings::guidance(project, track),
         "audibility":{"sustain_data_present":observed.sustain,"sustain_response":sustain_response,"track_muted":track.mixer.mute,
             "effect_or_send_paths_present":!track.mixer.effects.is_empty()||!track.sends.is_empty(),
             "limitation":"Note occupancy excludes instrument release, pedal-held tails, effect/bus tails and other tracks. Compare the foreground stem and mix with inspect_audio/preview/listen; these flags identify possible causes, not proven audible silence."}}),
@@ -242,6 +266,7 @@ pub(super) fn repair(
     minimum: i64,
     protections: &[NoteAddress],
     omissions: &[NoteAddress],
+    landings: &[PhraseLanding],
 ) -> Result<Value, String> {
     if clips.is_empty()
         || clips.len() > 16
@@ -250,6 +275,7 @@ pub(super) fn repair(
         || !(1..=3840).contains(&minimum)
         || protections.len() > 256
         || omissions.len() > 256
+        || landings.len() > 16
     {
         return Err("Breath requires 1..16 clips/rests, min_note_ticks 1..3840, and at most 256 protected/omitted notes".into());
     }
@@ -342,6 +368,18 @@ pub(super) fn repair(
         }
     }
     // Any supported (or unknown) pedal on this channel can mask the rest, including another clip.
+    let landing = endings::prepare(
+        endings::LandingContext {
+            project,
+            clips,
+            rests,
+            protections: &protections,
+            omissions: &omissions,
+            attacks: &attacks,
+            releases: &releases,
+        },
+        landings,
+    )?;
     let pedal_may_sound = source.kind.as_instrument().is_none_or(|instrument| {
         diagnostics::capabilities(instrument, false)["cc64_sustain"] != "unsupported"
     });
@@ -375,7 +413,7 @@ pub(super) fn repair(
             }
         }
     }
-    let mut changes = Vec::new();
+    let mut changes = landing.changes;
     let mut consumed = HashSet::new();
     for id in clips {
         let clip = project
@@ -408,8 +446,18 @@ pub(super) fn repair(
         }
         let mut removed = Vec::new();
         for index in 0..clip.notes.len() {
-            let note = &clip.notes[index];
             let address = NoteAddress { clip: *id, index };
+            if landing.replaced.contains(&address) {
+                removed.push(index);
+                continue;
+            }
+            if let Some(start) = landing.starts.get(&address) {
+                let note = &mut clip.notes[index];
+                let end = note.end();
+                note.start = Ticks(*start - clip.start.raw());
+                note.length = end - note.start;
+            }
+            let note = &clip.notes[index];
             let a = (clip.start + note.start).raw();
             let b = (clip.start + note.start + note.length)
                 .min(clip.end())
@@ -485,7 +533,8 @@ pub(super) fn repair(
     }
     Ok(
         json!({"track":track.0,"rests":rests,"note_changes":changes,"before":before,"after":after,
-        "retained_pitches_attacks_velocities_preserved":true,"curves_and_recipes_preserved":true,
+        "retained_pitches_attacks_velocities_preserved":landings.is_empty(),"retained_pitches_velocities_preserved":true,"attacks_preserved_except_explicit_landings":true,"curves_and_recipes_preserved":true,
+        "ending_guidance":endings::guidance(project, project.track(track).ok_or("Missing track")?),
         "audio_review_required":true,"warning":"This verifies note-event space only. Compare the foreground stem and full mix; release, reverb and other layers may mask a rest. Explicit recipe regeneration can replace repaired notes."}),
     )
 }

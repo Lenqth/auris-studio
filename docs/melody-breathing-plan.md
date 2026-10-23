@@ -88,6 +88,46 @@ fall inside a requested rest. Protected indices, vocal data/ornaments and touchi
 same-pitch continuations (possible ties, including across clips) are refused. Notes are
 not split or uniformly gated.
 
+### Held arrivals and instrument tails
+
+`inspect_breathing.ending_guidance` distinguishes sustained winds/bowed strings,
+struck/plucked instruments and patch-dependent synths. For registered native instruments,
+`envelope_controls` reads attack/decay/sustain/release descriptors and saved overrides
+from the actual implementation, including whether a parameter has automation. A release
+value is a control setting, not a measurement of acoustic silence. Inspect its automation
+and render the stem and mix through the following entry. Hosted and sampled envelopes
+remain patch-dependent; no native default is invented for them.
+
+When shortening a newly attacked ending sounds clipped, a `breath` edit can explicitly
+hold an existing arrival earlier in place of named approach notes:
+
+```json
+"landings": [{
+  "note": {"clip": 2, "index": 15},
+  "start_tick": 13440,
+  "replace_notes": [14]
+}]
+```
+
+All indices refer to the original `read_notes` response. The arrival keeps its pitch and
+velocity, moves to the absolute `start_tick`, and is held until the requested rest. The
+named approach notes must cover exactly the interval from the new attack to the original
+attack, without gaps, overlaps or another authored voice. No other notes are selected implicitly.
+Protected/vocal/tied notes are refused, including replaced approach notes. Landings are
+limited to sixteen and require independent clips; use independent copies for loop passes.
+Preview includes every original replaced note and the arrival timing. Without `landings`,
+the original release-only contract is unchanged. Curves, performance and recipes remain
+intact, and the complete proposal remains one Undo.
+
+Give the arrival enough time to settle before note-off, then budget the instrument tail
+before the next entry. Choose its pitch against the local harmony and motif; the final
+written note is not necessarily a resolved arrival. Let piano/guitar resonance decay
+rather than forcing a generic fade.
+For sustained wind/bow/synth patches, an explicitly scoped expression or native parameter
+automation can shape an ending when needed. Preserve the outside curve and check for tail
+reappearance when restoring gain; a gain dip alone does not release a held voice. Do not
+change global instrument defaults as a substitute for phrase design.
+
 Select 1–16 unmuted clips on one foreground instrument track and 1–16 ordered,
 nonoverlapping rest windows. The selected passage is bounded to 128 quarter notes.
 Singer/drum tracks are protected. A repeated clip requires explicit windows covering
@@ -139,3 +179,37 @@ The opt-in session test `installed_audio_critic_compares_breathing_stem_and_mix`
 four 24 kHz WAV excerpts and the review to a fresh absolute directory supplied through
 `AURIS_BREATHING_REVIEW_OUTPUT`. It uses `AURIS_AUDIO_*` settings and sends actual audio;
 ordinary tests do not contact a critic. Raw local evidence remains outside Cargo cleanup.
+
+### Follow-up ending comparison
+
+The [held-arrival comparison record](../tools/eval/references/phrase-ending-2026-10-23.json)
+keeps the follow-up attempts, the actual native envelope controls, WAV hashes, PCM
+measurements and every critic response. The six-second excerpts include the following
+entry and compare the previous shortening-only repair with the new explicit ending.
+The continuous original is retained as a separate control. These are synthetic test
+phrases, not a claim about an entire song.
+
+The final comparison holds the same arrival pitch longer, with instrument-specific
+release space. Sustained chiptune and clarinet receive a scoped track-gain taper, with
+the original gain restored at the next entry after their native release. Piano keeps its
+natural decay without a gain fade. Violin keeps its 1.5-second release control. Its measured
+tail falls below -100 dBFS about 0.7 seconds after note-off in this fixture, so the final
+interval is 0.75 seconds instead of the uniform quarter second. The conservative 1.75-second
+intermediate interval is retained in the record; it left excessive quiet space. No instrument
+or composer defaults change. Both foreground stems and mixes with the same sustained
+background are rendered at common gain, without normalization or limiting.
+
+Numeric assertions verify easing before release for synth/wind, reduced violin tail
+immediately before the next entry, and preservation of the next attack for all four.
+These checks establish the acoustic behavior, not perceived naturalness. The critic
+received eight final paired uploads but repeatedly requested audio or could not identify
+music. Shorter-focus and mono/16-bit controls did not establish reliable musical judgment;
+one earlier isolated answer preferred the shortening-only stem, while its mix comparison
+failed. No favorable model quality verdict is claimed. The comparison WAVs remain available
+for human audition.
+
+To reproduce, set `AURIS_BREATHING_REVIEW_OUTPUT` to a fresh absolute directory and run
+`cargo test -p auris-session --lib installed_audio_critic_compares_natural_phrase_endings -- --ignored --nocapture --test-threads=1`.
+The test writes continuous, shortening-only and revised stems, both mixes, the score/plan,
+50 ms RMS trajectories and raw review responses. Review transmission assertions do not
+assert musical preference.
