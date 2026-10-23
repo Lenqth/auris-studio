@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auris Composition"
+  short_description: "Compose and integrate game or video music in Auris Studio"
+  default_prompt: "Use Auris Studio to plan, compose, render, and verify music for this project."
