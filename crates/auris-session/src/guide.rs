@@ -380,6 +380,9 @@ pub mod architecture {
     //! The desktop owns [`agent_policy::Policy`](crate::agent_policy::Policy): every live tool
     //! asks it for a decision, and live edits are checked again immediately before execution.
     //! Deny rules override every mode; plan mode forbids mutations even with an allow rule.
+    //! Saved policy deserialization migrates known retired operation names before validation.
+    //! Retired grants return to the mode's defaults rather than granting a broader command;
+    //! retired denials cover their successors. Unknown rules still fail closed.
     //! One-time approvals bind the exact command to the current document revision. Standalone MCP
     //! adapts the shared command catalog to saved projects and does not consult this live policy.
     //! Auto-review mode delegates operations needing confirmation to a separate conversation

@@ -1,7 +1,7 @@
 //! Permission decisions for live agents, including embedded MCP. Standalone saved-file MCP
 //! does not consult this policy.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// User-selected behavior for agent operations.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,15 +43,124 @@ impl Mode {
 }
 
 /// Saved permission rules. Exact operation names, `edit_project.*`, or `*` are accepted.
+/// Deserialization resets retired grants and carries retired denials to their successors.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Policy {
     /// The selected permission mode.
     pub mode: Mode,
     /// Operations that may run without confirmation, except mutations in read-only and plan mode.
+    #[serde(deserialize_with = "deserialize_allow_rules")]
     pub allow: Vec<String>,
     /// Operations that are denied in every mode, including bypass.
+    #[serde(deserialize_with = "deserialize_deny_rules")]
     pub deny: Vec<String>,
+}
+
+// Saved preferences outlive tool catalogs. Consolidation can broaden an operation, so an old
+// grant cannot approve its successor; a denial must still cover the corresponding operations.
+const RETIRED_OPERATIONS: &[(&str, &[&str])] = &[
+    ("edit_project.add_note", &["edit_project.edit_notes"]),
+    ("edit_project.add_notes", &["edit_project.edit_notes"]),
+    ("edit_project.remove_notes", &["edit_project.edit_notes"]),
+    ("edit_project.replace_notes", &["edit_project.edit_notes"]),
+    ("edit_project.set_tempo", &["edit_project.edit_timeline"]),
+    (
+        "edit_project.set_level",
+        &["edit_project.mixer_graph.set_strip"],
+    ),
+    (
+        "edit_project.set_track_state",
+        &["edit_project.mixer_graph.set_strip"],
+    ),
+    (
+        "edit_project.read_mixer_graph",
+        &["edit_project.mixer_graph.read"],
+    ),
+    (
+        "edit_project.connect_mixer",
+        &[
+            "edit_project.mixer_graph.connect",
+            "edit_project.mixer_graph.set_outputs",
+            "edit_project.mixer_graph.add_send",
+            "edit_project.mixer_graph.set_sidechain",
+        ],
+    ),
+    (
+        "edit_project.disconnect_mixer",
+        &[
+            "edit_project.mixer_graph.disconnect",
+            "edit_project.mixer_graph.set_outputs",
+            "edit_project.mixer_graph.set_sidechain",
+        ],
+    ),
+    (
+        "edit_project.add_mixer_effect",
+        &["edit_project.mixer_graph.add_effect"],
+    ),
+    (
+        "edit_project.remove_mixer_effect",
+        &["edit_project.mixer_graph.remove_effect"],
+    ),
+    (
+        "edit_project.move_mixer_effect",
+        &["edit_project.mixer_graph.move_effect"],
+    ),
+    (
+        "edit_project.enable_mixer_effect",
+        &["edit_project.mixer_graph.enable_effect"],
+    ),
+    (
+        "edit_project.set_mixer_send",
+        &["edit_project.mixer_graph.set_send"],
+    ),
+    (
+        "edit_project.mixer_effect_parameters",
+        &["edit_project.mixer_graph.parameters"],
+    ),
+    (
+        "edit_project.set_mixer_effect_parameter",
+        &["edit_project.mixer_graph.set_parameter"],
+    ),
+    (
+        "edit_project.set_mixer_track",
+        &["edit_project.mixer_graph.set_strip"],
+    ),
+    (
+        "edit_project.create_piano_cover",
+        &["transcribe_audio", "edit_project.import_transcription"],
+    ),
+    ("list_instruments", &["search_instruments"]),
+    ("similar_instruments", &["search_instruments"]),
+];
+
+fn retired_successors(operation: &str) -> Option<&'static [&'static str]> {
+    RETIRED_OPERATIONS
+        .iter()
+        .find_map(|(retired, successors)| (*retired == operation).then_some(*successors))
+}
+
+fn deserialize_allow_rules<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<String>, D::Error> {
+    let mut rules = Vec::<String>::deserialize(deserializer)?;
+    rules.retain(|rule| retired_successors(rule).is_none());
+    Ok(rules)
+}
+
+fn deserialize_deny_rules<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<String>, D::Error> {
+    let mut rules = Vec::<String>::new();
+    for rule in Vec::<String>::deserialize(deserializer)? {
+        let unchanged = [rule.as_str()];
+        for successor in retired_successors(&rule).unwrap_or(&unchanged) {
+            if !rules.iter().any(|name| name == successor) {
+                rules.push((*successor).to_owned());
+            }
+        }
+    }
+    Ok(rules)
 }
 
 /// The permission decision before an operation runs.
@@ -306,6 +415,114 @@ mod tests {
         assert!(undo.confirm);
     }
     use super::*;
+
+    #[test]
+    fn all_retired_rules_migrate_without_widening_grants_or_losing_denials() {
+        for (retired, successors) in RETIRED_OPERATIONS {
+            assert!(!OPERATIONS.contains(retired));
+            assert!(!successors.is_empty());
+            let policy: Policy = serde_json::from_value(serde_json::json!({
+                "mode":"bypass",
+                "allow":[retired, "edit_project.listen"],
+                "deny":[retired, successors[0]]
+            }))
+            .unwrap();
+            assert_eq!(policy.allow, ["edit_project.listen"], "{retired}");
+            assert_eq!(policy.deny, *successors, "{retired}");
+            for successor in *successors {
+                assert!(OPERATIONS.contains(successor), "{retired}: {successor}");
+                let operation = Operation {
+                    name: (*successor).into(),
+                    mutating: true,
+                    confirm: true,
+                };
+                assert!(matches!(policy.decide(&operation), Decision::Deny(_)));
+            }
+            let saved = serde_json::to_string(&policy).unwrap();
+            assert_eq!(serde_json::from_str::<Policy>(&saved).unwrap(), policy);
+        }
+    }
+
+    #[test]
+    fn saved_unknown_rules_still_fail_closed_after_migration() {
+        for field in ["allow", "deny"] {
+            let mut saved = serde_json::json!({"mode":"bypass"});
+            saved[field] =
+                serde_json::json!(["edit_project.remove_notes", "edit_project.future_command"]);
+            let policy: Policy = serde_json::from_value(saved).unwrap();
+            let operation = Operation::parse(
+                "edit_project",
+                &serde_json::json!({"command":{"action":"inspect"}}),
+            )
+            .unwrap();
+            assert!(matches!(policy.decide(&operation), Decision::Deny(reason)
+                if reason.contains("edit_project.future_command")));
+        }
+        assert!(serde_json::from_value::<Policy>(serde_json::json!({"allow":null})).is_err());
+        assert!(serde_json::from_value::<Policy>(serde_json::json!({"deny":[42]})).is_err());
+    }
+
+    #[test]
+    fn saved_remove_notes_allow_rule_does_not_block_project_inspection() {
+        let settings: crate::Settings = serde_json::from_value(serde_json::json!({
+            "agent":{"policy":{"mode":"bypass","allow":[
+                "edit_project.listen", "edit_project.remove_notes"
+            ]}}
+        }))
+        .unwrap();
+        let operation = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{"action":"inspect"}}),
+        )
+        .unwrap();
+        assert_eq!(settings.agent.policy.decide(&operation), Decision::Allow);
+        assert_eq!(settings.agent.policy.mode, Mode::Bypass);
+        assert_eq!(settings.agent.policy.allow, ["edit_project.listen"]);
+        let saved = serde_json::to_string(&settings).unwrap();
+        assert_eq!(
+            serde_json::from_str::<crate::Settings>(&saved).unwrap(),
+            settings
+        );
+    }
+
+    #[test]
+    fn retired_note_allow_does_not_authorize_the_broader_edit_notes_command() {
+        let policy: Policy = serde_json::from_value(serde_json::json!({
+            "allow":["edit_project.remove_notes"]
+        }))
+        .unwrap();
+        let operation = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{"action":"edit_notes","expected_revision":"test","edits":[
+                {"kind":"replace","clip":1,"notes":[]}
+            ]}}),
+        )
+        .unwrap();
+        assert_eq!(policy.decide(&operation), Decision::Ask);
+    }
+
+    #[test]
+    fn retired_note_deny_still_protects_notes_without_blocking_inspection() {
+        let policy: Policy = serde_json::from_value(serde_json::json!({
+            "mode":"bypass", "deny":["edit_project.remove_notes"]
+        }))
+        .unwrap();
+        let inspect = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{"action":"inspect"}}),
+        )
+        .unwrap();
+        let removal = Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{"action":"edit_notes","expected_revision":"test","edits":[
+                {"kind":"patch","clip":1,"remove":[0]}
+            ]}}),
+        )
+        .unwrap();
+        assert_eq!(policy.decide(&inspect), Decision::Allow);
+        assert_eq!(policy.deny, ["edit_project.edit_notes"]);
+        assert!(matches!(policy.decide(&removal), Decision::Deny(_)));
+    }
 
     #[test]
     fn unknown_rules_fail_closed_until_explicitly_deleted() {

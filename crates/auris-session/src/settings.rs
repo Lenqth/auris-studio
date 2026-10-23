@@ -767,6 +767,29 @@ mod tests {
     }
 
     #[test]
+    fn controlled_settings_updates_migrate_retired_agent_permission_rules() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("settings.json");
+        std::fs::write(
+            &path,
+            serde_json::json!({"agent":{
+                "backend":"codex", "model":"existing",
+                "policy":{
+                    "allow":["edit_project.remove_notes", "edit_project.listen"],
+                    "deny":["edit_project.set_tempo"]
+                }
+            }})
+            .to_string(),
+        )
+        .unwrap();
+        let settings = Settings::read_for_update(&path).unwrap();
+        assert_eq!(settings.agent.policy.allow, ["edit_project.listen"]);
+        assert_eq!(settings.agent.policy.deny, ["edit_project.edit_timeline"]);
+        assert_eq!(settings.agent.backend, "codex");
+        assert_eq!(settings.agent.model, "existing");
+    }
+
+    #[test]
     fn settings_updates_refuse_malformed_files_instead_of_replacing_preferences() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("settings.json");
