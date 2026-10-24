@@ -189,6 +189,7 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "production_record",
     "edit_project.suggest_harmony",
     "edit_project.accompaniment",
     "edit_project.arrangement",
@@ -315,7 +316,8 @@ impl Operation {
         } else if !tool.contains('.') && OPERATIONS.contains(&tool) {
             Ok(Self {
                 name: tool.into(),
-                mutating: matches!(tool, "cli_command" | "cli_file_change"),
+                mutating: matches!(tool, "cli_command" | "cli_file_change")
+                    || (tool == "production_record" && args["operation"]["kind"] != "read"),
                 // A native read is free only inside the folder the CLI works in. The worker
                 // decides that from the path the CLI asked for, and says so here; anything
                 // else — another project, a home directory's keys — asks like a network call.

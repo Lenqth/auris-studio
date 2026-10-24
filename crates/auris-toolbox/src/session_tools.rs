@@ -34,6 +34,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
             !matches!(
                 tool.name.as_str(),
                 "history"
+                    | "production_record"
                     | "capabilities"
                     | "discover_tools"
                     | "tool_help"

@@ -450,6 +450,7 @@ async fn conversation(
         }
         _ => (memory::Memory::default(), None),
     };
+    bridge.bind_production_history(generation.as_ref())?;
     if !preloaded {
         bridge.emit(json!({"event":"history","summary":memory.summary,"turns":memory.turns}));
     }

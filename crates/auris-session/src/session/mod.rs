@@ -613,6 +613,11 @@ struct CachedFont {
 }
 
 impl Session {
+    /// Process-local identity used to invalidate evidence after reopening a document.
+    pub fn document_instance(&self) -> &str {
+        &self.sound_scope
+    }
+
     /// The longest count-in that can be asked for, in bars.
     ///
     /// Four, which is a bar more than anybody counts and two more than anybody should have to sit

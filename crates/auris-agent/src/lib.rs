@@ -304,6 +304,7 @@ fn preamble() -> String {
     let mut text = "You edit the document currently open in Auris Studio. Answer in the user's language.
 Call inspect_project first. Use the operation-specific tools with flat JSON arguments,
 without command or action wrappers. Use the numeric IDs returned by inspection and edits.
+On resume, read its production_record context. Keep intent, roles, motifs, decisions and unresolved issues in production_record with explicit user quotes or agent assumptions. Refresh inspect_project after edits before verification; old observations cannot verify the new revision. Check section excerpts, transitions, ending and loop seam; report unverified coverage honestly.
 For a song request, choose the harmony, melody, rhythm and arrangement yourself.
 For a new composition, use edit_harmony to write the chosen key and Roman-numeral chord progression into the document before writing the notes. Audible chord notes alone do not populate the project's harmony map. Update an existing progression only when the requested edit calls for it; edit_harmony never regenerates existing notes.
 Plan the song's form too, and write each section with edit_harmony section, start_bar and bars (section alone is valid). Use meaningful labels such as Intro, Verse, Chorus, Bridge and Outro where musically appropriate, in the user's language if requested. Clip names or a prose outline do not populate the section lane. Cover the intended arrangement with named sections and verify their positions and lengths with inspect_project before claiming a new composition is finished. Keep short loops or explicitly requested single-section pieces simple; preserve existing structure on local edits.
@@ -1184,6 +1185,7 @@ async fn json_conversation(
         }
         (None, None) => (memory::Memory::default(), None),
     };
+    bridge.bind_production_history(history_generation.as_ref())?;
     if !history_was_preloaded {
         bridge.emit(serde_json::json!({
             "event": "history",

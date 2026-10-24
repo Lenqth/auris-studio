@@ -25,6 +25,14 @@
 //!
 //! # Agent conversations
 //!
+//! A conversation also retains a bounded `memory.production.json` beside model memory.
+//! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;
+//! the agent runtime owns persistence under the same generation lock as conversation history.
+//! Reset removes both files, and Save As copies both. Tool observations enter through the host,
+//! independently of model summaries. Inspection reconciles clip IDs and conservatively marks
+//! evidence stale after a content change or document restart. Coverage tracks section excerpts,
+//! boundaries, endings and loop joins; measurements never establish human preference.
+//!
 //! [`crate::conversations::ConversationStore`] manages project-local conversations independently
 //! of the score. Creating, renaming, archiving, deleting or opening a conversation neither changes
 //! the music nor records an Undo step. The desktop owns navigation and focus; the agent library

@@ -468,7 +468,15 @@ impl ConversationStore {
                 let same_transcript = std::fs::read(source.join("transcript.json"))
                     .map_err(|e| e.to_string())?
                     == std::fs::read(target.join("transcript.json")).map_err(|e| e.to_string())?;
-                if existing == info && same_transcript {
+                let same_production = ["memory.production.json"].into_iter().all(|name| {
+                    let read = |folder: &Path| match std::fs::read(folder.join(name)) {
+                        Ok(bytes) => Ok(Some(bytes)),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                        Err(error) => Err(error),
+                    };
+                    matches!((read(&source), read(&target)), (Ok(a), Ok(b)) if a == b)
+                });
+                if existing == info && same_transcript && same_production {
                     continue;
                 }
                 return Err(
@@ -476,7 +484,7 @@ impl ConversationStore {
                 );
             }
             std::fs::create_dir_all(&target).map_err(|e| e.to_string())?;
-            for name in ["transcript.json", "memory.json"] {
+            for name in ["transcript.json", "memory.json", "memory.production.json"] {
                 let path = source.join(name);
                 if path.exists() {
                     std::fs::copy(path, target.join(name)).map_err(|e| e.to_string())?;
@@ -649,6 +657,32 @@ mod tests {
         store.migrate_legacy(&legacy).unwrap();
         assert!(store.list().unwrap().is_empty());
         assert!(legacy.exists());
+    }
+
+    #[test]
+    fn project_copy_retains_production_records_and_rejects_conflicting_records() {
+        let source_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+        let source = ConversationStore::for_project(source_dir.path());
+        let target = ConversationStore::for_project(target_dir.path());
+        let conversation = source.create().unwrap();
+        let path = source
+            .memory_path(&conversation.info.id)
+            .unwrap()
+            .with_extension("production.json");
+        std::fs::write(&path, b"{\"entries\":[]}").unwrap();
+        source.copy_to(&target).unwrap();
+        let copied = target
+            .memory_path(&conversation.info.id)
+            .unwrap()
+            .with_extension("production.json");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            std::fs::read(copied).unwrap()
+        );
+        source.copy_to(&target).unwrap();
+        std::fs::write(&path, b"{}").unwrap();
+        assert!(source.copy_to(&target).is_err());
     }
 
     #[test]
