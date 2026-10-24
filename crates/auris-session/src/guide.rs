@@ -31,6 +31,11 @@
 //! owns bounded model memory and provider execution. Readable transcripts and composer drafts
 //! survive model-memory compaction. Resuming a conversation continues against the current score,
 //! never the score that existed when a historical message was written.
+//! Messages submitted during a turn wait in a conversation-local queue. The desktop dispatches
+//! them in order after successful completion; Stop and failures pause the queue. Queues survive
+//! reopening as paused drafts. Explicit priority sends cancel the current worker, wait for its
+//! native shutdown, then resume from checkpointed model memory. Each backend checkpoints the
+//! pending request before model work, so cancellation retains its intent and uncertain outcome.
 //! Each user message retains its attachment references as display metadata, so the transcript
 //! can identify sent files after reopening. These references never repopulate the next draft
 //! or authorize file access; only files explicitly attached in the current window can do that.

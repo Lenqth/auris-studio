@@ -37,6 +37,7 @@ pub(crate) mod controls;
 mod conversations;
 #[cfg(test)]
 mod performance_eval;
+mod queued;
 #[cfg(test)]
 mod tool_surface_eval;
 #[cfg(test)]
@@ -1074,6 +1075,9 @@ pub(crate) struct AgentChat {
     history_error_project: Option<PathBuf>,
     /// The exact composer submission to send once saved history has arrived.
     pending_send: Option<PendingAgentSend>,
+    queued: VecDeque<queued::QueuedEntry>,
+    queue_paused: bool,
+    interrupting: bool,
     /// Which field holds the keyboard, if any.
     pub(crate) focused: Option<AgentField>,
     /// Restore approval shortcuts once when a hidden panel is deliberately shown again.
@@ -1169,6 +1173,9 @@ impl Default for AgentChat {
             loaded_history: None,
             history_error_project: None,
             pending_send: None,
+            queued: VecDeque::new(),
+            queue_paused: false,
+            interrupting: false,
             focused: None,
             restore_pending_focus: false,
             configuring: false,
@@ -1682,6 +1689,7 @@ impl AgentChat {
                 return self.finish_reload(open, dirty);
             }
             AgentEvent::Error { message } => {
+                self.queue_paused = true;
                 self.busy = false;
                 self.finish_open_tools("failed", &message);
                 self.phase = AgentPhase::Idle;
@@ -1691,6 +1699,7 @@ impl AgentChat {
                 return self.finish_reload(open, dirty);
             }
             AgentEvent::Ended => {
+                self.queue_paused = true;
                 self.controls = Default::default();
                 self.busy = false;
                 self.phase = AgentPhase::Idle;
@@ -1760,6 +1769,7 @@ impl AurisApp {
         self.agent_chat.attachment_error = None;
         for path in paths {
             if self.agent_chat.attachments.contains(path) {
+                self.agent_chat.attached_here.insert(path.clone());
                 continue;
             }
             if auris_agent::attachment_kind(path).is_none() {
@@ -1802,10 +1812,13 @@ impl AurisApp {
             let navigation = std::mem::take(&mut self.agent_chat.conversations);
             let entries = std::mem::take(&mut self.agent_chat.entries);
             let attachments = std::mem::take(&mut self.agent_chat.attachments);
+            let queued = std::mem::take(&mut self.agent_chat.queued);
             self.agent_reset_conversation();
             self.agent_chat.conversations = navigation;
             self.agent_chat.entries = entries;
             self.agent_chat.attachments = attachments;
+            self.agent_chat.queued = queued;
+            self.agent_chat.queue_paused = true;
             if let Some(folder) = self.session.project_folder() {
                 self.conversation_operation(conversations::Operation::Copy(
                     auris_session::conversations::ConversationStore::for_project(folder),
@@ -1831,8 +1844,11 @@ impl AurisApp {
         // file. Preserve it while dropping the worker receiver so queued old-path events cannot
         // be observed under the new path.
         let attachments = std::mem::take(&mut self.agent_chat.attachments);
+        let queued = std::mem::take(&mut self.agent_chat.queued);
         self.agent_reset_conversation();
         self.agent_chat.attachments = attachments;
+        self.agent_chat.queued = queued;
+        self.agent_chat.queue_paused = true;
     }
 
     fn agent_history_clear_pending(&self) -> bool {
@@ -1974,6 +1990,7 @@ impl AurisApp {
                 self.agent_chat.history_error_project = project;
                 self.agent_chat.loaded_history = None;
                 self.agent_chat.pending_send = None;
+                self.agent_chat.queue_paused = true;
                 self.agent_chat.push_entry(ChatEntry::Error(error));
             }
         }
@@ -2040,6 +2057,9 @@ impl AurisApp {
         self.agent_chat.loaded_history = None;
         self.agent_chat.history_error_project = None;
         self.agent_chat.pending_send = None;
+        self.agent_chat.queued.clear();
+        self.agent_chat.queue_paused = false;
+        self.agent_chat.interrupting = false;
         self.agent_chat.fresh_history = false;
         self.agent_chat.restart_after_turn = false;
         self.agent_chat.produced_project = None;
@@ -2085,13 +2105,14 @@ impl AurisApp {
 
     /// Cancels either a queued submission or the running worker, then returns to its draft.
     fn agent_cancel(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        self.agent_chat.queue_paused = true;
         if self.agent_chat.pending_send.take().is_some() {
             // Dropping the receiver detaches this panel from the read. The storage thread may
             // finish independently, but its stale answer can no longer start the queued turn.
             self.agent_chat.history_load = None;
             self.agent_chat
                 .push_entry(ChatEntry::Note(Key::AgentSendCancelled));
-        } else {
+        } else if !self.agent_chat.interrupting {
             self.agent_stop(cx);
         }
         self.focus_agent_field(AgentField::Chat);
@@ -2103,6 +2124,8 @@ impl AurisApp {
 
     /// Stops the worker and checks for completed writes, which remain undoable.
     fn agent_stop(&mut self, cx: &mut gpui::Context<Self>) {
+        self.agent_chat.queue_paused = true;
+        self.agent_chat.interrupting = false;
         self.session.end_agent_request();
         self.agent_chat.controls.review = None;
         self.agent_chat.controls.pending = None;
@@ -2141,10 +2164,15 @@ impl AurisApp {
         if text.is_empty() {
             return;
         }
-        if self.agent_operation_busy() {
+        if controls::is_control_command(&text) && !self.agent_operation_busy() {
+            self.agent_control_command(&text);
             return;
         }
-        if self.agent_control_command(&text) {
+        if self.agent_chat.busy || !self.agent_chat.queued.is_empty() {
+            self.enqueue_agent_message();
+            return;
+        }
+        if self.agent_operation_busy() {
             return;
         }
         if self.agent_chat.pending_reload.is_some() {
@@ -2224,7 +2252,7 @@ impl AurisApp {
     }
 
     /// Sends one already-validated composer snapshot without consulting the live editor again.
-    fn send_agent_message(&mut self, message: PendingAgentSend) {
+    fn send_agent_message(&mut self, message: PendingAgentSend) -> bool {
         if !message
             .token
             .matches(self.session.path(), self.session.revision())
@@ -2233,7 +2261,7 @@ impl AurisApp {
                 "The document changed before the message could be sent. Review the draft and send it again."
                     .into(),
             ));
-            return;
+            return false;
         }
         if self.agent_chat.link.is_none() {
             let folder = message
@@ -2250,7 +2278,7 @@ impl AurisApp {
                     self.agent_chat.push_entry(ChatEntry::Error(
                         "Conversation history is not ready. Send again after it reloads.".into(),
                     ));
-                    return;
+                    return false;
                 };
                 Some(snapshot)
             } else {
@@ -2269,7 +2297,7 @@ impl AurisApp {
                 }
                 Err(error) => {
                     self.agent_chat.push_entry(ChatEntry::Error(error));
-                    return;
+                    return false;
                 }
             }
         }
@@ -2293,7 +2321,7 @@ impl AurisApp {
             self.agent_chat
                 .push_entry(ChatEntry::Error(error.to_string()));
             self.agent_chat.link = None;
-            return;
+            return false;
         }
         // Typed here, so it is something the user asked for. Restored turns are not, which is
         // why automatic review reads this list rather than the transcript.
@@ -2316,6 +2344,7 @@ impl AurisApp {
         self.agent_chat.streamed_answer = false;
         self.agent_chat.input = TextField::new(String::new());
         self.agent_chat.attachments.clear();
+        true
     }
 
     /// Apply one request to the bound document without touching its saved file.
@@ -2663,16 +2692,22 @@ impl AurisApp {
         if self.poll_agent_review() {
             cx.notify();
         }
-        loop {
-            let Some(link) = self.agent_chat.link.as_ref() else {
-                return;
-            };
+        while let Some(link) = self.agent_chat.link.as_ref() {
             let Ok(value) = link.worker.try_recv() else {
-                return;
+                break;
             };
             let Some(event) = parse_event(&value.to_string()) else {
                 continue;
             };
+            if self.agent_chat.interrupting {
+                if matches!(event, AgentEvent::Ended) {
+                    let paused = self.agent_chat.queue_paused;
+                    self.agent_stop(cx);
+                    self.agent_chat.queue_paused = paused;
+                }
+                // A cancelled turn may still have buffered tool requests. Never execute them.
+                continue;
+            }
             if let AgentEvent::Permission { id, tool, args } = event {
                 self.agent_permission(id, tool, args);
                 cx.notify();
@@ -2764,6 +2799,7 @@ impl AurisApp {
                 self.agent_chat.restart_after_turn = false;
             }
         }
+        self.dispatch_queued_agent_message(cx);
     }
 
     /// Throws the model list away and asks the provider again, with the form as it stands.
@@ -3427,7 +3463,9 @@ impl AurisApp {
     /// the window is, because a bar with an invented ceiling would be a number wearing a lie.
     fn agent_status_row(&self, theme: &Theme) -> AnyElement {
         let ratio = self.agent_chat.context_ratio();
-        let phase = if self.agent_chat.pending_send.is_some()
+        let phase = if self.agent_chat.interrupting {
+            Key::AgentInterrupting
+        } else if self.agent_chat.pending_send.is_some()
             || self.agent_chat.conversations.changing_conversation()
         {
             Key::AgentConversationsLoading
@@ -4569,12 +4607,17 @@ impl AurisApp {
         let placeholder = self.t(Key::AgentComposerPlaceholder).to_owned();
         let attachments = self.agent_chat.attachments.clone();
         let blocker = self.agent_send_blocker();
-        let can_send = !self.agent_operation_busy()
-            && blocker.is_none()
-            && !self.agent_chat.input.content().trim().is_empty()
-            && self.agent_chat.input.marked().is_none();
+        let can_send = self.agent_composer_can_submit();
         let cancelable = self.agent_cancelable();
-        let send_label = self.t(Key::AgentSend).to_owned();
+        let queueing = (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
+            && !controls::is_control_command(self.agent_chat.input.content().trim());
+        let send_label = self
+            .t(if queueing {
+                Key::AgentQueue
+            } else {
+                Key::AgentSend
+            })
+            .to_owned();
         let bypass = controls::mode_warns(self.settings.agent.policy.mode);
         div()
             .id("agent-composer")
@@ -4596,6 +4639,9 @@ impl AurisApp {
                 theme.warning
             } else {
                 theme.border_subtle
+            })
+            .when(!self.agent_chat.queued.is_empty(), |this| {
+                this.child(self.agent_queue_view(cx))
             })
             .when(bypass, |this| {
                 this.child(
@@ -4799,74 +4845,106 @@ impl AurisApp {
                             .min_w(px(80.0))
                             .child(self.agent_model_picker(cx)),
                     )
-                    .when_else(
-                        cancelable,
-                        |this| {
-                            this.child(
-                                button(
-                                    "agent-stop",
-                                    "",
-                                    ButtonStyle::Normal,
-                                    false,
-                                    theme.warning,
-                                    &theme,
-                                    cx.listener(|this, _, window, cx| {
-                                        this.agent_cancel(window, cx)
-                                    }),
-                                )
-                                .track_focus(&stop_focus)
-                                .w(Metrics::CONTROL_HEIGHT)
-                                .px_0()
-                                .gap_0()
-                                .justify_center()
-                                .rounded_full()
-                                .child(icon(Icon::Stop, px(12.0), theme.text))
-                                .tooltip(
-                                    crate::ui::tooltip::keyed_tip(
-                                        self.t(Key::AgentStop),
-                                        "",
-                                        &theme,
-                                    ),
-                                ),
+                    .when(cancelable, |this| {
+                        this.child(
+                            button(
+                                "agent-stop",
+                                "",
+                                ButtonStyle::Normal,
+                                false,
+                                theme.warning,
+                                &theme,
+                                cx.listener(|this, _, window, cx| this.agent_cancel(window, cx)),
                             )
-                        },
-                        |this| {
-                            this.child(
-                                button_enabled(
-                                    "agent-send",
-                                    "",
-                                    if can_send {
-                                        ButtonStyle::Primary
-                                    } else {
-                                        ButtonStyle::Ghost
-                                    },
-                                    ButtonState::available(false, can_send),
-                                    theme.accent,
-                                    &theme,
-                                    cx.listener(|this, _, window, cx| {
-                                        this.agent_submit(window, cx);
-                                        cx.notify();
-                                    }),
-                                )
-                                .w(Metrics::CONTROL_HEIGHT)
-                                .px_0()
-                                .gap_0()
-                                .justify_center()
-                                .rounded_full()
-                                .child(icon(
-                                    Icon::ChevronUp,
-                                    px(14.0),
-                                    if can_send {
-                                        theme.text_on_accent
-                                    } else {
-                                        theme.text_faint
-                                    },
-                                ))
-                                .tooltip(crate::ui::tooltip::keyed_tip(send_label, "", &theme)),
+                            .track_focus(&stop_focus)
+                            .w(Metrics::CONTROL_HEIGHT)
+                            .px_0()
+                            .gap_0()
+                            .justify_center()
+                            .rounded_full()
+                            .child(icon(Icon::Stop, px(12.0), theme.text))
+                            .tooltip(crate::ui::tooltip::keyed_tip(
+                                self.t(Key::AgentStop),
+                                "",
+                                &theme,
+                            )),
+                        )
+                    })
+                    .when(!locked, |this| {
+                        this.child(
+                            button_enabled(
+                                "agent-send",
+                                "",
+                                if can_send {
+                                    ButtonStyle::Primary
+                                } else {
+                                    ButtonStyle::Ghost
+                                },
+                                ButtonState::available(false, can_send),
+                                theme.accent,
+                                &theme,
+                                cx.listener(|this, _, window, cx| {
+                                    this.agent_submit(window, cx);
+                                    cx.notify();
+                                }),
                             )
-                        },
-                    ),
+                            .w(Metrics::CONTROL_HEIGHT)
+                            .px_0()
+                            .gap_0()
+                            .justify_center()
+                            .rounded_full()
+                            .child(icon(
+                                Icon::ChevronUp,
+                                px(14.0),
+                                if can_send {
+                                    theme.text_on_accent
+                                } else {
+                                    theme.text_faint
+                                },
+                            ))
+                            .tooltip(crate::ui::tooltip::keyed_tip(send_label, "", &theme)),
+                        )
+                    }),
             )
+            .when(queueing, |row| {
+                row.child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_1()
+                        .px_1p5()
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_xs()
+                                .text_color(theme.text_muted)
+                                .child(self.t(Key::AgentQueueHint)),
+                        )
+                        .child(
+                            button_enabled(
+                                "agent-send-now",
+                                self.t(Key::AgentSendNow),
+                                ButtonStyle::Ghost,
+                                ButtonState::available(
+                                    false,
+                                    can_send && !self.agent_chat.interrupting,
+                                ),
+                                theme.accent,
+                                &theme,
+                                cx.listener(|this, _, _, cx| {
+                                    this.submit_agent_message_now(cx);
+                                    cx.notify();
+                                }),
+                            )
+                            .tooltip(crate::ui::tooltip::keyed_tip(
+                                self.t(Key::AgentSendNowHint),
+                                "",
+                                &theme,
+                            )),
+                        ),
+                )
+            })
             .into_any_element()
     }
     /// The growing multi-line message composer.

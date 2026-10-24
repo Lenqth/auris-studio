@@ -1244,6 +1244,11 @@ async fn json_conversation(
                 continue;
             }
         };
+        bridge.checkpoint_turn(
+            history_generation.as_mut(),
+            &memory,
+            wire["display"].as_str().unwrap_or(&said),
+        );
         if let Some(policy) = wire.get("policy")
             && let Ok(policy) =
                 serde_json::from_value::<auris_session::agent_policy::Policy>(policy.clone())

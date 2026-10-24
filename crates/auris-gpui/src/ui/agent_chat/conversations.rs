@@ -218,6 +218,12 @@ impl AurisApp {
             attachments: self.agent_chat.attachments.clone(),
             scroll_y: self.agent_chat.scroll.offset().y.into(),
             interrupted: self.agent_chat.busy,
+            queued: self
+                .agent_chat
+                .queued
+                .iter()
+                .map(|entry| entry.message.clone())
+                .collect(),
         })
     }
 
@@ -447,6 +453,7 @@ impl AurisApp {
                                 || old.draft != snapshot.draft
                                 || old.attachments != snapshot.attachments
                                 || old.interrupted != snapshot.interrupted
+                                || old.queued != snapshot.queued
                                 || (old.scroll_y - snapshot.scroll_y).abs() > 1.0
                         })
                 {
@@ -496,6 +503,14 @@ impl AurisApp {
                 .push(ChatEntry::Note(Key::AgentConversationInterrupted));
         }
         self.agent_chat.input = TextField::new(conversation.transcript.draft.clone());
+        self.agent_chat.queued = conversation
+            .transcript
+            .queued
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect();
+        self.agent_chat.queue_paused = !self.agent_chat.queued.is_empty();
         self.agent_chat.attachments = restorable_attachments(
             &conversation.transcript.attachments,
             &self.agent_chat.attached_here,
@@ -1287,6 +1302,46 @@ mod tests {
             std::thread::yield_now();
         }
         paint(app, cx);
+    }
+
+    #[gpui::test]
+    fn unsent_queue_is_scoped_to_its_conversation_and_restores_paused(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        paint(&app, cx);
+        settle(&app, cx);
+        let original = app.update(cx, |this, _| {
+            this.agent_chat.queued.push_back(
+                auris_session::conversations::QueuedMessage {
+                    text: "Keep this unsent request".into(),
+                    ..Default::default()
+                }
+                .into(),
+            );
+            this.agent_chat
+                .conversations
+                .active_id()
+                .unwrap()
+                .to_owned()
+        });
+        app.update(cx, |this, cx| this.start_new_agent_conversation(cx));
+        settle(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.agent_chat.queued.is_empty()));
+        app.update(cx, |this, _| this.show_conversation(original));
+        settle(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.agent_chat.queued.front().unwrap().text,
+                "Keep this unsent request"
+            );
+            assert!(this.agent_chat.queue_paused);
+            assert!(this.agent_chat.link.is_none());
+        });
     }
 
     #[gpui::test]
