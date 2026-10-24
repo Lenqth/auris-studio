@@ -4,6 +4,9 @@ Development measurements, none part of any release build. They exist for the sam
 every level and timing constant in this workspace was calibrated by rendering and measuring:
 a change to a writer or a dial should be judged against numbers first and ears always.
 
+The [agent composition trials](composition-quality.md) exercise complete panel tasks,
+preserve failures and provenance, and prepare blinded human listening comparisons.
+
 The [preset arrangement study](preset-arrangement.md) pairs these measurements with track
 participation and density across the form, and records the default-seed selection, fresh-seed
 check, and per-preset tradeoffs from the 2026-10-04 revision.

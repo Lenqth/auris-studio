@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "conditions": "この課題では内蔵音源だけを使い、外部の音声批評は呼ばず、数値と譜面で確認して。各ターンで依頼した範囲を完成させ、プロジェクトは未保存のまま残して。",
+  "axes": [
+    "request_fit",
+    "melody",
+    "form",
+    "ensemble",
+    "sound"
+  ],
+  "delivery_prompt": "この課題では内蔵音源を使い、外部の音声批評は呼ばず、数値と譜面で確認して。完成した曲全体を24bit WAV「{output}/result.wav」とMIDI「{output}/result.mid」に書き出して。指定小節数ちょうどにし、実ファイルの長さ、無音、音割れを確認して。曲は未保存のまま残して。",
+  "cases": [
+    {
+      "id": "loop_title",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "ゲームのタイトル画面向けに、少し切ないが前向きな8小節ループを作って。ニ短調、100 BPM、4/4。覚えやすい主旋律、和音、ベース、控えめなドラム。末尾から頭へ自然につなげて。"
+      ]
+    },
+    {
+      "id": "authored_folk",
+      "split": "development",
+      "fixture": "melody_six_eight",
+      "prompts": [
+        "手書きのメロディーを主役に8小節のフォーク伴奏を付けて。アコースティックギター、ベース、軽い打楽器。イ短調、90 BPM、6/8を維持し、元の旋律の音符、強弱、コントローラーはすべて残して。"
+      ]
+    },
+    {
+      "id": "motif_development",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "ト長調、112 BPM、4/4で、短い動機が覚えられる4小節のピアノ曲を作って。",
+        "冒頭4小節の音符をそのまま保ち、16小節に発展させて。1〜8小節はAメロ、9〜16小節はサビ。同じ動機が分かるようにしつつサビに対比を作って。"
+      ]
+    },
+    {
+      "id": "quiet_space",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "読書の背景に流す、静かな16小節の器楽曲。72 BPM、4/4。ピアノの短い旋律に息継ぎを作り、持続する背景音は意図して残して。音数の少なさだけでなく、自然なフレーズの終わりを大切にして。"
+      ]
+    },
+    {
+      "id": "dense_ensemble",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "疾走感のある16小節のゲーム戦闘曲。160 BPM、4/4、ホ短調。主旋律、対旋律、ベース、コード、ドラム。密度は高くても主旋律が分かり、後半に展開がある曲にして。"
+      ]
+    },
+    {
+      "id": "section_handover",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "24小節のポップ器楽曲を作って。120 BPM、4/4、ハ長調。Aメロ8小節、つなぎ4小節、サビ8小節、終わり4小節。境界で持続音や伴奏が不自然に切れず、サビの到来が分かるようにして。"
+      ]
+    },
+    {
+      "id": "local_revision",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "8小節、96 BPM、4/4のピアノ主旋律とベース、コード、ドラムを作って。",
+        "主旋律の最後2小節だけ、着地を感じる長めの音に直して。冒頭6小節と他パート、テンポ、和声は保って。"
+      ]
+    },
+    {
+      "id": "sustained_texture",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "16小節のアンビエント曲を作って。80 BPM、4/4。長く続く音の層を中心に、小さなピアノ動機が時々現れる構成。背景の持続音を無理に途切れさせず、前半と後半で色合いを変えて。"
+      ]
+    },
+    {
+      "id": "holdout_waltz",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": [
+        "3/4拍子、108 BPM、12小節の穏やかなワルツ。短い主旋律、左手のベース、和音。中間に小さな対比を作り最後は自然に終えて。"
+      ]
+    },
+    {
+      "id": "holdout_folk_change",
+      "split": "holdout",
+      "fixture": "melody_six_eight",
+      "prompts": [
+        "元の6/8のメロディーを全て保ち、8小節の軽い伴奏を付けて。前半は薄く、後半だけ動きを増やして。元のテンポ、音符、強弱、CCは変えないで。"
+      ]
+    },
+    {
+      "id": "holdout_rhythm_first",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": [
+        "112 BPM、4/4、8小節のファンク風ループ。ベースとドラムの掛け合いを中心に、短い鍵盤の動機が応答する曲。ずっと全員が鳴り続けないようにして。"
+      ]
+    },
+    {
+      "id": "holdout_return",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": [
+        "110 BPM、4/4の24小節の曲。8小節のテーマ、8小節の対比、8小節のテーマ再現。戻ったと分かる動機を保ち、再現では伴奏を変えて、最後は着地させて。"
+      ]
+    }
+  ]
+}
