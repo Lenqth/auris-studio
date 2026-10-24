@@ -12,6 +12,7 @@ pub use jobs::{AgentJob, AgentResult, AgentStep};
 mod harmony;
 pub mod note_editing;
 pub mod performance;
+pub mod phrase_variation;
 
 /// Read or reverse one complete live agent request using the session's ordinary history.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
@@ -54,6 +55,13 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Propose exact local pitch variation with fixed rhythm and protected opening, or cadence pitch/length changes, without editing. Explicit clip-relative range and protected indices are enforced. Returns before/after notes and an equivalent edit_notes patch. Use candidates variation to compare and adopt the exact result; structural validity does not establish musical quality.
+    PhraseVariation {
+        /// Current content revision from read_notes.
+        expected_revision: String,
+        /// Explicit range, protected notes and allowed changes.
+        request: phrase_variation::Request,
+    },
     /// Compare a baseline and 1..3 exact instrument-note or accompaniment alternatives without editing. Create binds snapshots to this document/revision for fifteen minutes; read returns exact note differences; preview renders the same short range with common gain. Apply adopts the selected snapshot as one Undo without regeneration. Cancel retains the original. At most three rounds per revision and three previews per round; stop and report unresolved choices at the limit. These tools establish no musical preference. Read tool_help for operation fields.
     Candidates {
         /// Create, read, preview, apply or cancel a bounded candidate round.
@@ -514,6 +522,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::PhraseVariation { .. }
             | Self::SuggestHarmony { .. }
             | Self::AnalyzeLyrics { .. }
             | Self::DiagnoseSong { .. }
@@ -612,6 +621,10 @@ impl Session {
             );
         }
         match command {
+            Command::PhraseVariation {
+                expected_revision,
+                request,
+            } => self.agent_phrase_variation(&expected_revision, request),
             Command::Candidates { operation } => self.agent_candidates(operation),
             Command::SuggestHarmony { request } => self.agent_suggest_harmony(request),
             Command::Arrangement {

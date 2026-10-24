@@ -31,3 +31,22 @@ unchanged. At most three rounds per revision and three preview ranges per round
 bound exploration. The process retains at most eight rounds and 256 MiB of score
 snapshots, with 64 MiB per round. Preview paths live only while the round remains
 cached; cancellation removes them. The tools never automatically choose a winner.
+
+## Scoped phrase variation
+
+`phrase_variation` reads one instrument or drum clip and returns a patch plus
+exact note differences. `request` includes `clip`, clip-relative `start_tick` and
+`end_tick`, `protected_indices`, and an `operation`:
+
+- `pitches`: `preserve_prefix_until_tick` protects the opening; `changes` contains
+  `{index, pitch}`. Rhythm, duration, velocity and all other note fields stay fixed.
+- `cadence`: `landings` contains `{index, pitch, length_ticks}`. Attack, velocity
+  and every unspecified field stay fixed. Both the original and proposed note
+  must fit completely inside the requested range.
+
+Each operation accepts 1..128 unique changes. Protected, duplicate, missing or
+out-of-range notes fail before any document edit. The response includes the
+equivalent `edit_notes` patch. Alternatively, submit the original request as
+`candidates` edit `{kind:variation, request:...}` to retain protection checks while
+comparing and adopting immutable alternatives. Values are explicitly authored;
+the operation does not infer that a pitch change improves the phrase.

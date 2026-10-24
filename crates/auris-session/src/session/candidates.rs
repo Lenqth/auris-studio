@@ -83,6 +83,11 @@ pub struct Proposal {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
+    /// Exact phrase edits with enforced motif and range protection.
+    Variation {
+        /// Pitch or cadence proposal with explicit protected notes.
+        request: crate::live_agent::phrase_variation::Request,
+    },
     /// The same exact edits accepted by edit_notes, on a private snapshot.
     Notes {
         /// One to sixteen clip patches/replacements; normal note validation applies.
@@ -253,6 +258,12 @@ impl Session {
                     }
                     purposes.push(candidate.purpose);
                     pending.push(match candidate.edit {
+                        Action::Variation { request } => {
+                            Pending::Notes(vec![crate::live_agent::phrase_variation::proposal(
+                                &self.project,
+                                request,
+                            )?])
+                        }
                         Action::Notes { edits } => Pending::Notes(edits),
                         Action::Accompaniment {
                             protected_clips,

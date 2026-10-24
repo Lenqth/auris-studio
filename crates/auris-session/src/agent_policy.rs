@@ -193,6 +193,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.suggest_harmony",
     "edit_project.accompaniment",
     "edit_project.candidates",
+    "edit_project.phrase_variation",
     "edit_project.arrangement",
     "edit_project.analyze_lyrics",
     "edit_project.diagnose_song",

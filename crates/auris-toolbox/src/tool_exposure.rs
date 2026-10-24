@@ -106,6 +106,7 @@ pub fn tool_group(name: &str) -> &'static str {
         | "suggest_harmony"
         | "accompany" => "composition",
         "arrangement"
+        | "phrase_variation"
         | "create_project"
         | "import_audio"
         | "import_midi"
