@@ -4,8 +4,8 @@ use super::*;
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
     selected_connection: auris_agent::ModelConnection,
-    pub(super) fields: [TextField; 4],
-    pub(super) focus: [FocusHandle; 4],
+    pub(super) fields: [TextField; 5],
+    pub(super) focus: [FocusHandle; 5],
     pub(super) active: Option<usize>,
 }
 
@@ -25,8 +25,10 @@ impl AgentSettings {
                 TextField::new(prefs.api_key_env.clone()),
                 TextField::new(prefs.codex_path.clone()),
                 TextField::new(prefs.claude_path.clone()),
+                TextField::new(prefs.opencode_path.clone()),
             ],
             focus: [
+                cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
@@ -54,6 +56,7 @@ impl SettingsWindow {
         self.agent.prefs.api_key_env = self.agent.fields[1].content().trim().to_owned();
         self.agent.prefs.codex_path = self.agent.fields[2].content().trim().to_owned();
         self.agent.prefs.claude_path = self.agent.fields[3].content().trim().to_owned();
+        self.agent.prefs.opencode_path = self.agent.fields[4].content().trim().to_owned();
         let draft = self.agent.prefs.clone();
         let selected_connection = self.agent.selected_connection.clone();
         let result = self.app.update(cx, move |app, cx| {
@@ -68,7 +71,9 @@ impl SettingsWindow {
             });
             prefs.codex_path = draft.codex_path;
             prefs.claude_path = draft.claude_path;
-            if owns_connection && !matches!(prefs.backend.as_str(), "codex" | "claude") {
+            prefs.opencode_path = draft.opencode_path;
+            if owns_connection && !matches!(prefs.backend.as_str(), "codex" | "claude" | "opencode")
+            {
                 prefs.provider = draft.provider;
                 prefs.url = draft.url;
                 prefs.api_key_env = draft.api_key_env;
@@ -118,6 +123,7 @@ impl SettingsWindow {
             "agent-key-env",
             "agent-codex-path",
             "agent-claude-path",
+            "agent-opencode-path",
         ][index];
         let focus = self.agent.focus[index].clone();
         let field = &self.agent.fields[index];
@@ -187,6 +193,9 @@ impl SettingsWindow {
             section_title(self.t(Key::AgentClaudePathLabel), &theme),
             self.agent_field(3, cx),
             note(self.t(Key::AgentClaudeHelp), &theme),
+            section_title(self.t(Key::AgentOpenCodePathLabel), &theme),
+            self.agent_field(4, cx),
+            note(self.t(Key::AgentOpenCodeHelp), &theme),
             section_title(self.t(Key::AgentProviderLabel), &theme),
             provider_control,
             section_title(self.t(Key::AgentUrlLabel), &theme),
@@ -355,6 +364,41 @@ mod tests {
             assert_eq!(
                 this.settings.agent.discovery_endpoint.as_ref().unwrap().url,
                 "https://next.invalid/v1"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn opencode_connection_settings_preserve_the_model_and_api_route(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent = AgentPreferences {
+                backend: "opencode".into(),
+                model: "provider/model".into(),
+                url: "https://example.invalid/v1".into(),
+                ..Default::default()
+            };
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(760.0), px(1400.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        crate::harness::click("agent-opencode-path", cx);
+        cx.simulate_input("C:/Tools/opencode.exe");
+        handle
+            .update(cx, |this, _, cx| {
+                this.apply_agent_with(cx, |_| Ok::<(), String>(()))
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.backend, "opencode");
+            assert_eq!(this.settings.agent.model, "provider/model");
+            assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
+            assert_eq!(
+                this.agent_chat.preferences().opencode_path,
+                "C:/Tools/opencode.exe"
             );
         });
     }

@@ -74,7 +74,7 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
         std::env::var_os("AURIS_CODEX_TRANSCRIPTION_EVAL").expect("explicit evaluation config");
     let config: Evaluation = serde_json::from_slice(&fs::read(config).unwrap()).unwrap();
     let backend = config.backend.as_deref().unwrap_or("codex");
-    assert!(matches!(backend, "codex" | "claude"));
+    assert!(matches!(backend, "codex" | "claude" | "opencode"));
     assert!(
         config.workspace.is_absolute()
             && config.output.is_absolute()
