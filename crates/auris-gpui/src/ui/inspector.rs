@@ -22,6 +22,14 @@ use crate::ui::plugin_window::PluginSubject;
 use crate::ui::scrollbars::ScrollPanel;
 use crate::ui::widgets::{bounded_picker_label, chain_button, disclosure};
 
+/// Scroll and keyboard identity for the current large plugin parameter list.
+#[derive(Default)]
+pub(crate) struct ParameterListState {
+    pub(crate) scroll: gpui::UniformListScrollHandle,
+    pub(crate) rows: std::sync::Arc<Vec<gpui::FocusHandle>>,
+    pending_focus: Option<usize>,
+}
+
 /// Stable groups whose disclosure state belongs to the view, not the selected document object.
 #[derive(Clone, Copy)]
 enum InspectorSection {
@@ -636,7 +644,94 @@ impl AurisApp {
             .into_any_element()
     }
 
-    /// Builds a control for every parameter of a plugin.
+    fn focus_parameter_row(&mut self, index: usize, backwards: bool, cx: &mut gpui::Context<Self>) {
+        let next = if backwards {
+            index.checked_sub(1)
+        } else {
+            index
+                .checked_add(1)
+                .filter(|next| *next < self.parameter_list.rows.len())
+        };
+        let Some(next) = next else {
+            cx.propagate();
+            return;
+        };
+        self.parameter_list
+            .scroll
+            .scroll_to_item(next, gpui::ScrollStrategy::Top);
+        self.parameter_list.pending_focus = Some(next);
+        cx.notify();
+    }
+
+    /// The scrollable parameter body shared by large hosted editors.
+    pub(crate) fn parameter_list(
+        &mut self,
+        descriptors: std::sync::Arc<Vec<ParamDescriptor>>,
+        target_for: impl Fn(ParamId) -> ParamTarget + Copy + 'static,
+        id_prefix: &'static str,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        if self.parameter_list.rows.len() != descriptors.len() {
+            self.parameter_list = ParameterListState {
+                scroll: Default::default(),
+                rows: std::sync::Arc::new(
+                    (0..descriptors.len()).map(|_| cx.focus_handle()).collect(),
+                ),
+                pending_focus: None,
+            };
+        }
+        let rows = self.parameter_list.rows.clone();
+        gpui::uniform_list(
+            "pw-body",
+            descriptors.len(),
+            cx.processor(move |app, range: std::ops::Range<usize>, window, cx| {
+                if let Some(next) = app.parameter_list.pending_focus
+                    && range.contains(&next)
+                {
+                    app.parameter_list.pending_focus = None;
+                    let focus = rows[next].clone();
+                    // Defer until this render pass has installed the destination in tab order.
+                    // Its row anchor is not a tab stop; advance to the actual control inside it.
+                    window.defer(cx, move |window, _| {
+                        window.focus(&focus);
+                        window.focus_next();
+                    });
+                }
+                let controls =
+                    app.param_controls(&descriptors[range.clone()], target_for, id_prefix, cx);
+                range
+                    .zip(controls)
+                    .map(|(index, control)| {
+                        div()
+                            .id(("parameter-row", index))
+                            .track_focus(&rows[index])
+                            .tab_index(0)
+                            .tab_stop(false)
+                            .pb_1()
+                            .child(control)
+                            .on_action(cx.listener(
+                                move |app, _: &crate::actions::FocusNextPane, _, cx| {
+                                    app.focus_parameter_row(index, false, cx);
+                                },
+                            ))
+                            .on_action(cx.listener(
+                                move |app, _: &crate::actions::FocusPreviousPane, _, cx| {
+                                    app.focus_parameter_row(index, true, cx);
+                                },
+                            ))
+                    })
+                    .collect()
+            }),
+        )
+        .track_scroll(self.parameter_list.scroll.clone())
+        .debug_selector(|| "pw-body".into())
+        .flex_1()
+        .min_h_0()
+        .p_2()
+        .into_any_element()
+    }
+
+    /// Builds controls for a slice of a plugin's parameters.
     ///
     /// `target_for` turns a parameter index into the routing enum, which is what lets the same
     /// code drive an instrument, a track effect and a master effect.
