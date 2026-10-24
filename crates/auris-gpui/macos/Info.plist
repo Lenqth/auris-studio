@@ -27,9 +27,9 @@
     <string>6.0</string>
     <!-- Both rewritten at release time; the values here are what a local bundle gets. -->
     <key>CFBundleShortVersionString</key>
-    <string>0.10.0</string>
+    <string>0.11.0</string>
     <key>CFBundleVersion</key>
-    <string>0.10.0</string>
+    <string>0.11.0</string>
     <!-- Matches Cargo's deployment target and the shipped Core ML ONNX Runtime. -->
     <key>LSMinimumSystemVersion</key>
     <string>13.4</string>

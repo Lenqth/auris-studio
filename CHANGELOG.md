@@ -7,6 +7,46 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.11.0 — 2026-10-24
+
+### Agent backends and conversations
+
+* **Use installed OpenCode and Antigravity CLI models.** Discover their models alongside
+  Codex, Claude Code and configured API providers, and edit the live, unsaved song through
+  the existing permission and Undo paths. Each CLI has its own executable-path setting.
+* **Queue follow-up messages and interrupt with priority requests.** Queued text, references
+  and selection context survive conversation restoration, paused until resumed. Requests
+  are checkpointed before model work so interrupted turns retain their intent.
+* **Follow ongoing work in readable history.** Conversation rows expose current activity,
+  clearer tool details and progress without repeating metadata as messages.
+* **Edit the shared system prompt in Settings.** Multiline instructions apply across agent
+  backends, with an explicit Apply action and reset to the default. Independent approval
+  reviews retain their separate instructions.
+
+### Composition and audio materials
+
+* **Retain a conversation's production record.** Keep musical intent, roles, motifs and
+  decisions alongside attributed tool observations. Revision-bound evidence makes stale
+  measurements distinguishable from checks of the current document.
+* **Compare exact composition candidates before adoption.** Experimental tools retain an
+  immutable baseline and alternatives, preview the same range, protect selected phrases and
+  apply the chosen snapshot in one Undo edit. Scoped pitch and cadence variations preserve
+  protected notes. Candidate tools and modular composition workflows remain opt-in.
+* **Arrange around explicitly selected foreground clips.** Backing generation reads selected
+  written notes, clip windows and loops while preserving protected and unselected clips.
+  Full-song vocal guidance covers later verses, choruses and endings, with coverage checks.
+* **Find and process audio materials.** Agents can search Wikimedia Commons, import direct
+  audio URLs and retain source hashes and attributed creator/license metadata. Clip trimming
+  and reversal create new audio while preserving the original source and supporting Undo.
+  Recorded provenance does not verify usage rights or musical suitability.
+
+### Plugin editors and compatibility
+
+* **Navigate large plugin parameter lists efficiently.** Editors with thousands of parameters,
+  including Vital, render visible rows and retain scrolling and keyboard navigation across
+  the entire list.
+* Projects continue to use format 32. Platform requirements are unchanged from v0.10.0.
+
 ## 0.10.0 — 2026-10-24
 
 ### Installation and updates
