@@ -16,6 +16,7 @@ def suite(root: Path, *, success=True, model="model"):
         "backend": "codex",
         "split": "development",
         "repetitions": 1,
+        "selected_cases": ["loop_title"],
         "trials": [
             {
                 "id": "loop_title-01",
@@ -81,3 +82,13 @@ def test_pair_order_is_reproducible_and_does_not_modify_sources(tmp_path):
     assert json.loads((before / "suite.json").read_text())["trials"][0][
         "transport_pass"
     ]
+
+
+def test_matching_but_incomplete_cohorts_cannot_hide_interrupted_runs(tmp_path):
+    before, after = tmp_path / "before", tmp_path / "after"
+    for root in [before, after]:
+        data = suite(root)
+        data["repetitions"] = 2
+        quality.write_json(root / "suite.json", data)
+    with pytest.raises(ValueError, match="Incomplete trial cohorts"):
+        quality.pairs(before, after, 42)

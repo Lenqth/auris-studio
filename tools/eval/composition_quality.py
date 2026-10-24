@@ -208,6 +208,25 @@ def pairs(before: Path, after: Path, seed: int) -> list[dict]:
     for field in ["manifest_sha256", "model", "backend", "split", "repetitions"]:
         if left[field] != right[field]:
             raise ValueError(f"Comparison conditions differ: {field}")
+    for suite in [left, right]:
+        selected = suite.get("pilot_selection", {}).get(
+            "cases", suite.get("selected_cases")
+        )
+        if selected is None:
+            selected = [
+                case["id"]
+                for case in suite["manifest"]["cases"]
+                if case["split"] == suite["split"]
+            ]
+        expected = {
+            f"{case}-{repetition:02}"
+            for case in selected
+            for repetition in range(1, suite["repetitions"] + 1)
+        }
+        if not expected or expected != {trial["id"] for trial in suite["trials"]}:
+            raise ValueError(
+                "Incomplete trial cohorts; collect or explicitly record every selected trial"
+            )
     lookup = {trial["id"]: trial for trial in right["trials"]}
     if len(lookup) != len(right["trials"]) or len(
         {t["id"] for t in left["trials"]}
