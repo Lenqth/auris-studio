@@ -377,6 +377,9 @@ pub mod architecture {
     //! text is restored through the shared transcript; CLI session identifiers are never reused.
     //! The desktop executes [`live_agent::Command`](crate::live_agent::Command) against the
     //! currently open session, so changes appear immediately and remain unsaved and undoable.
+    //! An agent's `set_loop` records both the region and its enabled state in that request's
+    //! Undo group. Human transport toggles remain unrecorded listening choices; the agent must
+    //! not use that toggle path, which synchronizes the switch across earlier history snapshots.
     //! The host brackets each user request with `begin_agent_request`/`end_agent_request`.
     //! Synchronous commands and worker publication tag the ordinary history while they execute;
     //! adjacent edits with that tag share one snapshot. No gesture stays open while the model

@@ -150,9 +150,12 @@ which returns structured toolbox requests without executing them. Auris checks
 all requested tool names and object shapes before dispatch, validates and executes
 each call through the common ToolHost, and sends
 the results back to the same CLI conversation. All document edits therefore use
-the ordinary live permissions and Undo. Repeated identical tool failures stop the
-turn. Native CLI shell/file/browser/subagent tools are unavailable; no permission
-bypass flag is used.
+the ordinary live permissions and Undo. The text catalog retains parameter units,
+examples and field descriptions. Continuation messages distinguish host instructions
+from untrusted tool results and explicitly request an empty call list when finished.
+Repeated identical tool failures or three consecutive identical request/result
+batches stop the turn without reverting earlier edits. Native CLI
+shell/file/browser/subagent tools are unavailable; no permission bypass flag is used.
 
 Text references and local audio measurements are supported. Image attachments are
 refused before submission, retaining the draft for another backend. Structured
@@ -178,6 +181,21 @@ cargo test -p auris-agent installed_antigravity_returns_structured_tool_requests
 ```
 
 It requests one structured `add_track` call without executing it or opening a song.
+
+The broader opt-in suite uses the signed-in CLI and real inference:
+
+```sh
+cargo test -p auris-agent installed_antigravity_ -- --ignored --nocapture --test-threads=1
+```
+
+It composes a disposable four-bar melody/bass/drum arrangement, reads back notes and
+harmony, edits pitch/performance/mixer controls, and verifies request-level Undo/Redo.
+It tests sound selection, track renaming, clip copying and playback loops, then
+renders and measures an eight-second WAV, exports MIDI, submits text/audio
+references, restores conversation history in a replacement worker, tests denied and
+cancelled edits, and checks model discovery and independent approval/denial reviews.
+Outputs and conversation files live in temporary directories; no saved song is opened.
+These checks require the `gemini-3.8-flash-low` model and consume inference credits.
 
 ## Runtime boundary
 
