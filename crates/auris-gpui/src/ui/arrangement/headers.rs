@@ -527,6 +527,9 @@ impl AurisApp {
                                                 .debug_selector(move || {
                                                     format!("voice-badge-{index}")
                                                 })
+                                                .flex()
+                                                .items_center()
+                                                .gap_1()
                                                 .text_xs()
                                                 .max_w(px(120.0))
                                                 .truncate()
@@ -541,11 +544,21 @@ impl AurisApp {
                                                 // The mark goes *before* the name: the label
                                                 // truncates from the right, and a warning that
                                                 // only long names hide is no warning at all.
-                                                .child(match (singing, behind) {
-                                                    (true, _) => format!("… ♪ {voice}"),
-                                                    (false, true) => format!("! ♪ {voice}"),
-                                                    (false, false) => format!("♪ {voice}"),
-                                                }),
+                                                .when(singing, |badge| {
+                                                    badge.child(
+                                                        crate::ui::widgets::activity_indicator(
+                                                            "track-synthesis-activity",
+                                                            theme.accent_text,
+                                                        ),
+                                                    )
+                                                })
+                                                .child(div().min_w_0().truncate().child(
+                                                    match (singing, behind) {
+                                                        (true, _) => format!("♪ {voice}"),
+                                                        (false, true) => format!("! ♪ {voice}"),
+                                                        (false, false) => format!("♪ {voice}"),
+                                                    },
+                                                )),
                                         )
                                     }),
                             )
@@ -828,6 +841,10 @@ mod tests {
             assert!(
                 cx.debug_bounds(badge_selector).is_some(),
                 "the voice and state are drawn together"
+            );
+            assert_eq!(
+                cx.debug_bounds("track-synthesis-activity").is_some(),
+                running
             );
         }
         app.update(cx, |this, _| this.auto_sing = None);

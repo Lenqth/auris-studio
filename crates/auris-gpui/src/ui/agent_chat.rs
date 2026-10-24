@@ -25,8 +25,8 @@ use crate::ui::icons::{Icon, icon};
 use crate::ui::scrollbars::ScrollPanel;
 use crate::ui::text_field::TextField;
 use crate::ui::widgets::{
-    ButtonState, ButtonStyle, bounded_button_enabled, bounded_picker_label, button, button_enabled,
-    disclosure, menu_picker,
+    ButtonState, ButtonStyle, activity_indicator, bounded_button_enabled, bounded_picker_label,
+    button, button_enabled, disclosure, menu_picker,
 };
 
 #[cfg(test)]
@@ -3427,7 +3427,11 @@ impl AurisApp {
     /// the window is, because a bar with an invented ceiling would be a number wearing a lie.
     fn agent_status_row(&self, theme: &Theme) -> AnyElement {
         let ratio = self.agent_chat.context_ratio();
-        let phase = if self.agent_chat.controls.compacting {
+        let phase = if self.agent_chat.pending_send.is_some()
+            || self.agent_chat.conversations.changing_conversation()
+        {
+            Key::AgentConversationsLoading
+        } else if self.agent_chat.controls.compacting {
             Key::AgentCompacting
         } else if self.agent_chat.controls.review.is_some() {
             Key::AgentReviewing
@@ -3443,23 +3447,28 @@ impl AurisApp {
                 AgentPhase::Tool => Key::AgentPhaseTool,
             }
         };
-        let active = self.agent_chat.busy || self.agent_chat.controls.compacting;
-        let mut counters = div().flex().items_center().gap_2().min_w_0().child(
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .child(
-                    div()
-                        .text_color(if active {
-                            theme.accent
-                        } else {
-                            theme.text_faint
-                        })
-                        .child("●"),
-                )
-                .child(self.t(phase)),
-        );
+        let active = (self.agent_chat.busy && self.agent_chat.controls.pending.is_none())
+            || self.agent_chat.controls.compacting
+            || self.agent_chat.controls.review.is_some()
+            || self.agent_chat.pending_send.is_some()
+            || self.agent_chat.conversations.changing_conversation();
+        let mut counters = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_2()
+            .min_w_0()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .when(active, |row| {
+                        row.child(activity_indicator("agent-activity", theme.accent_text))
+                    })
+                    .text_color(theme.text_muted)
+                    .child(self.t(phase)),
+            );
         if let Some(rate) = self.agent_chat.speed.rate().filter(|_| active) {
             counters = counters.child(format!("{:>3.0} tok/s", rate.max(1.0)));
         }

@@ -2060,6 +2060,8 @@ new のオプション
     AgentBackToConversation { en: "Back to conversation", ja: "会話に戻る" }
     AgentSearchConversations { en: "Search conversation titles", ja: "会話名を検索" }
     AgentArchivedConversations { en: "Archived", ja: "アーカイブ済み" }
+    AgentRecentConversations { en: "Recent", ja: "最近の会話" }
+    AgentCurrentConversation { en: "Current", ja: "現在の会話" }
     AgentArchiveConversation { en: "Archive", ja: "アーカイブ" }
     AgentRestoreConversation { en: "Restore", ja: "一覧に戻す" }
     AgentRenameConversation { en: "Rename conversation", ja: "会話名の変更" }

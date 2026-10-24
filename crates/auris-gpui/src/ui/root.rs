@@ -1219,6 +1219,12 @@ impl AurisApp {
                                 } else {
                                     theme.text_muted
                                 })
+                                .when(!finished, |row| {
+                                    row.child(crate::ui::widgets::activity_indicator(
+                                        "export-activity",
+                                        theme.accent_text,
+                                    ))
+                                })
                                 .child(div().flex_1().min_w_0().truncate().child(message))
                                 .child(
                                     div()
