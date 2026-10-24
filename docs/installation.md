@@ -32,6 +32,11 @@ uninstall it. Uninstall removes the files and the `PATH` entry added by the inst
 and user settings are not installation files and remain available. The portable ZIP still runs
 without installation when its folder is kept intact.
 
+Windows v0.10.0 and v0.11.0 need one manual upgrade to v0.11.1 or later: download and run the
+new setup file from the release page. Their update helper can crash before the installer starts,
+so **Restart and Update** cannot install its own repair. The newer installer replaces the helper
+for subsequent automatic updates.
+
 The installer is currently unsigned. Windows SmartScreen may require **More info → Run anyway**
 after the publisher and download source have been checked.
 

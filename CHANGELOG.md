@@ -7,6 +7,21 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.11.1 — 2026-10-25
+
+### Automatic updates
+
+* **Fix Windows updates stopping before installation.** The update helper no longer exits
+  with a stack overflow before it can verify and install a downloaded package.
+* Test the actual helper process in debug and release builds. Windows release packaging also
+  checks that the shipped helper replaces an older executable through the real installer.
+* **Windows v0.10.0 and v0.11.0 require one manual upgrade.** Download and run
+  `auris-studio-v0.11.1-windows-x86_64-setup.exe` from this release. Their existing helper can
+  crash before installation, so Restart and Update cannot install its own repair. Later
+  updates use the repaired helper installed by this version.
+
+Project format and minimum platform requirements are unchanged from v0.11.0.
+
 ## 0.11.0 — 2026-10-24
 
 ### Agent backends and conversations
