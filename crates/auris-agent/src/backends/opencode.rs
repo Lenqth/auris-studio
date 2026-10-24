@@ -712,6 +712,11 @@ async fn conversation(
             continue;
         }
         let (said, attachments) = crate::parse_say(&line)?;
+        bridge.checkpoint_turn(
+            generation.as_mut(),
+            &memory,
+            wire["display"].as_str().unwrap_or(&said),
+        );
         let policy_context =
             serde_json::from_value::<auris_session::agent_policy::Policy>(wire["policy"].clone())
                 .map(|policy| crate::toolbox::live_agent::permission_context(&policy))
@@ -1274,7 +1279,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn replacement_worker_replays_memory_once_and_persists_display_text() {
+    async fn replacement_worker_replays_memory_once_and_checkpoints_display_text() {
         tokio::time::timeout(Duration::from_secs(5), async {
             let root = working_directory().unwrap();
             let path = root.path().join("memory.json");
@@ -1293,6 +1298,8 @@ mod tests {
                     let prompt: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                     let text = prompt["params"]["prompt"][0]["text"].as_str().unwrap();
                     assert_eq!(text.contains("Remember the melody"), index == 0);
+                    let pending = memory::Memory::load(&path).unwrap();
+                    assert_eq!(pending.turns.last().unwrap().user, if index == 0 { "First display" } else { "Second request" });
                     reply(&mut writer, notification(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("Response {index}")}}))).await;
                     reply(&mut writer, json!({"jsonrpc":"2.0","id":prompt["id"],"result":{"stopReason":"end_turn"}})).await;
                 }

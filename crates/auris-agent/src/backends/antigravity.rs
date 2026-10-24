@@ -559,6 +559,11 @@ async fn conversation(
             continue;
         }
         let (said, paths) = crate::parse_say(&line)?;
+        bridge.checkpoint_turn(
+            generation.as_mut(),
+            &memory,
+            wire["display"].as_str().unwrap_or(&said),
+        );
         crate::validate_attachments(prefs, &paths.iter().map(PathBuf::from).collect::<Vec<_>>())?;
         let policy =
             serde_json::from_value::<auris_session::agent_policy::Policy>(wire["policy"].clone())
@@ -691,6 +696,51 @@ mod tests {
                 .iter()
                 .all(|name| ToolHost::contains(name.as_str().unwrap()))
         );
+    }
+
+    #[tokio::test]
+    async fn conversation_checkpoints_the_pending_request_before_cli_work() {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("memory.json");
+            let (bridge, commands, _events) = crate::worker::test_bridge();
+            let (client, server) = tokio::io::duplex(32768);
+            let (reader, writer) = tokio::io::split(client);
+            let mut cli = Cli::transport(None, writer, reader, "auris-fixture".into());
+            commands
+                .send(
+                    json!({"say":"Add drums", "display":"Keep the melody; add drums"}).to_string(),
+                )
+                .unwrap();
+            let peer = async {
+                let (reader, mut writer) = tokio::io::split(server);
+                let mut lines = BufReader::new(reader).lines();
+                lines.next_line().await.unwrap().unwrap();
+                let pending = memory::Memory::load(&path).unwrap();
+                assert_eq!(
+                    pending.turns.last().map(|turn| turn.user.as_str()),
+                    Some("Keep the melody; add drums")
+                );
+                reply(
+                    &mut writer,
+                    json!({"event":"init","init":{"agent":"auris-fixture"}}),
+                )
+                .await;
+                reply(&mut writer, result(json!({"text":"Done", "calls":[]}))).await;
+                drop(commands);
+            };
+            let prefs = AgentPreferences::default();
+            let (result, ()) = tokio::join!(
+                conversation(&mut cli, &prefs, &bridge, Some(path.clone()), false, None),
+                peer
+            );
+            result.unwrap();
+            let saved = memory::Memory::load(&path).unwrap();
+            assert_eq!(saved.turns.len(), 1);
+            assert_eq!(saved.turns[0].answer, "Done");
+        })
+        .await
+        .unwrap();
     }
 
     #[tokio::test]

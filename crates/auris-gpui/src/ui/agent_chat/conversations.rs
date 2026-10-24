@@ -218,6 +218,12 @@ impl AurisApp {
             attachments: self.agent_chat.attachments.clone(),
             scroll_y: self.agent_chat.scroll.offset().y.into(),
             interrupted: self.agent_chat.busy,
+            queued: self
+                .agent_chat
+                .queued
+                .iter()
+                .map(|entry| entry.message.clone())
+                .collect(),
         })
     }
 
@@ -447,6 +453,7 @@ impl AurisApp {
                                 || old.draft != snapshot.draft
                                 || old.attachments != snapshot.attachments
                                 || old.interrupted != snapshot.interrupted
+                                || old.queued != snapshot.queued
                                 || (old.scroll_y - snapshot.scroll_y).abs() > 1.0
                         })
                 {
@@ -496,6 +503,14 @@ impl AurisApp {
                 .push(ChatEntry::Note(Key::AgentConversationInterrupted));
         }
         self.agent_chat.input = TextField::new(conversation.transcript.draft.clone());
+        self.agent_chat.queued = conversation
+            .transcript
+            .queued
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect();
+        self.agent_chat.queue_paused = !self.agent_chat.queued.is_empty();
         self.agent_chat.attachments = restorable_attachments(
             &conversation.transcript.attachments,
             &self.agent_chat.attached_here,
@@ -716,11 +731,11 @@ impl AurisApp {
             .p_2()
             .border_b_1()
             .border_color(theme.border)
-            .child(button(
+            .child(bounded_button_enabled(
                 "agent-conversations-back",
                 self.t(Key::AgentBackToConversation),
                 ButtonStyle::Ghost,
-                false,
+                ButtonState::available(false, true),
                 theme.accent,
                 &theme,
                 cx.listener(|this, _, _, cx| {
@@ -730,11 +745,14 @@ impl AurisApp {
                     cx.notify();
                 }),
             ))
-            .child(button(
+            .child(bounded_button_enabled(
                 "agent-conversations-new",
                 self.t(Key::AgentNewConversation),
                 ButtonStyle::Normal,
-                false,
+                ButtonState::available(
+                    false,
+                    !self.agent_chat.conversations.changing_conversation(),
+                ),
                 theme.accent,
                 &theme,
                 cx.listener(|this, _, _, cx| {
@@ -809,12 +827,21 @@ impl AurisApp {
                     )),
             );
         }
-        if self.agent_chat.conversations.pending.is_some() {
+        if self.agent_chat.conversations.pending.is_some()
+            && !matches!(self.agent_chat.conversations.retry, Some(Operation::Save))
+        {
             body = body.child(
                 div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
                     .px_2()
                     .text_xs()
                     .text_color(theme.text_muted)
+                    .child(activity_indicator(
+                        "conversation-loading-activity",
+                        theme.accent_text,
+                    ))
                     .child(self.t(Key::AgentConversationsLoading)),
             );
         }
@@ -844,20 +871,49 @@ impl AurisApp {
                 cx,
             );
             let archived = self.agent_chat.conversations.archived;
-            body = body.child(div().p_2().child(search)).child(button(
-                "agent-conversations-archived",
-                self.t(Key::AgentArchivedConversations),
-                ButtonStyle::Ghost,
-                archived,
-                theme.accent,
-                &theme,
-                cx.listener(|this, _, _, cx| {
-                    this.agent_chat.conversations.archived =
-                        !this.agent_chat.conversations.archived;
-                    this.agent_chat.conversations.selected = None;
-                    cx.notify();
-                }),
-            ));
+            body = body.child(div().px_2().pt_2().child(search)).child(
+                div()
+                    .flex()
+                    .items_center()
+                    .flex_wrap()
+                    .gap_1()
+                    .px_2()
+                    .py_2()
+                    .child(button(
+                        "agent-conversations-recent",
+                        self.t(Key::AgentRecentConversations),
+                        ButtonStyle::Ghost,
+                        !archived,
+                        theme.accent_soft,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.agent_chat.conversations.archived = false;
+                            this.agent_chat.conversations.selected = None;
+                            this.agent_chat
+                                .conversations
+                                .scroll
+                                .set_offset(gpui::point(px(0.0), px(0.0)));
+                            cx.notify();
+                        }),
+                    ))
+                    .child(button(
+                        "agent-conversations-archived",
+                        self.t(Key::AgentArchivedConversations),
+                        ButtonStyle::Ghost,
+                        archived,
+                        theme.accent_soft,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.agent_chat.conversations.archived = true;
+                            this.agent_chat.conversations.selected = None;
+                            this.agent_chat
+                                .conversations
+                                .scroll
+                                .set_offset(gpui::point(px(0.0), px(0.0)));
+                            cx.notify();
+                        }),
+                    )),
+            );
             let infos: Vec<_> = self
                 .agent_chat
                 .conversations
@@ -871,6 +927,7 @@ impl AurisApp {
                 .flex()
                 .flex_col()
                 .flex_1()
+                .min_w_0()
                 .min_h_0()
                 .overflow_y_scroll()
                 .track_scroll(&self.agent_chat.conversations.scroll);
@@ -896,27 +953,39 @@ impl AurisApp {
                 let menu_id = id.clone();
                 let active = self.agent_chat.conversations.active_id() == Some(&id);
                 let title = conversation_title(&info, self.language());
+                let running =
+                    active && self.agent_chat.busy && self.agent_chat.controls.pending.is_none();
                 let status = if active && self.agent_chat.controls.pending.is_some() {
                     self.t(Key::AgentAwaitingApproval)
                 } else if active && self.agent_chat.busy {
                     self.t(Key::AgentWorking)
+                } else if active {
+                    self.t(Key::AgentCurrentConversation)
                 } else {
                     ""
                 };
                 list = list.child(
                     div()
+                        .id(gpui::SharedString::from(format!(
+                            "conversation-row-{}",
+                            info.id
+                        )))
+                        .debug_selector(move || format!("conversation-row-{index}"))
                         .flex()
                         .items_center()
                         .gap_1()
-                        .px_2()
-                        .border_b_1()
-                        .border_color(theme.border_subtle)
+                        .mx_2()
+                        .mb_1()
+                        .min_w_0()
+                        .rounded(Metrics::RADIUS_SM)
+                        .when(index == selected, |row| row.bg(theme.accent_soft))
+                        .hover(|row| row.bg(theme.surface_hover))
                         .child(
                             button(
                                 ("agent-conversation-open", index),
                                 "",
                                 ButtonStyle::Ghost,
-                                index == selected,
+                                false,
                                 theme.accent,
                                 &theme,
                                 cx.listener(move |this, _, _, cx| {
@@ -928,25 +997,72 @@ impl AurisApp {
                             .min_w_0()
                             .h_auto()
                             .py_2()
+                            .overflow_hidden()
+                            .tooltip(crate::ui::tooltip::keyed_tip(title.clone(), "", &theme))
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .flex_1()
                                     .min_w_0()
-                                    .child(div().text_xs().text_color(theme.text).child(title))
+                                    .gap_1()
                                     .child(
                                         div()
-                                            .text_xs()
-                                            .text_color(theme.text_muted)
-                                            .child(info.preview),
+                                            .flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .min_w_0()
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .text_sm()
+                                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                                    .text_color(theme.text)
+                                                    .truncate()
+                                                    .child(title),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex_shrink_0()
+                                                    .text_xs()
+                                                    .text_color(theme.text_muted)
+                                                    .child(relative_time(
+                                                        info.updated_at,
+                                                        self.language(),
+                                                    )),
+                                            ),
                                     )
-                                    .child(div().text_xs().text_color(theme.text_faint).child(
-                                        format!(
-                                            "{} {}",
-                                            relative_time(info.updated_at, self.language()),
-                                            status
-                                        ),
-                                    )),
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap_1()
+                                            .min_w_0()
+                                            .when(running, |row| {
+                                                row.child(activity_indicator(
+                                                    "conversation-activity",
+                                                    theme.accent_text,
+                                                ))
+                                            })
+                                            .child(
+                                                div()
+                                                    .min_w_0()
+                                                    .text_xs()
+                                                    .text_color(theme.text_muted)
+                                                    .truncate()
+                                                    .child(if !status.is_empty() {
+                                                        status.to_owned()
+                                                    } else if info.preview.is_empty() {
+                                                        " ".into()
+                                                    } else {
+                                                        info.preview
+                                                            .split_whitespace()
+                                                            .collect::<Vec<_>>()
+                                                            .join(" ")
+                                                    }),
+                                            ),
+                                    ),
                             ),
                         )
                         .child(
@@ -962,6 +1078,7 @@ impl AurisApp {
                                     cx.notify();
                                 }),
                             )
+                            .flex_shrink_0()
                             .tooltip(crate::ui::tooltip::keyed_tip(
                                 self.t(Key::AgentConversationActions),
                                 "",
@@ -1185,6 +1302,171 @@ mod tests {
             std::thread::yield_now();
         }
         paint(app, cx);
+    }
+
+    #[gpui::test]
+    fn unsent_queue_is_scoped_to_its_conversation_and_restores_paused(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        paint(&app, cx);
+        settle(&app, cx);
+        let original = app.update(cx, |this, _| {
+            this.agent_chat.queued.push_back(
+                auris_session::conversations::QueuedMessage {
+                    text: "Keep this unsent request".into(),
+                    ..Default::default()
+                }
+                .into(),
+            );
+            this.agent_chat
+                .conversations
+                .active_id()
+                .unwrap()
+                .to_owned()
+        });
+        app.update(cx, |this, cx| this.start_new_agent_conversation(cx));
+        settle(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.agent_chat.queued.is_empty()));
+        app.update(cx, |this, _| this.show_conversation(original));
+        settle(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.agent_chat.queued.front().unwrap().text,
+                "Keep this unsent request"
+            );
+            assert!(this.agent_chat.queue_paused);
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn activity_marks_distinguish_work_approval_and_completion(cx: &mut gpui::TestAppContext) {
+        // GPUI 0.2.2 retains old debug bounds when recycling frames. Use a fresh window per
+        // state so absence checks cannot see a spinner from an earlier frame.
+        for (busy, approval) in [(true, false), (true, true), (false, false)] {
+            let (app, cx) = open(cx);
+            app.update(cx, |this, _| {
+                this.panels.show(crate::dock::Panel::Agent);
+                this.agent_chat.models_loaded = true;
+            });
+            paint(&app, cx);
+            settle(&app, cx);
+            app.update(cx, |this, _| {
+                this.agent_chat.busy = busy;
+                this.agent_chat.phase = if busy {
+                    AgentPhase::Thinking
+                } else {
+                    AgentPhase::Idle
+                };
+                this.agent_chat.tokens_out = 1;
+                if busy && !approval {
+                    let track = this.session.add_singer_track("Rendering voice");
+                    this.auto_sing = Some(crate::app::AutoSing {
+                        track,
+                        fingerprint: 0,
+                        cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                        checked: 0,
+                    });
+                }
+                if approval {
+                    this.settings.agent.policy = auris_session::agent_policy::Policy::default();
+                    this.settings.agent.policy.mode = auris_session::agent_policy::Mode::Edit;
+                    this.agent_permission(
+                        7,
+                        "search_internet".into(),
+                        serde_json::json!({"query":"fixture"}),
+                    );
+                    assert!(this.agent_chat.controls.pending.is_some());
+                }
+            });
+            paint(&app, cx);
+            assert_eq!(
+                cx.debug_bounds("agent-activity").is_some(),
+                busy && !approval
+            );
+            assert_eq!(
+                cx.debug_bounds("synthesis-activity").is_some(),
+                busy && !approval
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn conversation_rows_keep_long_previews_and_actions_inside_a_narrow_panel(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        paint(&app, cx);
+        settle(&app, cx);
+        app.update(cx, |this, _| {
+            let info = this
+                .agent_chat
+                .conversations
+                .active
+                .as_ref()
+                .unwrap()
+                .info
+                .clone();
+            let mut long = info.clone();
+            long.id = "long-preview".into();
+            long.title = "歌声の表情を調整してサビの伴奏とバランスを整える".repeat(8);
+            long.preview = "長いプレビュー\n次の行\n".repeat(40);
+            this.agent_chat.conversations.list = vec![info, long];
+            this.agent_chat.conversations.showing_list = true;
+            this.focus_agent_field(AgentField::ConversationSearch);
+            this.panels
+                .set_size(crate::dock::Dock::Right, crate::dock::PanelLayout::MIN_SIDE);
+        });
+        for (scheme, language, font_size) in [
+            ("midnight", auris_i18n::Language::English, 16.0),
+            ("daylight", auris_i18n::Language::Japanese, 24.0),
+        ] {
+            app.update(cx, |this, _| {
+                this.theme = crate::theme::Theme::named(scheme);
+                this.language = language;
+            });
+            cx.update(|window, _| window.set_rem_size(px(font_size)));
+            crate::harness::resize(&app, cx, gpui::size(px(720.0), px(720.0)));
+            let panel = cx.debug_bounds("agent-conversation-browser").unwrap();
+            let short = cx.debug_bounds("conversation-row-0").unwrap();
+            let long = cx.debug_bounds("conversation-row-1").unwrap();
+            assert_eq!(
+                short.size.height, long.size.height,
+                "preview length must not change row height"
+            );
+            for selector in ["agent-conversation-open-1", "agent-conversation-menu-1"] {
+                let control = cx.debug_bounds(selector).unwrap();
+                assert!(
+                    control.left() >= panel.left() && control.right() <= panel.right(),
+                    "{selector}: {control:?} outside {panel:?}"
+                );
+                assert!(control.size.width > px(0.0));
+            }
+        }
+        cx.simulate_keystrokes("down");
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.agent_chat.conversations.selected.as_deref(),
+                Some("long-preview")
+            );
+        });
+        click("agent-conversations-archived", cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.conversations.archived)
+        });
+        click("agent-conversations-recent", cx);
+        paint(&app, cx);
+        assert!(cx.debug_bounds("conversation-row-1").is_some());
     }
 
     #[gpui::test]

@@ -768,6 +768,7 @@ dependencies = [
  "tempfile",
  "ureq",
  "url",
+ "windows 0.62.2",
 ]
 
 [[package]]

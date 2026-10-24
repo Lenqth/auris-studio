@@ -13,6 +13,83 @@ use crate::theme::{Metrics, Theme};
 use crate::ui::icons::{Icon, icon};
 use crate::ui::tooltip::keyed_tip;
 
+/// An indeterminate activity mark. Pair it with text naming the work in progress.
+/// The animation exists only while the caller renders this element.
+pub fn activity_indicator(id: impl Into<ElementId>, color: Hsla) -> gpui::AnyElement {
+    use gpui::{Animation, AnimationExt};
+
+    let id = id.into();
+    let selector = id.clone();
+    let mark = div()
+        .id(id)
+        .debug_selector(move || selector.to_string())
+        .size_3()
+        .flex_shrink_0();
+    if reduced_motion() {
+        return mark.child(activity_arc(0.0, color)).into_any_element();
+    }
+    mark.with_animation(
+        "activity-rotation",
+        Animation::new(std::time::Duration::from_millis(1000)).repeat(),
+        move |mark, phase| mark.child(activity_arc(phase, color)),
+    )
+    .into_any_element()
+}
+
+fn activity_arc(phase: f32, color: Hsla) -> impl IntoElement {
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            let side = bounds.size.width.min(bounds.size.height);
+            let radius = side * 0.38;
+            let center = bounds.center();
+            let mut path = gpui::PathBuilder::stroke(side * 0.12);
+            for step in 0..=24 {
+                let angle = (phase + step as f32 / 32.0) * std::f32::consts::TAU;
+                let point = center + point(radius * angle.cos(), radius * angle.sin());
+                if step == 0 {
+                    path.move_to(point);
+                } else {
+                    path.line_to(point);
+                }
+            }
+            if let Ok(path) = path.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .size_full()
+}
+
+fn reduced_motion() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+        };
+        use windows::core::BOOL;
+        let mut enabled = BOOL(1);
+        // SAFETY: This query writes one BOOL to a live, correctly sized local value.
+        let result = unsafe {
+            SystemParametersInfoW(
+                SPI_GETCLIENTAREAANIMATION,
+                0,
+                Some(std::ptr::from_mut(&mut enabled).cast()),
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+            )
+        };
+        result.is_ok() && !enabled.as_bool()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        false
+    }
+}
+
 /// A horizontal separator.
 pub fn divider(theme: &Theme) -> impl IntoElement + use<> {
     div().h(px(1.0)).w_full().bg(theme.border_subtle)

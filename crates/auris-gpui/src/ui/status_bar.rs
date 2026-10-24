@@ -18,7 +18,7 @@ use crate::dock::{Dock, Panel};
 use crate::theme::{Metrics, Theme};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::icons::icon;
-use crate::ui::widgets::{ButtonStyle, button};
+use crate::ui::widgets::{ButtonStyle, activity_indicator, button};
 
 /// Side of one switch, including the padding around its icon.
 const SWITCH_SIZE: Pixels = px(20.0);
@@ -63,6 +63,12 @@ impl AurisApp {
             .when(compact, |bar| {
                 bar.child(self.dock_switches(Dock::Left, SWITCH_SIZE, cx))
             })
+            .when(background_running, |bar| {
+                bar.child(activity_indicator(
+                    "background-command-activity",
+                    theme.accent_text,
+                ))
+            })
             .child(
                 div()
                     .flex_1()
@@ -79,6 +85,26 @@ impl AurisApp {
                     .truncate()
                     .text_color(theme.accent_text)
                     .child(download.message(self.language()))
+            }))
+            .children(self.auto_sing.as_ref().map(|job| {
+                let track = self
+                    .project()
+                    .track(job.track)
+                    .map_or("", |track| track.name.as_str());
+                div()
+                    .id("synthesis-status")
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .min_w_0()
+                    .max_w_64()
+                    .text_color(theme.accent_text)
+                    .child(activity_indicator("synthesis-activity", theme.accent_text))
+                    .child(
+                        div()
+                            .truncate()
+                            .child(format!("{} · {track}", self.t(Key::TakeRendering))),
+                    )
             }))
             .children(background_fraction.map(|fraction| {
                 div()

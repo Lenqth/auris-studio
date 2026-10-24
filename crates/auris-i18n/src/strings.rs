@@ -2065,6 +2065,8 @@ new のオプション
     AgentBackToConversation { en: "Back to conversation", ja: "会話に戻る" }
     AgentSearchConversations { en: "Search conversation titles", ja: "会話名を検索" }
     AgentArchivedConversations { en: "Archived", ja: "アーカイブ済み" }
+    AgentRecentConversations { en: "Recent", ja: "最近の会話" }
+    AgentCurrentConversation { en: "Current", ja: "現在の会話" }
     AgentArchiveConversation { en: "Archive", ja: "アーカイブ" }
     AgentRestoreConversation { en: "Restore", ja: "一覧に戻す" }
     AgentRenameConversation { en: "Rename conversation", ja: "会話名の変更" }
@@ -2090,6 +2092,20 @@ new のオプション
     AgentConversationDays { en: "{n} days ago", ja: "{n}日前" }
     AgentStop { en: "Stop", ja: "停止" }
     AgentSend { en: "Send", ja: "送信" }
+    AgentQueue { en: "Add to queue", ja: "キューに追加" }
+    AgentQueued { en: "Queued · {count}", ja: "送信待ち · {count}件" }
+    AgentQueuedAttachments { en: "{count} files", ja: "添付{count}件" }
+    AgentQueuePaused { en: "Queue paused · {count}", ja: "キュー停止中 · {count}件" }
+    AgentQueueResume { en: "Resume queue", ja: "キューを再開" }
+    AgentQueuePause { en: "Pause queue", ja: "キューを一時停止" }
+    AgentSendNow { en: "Send now", ja: "今すぐ送る" }
+    AgentSendNowHint { en: "Interrupt the current turn and send this message first", ja: "現在の処理を中断して、このメッセージを優先送信" }
+    AgentQueueEdit { en: "Edit queued message", ja: "送信待ちメッセージを編集" }
+    AgentQueueEditShort { en: "Edit", ja: "編集" }
+    AgentQueueRemove { en: "Remove from queue", ja: "キューから削除" }
+    AgentQueueHint { en: "Enter queues · Shift+Enter adds a line", ja: "Enterでキューに追加 · Shift+Enterで改行" }
+    AgentInterrupting { en: "Stopping the current turn…", ja: "現在の処理を中断中…" }
+    AgentQueueReattach { en: "Attach the reference files again before sending this saved message.", ja: "保存されたメッセージを送るには、参照ファイルをもう一度添付してください。" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }
     AgentDropFiles { en: "Drop images, text or audio here", ja: "画像・テキスト・音声をここにドロップ" }
     AgentComposerPlaceholder { en: "Ask about this song, or drop reference files…", ja: "この曲について相談、または参考ファイルをドロップ…" }

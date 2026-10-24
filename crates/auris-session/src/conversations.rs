@@ -100,6 +100,19 @@ pub enum ConversationContent {
     },
 }
 
+/// One user-authored message waiting to be submitted to an agent.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueuedMessage {
+    /// User-authored text waiting for its own turn.
+    pub text: String,
+    /// Explicit reference files; restoring paths does not grant permission to send them.
+    #[serde(default)]
+    pub attachments: Vec<PathBuf>,
+    /// Selection at submission time, using stable document IDs.
+    #[serde(default)]
+    pub selection_context: String,
+}
+
 /// Readable history and composer state; model context is stored separately.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ConversationTranscript {
@@ -118,6 +131,9 @@ pub struct ConversationTranscript {
     /// A turn was in progress when the latest snapshot was written.
     #[serde(default)]
     pub interrupted: bool,
+    /// Unsent messages, restored paused until the user resumes them.
+    #[serde(default)]
+    pub queued: Vec<QueuedMessage>,
 }
 
 /// One loaded conversation.
@@ -545,6 +561,27 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queued_messages_round_trip_without_becoming_sent_history() {
+        let old: ConversationTranscript =
+            serde_json::from_str(r#"{"revision":0,"messages":[],"draft":"old draft"}"#).unwrap();
+        assert!(old.queued.is_empty());
+        let dir = tempfile::tempdir().unwrap();
+        let store = ConversationStore::for_project(dir.path());
+        let mut conversation = store.create().unwrap();
+        conversation.transcript.queued.push(QueuedMessage {
+            text: "Keep the melody".into(),
+            attachments: vec![PathBuf::from("reference.png")],
+            selection_context: "{\"selected_tracks\":[2]}".into(),
+        });
+        store
+            .save(&conversation.info.id, &conversation.transcript)
+            .unwrap();
+        let restored = store.load(&conversation.info.id).unwrap();
+        assert_eq!(restored.transcript.queued, conversation.transcript.queued);
+        assert!(restored.transcript.messages.is_empty());
+    }
 
     #[test]
     fn user_messages_retain_attachment_metadata_and_read_text_only_history() {

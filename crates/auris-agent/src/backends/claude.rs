@@ -433,6 +433,11 @@ async fn conversation(
             continue;
         }
         let (said, attachments) = crate::parse_say(&line)?;
+        bridge.checkpoint_turn(
+            generation.as_mut(),
+            &memory,
+            wire["display"].as_str().unwrap_or(&said),
+        );
         let policy_context =
             serde_json::from_value::<auris_session::agent_policy::Policy>(wire["policy"].clone())
                 .map(|policy| crate::toolbox::live_agent::permission_context(&policy))
@@ -991,6 +996,8 @@ mod tests {
                     let prompt: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                     let text = prompt["message"]["content"].as_str().unwrap();
                     assert_eq!(text.contains("Remember the old request"), index == 0);
+                    let checkpoint = memory::Memory::load(&path).unwrap();
+                    assert!(checkpoint.turns.last().unwrap().answer.contains("no final answer was recorded"));
                     reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":format!("Response {index}")})).await;
                 }
                 drop(commands);

@@ -155,13 +155,22 @@ impl AurisApp {
         rows.push(
             div()
                 .debug_selector(|| "singer-status".into())
+                .flex()
+                .items_center()
+                .gap_2()
                 .text_xs()
                 .text_color(if failure.is_some() && !rendering {
                     theme.danger
                 } else {
                     theme.text_muted
                 })
-                .child(state)
+                .when(rendering, |row| {
+                    row.child(crate::ui::widgets::activity_indicator(
+                        "singer-activity",
+                        theme.accent_text,
+                    ))
+                })
+                .child(div().min_w_0().child(state))
                 .into_any_element(),
         );
         if info.is_some() && !rendering && !queued {

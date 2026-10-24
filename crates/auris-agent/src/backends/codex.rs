@@ -476,6 +476,11 @@ async fn conversation(
             continue;
         }
         let (said, attachments) = crate::parse_say(&line)?;
+        bridge.checkpoint_turn(
+            generation.as_mut(),
+            &memory,
+            wire["display"].as_str().unwrap_or(&said),
+        );
         let policy_context =
             serde_json::from_value::<auris_session::agent_policy::Policy>(wire["policy"].clone())
                 .map(|policy| crate::toolbox::live_agent::permission_context(&policy))
@@ -787,10 +792,11 @@ mod tests {
             let prefs = auris_session::AgentPreferences { backend:"codex".into(), model:"fixture".into(), ..Default::default() };
             let cwd = tempfile::tempdir().unwrap();
             let audio = cwd.path().join("reference.wav");
+            let history = cwd.path().join("memory.json");
             crate::attachments::tests::reference_wav(&audio, false);
             commands.send(json!({"say":"Add an instrument track", "display":"Add a track", "attachments":[audio]}).to_string()).unwrap();
             let drive = async {
-                conversation(&mut rpc, &prefs, &bridge, &mcp, cwd.path(), HistoryInput { path: None, fresh: false, snapshot: None }).await.unwrap();
+                conversation(&mut rpc, &prefs, &bridge, &mcp, cwd.path(), HistoryInput { path: Some(history.clone()), fresh: false, snapshot: None }).await.unwrap();
             };
             let peer = async {
                 let (reader, mut writer) = tokio::io::split(server);
@@ -804,6 +810,9 @@ mod tests {
                 reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"transcribe_audio":{},"import_transcription":{}}}]}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "turn/start");
+                let checkpoint = memory::Memory::load(&history).unwrap();
+                assert_eq!(checkpoint.turns.last().unwrap().user, "Add a track");
+                assert!(checkpoint.turns.last().unwrap().answer.contains("no final answer was recorded"));
                 assert!(request["params"]["input"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
                 let metadata: Value = serde_json::from_str(request["params"]["input"][1]["text"].as_str().unwrap().lines().nth(1).unwrap()).unwrap();
                 // Replacing the user's file after submission must not change the retained source.

@@ -347,6 +347,22 @@ impl Bridge {
         self.history(|| generation.save_memory(memory))
     }
 
+    /// Checkpoint the request before work begins so cancellation cannot erase its intent.
+    pub(super) fn checkpoint_turn(
+        &self,
+        generation: Option<&mut HistoryGeneration>,
+        memory: &memory::Memory,
+        display: &str,
+    ) {
+        if let Some(generation) = generation {
+            let mut checkpoint = memory.clone();
+            checkpoint.push_interrupted(display, "no final answer was recorded");
+            if let Err(error) = self.save_history(generation, &checkpoint) {
+                self.emit(serde_json::json!({"event":"notice","message":format!("Conversation history was not saved: {error}")}));
+            }
+        }
+    }
+
     pub(super) fn emit(&self, event: serde_json::Value) {
         if (matches!(event["event"].as_str(), Some("answer" | "error" | "ended"))
             || (event["event"] == "compacted" && event["manual"] == true))
@@ -674,6 +690,33 @@ pub fn list_models_background(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_request_checkpoint_survives_cancellation_and_completion_replaces_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory.json");
+        let (bridge, _, _) = test_bridge();
+        let (mut memory, mut generation) = bridge.open_history(&path, false).unwrap();
+        memory.push("Keep the melody", "Understood");
+        bridge.save_history(&mut generation, &memory).unwrap();
+        bridge.checkpoint_turn(Some(&mut generation), &memory, "Add drums");
+        let interrupted = memory::Memory::load(&path).unwrap();
+        assert_eq!(interrupted.turns.len(), 2);
+        assert_eq!(interrupted.turns[1].user, "Add drums");
+        assert!(interrupted.turns[1].answer.contains("Inspect the project"));
+        assert_eq!(memory.turns.len(), 1);
+        memory.push("Add drums", "Added drums");
+        bridge.save_history(&mut generation, &memory).unwrap();
+        assert_eq!(memory::Memory::load(&path).unwrap(), memory);
+        bridge.checkpoint_turn(Some(&mut generation), &memory, "Change the bass");
+        bridge.0.stopped.store(true, Ordering::Release);
+        assert!(bridge.save_history(&mut generation, &memory).is_err());
+        let restored = load_history_background(path, false)
+            .recv()
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.turns().last().unwrap().0, "Change the bass");
+    }
     use crate::tests::{completion, mock_server};
     use std::time::Duration;
 
