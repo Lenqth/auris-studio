@@ -57,3 +57,41 @@ for human listening or permission to optimize against the holdout set.
 uv run --with pytest pytest tools/eval/test_composition_quality.py
 uv run --with ruff ruff check tools/eval/composition_quality.py tools/eval/test_composition_quality.py
 ```
+
+## 2026-10-24 implementation pilot
+
+The [retained numerical report](../tools/eval/references/composition-quality-pilot-2026-10-24.json)
+compares baseline `406277cc` with implementation `da89dc96`, using Codex CLI 0.163.0 and
+`gpt-6.1-sol`. This exploratory pilot selected the first two development tasks while the
+larger run was in progress; it is not a preregistered efficacy study. Both selected tasks
+have three trials per condition, with no selected trial omitted. The four holdout tasks
+remain unevaluated. The complete manifest remains available for broader development runs.
+
+| Condition | Task | Completed with WAV/MIDI | Failed tool calls, total | Wall time range | Trials reporting changed accompaniment |
+| --- | --- | ---: | ---: | ---: | ---: |
+| before | loop_title | 3/3 | 10 | 294–334 s | not reported |
+| before | authored_folk | 3/3 | 9 | 286–345 s | not reported |
+| after | loop_title | 3/3 | 10 | 198–266 s | 1 |
+| after | authored_folk | 3/3 | 6 | 236–296 s | 2 |
+
+Failed tool calls include arguments that the agent corrected before completion. Wall times
+overlapped builds and other measurements; do not interpret them as a performance improvement.
+12/12 deliveries have the requested duration (19.2 seconds for the title loop,
+16 seconds for the folk arrangement); 12/12 have zero full-scale samples.
+External critic calls: 0. 6/6 folk trials retained the original melody clip
+in full, including notes and curves.
+The new adaptation reports distinguish changed backing from explicit-rhythm, sustained-texture,
+role and empty-foreground bypasses. A changed accompaniment is not a preference score.
+
+The complete workspace passed 4,499 Rust tests including doctests; Clippy and formatting passed.
+The evaluator scripts passed ten pytest cases and Ruff. The symbolic ruler was byte-identical.
+One fixed pop-band render was also byte-identical; its TuneJury and MuQ-MuLan deltas were zero.
+These are regression checks, not evidence that the new compositions are better.
+
+Foreground selection is request-local. This pilot covers explicit `accompaniment` generation
+and regeneration, not generic GUI regeneration of those clips. For music assessment,
+`target/quality-evidence/listening/listening.html` contains six anonymous A/B pairs and a
+rating form; the separate key reveals their identities. Original levels are retained.
+No human preference ratings have been collected, so musical improvement remains unproven.
+The [critic calibration](audio-critic-calibration.md) likewise did not validate the current
+audio model for automatic musical selection.
