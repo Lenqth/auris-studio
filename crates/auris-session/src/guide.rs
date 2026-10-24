@@ -164,7 +164,7 @@
 //! Measurements describe both the source and the exact decoded 16-bit WAV; audition
 //! protection never changes project faders or conceals a source overload. Temporary files
 //! live only for the request, and encoded bytes are hashed. The true-peak estimate uses
-//! 4x Catmull-Rom interpolation, not a certified BS.1770 meter.
+//! 4x FIR interpolation, not a certified BS.1770 meter.
 //!
 //! Cancellation is checked around render, encode and network stages. An HTTP request already
 //! in flight can finish up to its bounded timeout; stopped or stale work is never adopted.
@@ -1799,7 +1799,11 @@ pub mod composition {
     //! [`set_drum_assignment`](crate::Session::set_drum_assignment) adds, replaces or removes a
     //! musical role's MIDI address without acoustic analysis. It preserves the other assignments
     //! and plugin state, records one undo step, and affects editor labels and future generation.
-    //! Existing clip recipes keep their saved maps, including on regeneration. Empty assignments
+    //! Existing clip recipes keep their saved maps, including on regeneration, unless
+    //! [`set_drum_assignment_remapping`](crate::Session::set_drum_assignment_remapping) is asked
+    //! for instead: in the same undo step it moves every generated drum voice, and the recipe
+    //! that wrote it, onto the map — the remap a measured map offers — leaving untagged hits
+    //! where they were. Regeneration is still a separate command. Empty assignments
     //! are stored explicitly; neither SoundFont conventions nor built-in defaults fill them in.
     //! [`drum_analysis_source_key`](crate::Session::drum_analysis_source_key) supports scheduling
     //! with a digest of source state, availability and render context. It excludes the score,

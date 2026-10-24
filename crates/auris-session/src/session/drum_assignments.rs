@@ -388,6 +388,65 @@ impl Session {
         map.sync_voices_from_lanes();
         self.set_drum_map(track, map)
     }
+
+    /// [`Self::set_drum_assignment`], then moves the track's generated drum notes onto the map.
+    ///
+    /// For takes written before the assignment changed. Regenerating one keeps the notes its
+    /// recipe saved, so without this a kick reassigned to 36 goes on playing 41. Every generated
+    /// voice follows the map as it now stands — the remap [`Self::apply_drum_map`] offers after a
+    /// scan — while untagged, hand-placed hits stay where they are. One undo step. Refused,
+    /// changing nothing, when a generated voice plays a role the map leaves unassigned.
+    pub fn set_drum_assignment_remapping(
+        &mut self,
+        track: TrackId,
+        role: DrumRole,
+        note: u8,
+    ) -> Result<bool, SessionError> {
+        self.checked_drum_map(track)?;
+        validate_note(note)?;
+        self.begin_transaction(Edit::SetDrumAssignment);
+        let mut changed = match self.set_drum_assignment(track, role, Some(note)) {
+            Ok(changed) => changed,
+            Err(error) => {
+                // An open transaction would disable Undo and autosave until the next gesture.
+                self.revert_transaction();
+                return Err(error);
+            }
+        };
+        // Already checked above, and assigning a note cannot make the track stop being a kit.
+        let map = self.checked_drum_map(track).unwrap_or_default();
+        let inner = self
+            .project
+            .track(track)
+            .unwrap()
+            .kind
+            .as_instrument()
+            .unwrap();
+        let mut clips = inner.clips.clone();
+        if let Err(missing) = super::drum_analysis::remap_generated_drums(&mut clips, &map) {
+            self.revert_transaction();
+            let missing = serde_json::to_value(missing)
+                .ok()
+                .and_then(|name| name.as_str().map(str::to_owned))
+                .unwrap_or_default();
+            return Err(SessionError::InvalidDrumAssignment(format!(
+                "a generated voice plays {missing}, which has no assignment to move it to"
+            )));
+        }
+        if clips != inner.clips {
+            self.project
+                .track_mut(track)
+                .unwrap()
+                .kind
+                .as_instrument_mut()
+                .unwrap()
+                .clips = clips;
+            self.invalidate_graph();
+            changed = true;
+        }
+        self.end_transaction();
+        Ok(changed)
+    }
 }
 
 fn validate_note(note: u8) -> Result<(), SessionError> {
@@ -469,6 +528,103 @@ mod tests {
                 .iter()
                 .all(|note| note.pitch == 84)
         );
+    }
+
+    #[test]
+    fn a_remapping_assignment_moves_generated_hits_and_their_recipe_in_one_step() {
+        // What a model working over MCP ran into: the snare reassigned, the clip regenerated
+        // with the same take, and the snare still on its old key — the recipe kept its own map.
+        let mut session = session();
+        let track = session.add_default_drum_track("Kit").unwrap();
+        let clip = session
+            .generate_clip(
+                track,
+                Ticks::ZERO,
+                BAR,
+                ClipRecipe::new(ClipPreset::Snare, 7),
+            )
+            .unwrap();
+        session
+            .add_note(
+                clip,
+                auris_core::project::Note::new(100, Ticks::ZERO, Ticks::QUARTER),
+            )
+            .unwrap();
+        let original = session.midi_clip(clip).unwrap().clone();
+        let authored = session.drum_assignments(track).unwrap();
+        session.forget_history();
+
+        assert!(
+            session
+                .set_drum_assignment_remapping(track, DrumRole::Snare, 84)
+                .unwrap()
+        );
+        let notes = &session.midi_clip(clip).unwrap().notes;
+        assert!(
+            notes
+                .iter()
+                .filter(|note| !note.drum_voice.is_empty())
+                .all(|note| note.pitch == 84),
+            "every generated snare follows the new key: {notes:?}"
+        );
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.drum_voice.is_empty() && note.pitch == 100),
+            "a hand-placed hit stays where it was put"
+        );
+        // The assignment and the move are one step.
+        let moved = session.midi_clip(clip).unwrap().clone();
+        assert_eq!(session.undo(), Some(Edit::SetDrumAssignment));
+        assert_eq!(session.midi_clip(clip).unwrap(), &original);
+        assert_eq!(session.drum_assignments(track), Some(authored));
+        assert_eq!(session.undo(), None);
+        assert_eq!(session.redo(), Some(Edit::SetDrumAssignment));
+        assert_eq!(session.midi_clip(clip).unwrap(), &moved);
+
+        // A regenerated take is written from the moved recipe, so it plays the new key too.
+        session.regenerate_clip(clip).unwrap();
+        let regenerated = &session.midi_clip(clip).unwrap().notes;
+        assert!(!regenerated.is_empty());
+        assert!(
+            regenerated
+                .iter()
+                .filter(|note| !note.drum_voice.is_empty())
+                .all(|note| note.pitch == 84),
+            "{regenerated:?}"
+        );
+    }
+
+    #[test]
+    fn a_remapping_assignment_is_refused_whole_when_a_generated_voice_has_nowhere_to_go() {
+        let mut session = session();
+        let track = session.add_default_drum_track("Kit").unwrap();
+        let clip = session
+            .generate_clip(
+                track,
+                Ticks::ZERO,
+                BAR,
+                ClipRecipe::new(ClipPreset::Kick, 3),
+            )
+            .unwrap();
+        session
+            .set_drum_assignment(track, DrumRole::Kick, None)
+            .unwrap();
+        let original = session.midi_clip(clip).unwrap().clone();
+        let map = session.drum_assignments(track);
+        session.forget_history();
+
+        let error = session
+            .set_drum_assignment_remapping(track, DrumRole::Snare, 84)
+            .unwrap_err();
+        assert!(error.to_string().contains("kick"), "{error}");
+        assert_eq!(session.midi_clip(clip).unwrap(), &original);
+        assert_eq!(
+            session.drum_assignments(track),
+            map,
+            "nor is the assignment kept"
+        );
+        assert_eq!(session.undo(), None);
     }
 
     #[test]

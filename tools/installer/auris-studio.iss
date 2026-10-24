@@ -26,13 +26,10 @@ SolidCompression=yes
 ChangesEnvironment=yes
 CloseApplications=yes
 
-; The helper is present in current releases and absent from historical tags that can be
-; repackaged through workflow_dispatch. Keep it conditional so recovery builds remain usable.
+; Include every staged binary, including the update helper when present. Historical
+; tags repackaged through workflow_dispatch do not need to provide the helper.
 [Files]
-Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "auris-update-helper.exe"; Flags: ignoreversion recursesubdirs createallsubdirs
-#ifexist "{#StageDir}\auris-update-helper.exe"
-Source: "{#StageDir}\auris-update-helper.exe"; DestDir: "{app}"; Flags: ignoreversion
-#endif
+Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Auris Studio"; Filename: "{app}\auris-studio.exe"
