@@ -54,6 +54,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Compare a baseline and 1..3 exact instrument-note or accompaniment alternatives without editing. Create binds snapshots to this document/revision for fifteen minutes; read returns exact note differences; preview renders the same short range with common gain. Apply adopts the selected snapshot as one Undo without regeneration. Cancel retains the original. At most three rounds per revision and three previews per round; stop and report unresolved choices at the limit. These tools establish no musical preference. Read tool_help for operation fields.
+    Candidates {
+        /// Create, read, preview, apply or cancel a bounded candidate round.
+        operation: crate::session::candidates::Operation,
+    },
     /// Suggest up to three melody-aware chord progressions without changing notes or harmony. Pass request with melody_clips, start_bar, bars and optional key/mood/ending. Keeps a plain alternative; 7th, sus4 and diminished colour needs melodic evidence and appropriate resolution, never a complexity quota. Returns explanations, tensions, a content revision and harmony objects usable by accompaniment. Read tool_help for bounds. These are heuristic proposals; compare and audition before claiming musical improvement.
     SuggestHarmony {
         /// Explicit foreground clips and musical intent for one short phrase.
@@ -495,6 +500,10 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::Candidates { operation } => matches!(
+                operation,
+                crate::session::candidates::Operation::Apply { .. }
+            ),
             Self::Arrangement { operation } => operation.is_mutating(),
             Self::RepairLyrics { request } => request.apply,
             Self::History { operation } => !matches!(operation, HistoryOperation::Read),
@@ -528,7 +537,10 @@ impl Command {
     pub fn needs_worker(&self) -> bool {
         matches!(
             self,
-            Self::Arrangement {
+            Self::Candidates {
+                operation: crate::session::candidates::Operation::Create { .. }
+                    | crate::session::candidates::Operation::Preview { .. }
+            } | Self::Arrangement {
                 operation: crate::arrangement::Operation::Validate { .. }
             } | Self::Accompaniment { .. }
                 | Self::ListVoices { .. }
@@ -600,6 +612,7 @@ impl Session {
             );
         }
         match command {
+            Command::Candidates { operation } => self.agent_candidates(operation),
             Command::SuggestHarmony { request } => self.agent_suggest_harmony(request),
             Command::Arrangement {
                 operation:

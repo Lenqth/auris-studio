@@ -140,7 +140,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                         object.insert("unsaved".into(), session.is_dirty().into());
                         return Ok(value.to_string());
                     }
-                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement") {
+                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement" | "candidates" | "phrase_variation") {
                         return crate::present_domain_report(&text);
                     }
                     Ok(text)
@@ -155,6 +155,49 @@ mod tests {
     use super::*;
     use auris_session::prelude::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn saved_candidate_rounds_preserve_files_until_exact_adoption() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Candidates.auris");
+        let mut session = crate::headless().unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        session
+            .replace_notes(clip, vec![Note::new(60, Ticks::ZERO, Ticks::QUARTER)])
+            .unwrap();
+        session.save(&path).unwrap();
+        let revision = session.agent_document_revision().unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let call = |operation| {
+            crate::runtime::call_saved(
+                &crate::ToolGroups::parse("manual").unwrap(),
+                "candidates",
+                json!({"project":path,"operation":operation}),
+            )
+        };
+        let round:Value=serde_json::from_str(&call(json!({"kind":"create","expected_revision":revision,"candidates":[{"purpose":"Answer on the dominant","edit":{"kind":"notes","edits":[{"kind":"patch","clip":clip.0,"update":[{"index":0,"pitch":67}]}]}}]})).unwrap()).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let read: Value = serde_json::from_str(
+            &call(json!({"kind":"read","round_id":round["round_id"],"candidate":1,"clip":clip.0}))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read["notes"][0]["after"]["pitch"], 67);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        call(json!({"kind":"apply","round_id":round["round_id"],"candidate":1,"expected_revision":revision})).unwrap();
+        let after = crate::opened(path.to_str().unwrap()).unwrap();
+        let mut expected = session.project().clone();
+        expected.midi_clip_mut(clip).unwrap().notes[0].pitch = 67;
+        assert_eq!(after.project(), &expected);
+        call(json!({"kind":"apply","round_id":round["round_id"],"candidate":1,"expected_revision":revision})).unwrap();
+        assert_eq!(
+            crate::opened(path.to_str().unwrap()).unwrap().project(),
+            &expected
+        );
+    }
 
     #[test]
     fn saved_accompaniment_preserves_melody_and_selective_regeneration_survives_reopen() {

@@ -20,6 +20,11 @@ impl ToolHost {
 
     pub(crate) fn catalog() -> Vec<toolbox::live_agent::Definition> {
         let mut catalog = toolbox::live_agent::definitions();
+        // Candidate schemas add about 9 KiB. Keep the experimental surface explicit so
+        // existing 32k local-model conversations retain their inspection headroom.
+        if !std::env::var("AURIS_COMPOSITION_CANDIDATES").is_ok_and(|v| v == "1") {
+            catalog.retain(|tool| !matches!(tool.name.as_str(), "candidates" | "phrase_variation"));
+        }
         if Self::search_available() {
             catalog.push(toolbox::live_agent::Definition {
                 name: toolbox::internet_search::NAME.into(),
@@ -221,7 +226,12 @@ impl ToolHost {
         }
         if matches!(
             name,
-            "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement"
+            "analyze_lyrics"
+                | "diagnose_song"
+                | "repair_lyrics"
+                | "arrangement"
+                | "candidates"
+                | "phrase_variation"
         ) && reply["ok"] == true
             && let Some(text) = reply["text"].as_str()
         {

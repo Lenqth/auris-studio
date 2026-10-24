@@ -129,6 +129,12 @@ pub struct Prepared {
     harmony_changed: bool,
 }
 
+impl Prepared {
+    pub(crate) fn into_candidate_project(self) -> Project {
+        self.job.project
+    }
+}
+
 fn check(cancelled: &AtomicBool) -> Result<(), String> {
     if cancelled.load(Ordering::Relaxed) {
         Err("Accompaniment cancelled".into())

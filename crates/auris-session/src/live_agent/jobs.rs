@@ -9,6 +9,8 @@ use std::sync::atomic::AtomicBool;
 
 /// Owned work that can run without accessing the live document.
 pub enum AgentJob {
+    /// Private candidate construction or comparison rendering.
+    Candidates(crate::session::candidates::Job),
     /// Bounded backing generation against an owned document snapshot.
     Accompaniment(Box<crate::session::accompaniment::Job>),
     /// Capability-aware preparation of an immutable arrangement candidate.
@@ -23,6 +25,8 @@ pub enum AgentJob {
 
 /// A worker result returned to its originating owner for validation and publication.
 pub enum AgentResult {
+    /// Candidate results awaiting owner validation.
+    Candidates(crate::session::candidates::Prepared),
     /// Generated backing and optional harmony awaiting their original owner.
     Accompaniment(Box<crate::session::accompaniment::Prepared>),
     /// A complete arrangement candidate awaiting its original owner.
@@ -47,6 +51,7 @@ impl AgentJob {
     /// Perform detached work with cooperative cancellation.
     pub fn run(self, cancelled: &AtomicBool) -> Result<AgentResult, String> {
         match self {
+            Self::Candidates(job) => job.run(cancelled).map(AgentResult::Candidates),
             Self::Accompaniment(job) => job
                 .run(cancelled)
                 .map(|result| AgentResult::Accompaniment(Box::new(result))),
@@ -70,6 +75,9 @@ impl Session {
         settings: Settings,
     ) -> Result<AgentJob, String> {
         match command {
+            Command::Candidates { operation } => {
+                self.begin_candidates(operation).map(AgentJob::Candidates)
+            }
             Command::Accompaniment {
                 expected_revision,
                 protected_clips,
@@ -134,6 +142,9 @@ impl Session {
             return Err("Agent operation cancelled before publication".into());
         }
         match result {
+            AgentResult::Candidates(result) => self
+                .continue_candidates(result, cancelled)
+                .map(AgentStep::Done),
             AgentResult::Accompaniment(result) => self
                 .continue_accompaniment(*result, cancelled)
                 .map(AgentStep::Done),

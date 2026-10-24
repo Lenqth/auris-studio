@@ -192,6 +192,7 @@ pub const OPERATIONS: &[&str] = &[
     "production_record",
     "edit_project.suggest_harmony",
     "edit_project.accompaniment",
+    "edit_project.candidates",
     "edit_project.arrangement",
     "edit_project.analyze_lyrics",
     "edit_project.diagnose_song",
@@ -289,6 +290,7 @@ impl Operation {
             }
             let mutating = parsed.is_mutating();
             let confirm = matches!(&parsed, crate::live_agent::Command::Arrangement { operation } if operation.requires_confirmation())
+                || matches!(&parsed, crate::live_agent::Command::Candidates { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
                 || matches!(&parsed, crate::live_agent::Command::History { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
@@ -403,6 +405,39 @@ impl Policy {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn candidate_preparation_is_read_only_but_adoption_requires_edit_permission() {
+        use super::*;
+        for (operation, mutating) in [
+            (
+                serde_json::json!({"kind":"read","round_id":"r","candidate":0}),
+                false,
+            ),
+            (
+                serde_json::json!({"kind":"preview","round_id":"r","range":{"start_bar":1,"bars":1}}),
+                false,
+            ),
+            (
+                serde_json::json!({"kind":"apply","round_id":"r","candidate":1,"expected_revision":"v"}),
+                true,
+            ),
+        ] {
+            let parsed = Operation::parse(
+                "edit_project",
+                &serde_json::json!({"command":{"action":"candidates","operation":operation}}),
+            )
+            .unwrap();
+            assert_eq!(parsed.mutating, mutating);
+            assert_eq!(parsed.confirm, mutating);
+            let decision = Policy {
+                mode: Mode::ReadOnly,
+                ..Default::default()
+            }
+            .decide(&parsed);
+            assert_eq!(matches!(decision, Decision::Deny(_)), mutating);
+        }
+    }
+
     #[test]
     fn harmony_suggestions_are_available_in_read_only_and_plan_modes() {
         use super::*;

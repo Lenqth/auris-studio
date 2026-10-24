@@ -28,7 +28,7 @@ impl ToolGroups {
             || self.0.iter().any(|g| g == "all" || g == tool_group(name))
             || (matches!(name, "analyze_lyrics" | "diagnose_song")
                 && self.0.iter().any(|g| g == "composition"))
-            || (matches!(name, "accompaniment" | "suggest_harmony")
+            || (matches!(name, "accompaniment" | "suggest_harmony" | "candidates")
                 && self.0.iter().any(|g| g == "manual"))
             || tool_group(name) == "common"
     }
@@ -102,6 +102,7 @@ pub fn tool_group(name: &str) -> &'static str {
         | "list_presets"
         | "generate_phrase"
         | "accompaniment"
+        | "candidates"
         | "suggest_harmony"
         | "accompany" => "composition",
         "arrangement"
