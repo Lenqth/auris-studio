@@ -20,6 +20,7 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const FRAME_LIMIT: usize = 40 * 1024 * 1024;
 const NATIVE_TOOLS: &[&str] = &[
     "bash",
+    "shell",
     "read",
     "glob",
     "grep",
@@ -65,6 +66,22 @@ fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String
         .ok_or_else(|| "OpenCode CLI was not found. Install OpenCode, run opencode auth login, or set its executable path in Agent settings".into())
 }
 
+fn cli_major(version: &str) -> Result<u32, String> {
+    let number = version
+        .trim()
+        .strip_prefix("opencode ")
+        .unwrap_or(version.trim())
+        .trim_start_matches('v');
+    match number.split('.').next() {
+        Some("1") => Ok(1),
+        Some("2") => Ok(2),
+        _ => Err(format!(
+            "Unsupported OpenCode version: {} (expected 1.x or 2.x)",
+            version.trim()
+        )),
+    }
+}
+
 fn working_directory() -> Result<tempfile::TempDir, String> {
     let mut builder = tempfile::Builder::new();
     builder.prefix("auris-opencode-");
@@ -76,7 +93,35 @@ fn working_directory() -> Result<tempfile::TempDir, String> {
     builder.tempdir().map_err(|error| error.to_string())
 }
 
-fn configuration(native: bool) -> Value {
+fn opencode_preamble() -> String {
+    format!(
+        "{}\nOpenCode exposes the live tools as auris_live_<tool name>, for example auris_live_inspect_project. Call them directly. Do not use native shell commands or directory scans to discover Auris tools. If the live tools are unavailable, report the connection problem instead.",
+        super::cli_preamble()
+    )
+}
+
+fn configuration(native: bool, major: u32) -> Value {
+    if major == 2 {
+        let mut permissions = vec![json!({"action":"*","resource":"*","effect":"deny"})];
+        if native {
+            for action in [
+                "shell",
+                "read",
+                "glob",
+                "grep",
+                "edit",
+                "external_directory",
+            ] {
+                permissions.push(json!({"action":action,"resource":"*","effect":"ask"}));
+            }
+            permissions.push(json!({"action":"auris_live_*","resource":"*","effect":"allow"}));
+        }
+        return json!({"$schema":"https://opencode.ai/config.json", "update":"disable",
+            "share":"disabled", "snapshots":false, "lsp":false, "formatter":false,
+            "default_agent":"auris", "permissions":permissions,
+            "agents":{"auris":{"mode":"primary", "system":if native { opencode_preamble() } else { crate::approval_review::INSTRUCTIONS.into() },
+                "permissions":permissions}}});
+    }
     let mut tools = json!({"*":false});
     let mut permission = json!({"*":"deny"});
     if native {
@@ -92,7 +137,7 @@ fn configuration(native: bool) -> Value {
     json!({"$schema":"https://opencode.ai/config.json", "autoupdate":false,
         "share":"disabled", "snapshot":false, "lsp":false, "formatter":false,
         "default_agent":"auris", "permission":permission, "tools":tools,
-        "agent":{"auris":{"mode":"primary", "prompt":if native { super::cli_preamble() } else { crate::approval_review::INSTRUCTIONS.into() },
+        "agent":{"auris":{"mode":"primary", "prompt":if native { opencode_preamble() } else { crate::approval_review::INSTRUCTIONS.into() },
             "permission":permission, "tools":tools}}})
 }
 
@@ -100,13 +145,25 @@ fn command(
     prefs: &auris_session::AgentPreferences,
     cwd: &Path,
     native: bool,
+    major: u32,
+    mcp: Option<&LiveMcp>,
 ) -> Result<Command, String> {
     // Keep XDG_DATA_HOME untouched: OpenCode can use its own authentication store. An
     // isolated config home excludes inherited MCP servers, custom tools and user plugins.
     let config_home = cwd.join("config");
     std::fs::create_dir_all(&config_home).map_err(|error| error.to_string())?;
     let mut file = tempfile::NamedTempFile::new_in(cwd).map_err(|error| error.to_string())?;
-    std::io::Write::write_all(&mut file, configuration(native).to_string().as_bytes())
+    let mut config = configuration(native, major);
+    if major == 2
+        && let Some(mcp) = mcp
+    {
+        // ACP-added V2 servers always enable Code Mode. Configure the server here
+        // to retain direct tool names; only the child environment carries its token.
+        config["mcp"] = json!({"servers":{"auris_live":{"type":"remote","url":mcp.url,
+            "oauth":false,"codemode":false,
+            "headers":{"Authorization":"Bearer {env:AURIS_OPENCODE_MCP_TOKEN}"}}}});
+    }
+    std::io::Write::write_all(&mut file, config.to_string().as_bytes())
         .map_err(|error| error.to_string())?;
     let config_path = cwd.join("opencode.json");
     file.persist_noclobber(&config_path)
@@ -122,19 +179,28 @@ fn command(
         .env("OPENCODE_TEST_HOME", cwd)
         .env(
             "OPENCODE_PERMISSION",
-            configuration(native)["permission"].to_string(),
+            configuration(native, 1)["permission"].to_string(),
         )
         .env("OPENCODE_DISABLE_PROJECT_CONFIG", "true")
+        .env("OPENCODE_CONFIG_PROJECT_DISABLE", "true")
         .env("OPENCODE_DISABLE_AUTOUPDATE", "true")
         .env("OPENCODE_DISABLE_EXTERNAL_SKILLS", "true")
         .env("OPENCODE_DISABLE_CLAUDE_CODE", "true")
         .env("OPENCODE_AUTO_SHARE", "false")
         .env_remove("OPENCODE_CONFIG_CONTENT")
+        .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
         .env_remove("OPENCODE_TEST_MANAGED_CONFIG_DIR")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
+    if major == 2
+        && let Some(mcp) = mcp
+    {
+        command.env("AURIS_OPENCODE_MCP_TOKEN", &mcp.token);
+    } else {
+        command.env_remove("AURIS_OPENCODE_MCP_TOKEN");
+    }
     #[cfg(windows)]
     command.creation_flags(0x08000000);
     Ok(command)
@@ -175,7 +241,19 @@ impl Cli {
         mcp: Option<&LiveMcp>,
         native: bool,
     ) -> Result<(Self, Value), String> {
-        let mut child = command(prefs, cwd, native)?
+        let mut version_command = Command::new(executable(prefs)?);
+        #[cfg(windows)]
+        version_command.creation_flags(0x08000000);
+        let version = tokio::time::timeout(
+            Duration::from_secs(5),
+            version_command.arg("--version").kill_on_drop(true).output(),
+        )
+        .await
+        .map_err(|_| "OpenCode version check timed out".to_string())?
+        .map_err(|error| format!("Cannot check OpenCode version: {error}"))?;
+        let major = cli_major(&String::from_utf8_lossy(&version.stdout))?;
+        let mut child = command(prefs, cwd, native, major, mcp)?
+            .current_dir(project.unwrap_or(cwd))
             .spawn()
             .map_err(|error| format!("Cannot start OpenCode: {error}"))?;
         let input = child
@@ -187,7 +265,16 @@ impl Cli {
             .take()
             .ok_or("OpenCode stdout was not available")?;
         let mut cli = Self::transport(Some(child), input, output);
-        let session = cli.initialize(project.unwrap_or(cwd), mcp).await?;
+        let session = cli
+            .initialize(project.unwrap_or(cwd), if major == 1 { mcp } else { None })
+            .await?;
+        if let Some(mcp) = mcp {
+            tokio::time::timeout(STARTUP_TIMEOUT, mcp.wait_for_catalog())
+                .await
+                .map_err(|_| {
+                    "OpenCode did not connect to the Auris live tool catalogue".to_string()
+                })?;
+        }
         Ok((cli, session))
     }
 
@@ -401,7 +488,7 @@ impl Cli {
 #[derive(Default)]
 struct Turn {
     answer: String,
-    calls: HashMap<String, (String, bool)>,
+    calls: HashMap<String, (String, bool, Value)>,
 }
 
 impl Turn {
@@ -425,26 +512,34 @@ impl Turn {
                     .as_str()
                     .ok_or("OpenCode omitted a tool call ID")?;
                 if update["sessionUpdate"] == "tool_call" {
-                    let name = update["title"]
+                    let name = update["name"]
                         .as_str()
+                        .or_else(|| update["title"].as_str())
                         .ok_or("OpenCode omitted a tool name")?;
                     let name = name
                         .strip_prefix("auris_live_")
                         .filter(|name| ToolHost::contains(name))
                         .or_else(|| NATIVE_TOOLS.contains(&name).then_some(name))
-                        .ok_or("OpenCode requested a tool outside the Auris catalog")?;
-                    self.calls.insert(id.to_owned(), (name.to_owned(), false));
+                        .ok_or_else(|| {
+                            format!("OpenCode requested a tool outside the Auris catalog: {name}")
+                        })?;
+                    self.calls
+                        .insert(id.to_owned(), (name.to_owned(), false, json!({})));
                 }
-                if let Some((name, emitted)) = self.calls.get_mut(id) {
+                if let Some((name, emitted, args)) = self.calls.get_mut(id) {
+                    if let Some(input) = update["rawInput"].as_object() {
+                        for (key, value) in input {
+                            args[key] = value.clone();
+                        }
+                    }
                     let done = matches!(update["status"].as_str(), Some("completed" | "failed"));
                     if !*emitted
                         && (done
-                            || update["rawInput"]
-                                .as_object()
-                                .is_some_and(|input| !input.is_empty()))
+                            || update["status"] == "in_progress"
+                                && args.as_object().is_some_and(|input| !input.is_empty()))
                     {
                         bridge.emit(json!({"event":"phase","phase":"tool"}));
-                        bridge.emit(json!({"event":"call","call_id":id,"tool":name,"args":update.get("rawInput").cloned().unwrap_or_else(|| json!({}))}));
+                        bridge.emit(json!({"event":"call","call_id":id,"tool":name,"args":args}));
                         *emitted = true;
                     }
                     if done {
@@ -732,7 +827,7 @@ mod tests {
             .into(),
             ..Default::default()
         };
-        let command = command(&prefs, cwd.path(), true).unwrap();
+        let command = command(&prefs, cwd.path(), true, 1, None).unwrap();
         let args: Vec<_> = command.as_std().get_args().collect();
         assert_eq!(args, ["acp"]);
         let env: HashMap<_, _> = command.as_std().get_envs().collect();
@@ -754,7 +849,7 @@ mod tests {
         assert_eq!(config["permission"]["auris_live_*"], "allow");
         assert_eq!(config["permission"]["*"], "deny");
         assert_eq!(config["tools"]["*"], false);
-        let review = configuration(false);
+        let review = configuration(false, 1);
         assert_eq!(review["permission"], json!({"*":"deny"}));
         assert_eq!(review["tools"], json!({"*":false}));
         #[cfg(unix)]
@@ -780,6 +875,81 @@ mod tests {
             .unwrap(),
             super::super::Backend::OpenCode(_)
         ));
+    }
+
+    #[test]
+    fn version_two_uses_current_agent_and_permission_fields() {
+        assert_eq!(cli_major("2.1.3\n").unwrap(), 2);
+        assert_eq!(cli_major("opencode v2.1.3\n").unwrap(), 2);
+        assert_eq!(cli_major("1.19.3").unwrap(), 1);
+        assert!(cli_major("3.0.0").is_err());
+        assert!(cli_major("not a version").is_err());
+        let config = configuration(true, 2);
+        assert!(
+            config["agents"]["auris"]["system"]
+                .as_str()
+                .unwrap()
+                .contains("Auris")
+        );
+        assert!(config.get("agent").is_none());
+        assert!(config.get("tools").is_none());
+        let rules = config["permissions"].as_array().unwrap();
+        assert_eq!(
+            rules[0],
+            json!({"action":"*","resource":"*","effect":"deny"})
+        );
+        assert!(rules.contains(&json!({"action":"shell","resource":"*","effect":"ask"})));
+        assert!(rules.contains(&json!({"action":"auris_live_*","resource":"*","effect":"allow"})));
+        assert_eq!(
+            config["agents"]["auris"]["permissions"],
+            config["permissions"]
+        );
+        let review = configuration(false, 2);
+        assert_eq!(
+            review["permissions"],
+            json!([{ "action":"*","resource":"*","effect":"deny" }])
+        );
+        assert_eq!(
+            review["agents"]["auris"]["permissions"],
+            review["permissions"]
+        );
+    }
+
+    #[tokio::test]
+    async fn version_two_exposes_direct_mcp_tools_and_keeps_token_out_of_config() {
+        let (bridge, _commands, _events) = crate::worker::test_bridge();
+        let mcp = LiveMcp::start(ToolHost::new(bridge)).await.unwrap();
+        let cwd = working_directory().unwrap();
+        let prefs = auris_session::AgentPreferences {
+            opencode_path: if cfg!(windows) {
+                "C:/Tools/opencode.exe"
+            } else {
+                "/usr/local/bin/opencode"
+            }
+            .into(),
+            ..Default::default()
+        };
+        let command = command(&prefs, cwd.path(), true, 2, Some(&mcp)).unwrap();
+        let bytes = std::fs::read(cwd.path().join("opencode.json")).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains(&mcp.token));
+        let config: Value = serde_json::from_slice(&bytes).unwrap();
+        let server = &config["mcp"]["servers"]["auris_live"];
+        assert_eq!(server["codemode"], false);
+        assert_eq!(server["oauth"], false);
+        assert_eq!(server["url"], mcp.url);
+        let env: HashMap<_, _> = command.as_std().get_envs().collect();
+        assert_eq!(
+            env.get(std::ffi::OsStr::new("AURIS_OPENCODE_MCP_TOKEN"))
+                .unwrap()
+                .unwrap(),
+            std::ffi::OsStr::new(&mcp.token)
+        );
+        assert_eq!(
+            env.get(std::ffi::OsStr::new("OPENCODE_CONFIG_PROJECT_DISABLE"))
+                .unwrap()
+                .unwrap(),
+            "true"
+        );
     }
 
     #[tokio::test]
@@ -882,6 +1052,33 @@ mod tests {
             && event["tool"] == "add_track"
             && event["text"] == "Done"
             && event["ok"] == true));
+    }
+
+    #[test]
+    fn version_two_stream_keeps_the_tool_name_and_complete_arguments() {
+        let (bridge, _commands, events) = crate::worker::test_bridge();
+        let mut turn = Turn::default();
+        turn.update(&json!({"sessionUpdate":"tool_call","toolCallId":"shell-id","name":"shell","title":"Run script","status":"pending","rawInput":{"cwd":"/project"}}), Some(&bridge)).unwrap();
+        assert!(!events.try_iter().any(|event| event["event"] == "call"));
+        turn.update(&json!({"sessionUpdate":"tool_call_update","toolCallId":"shell-id","title":"Inspect output","status":"in_progress","rawInput":{"command":"printf proof"}}), Some(&bridge)).unwrap();
+        turn.update(&json!({"sessionUpdate":"tool_call_update","toolCallId":"shell-id","status":"completed"}), Some(&bridge)).unwrap();
+        let events: Vec<_> = events.try_iter().collect();
+        let call = events
+            .iter()
+            .find(|event| event["event"] == "call")
+            .unwrap();
+        assert_eq!(call["tool"], "shell");
+        assert_eq!(
+            call["args"],
+            json!({"cwd":"/project","command":"printf proof"})
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event["event"] == "result")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -1128,3 +1325,6 @@ mod tests {
         cli.stop().await;
     }
 }
+
+#[cfg(test)]
+mod evaluation;

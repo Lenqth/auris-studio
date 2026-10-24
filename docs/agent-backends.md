@@ -148,10 +148,11 @@ Auris launches `opencode acp` and speaks [ACP v1 over stdio](https://opencode.ai
 The transport supports both the original `models.availableModels` catalogue and
 model `configOptions`, including grouped choices. Authentication and inference
 stay inside OpenCode; Auris does not read its authentication store. The integration
-follows the [OpenCode ACP implementation](https://github.com/anomalyco/opencode/tree/v1.2.27/packages/opencode/src/acp).
-Startup, model discovery and live-MCP session creation have been checked with
-OpenCode 2.1.3 without inference. An optional installed-CLI compatibility test
-is included.
+checks the CLI version before launch and generates the matching configuration for
+OpenCode 1.x or 2.x. V2 uses `agents`, `system`, ordered `permissions` rules and
+the native `shell` tool; V1 uses its original configuration fields. Unknown major
+versions are rejected. See the [current ACP reference](https://opencode.ai/v2/docs/cli/acp/)
+and [V2 permissions](https://opencode.ai/v2/docs/permissions/).
 
 Each worker uses a private configuration home and disables project configuration,
 external skills, automatic sharing, snapshots, LSP and formatters. User plugins,
@@ -162,6 +163,10 @@ provider supported by OpenCode's authentication flow or environment configuratio
 the rig API settings do not configure this route. User configuration files are
 not edited. Native shell and file tools request the same Auris permission gate;
 unknown requests and unsolicited client file/terminal requests are refused.
+V2 receives the live server through private configuration with `codemode: false`;
+its token is expanded from a child-only environment variable rather than stored
+in that file. This keeps each MCP operation on the direct tool list, subject to
+the existing Auris gate. V1 receives the authenticated server through ACP stdin.
 
 The authenticated live MCP server edits the open song, including unsaved changes,
 through the existing permission and Undo paths. Images and text use ACP content
@@ -170,6 +175,11 @@ CLI backends. Stop revokes live calls, sends `session/cancel` and terminates the
 child. Auris persists and restores its own text transcript; OpenCode may also keep
 sessions in its normal data directory. Manual compaction from Auris is not yet
 supported. Approval review uses a separate session with all tools denied.
+
+Real composition, audio feedback and feature trials are recorded in
+[OpenCode backend validation](opencode-backend-validation.md), including the free
+provider's restriction on tool-free automatic review. Startup waits for an actual
+authenticated MCP tool catalogue request before allowing inference.
 
 Default tests use a scripted ACP peer and the real HTTP MCP endpoint to verify
 live edits, Undo, streaming, permission decisions and cancellation without model

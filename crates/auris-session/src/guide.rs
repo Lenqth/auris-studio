@@ -308,7 +308,12 @@ pub mod architecture {
     //! directly, while file writes and command escalations require a decision. Claude routes
     //! its explicit native tool catalog through ask rules and the stdio approval callback.
     //! OpenCode uses an isolated configuration directory, keeping its provider authentication in
-    //! the CLI, and routes native permission requests through the same gate. Custom provider
+    //! the CLI, and routes native permission requests through the same gate. It selects the
+    //! configuration schema for CLI major version 1 or 2 before launching ACP; V2 exposes
+    //! direct live tools with Code Mode disabled so each operation retains its own permission.
+    //! Inference waits for the authenticated live tool catalogue to be requested; a saved
+    //! project is also the CLI process directory, keeping its initial and ACP locations aligned.
+    //! Custom provider
     //! configuration and user plugins are not inherited. Its model variants are selected as
     //! advertised model IDs. Native tools operate on external files; the open song is still
     //! edited through live MCP.
