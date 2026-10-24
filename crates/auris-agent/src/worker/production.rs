@@ -10,6 +10,18 @@ pub(super) struct State {
     document: Value,
 }
 
+fn record_view(record: &Record, document: &Value) -> Result<Value, String> {
+    let mut view = record.view(document);
+    if toolbox::composition_workflows::enabled()
+        && let Some((workflow, order)) = record.workflow
+    {
+        view["workflow_instructions"] =
+            toolbox::composition_workflows::instructions(workflow, order).into();
+    }
+    let text = toolbox::present_domain_report(&view.to_string())?;
+    serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
 impl Bridge {
     pub(crate) fn bind_production_history(
         &self,
@@ -84,7 +96,7 @@ impl Bridge {
                     );
                 }
                 state.record.update(operation)?;
-                let mut view = state.record.view(&state.document);
+                let mut view = record_view(&state.record, &state.document)?;
                 view["persistence"] = json!(if state.history.is_some() {
                     "conversation"
                 } else {
@@ -100,7 +112,7 @@ impl Bridge {
         let view = self.with_production(
             |state| {
                 state.document = document.clone();
-                Ok(state.record.view(&state.document))
+                record_view(&state.record, &state.document)
             },
             false,
         )?;
@@ -132,6 +144,24 @@ impl Bridge {
 mod tests {
     use super::*;
     #[test]
+    fn large_records_use_bounded_report_pages_without_dropping_stored_context() {
+        let mut record = Record::default();
+        for index in 0..12 {
+            record
+                .update(
+                    serde_json::from_value(json!({"kind":"put","entry":{
+                "key":format!("decision_{index}"),"category":"decision","source":"agent_assumption",
+                "basis":"explicit development choice","text":"x".repeat(1024)}}))
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let view = record_view(&record, &json!({"revision":"today"})).unwrap();
+        assert!(view["report_id"].is_string());
+        assert!(view.to_string().len() <= 8192);
+        assert_eq!(record.entries.len(), 12);
+    }
+    #[test]
     fn records_resume_and_reset_rejects_a_late_writer() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("memory.json");
@@ -143,6 +173,12 @@ mod tests {
             .unwrap();
         bridge.production_record(serde_json::from_value(json!({"kind":"put","entry":{
             "key":"motif","category":"motif","source":"agent_assumption","basis":"opening phrase","text":"keep the rising third"}})).unwrap()).unwrap();
+        bridge
+            .production_record(Operation::SelectWorkflow {
+                workflow: auris_session::production_record::Workflow::LocalEdit,
+                writing_order: auris_session::production_record::WritingOrder::MelodyFirst,
+            })
+            .unwrap();
         let (resumed, _, _) = test_bridge();
         resumed.bind_production_history(Some(&generation)).unwrap();
         resumed
@@ -151,6 +187,10 @@ mod tests {
         assert_eq!(
             resumed.production_record(Operation::Read).unwrap()["entries"][0]["entry"]["text"],
             "keep the rising third"
+        );
+        assert_eq!(
+            resumed.production_record(Operation::Read).unwrap()["workflow"],
+            json!({"task":"local_edit","writing_order":"melody_first"})
         );
         clear_history(&path).unwrap();
         assert!(

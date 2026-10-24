@@ -301,6 +301,13 @@ fn parse_command(
 /// What the model is told once, before the conversation: the shared workflow, plus what only
 /// this frontend knows — where it is standing, and who it is talking to.
 fn preamble() -> String {
+    preamble_for_profile(toolbox::composition_workflows::enabled())
+}
+
+fn preamble_for_profile(modular: bool) -> String {
+    if modular {
+        return toolbox::composition_workflows::COMMON.to_owned();
+    }
     let mut text = "You edit the document currently open in Auris Studio. Answer in the user's language.
 Call inspect_project first. Use the operation-specific tools with flat JSON arguments,
 without command or action wrappers. Use the numeric IDs returned by inspection and edits.
@@ -1347,6 +1354,35 @@ async fn converse(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn experimental_prompt_keeps_safety_contracts_and_the_same_catalog() {
+        let catalog = host::ToolHost::definitions()
+            .iter()
+            .map(|t| t.name.clone())
+            .collect::<Vec<_>>();
+        let modular = preamble_for_profile(true);
+        let legacy = preamble_for_profile(false);
+        for text in [&modular, &legacy] {
+            for contract in [
+                "inspect_project",
+                "read_notes",
+                "expected_revision",
+                "0..1",
+                "production_record",
+                "Human listening",
+            ] {
+                assert!(text.contains(contract), "Missing {contract}");
+            }
+        }
+        assert!(modular.contains("select_workflow"));
+        assert_eq!(
+            catalog,
+            host::ToolHost::definitions()
+                .iter()
+                .map(|t| t.name.clone())
+                .collect::<Vec<_>>()
+        );
+    }
     use super::*;
 
     #[test]

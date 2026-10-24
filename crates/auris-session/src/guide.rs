@@ -30,8 +30,19 @@
 //! the agent runtime owns persistence under the same generation lock as conversation history.
 //! Reset removes both files, and Save As copies both. Tool observations enter through the host,
 //! independently of model summaries. Inspection reconciles clip IDs and conservatively marks
-//! evidence stale after a content change or document restart. Coverage tracks section excerpts,
+//! evidence stale after a revision change (including Undo) or document restart. Coverage tracks section excerpts,
 //! boundaries, endings and loop joins; measurements never establish human preference.
+//! Large record views use immutable report pages while the complete record stays on disk.
+//! An optional workflow selection belongs to this record; model-facing task instructions live
+//! in the toolbox. The compact prompt is experimental and retains the same selected tool catalog.
+//!
+//! Candidate rounds own a baseline and up to three score snapshots. Detached jobs build exact
+//! note/accompaniment alternatives and render them with common protective gain. Owner checks,
+//! content revisions, expiry and cancellation precede publication and adoption. Adopting a
+//! candidate copies the evaluated score as one Undo edit, never regenerates it. Scoped phrase
+//! operations produce ordinary validated note patches while preserving explicit ranges and
+//! protected notes. The live candidate catalog is opt-in so existing local-model context
+//! budgets are not silently enlarged; saved-project tools use the same canonical commands.
 //!
 //! [`crate::conversations::ConversationStore`] manages project-local conversations independently
 //! of the score. Creating, renaming, archiving, deleting or opening a conversation neither changes

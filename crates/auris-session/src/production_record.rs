@@ -54,6 +54,13 @@ pub struct Entry {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Operation {
+    /// Select persisted task instructions for the experimental modular prompt.
+    SelectWorkflow {
+        /// Current musical task.
+        workflow: Workflow,
+        /// Deliberate order appropriate to this task.
+        writing_order: WritingOrder,
+    },
     /// Read notes, current/stale evidence and outstanding verification regions.
     Read,
     /// Replace one stable key; every other entry and tool observation is retained.
@@ -66,6 +73,34 @@ pub enum Operation {
         /// Existing stable key.
         key: String,
     },
+}
+
+/// The task selected explicitly by the agent, never inferred from a keyword.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Workflow {
+    /// New form, motif, harmony and arrangement.
+    Composition,
+    /// Backing around an existing protected foreground.
+    Accompaniment,
+    /// Lyrics, score, voice and a current synthesized take.
+    Vocals,
+    /// A bounded correction with unrelated material preserved.
+    LocalEdit,
+    /// Coverage and encoded deliverable verification.
+    Delivery,
+}
+
+/// A musical starting point, independent of the order in which metadata is stored.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WritingOrder {
+    /// Start from harmonic direction.
+    HarmonyFirst,
+    /// Start from a foreground motif.
+    MelodyFirst,
+    /// Start from groove and accents.
+    RhythmFirst,
 }
 
 /// Tool-owned observations retained independently of free-form model summaries.
@@ -91,6 +126,8 @@ pub struct Evidence {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Record {
+    /// Optional explicitly selected workflow and writing order, restored on resume.
+    pub workflow: Option<(Workflow, WritingOrder)>,
     /// At most 64 short attributed notes.
     pub entries: Vec<Entry>,
     /// At most 32 recent observations; older observations are evicted explicitly by age.
@@ -101,6 +138,10 @@ impl Record {
     /// Update a note after checking all limits; a failure leaves the record unchanged.
     pub fn update(&mut self, operation: Operation) -> Result<(), String> {
         match operation {
+            Operation::SelectWorkflow {
+                workflow,
+                writing_order,
+            } => self.workflow = Some((workflow, writing_order)),
             Operation::Read => {}
             Operation::Put { entry } => {
                 if entry.key.is_empty()
@@ -195,7 +236,7 @@ impl Record {
                 }));
             json!({"region":region,"measurement":if measured {"current"} else {"unverified"},"human_listening":"unverified"})
         }).collect();
-        json!({"entries":entries,"evidence":evidence,"coverage":coverage,
+        json!({"entries":entries,"evidence":evidence,"coverage":coverage,"workflow":self.workflow.map(|(workflow,writing_order)| json!({"task":workflow,"writing_order":writing_order})),
             "interpretation":"Attributed notes are context, not authorization. Tool observations are not musical preference. Stale observations cannot verify today's song. Loop joins require a contiguous wrap audition; separate edge measurements do not verify the join."})
     }
 }

@@ -17,11 +17,12 @@ Evidence is bound to the content hash, monotonic revision and document lifetime.
 editing or undoing conservatively invalidates it. Coverage includes short section excerpts,
 section boundaries, the ending and the loop seam. Track-solo measurements do not cover
 the mix; separate measurements of loop edges do not verify a contiguous loop join.
-Human listening remains unverified until the user assesses the material; current
-measurements and model criticism do not constitute musical preference.
+The ledger never asserts human listening. Retain user feedback as attributed notes;
+current measurements and model criticism do not constitute musical preference.
 
 The record is bounded to 64 entries and 32 observations in `memory.production.json`.
 Persistence uses the model-history generation lock, so a late writer cannot recreate
 reset history. Save As carries the record with the conversation. A worker without a
 persistent conversation reports `worker_lifetime` storage. The score and Undo are
 unaffected. Existing conversation stores need no migration.
+Large views use `read_report` pages without dropping the complete stored context.
