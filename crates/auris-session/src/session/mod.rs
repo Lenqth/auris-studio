@@ -34,6 +34,7 @@ pub mod accompaniment;
 mod accompany;
 mod agent_history;
 pub mod arrangement;
+pub mod audio_assets;
 pub mod candidates;
 mod composition_inspection;
 mod composition_preview;

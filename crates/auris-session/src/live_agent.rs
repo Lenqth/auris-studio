@@ -124,6 +124,11 @@ pub enum Command {
         /// Current revision required for restore; omitted for list/create.
         expected_revision: Option<String>,
     },
+    /// Find audio on Wikimedia Commons or by local filename, inspect a source, import a direct HTTP(S) audio URL, or trim/reverse a clip into a new asset. Original files remain intact; processing is one Undo and rejects stale revisions. EQ uses mixer_graph add_effect with auris.fx.eq, then parameters/set_parameter. search_online needs no API key; download needs an audio URL, not a webpage. Attribution is not verified rights.
+    AudioAssets {
+        /// Material operation, performed off the UI thread.
+        operation: crate::session::audio_assets::Operation,
+    },
     /// Import a local audio file as a new track at an absolute tick position. Existing music and tempo are preserved. Copy and decode run off the UI thread; cancellation or document changes discard the staged import. One Undo removes it.
     ImportAudio {
         /// Absolute local source path, up to 512 MiB; no network paths.
@@ -511,6 +516,7 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::AudioAssets { operation } => operation.is_mutating(),
             Self::Candidates { operation } => matches!(
                 operation,
                 crate::session::candidates::Operation::Apply { .. }
@@ -549,12 +555,15 @@ impl Command {
     pub fn needs_worker(&self) -> bool {
         matches!(
             self,
-            Self::Candidates {
-                operation: crate::session::candidates::Operation::Create { .. }
-                    | crate::session::candidates::Operation::Preview { .. }
-            } | Self::Arrangement {
-                operation: crate::arrangement::Operation::Validate { .. }
-            } | Self::Accompaniment { .. }
+            Self::AudioAssets { .. }
+                | Self::Candidates {
+                    operation: crate::session::candidates::Operation::Create { .. }
+                        | crate::session::candidates::Operation::Preview { .. }
+                }
+                | Self::Arrangement {
+                    operation: crate::arrangement::Operation::Validate { .. }
+                }
+                | Self::Accompaniment { .. }
                 | Self::ListVoices { .. }
                 | Self::SetSingerVoice { .. }
                 | Self::Sing { .. }
@@ -813,7 +822,8 @@ impl Session {
                 offset,
                 section_offset,
             } => self.agent_inspect_singer(TrackId(track), offset, section_offset),
-            command @ (Command::Accompaniment { .. }
+            command @ (Command::AudioAssets { .. }
+            | Command::Accompaniment { .. }
             | Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }
             | Command::Sing { .. }

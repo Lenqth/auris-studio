@@ -946,6 +946,8 @@ mod tests {
             let (url, requests) = mock_server(vec![show, call, done]);
             let mut preferences = prefs(url);
             preferences.provider = "ollama".into();
+            // Leave room for the catalog and image; no real model runs in this test.
+            preferences.context_tokens = Some(65536);
             let worker = Worker::spawn(preferences, None, false, None).unwrap();
             until(&worker, "ready");
             worker.send(r#"{"say":"Inspect one bar"}"#).unwrap();

@@ -354,6 +354,15 @@ pub mod architecture {
     //! `import_transcription` accepts an inline draft or a bounded local JSON file; file reading
     //! is authorized before I/O, then the exact validated draft crosses the canonical edit/revision
     //! gate. No worker mutates the session. Saved-project MCP offers the same session import command.
+    //! Audio materials use `audio_assets`: bounded local filename search, keyless Commons search,
+    //! source inspection, direct HTTP(S) ingestion and copy-on-write crop/reversal. File I/O,
+    //! decoding, hashing and sample processing run in detached jobs; publication checks owner,
+    //! revision, folder and render rate. Import and processing each create one Undo entry.
+    //! Original assets remain intact. AudioSource provenance stores source paths/URLs, SHA-256
+    //! and attributed creator/license claims with serde defaults for older projects; it is data,
+    //! never verified rights or instructions. Remote search/download pass the network approval
+    //! gate. EQ uses the existing mixer graph on audio-track inserts; no RT processing changes.
+    //!
     //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
     //! residual activity outside their attack/release guards. Weak sustained predictions alone
     //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo

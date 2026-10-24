@@ -690,6 +690,7 @@ impl Session {
         name: String,
         start: Ticks,
         bytes: u64,
+        provenance: std::collections::BTreeMap<String, String>,
     ) -> Result<String, String> {
         if self.engine.sample_rate() != prepared.render_rate {
             return Err("Audio device changed during import preparation".into());
@@ -709,11 +710,13 @@ impl Session {
             buffer.sample_rate(),
             buffer.channel_count(),
         );
-        self.project
+        let metadata = self
+            .project
             .audio_sources
             .get_mut(&source)
-            .expect("new source")
-            .byte_size = bytes;
+            .expect("new source");
+        metadata.byte_size = bytes;
+        metadata.provenance = provenance;
         let track = self.project.add_audio_track(&name);
         let Some(clip) = self.project.add_audio_clip(track, source, start) else {
             self.revert_transaction();

@@ -9,6 +9,8 @@ use std::sync::atomic::AtomicBool;
 
 /// Owned work that can run without accessing the live document.
 pub enum AgentJob {
+    /// Bounded audio discovery, import or source processing.
+    AudioAssets(Box<crate::session::audio_assets::Job>),
     /// Private candidate construction or comparison rendering.
     Candidates(crate::session::candidates::Job),
     /// Bounded backing generation against an owned document snapshot.
@@ -25,6 +27,8 @@ pub enum AgentJob {
 
 /// A worker result returned to its originating owner for validation and publication.
 pub enum AgentResult {
+    /// Prepared audio material awaiting its originating document.
+    AudioAssets(Box<crate::session::audio_assets::Prepared>),
     /// Candidate results awaiting owner validation.
     Candidates(crate::session::candidates::Prepared),
     /// Generated backing and optional harmony awaiting their original owner.
@@ -51,6 +55,9 @@ impl AgentJob {
     /// Perform detached work with cooperative cancellation.
     pub fn run(self, cancelled: &AtomicBool) -> Result<AgentResult, String> {
         match self {
+            Self::AudioAssets(job) => job
+                .run(cancelled)
+                .map(|result| AgentResult::AudioAssets(Box::new(result))),
             Self::Candidates(job) => job.run(cancelled).map(AgentResult::Candidates),
             Self::Accompaniment(job) => job
                 .run(cancelled)
@@ -75,6 +82,9 @@ impl Session {
         settings: Settings,
     ) -> Result<AgentJob, String> {
         match command {
+            Command::AudioAssets { operation } => self
+                .begin_audio_assets(operation)
+                .map(|job| AgentJob::AudioAssets(Box::new(job))),
             Command::Candidates { operation } => {
                 self.begin_candidates(operation).map(AgentJob::Candidates)
             }
@@ -142,6 +152,9 @@ impl Session {
             return Err("Agent operation cancelled before publication".into());
         }
         match result {
+            AgentResult::AudioAssets(result) => self
+                .continue_audio_assets(*result, cancelled)
+                .map(AgentStep::Done),
             AgentResult::Candidates(result) => self
                 .continue_candidates(result, cancelled)
                 .map(AgentStep::Done),

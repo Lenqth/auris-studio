@@ -227,6 +227,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.listen",
     "edit_project.checkpoints",
     "edit_project.import_audio",
+    "edit_project.audio_assets",
     "edit_project.import_midi",
     "edit_project.render",
     "edit_project.preview",
@@ -290,7 +291,8 @@ impl Operation {
                 });
             }
             let mutating = parsed.is_mutating();
-            let confirm = matches!(&parsed, crate::live_agent::Command::Arrangement { operation } if operation.requires_confirmation())
+            let confirm = matches!(&parsed, crate::live_agent::Command::AudioAssets { operation } if operation.requires_confirmation())
+                || matches!(&parsed, crate::live_agent::Command::Arrangement { operation } if operation.requires_confirmation())
                 || matches!(&parsed, crate::live_agent::Command::Candidates { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
                 || matches!(&parsed, crate::live_agent::Command::History { .. } if mutating)

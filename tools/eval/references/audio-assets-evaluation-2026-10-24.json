@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "baseline_commit": "bb737c8b1a497ca7c39c2af973e0d5bbc338faff",
+  "backend": "codex",
+  "requested_model": "gpt-6.1-sol",
+  "fixture": "blank",
+  "context_tokens": 65536,
+  "policy": "Isolated GPUI application host with bypass policy; no real Ollama inference.",
+  "elapsed_seconds": 160.3905065,
+  "tool_calls": {
+    "inspect_project": 4,
+    "production_record": 5,
+    "audio_assets": 10,
+    "mixer_graph": 7,
+    "inspect_audio": 5,
+    "import_audio": 1,
+    "edit_clip": 1,
+    "render": 2,
+    "cli_command": 1,
+    "tool_help": 2,
+    "search_documentation": 2,
+    "edit_timeline": 1,
+    "add_clip": 1,
+    "verify_render": 1
+  },
+  "failed_calls": [
+    {
+      "name": "render",
+      "args": {
+        "destination": {
+          "kind": "mix",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\audio-assets-codex-20261024\\result.wav"
+        },
+        "range": {
+          "start_bar": 1,
+          "bars": 4
+        },
+        "include_tail": false,
+        "bit_depth": 24,
+        "ceiling_db": -1
+      },
+      "error": "Export range must lie inside the arrangement"
+    }
+  ],
+  "recovery": "The agent added a zero-note clip on the existing instrument track to extend the arrangement to the requested 8-second export boundary, then rendered successfully.",
+  "encoded": {
+    "sample_rate": 48000,
+    "channels": 2,
+    "bit_depth": 24,
+    "seconds": 8.0,
+    "frames": 384000,
+    "lufs": -23.805498123168945,
+    "peak_db": -5.570497035980225,
+    "true_peak_db": -5.305452823638916,
+    "full_scale_samples": 0,
+    "ending_rms_db": null,
+    "sha256": "c5898383347be883e51a87b33d24e42c331157592a73f520a5085be2f3b41627"
+  },
+  "tracks": [
+    {
+      "id": 3,
+      "name": "Commons • Door handle creaking • reverse HP180",
+      "color": 6277539,
+      "height": 72.0,
+      "kind": {
+        "type": "audio",
+        "clips": [
+          {
+            "id": 4,
+            "name": "Commons • Door handle creaking • reverse HP180",
+            "start": 0,
+            "source": 5,
+            "offset_frames": 0,
+            "length_frames": 86400,
+            "gain_db": 0.0,
+            "fade_in_frames": 960,
+            "fade_out_frames": 2400,
+            "fade_in_curve": "linear",
+            "fade_out_curve": "linear",
+            "muted": false,
+            "follows_tempo": false,
+            "loop_end": 0
+          }
+        ]
+      },
+      "mixer": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false,
+        "effects": [
+          {
+            "id": 9,
+            "effect_id": "auris.fx.eq",
+            "enabled": true,
+            "state": {
+              "params": {
+                "hp_enabled": 1.0,
+                "hp_freq": 180.0
+              }
+            }
+          }
+        ],
+        "target_lufs": null
+      },
+      "outputs": [
+        "master"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Local original • sfx-8KZlVp",
+      "color": 6277539,
+      "height": 72.0,
+      "kind": {
+        "type": "audio",
+        "clips": [
+          {
+            "id": 8,
+            "name": "Local original • sfx-8KZlVp",
+            "start": 3840,
+            "source": 6,
+            "offset_frames": 0,
+            "length_frames": 244507,
+            "gain_db": 0.0,
+            "fade_in_frames": 0,
+            "fade_out_frames": 0,
+            "fade_in_curve": "linear",
+            "fade_out_curve": "linear",
+            "muted": false,
+            "follows_tempo": false,
+            "loop_end": 0
+          }
+        ]
+      },
+      "mixer": {
+        "gain_db": 0.0,
+        "pan": 0.0,
+        "mute": false,
+        "solo": false,
+        "effects": [],
+        "target_lufs": null
+      },
+      "outputs": [
+        "master"
+      ]
+    }
+  ],
+  "audio_sources": {
+    "2": {
+      "id": 2,
+      "name": "Commons • Door handle creaking • reverse HP180",
+      "path": {
+        "inside": "Audio/sfx-v3vIc8.ogg"
+      },
+      "frame_count": 244507,
+      "sample_rate": 48000.0,
+      "channel_count": 2,
+      "byte_size": 145741,
+      "provenance": {
+        "attribution": "stephan",
+        "license": "Public domain",
+        "resolved_url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Door_handle_creaking.ogg",
+        "sha256": "3f60aef66fd4df65e3d8a8859285f42e8a1ddaf80a89b0e4a20964321811b153",
+        "source_page": "https://commons.wikimedia.org/wiki/File:Door_handle_creaking.ogg",
+        "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Door_handle_creaking.ogg"
+      }
+    },
+    "5": {
+      "id": 5,
+      "name": "Commons • Door handle creaking • reverse HP180",
+      "path": {
+        "inside": "Audio/sfx-zNZWle.wav"
+      },
+      "frame_count": 86400,
+      "sample_rate": 48000.0,
+      "channel_count": 2,
+      "byte_size": 691268,
+      "provenance": {
+        "attribution": "stephan",
+        "derived_from_source": "2",
+        "license": "Public domain",
+        "parent_sha256": "3f60aef66fd4df65e3d8a8859285f42e8a1ddaf80a89b0e4a20964321811b153",
+        "processing": "{\"source_start_frame\":0,\"frames\":86400,\"reverse\":true}",
+        "resolved_url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Door_handle_creaking.ogg",
+        "sha256": "fd679c70d39db055d66e57a0edb3aac3b4bbdc14100ace82bcf8c693253d822c",
+        "source_page": "https://commons.wikimedia.org/wiki/File:Door_handle_creaking.ogg",
+        "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Door_handle_creaking.ogg"
+      }
+    },
+    "6": {
+      "id": 6,
+      "name": "Local original • sfx-8KZlVp",
+      "path": {
+        "inside": "Audio/import-zpWdO0.ogg"
+      },
+      "frame_count": 244507,
+      "sample_rate": 48000.0,
+      "channel_count": 2,
+      "byte_size": 145741,
+      "provenance": {
+        "sha256": "3f60aef66fd4df65e3d8a8859285f42e8a1ddaf80a89b0e4a20964321811b153",
+        "source_path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\audio-assets-online-20261024\\CommonsSfx\\Audio\\sfx-8KZlVp.ogg"
+      }
+    }
+  },
+  "checks": {
+    "workspace_passed": 4536,
+    "workspace_failed": 0,
+    "workspace_ignored": 35,
+    "clippy_workspace_all_targets": "passed",
+    "new_session_tests_passed": 10,
+    "saved_dispatch_test": "passed",
+    "explicit_online_smoke": "passed",
+    "explicit_codex_panel_smoke": "passed"
+  },
+  "artifacts": {
+    "panel_report": "target/audio-assets-codex-20261024/report.json",
+    "panel_snapshot": "target/audio-assets-codex-20261024/project-01.json",
+    "mix": "target/audio-assets-codex-20261024/result.wav",
+    "saved_online_project": "target/audio-assets-online-20261024/CommonsSfx/CommonsSfx.auris",
+    "source_evidence": "target/audio-assets-source-evidence/manifest.json"
+  },
+  "executable_sha256": "3b4a86f37bdb5dbe96a6a1ce98e21ecc6771116153aaf5b3b30c852f56933a9c",
+  "limitations": [
+    "One Codex development run, not an estimate of reliability or musical suitability.",
+    "No human listening or external audio critic. Source credit/license claims come from Commons metadata, not independent rights verification.",
+    "The live panel document remained unsaved; its JSON snapshot and rendered mix are retained. Save/reopen was verified separately through session and saved-tool tests.",
+    "The encoded ending RMS is null; do not report it as a finite measurement."
+  ]
+}

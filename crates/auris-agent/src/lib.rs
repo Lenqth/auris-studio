@@ -1919,6 +1919,8 @@ mod tests {
             else {
                 panic!()
             };
+            // This scripted transport test exercises truncation, not catalog sizing.
+            options.context_tokens = 65536;
             options.output_tokens = 8192;
             let agent = build_agent(&options).unwrap();
             let error = converse_with_bridge(

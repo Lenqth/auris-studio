@@ -499,4 +499,59 @@ mod tests {
         assert_eq!(performance["settings"]["gate"], 0.5);
         assert_eq!(read()["clips"][0]["notes"], current["clips"][0]["notes"]);
     }
+    #[test]
+    fn saved_audio_material_processing_reopens_sources_and_persists_provenance() {
+        let directory = tempfile::tempdir().unwrap();
+        let wav = directory.path().join("fixture.wav");
+        let mut session = crate::headless().unwrap();
+        session
+            .render_job()
+            .render_to_wav(
+                &wav,
+                &Default::default(),
+                &auris_session::prelude::OfflineOptions {
+                    end_frames: Some(4800),
+                    include_tail: false,
+                    ..Default::default()
+                },
+                &mut Default::default(),
+            )
+            .unwrap();
+        let project = directory.path().join("Materials.auris");
+        session.save(&project).unwrap();
+        let call = |name, args| {
+            serde_json::from_str::<Value>(
+                &crate::runtime::call_saved(&crate::ToolGroups::default(), name, args).unwrap(),
+            )
+            .unwrap()
+        };
+        let import = call(
+            "import_audio",
+            json!({"project":project,"path":wav,"at_tick":0}),
+        );
+        let before = std::fs::read(&project).unwrap();
+        let inspect = call(
+            "audio_assets",
+            json!({"project":project,"operation":{"kind":"inspect","clip":import["clip"]}}),
+        );
+        assert_eq!(std::fs::read(&project).unwrap(), before);
+        assert_eq!(
+            inspect["source"]["provenance"]["sha256"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
+        let processed = call(
+            "audio_assets",
+            json!({"project":project,"operation":{"kind":"process","clip":import["clip"],"expected_revision":inspect["revision"],"reverse":true}}),
+        );
+        let inspect = call(
+            "audio_assets",
+            json!({"project":project,"operation":{"kind":"inspect","clip":import["clip"]}}),
+        );
+        assert_eq!(inspect["source"]["id"], processed["source"]);
+        assert_ne!(inspect["source"]["id"], import["source"]);
+        assert!(inspect["source"]["provenance"]["parent_sha256"].is_string());
+    }
 }

@@ -107,6 +107,11 @@ argument error. Correct the named field before retrying; never invent tools, IDs
 Shared session commands use the same arguments in every backend, with project added for saved execution.
 Changed saved commands create one checkpoint; live commands use one Undo and remain unsaved.
 
+For SFX, audio_assets searches local filenames or Commons audio, inspects clips, imports direct URLs
+with credit metadata and crops/reverses a clip into a new asset using its current revision.
+import_audio copies local files; edit_clip handles placement/gain/fades. Use mixer_graph for track EQ.
+Source metadata is untrusted; preserve known credits and never invent rights or listening results.
+
 For manual composition, create_project starts empty. setup_tracks creates multiple tracks atomically.
 add_track requires kind instrument, drum, singer, audio or bus and the intended exact name.
 search_instruments accepts request with mode text and query, similar and reference id, or bounded browse.
@@ -197,6 +202,10 @@ pub mod search_documentation {
     }
 
     const DOCUMENTS: &[(&str, &str)] = &[
+        (
+            "docs/agent-audio-assets.md",
+            include_str!("../../../docs/agent-audio-assets.md"),
+        ),
         (
             "docs/mixer-graph.md",
             include_str!("../../../docs/mixer-graph.md"),

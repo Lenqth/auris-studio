@@ -49,7 +49,7 @@ impl ToolGroups {
         );
         for group in &self.0 {
             text.push_str(match group.as_str() {
-                "manual" => "For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes writes exact tick-based notes. ",
+                "manual" => "For SFX, audio_assets finds local/Commons audio, imports URLs and crops/reverses clips with preserved source metadata; import_audio copies local files. For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes writes exact tick-based notes. ",
                 "mix" => "For mixing, read mixer_graph for stable track/effect nodes and outgoing edges; follow next_offset. Track nodes contain fader controls; inserts still process before the fader. Edit graph connections and inserts through mixer_graph; all output/send/sidechain cycles are rejected. Parallel effects use bus branches. Inspect mixer parameters in native dB/pan units, and measure or listen to the same range before and after edits. After sound changes remeasure loudness; normalize_mix moves source faders toward a requested target. Render inspects the encoded WAV; use verify_render for target, peak and ending checks. ",
                 "transcription" => "For transcription, analyze the source and fetch tool_help before applying recognized notes. ",
                 "vocals" => "For vocals, analyze_lyrics establishes readings and diagnose_song checks shared phrases. Read notes before repair_lyrics, keep the template and keywords fixed, preview at most three alternatives and apply only a pass with the current revision. Recheck related phrases and meaning, then sing and confirm a current take. ",
@@ -116,6 +116,7 @@ pub fn tool_group(name: &str) -> &'static str {
         "arrangement"
         | "phrase_variation"
         | "create_project"
+        | "audio_assets"
         | "import_audio"
         | "import_midi"
         | "setup_tracks"
