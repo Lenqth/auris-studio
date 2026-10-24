@@ -2,8 +2,9 @@
 
 For the live agent panel, set `AURIS_COMPOSITION_CANDIDATES=1` before starting
 Auris to advertise the experimental candidate and phrase tools. Their additional
-schemas need context headroom; use a 64k context for the full local-model
-experiment. The ordinary 32k catalog remains available by default. Saved-project
+schemas need context headroom. History can exhaust even a 64k local-model
+budget during a candidate round; choose a supported budget and retain budget
+failures in evaluation results. The ordinary 32k catalog remains available by default. Saved-project
 MCP exposes these commands through its manual/composition tool groups.
 
 `candidates` is shared by the live agent and saved-project MCP. It constructs
