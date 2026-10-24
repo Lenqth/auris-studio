@@ -1,4 +1,4 @@
-//! Opt-in, multi-turn composition trials through the real built-in Codex host.
+//! Opt-in, multi-turn composition trials through the real application agent hosts.
 
 use super::*;
 use auris_session::{
@@ -12,11 +12,56 @@ use std::fs;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Evaluation {
+    #[serde(default = "codex_backend")]
+    backend: String,
+    #[serde(default = "context_tokens")]
+    context_tokens: u32,
     model: String,
     output: PathBuf,
     timeout_seconds: u64,
     fixture: String,
     prompts: Vec<String>,
+}
+
+fn codex_backend() -> String {
+    "codex".into()
+}
+fn context_tokens() -> u32 {
+    65536
+}
+
+fn melody_fixture(quarter: Ticks) -> (Ticks, Vec<Note>) {
+    let notes = (0..8)
+        .flat_map(|bar| {
+            let pitches = [[69, 72, 76], [67, 71, 74], [65, 69, 72], [64, 68, 71]][bar % 4];
+            pitches.into_iter().enumerate().map(move |(i, pitch)| {
+                let mut note = Note::new(
+                    pitch,
+                    Ticks((bar as i64 * 3 + i as i64) * quarter.0),
+                    Ticks(quarter.0 * 7 / 8),
+                );
+                note.velocity = 0.61 + i as f32 * 0.07;
+                note
+            })
+        })
+        .collect();
+    (Ticks(24 * quarter.0), notes)
+}
+
+#[test]
+fn versioned_melody_fixture_spans_eight_bars_without_changing_legacy_data() {
+    let signature: TimeSignature = "6/8".parse().unwrap();
+    let (length, notes) = melody_fixture(Ticks::QUARTER);
+    assert_eq!(length, signature.ticks_per_bar() * 8);
+    assert_eq!(length.as_beats() * 60.0 / 90.0, 16.0);
+    assert_eq!(notes.len(), 24);
+    assert_eq!(notes[2].start, Ticks(1920));
+    assert_eq!(notes[2].length, Ticks(840));
+    assert_eq!(notes[2].pitch, 76);
+    let (legacy_length, legacy_notes) = melody_fixture(Ticks(480));
+    assert_eq!(legacy_length, Ticks(11520));
+    assert_eq!(legacy_notes[2].start, Ticks(960));
+    assert_eq!(legacy_notes[2].length, Ticks(420));
 }
 
 fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
@@ -41,19 +86,30 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
 }
 
 #[gpui::test]
-#[ignore = "real Codex inference; requires AURIS_COMPOSITION_EVAL config"]
+#[ignore = "real model inference; requires AURIS_COMPOSITION_EVAL config"]
 fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
     let path = std::env::var_os("AURIS_COMPOSITION_EVAL").expect("explicit evaluation config");
     let config: Evaluation = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     assert!(config.output.is_absolute());
     assert!(!config.prompts.is_empty());
+    assert!(matches!(
+        config.backend.as_str(),
+        "codex" | "claude" | "rig"
+    ));
     fs::create_dir(&config.output).expect("a fresh evidence folder");
     let (app, cx) = crate::harness::open(cx);
     app.update(cx, |this, _| {
         this.session.new_project();
         match config.fixture.as_str() {
             "blank" => {}
-            "melody_six_eight" => {
+            "melody_six_eight" | "melody_six_eight_eight_bars" => {
+                // Keep v1's four-bar seed unchanged for frozen paired comparisons.
+                let quarter = if config.fixture == "melody_six_eight" {
+                    Ticks(480)
+                } else {
+                    Ticks::QUARTER
+                };
+                let (length, notes) = melody_fixture(quarter);
                 this.session.set_tempo_at(Ticks::ZERO, 90.0);
                 this.session
                     .set_signature_at(Ticks::ZERO, "6/8".parse().unwrap());
@@ -63,23 +119,8 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
                     .unwrap();
                 let clip = this
                     .session
-                    .add_midi_clip(track, "残したい旋律", Ticks::ZERO, Ticks(11520))
+                    .add_midi_clip(track, "残したい旋律", Ticks::ZERO, length)
                     .unwrap();
-                let notes = (0..8)
-                    .flat_map(|bar| {
-                        let pitches =
-                            [[69, 72, 76], [67, 71, 74], [65, 69, 72], [64, 68, 71]][bar % 4];
-                        pitches.into_iter().enumerate().map(move |(i, pitch)| {
-                            let mut note = Note::new(
-                                pitch,
-                                Ticks(bar as i64 * 1440 + i as i64 * 480),
-                                Ticks(420),
-                            );
-                            note.velocity = 0.61 + i as f32 * 0.07;
-                            note
-                        })
-                    })
-                    .collect();
                 this.session.replace_notes(clip, notes).unwrap();
                 this.session
                     .set_curve_point(clip, ClipCurve::Controller(1), Ticks(333), 0.37);
@@ -87,7 +128,9 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
             other => panic!("unknown fixture {other}"),
         }
         this.settings.agent = AgentPreferences {
-            backend: "codex".into(),
+            backend: config.backend.clone(),
+            provider: "ollama".into(),
+            context_tokens: Some(config.context_tokens),
             model: config.model.clone(),
             // Fixture-only trials isolate tool selection from interactive approval timing.
             policy: Policy {
@@ -177,7 +220,11 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
             )
             .unwrap();
         });
-        turns.push(json!({"turn":index+1,"elapsed_seconds":turn_started.elapsed().as_secs_f64(),"failure":failure}));
+        let usage = app.read_with(cx, |this, _| json!({
+            "last_reported_input_context_tokens":this.agent_chat.tokens_in,
+            "conversation_reported_output_tokens":this.agent_chat.tokens_out,
+            "interpretation":"Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."}));
+        turns.push(json!({"turn":index+1,"elapsed_seconds":turn_started.elapsed().as_secs_f64(),"failure":failure,"usage":usage}));
         if failure.is_some() {
             break;
         }
@@ -192,7 +239,7 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
             let mut check = Session::new(auris_session::SessionOptions::headless()).unwrap();
             check.import_midi(&midi).ok().map(|report|report.notes)
         };
-        json!({"model":config.model,"fixture":config.fixture,"elapsed_seconds":started.elapsed().as_secs_f64(),
+        json!({"model":config.model,"backend":config.backend,"prompt_profile":if std::env::var("AURIS_COMPOSITION_WORKFLOWS").is_ok_and(|value| value == "1") {"modular"} else {"legacy"},"fixture":config.fixture,"elapsed_seconds":started.elapsed().as_secs_f64(),
             "policy":"isolated generated fixture, explicit bypass; real application host",
             "turns":turns,"unsaved":this.session.path().is_none(),"midi_notes":midi_notes,
             "encoded":auris_session::inspect_export(&wav).ok(),

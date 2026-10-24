@@ -59,7 +59,9 @@ def manifest(path: Path) -> dict:
             raise ValueError("Case IDs must be safe directory names")
         if case["split"] not in {"development", "holdout"}:
             raise ValueError("Invalid split")
-        if case["fixture"] not in {"blank", "melody_six_eight"}:
+        if case["fixture"] not in {
+            "blank", "melody_six_eight", "melody_six_eight_eight_bars"
+        }:
             raise ValueError("Unknown fixture")
         if not case["prompts"] or not all(
             isinstance(p, str) and p.strip() for p in case["prompts"]
@@ -68,10 +70,23 @@ def manifest(path: Path) -> dict:
     return value
 
 
+def frozen_source(reference: Path, runtime: dict[str, str]) -> dict:
+    """Bind a reused executable to previously captured source, never today's checkout."""
+    prior = read_json(reference)
+    if prior.get("runtime") != runtime:
+        raise ValueError("Frozen runtime does not match the source suite")
+    return {
+        key: prior[key]
+        for key in ("source_commit", "source_diff", "untracked_rust_sources")
+    } | {"source_reference_sha256": digest(reference)}
+
+
 def run(args) -> None:
     suite = manifest(args.manifest)
     if not 1 <= args.repetitions <= 20 or not 1 <= args.timeout <= 3600:
         raise ValueError("Use 1..20 repetitions and 1..3600 seconds per turn")
+    if not 8192 <= args.context_tokens <= 262144:
+        raise ValueError("Use 8192..262144 context tokens")
     eligible = {case["id"] for case in suite["cases"] if case["split"] == args.split}
     if args.case and not set(args.case) <= eligible:
         raise ValueError("Requested case is not in the selected split")
@@ -91,7 +106,11 @@ def run(args) -> None:
         "manifest": suite,
         "manifest_sha256": digest(args.manifest),
         "model": args.model,
-        "backend": "codex",
+        "backend": getattr(args, "backend", "codex"),
+        "prompt_profile": getattr(args, "prompt_profile", "legacy"),
+        "candidate_tools_enabled": True,
+        "context_tokens": args.context_tokens,
+        "runner_sha256": digest(Path(__file__)),
         "split": args.split,
         "repetitions": args.repetitions,
         "source_commit": subprocess.check_output(
@@ -132,6 +151,8 @@ def run(args) -> None:
         "quality_status": "unscored; transport and structural measurements are not musical preference",
         "trials": [],
     }
+    if getattr(args, "source_suite", None):
+        provenance.update(frozen_source(args.source_suite, provenance["runtime"]))
     write_json(output / "suite.json", provenance)
     for case in suite["cases"]:
         if case["split"] != args.split or (args.case and case["id"] not in args.case):
@@ -151,8 +172,19 @@ def run(args) -> None:
                 "output": str(destination),
             }
             config_path = output / f"{trial_id}.config.json"
+            if provenance["backend"] != "codex":
+                config["backend"] = provenance["backend"]
+                config["context_tokens"] = args.context_tokens
             write_json(config_path, config)
-            environment = dict(os.environ, AURIS_COMPOSITION_EVAL=str(config_path))
+            environment = dict(
+                os.environ,
+                AURIS_COMPOSITION_EVAL=str(config_path),
+                AURIS_COMPOSITION_WORKFLOWS="1"
+                if provenance["prompt_profile"] == "modular"
+                else "0",
+                AURIS_ARRANGEMENT_HARNESS="0",
+                AURIS_COMPOSITION_CANDIDATES="1",
+            )
             started = time.monotonic()
             with (output / f"{trial_id}.log").open("w", encoding="utf-8") as log:
                 process = subprocess.run(
@@ -319,10 +351,22 @@ def main() -> None:
     runner.add_argument("--manifest", type=Path, default=MANIFEST)
     runner.add_argument("--model", default="gpt-6.1-sol")
     runner.add_argument(
+        "--backend", choices=["codex", "claude", "rig"], default="codex"
+    )
+    runner.add_argument(
+        "--prompt-profile", choices=["legacy", "modular"], default="legacy"
+    )
+    runner.add_argument(
+        "--source-suite",
+        type=Path,
+        help="Previous suite binding an identical frozen runtime to its original source",
+    )
+    runner.add_argument(
         "--split", choices=["development", "holdout"], default="development"
     )
     runner.add_argument("--repetitions", type=int, default=3)
     runner.add_argument("--timeout", type=int, default=600)
+    runner.add_argument("--context-tokens", type=int, default=65536)
     runner.add_argument("--case", action="append")
     comparison = commands.add_parser("blind")
     comparison.add_argument("--before", type=Path, required=True)

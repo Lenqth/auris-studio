@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "conditions": "これは実行経路の検証です。内蔵音源だけを使い、外部の音声批評は呼ばず、数値と譜面で確認してください。既存のプロジェクトは未保存のまま残してください。",
+  "axes": ["request_fit", "melody", "form", "ensemble", "sound"],
+  "delivery_prompt": "現在の8小節を24bit WAV『{output}/result.wav』とMIDI『{output}/result.mid』に書き出してください。数値で長さ・無音・音割れを確認し、制作記録には実際に確認したことと未確認事項を分けて残してください。音楽的に良くなったとは断定しないでください。",
+  "cases": [
+    {
+      "id": "exact_phrase_round",
+      "split": "development",
+      "fixture": "melody_six_eight_eight_bars",
+      "prompts": [
+        "既存メロディーを読んで、制作記録に『先頭小節の3音目だけを半音上げ、それ以外の音符・強弱・コントローラー・テンポ・拍子を完全に保つ』という条件を記録してください。local_edit / melody_first を選び、phrase_variationで原曲と変更案の差分を確認し、candidatesにその1案を作ってください。先頭1小節を原曲と案でプレビューし、まだ採用せずに候補IDと未確認事項を記録してください。",
+        "前の制作記録と現在の文書を読み直してください。比較した変更案を、再生成せず候補IDで採用してください。historyでその操作をUndoし、元に戻ったことをread_notesで確認してからRedoしてください。最終状態は先頭小節の3音目だけが半音高い状態とし、他の音符とコントローラーが変わっていないか確認してください。"
+      ]
+    }
+  ]
+}
+

@@ -6,7 +6,9 @@ same, so prompt experiments do not silently compare different tools. The default
 continues to use the existing prompt until listening evidence supports a change.
 Use `AURIS_COMPOSITION_CANDIDATES=1` independently to advertise candidate tools;
 keep that flag equal in both prompt conditions. The evaluation runner enables it
-in both conditions and uses 64k for local-model experiments.
+in both conditions. Its local-model context defaults to 64k and can be recorded
+explicitly with `--context-tokens`; a larger budget in an experiment does not
+change application defaults.
 
 `production_record` accepts `select_workflow` with `workflow` (`composition`,
 `accompaniment`, `vocals`, `local_edit`, `delivery`) and `writing_order`

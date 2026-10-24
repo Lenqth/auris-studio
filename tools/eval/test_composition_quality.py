@@ -36,6 +36,13 @@ def test_manifest_keeps_development_and_holdout_cohorts_separate():
     assert sum(c["split"] == "holdout" for c in data["cases"]) == 4
 
 
+def test_runtime_smoke_uses_versioned_eight_bar_fixture():
+    data = quality.manifest(
+        quality.MANIFEST.with_name("composition-runtime-smoke-v2.json")
+    )
+    assert data["cases"][0]["fixture"] == "melody_six_eight_eight_bars"
+
+
 def test_changed_audio_cannot_be_substituted_after_scoring(tmp_path):
     before, after = tmp_path / "before", tmp_path / "after"
     suite(before)
@@ -92,3 +99,20 @@ def test_matching_but_incomplete_cohorts_cannot_hide_interrupted_runs(tmp_path):
         quality.write_json(root / "suite.json", data)
     with pytest.raises(ValueError, match="Incomplete trial cohorts"):
         quality.pairs(before, after, 42)
+
+
+def test_frozen_source_uses_original_provenance_and_rejects_changed_runtime(tmp_path):
+    reference = tmp_path / "suite.json"
+    original = {
+        "runtime": {"test.exe": "original-binary"},
+        "source_commit": "original-commit",
+        "source_diff": "original-diff",
+        "untracked_rust_sources": {"draft.rs": "original source"},
+    }
+    quality.write_json(reference, original)
+    bound = quality.frozen_source(reference, original["runtime"])
+    assert bound["source_commit"] == "original-commit"
+    assert bound["untracked_rust_sources"] == original["untracked_rust_sources"]
+    assert bound["source_reference_sha256"] == quality.digest(reference)
+    with pytest.raises(ValueError, match="runtime"):
+        quality.frozen_source(reference, {"test.exe": "different-binary"})

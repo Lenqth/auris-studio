@@ -4,7 +4,8 @@
 unsaved fixture. The versioned manifest contains eight development tasks and four
 held-out tasks. Freeze it before collecting a baseline; do not tune against holdout
 outputs. Use the same controller model, backend, manifest and repetition count for
-both conditions. The initial implementation exercises the Codex backend.
+both conditions. The runner supports Codex CLI, Claude Code and Rig/Ollama through
+the same live application host (`--backend codex|claude|rig`, `--model <name>`).
 
 Build the GPUI **test binary**, locate its executable in Cargo's JSON output, and
 pass that executable to the runner (not `auris-studio.exe`). The runner copies the
@@ -20,8 +21,11 @@ uv run tools/eval/composition_quality.py blind --before target/quality-before --
 
 Use `--case authored_folk` for a targeted experiment, preserving the same cohort on
 both sides. Use `--split holdout` only after development decisions are fixed.
-Trials require an authenticated Codex CLI and can consume substantial inference
-time. Each turn has a bounded timeout in the existing GPUI harness.
+CLI trials require the corresponding authenticated CLI; Rig trials require a
+running local Ollama server and an installed tool-capable model. They can consume
+substantial inference time. Each turn has a bounded timeout in the GPUI harness.
+`--context-tokens` controls the local model's context budget (default 65536); it
+does not change CLI model limits or the application's default preferences.
 
 The manifest asks for built-in instruments and disables the external audio critic
 in these composition trials. Critic calibration is a separate experiment, so its
@@ -31,7 +35,10 @@ Each run records executable/DLL hashes, the manifest, source commit and Rust dif
 new Rust source files, per-trial configuration hash, transcript, project snapshots, WAV/MIDI artifacts,
 encoded-file measurements, tool failures and elapsed time. Source provenance is
 captured from the current checkout: build and start the runner before changing
-that source. Controller services may change behind the same model name; retain
+that source. When reusing a frozen runtime, pass `--source-suite <suite.json>`:
+the runner verifies identical runtime hashes and retains the original source
+provenance rather than attributing the binary to today's checkout.
+Controller services may change behind the same model name; retain
 timestamps and compare under the closest available service conditions.
 
 `transport_pass` means that every requested turn completed. `delivery_present`
@@ -52,6 +59,19 @@ Three repetitions expose variability but do not by themselves demonstrate a
 statistically reliable preference improvement. The symbolic and learned rulers
 in [evaluation.md](evaluation.md) are supporting measurements, not substitutes
 for human listening or permission to optimize against the holdout set.
+
+The separate `composition-runtime-smoke-v2.json` manifest checks exact local
+variation, preview, candidate adoption, Undo/Redo and delivery. Its versioned
+`melody_six_eight_eight_bars` fixture uses native 960 ticks per quarter and spans
+eight 6/8 bars at 90 BPM (16 seconds). The original `melody_six_eight` fixture in
+quality manifest v1 is a **four-bar seed** (11520 ticks, 8 seconds), despite its
+eight construction iterations. Keep those original bytes for frozen v1 paired
+comparisons: an eight-bar accompaniment request must extend that shorter seed.
+Do not silently substitute the corrected fixture into one comparison condition.
+
+Runtime smoke v1 incorrectly requested the current eight bars from that four-bar
+seed. Its runs remain diagnostic evidence, not valid eight-bar delivery tests.
+Use v2 for new runtime checks. Neither runtime smoke version measures preference.
 
 ```sh
 uv run --with pytest pytest tools/eval/test_composition_quality.py
