@@ -1021,6 +1021,7 @@ pub(crate) struct AgentChat {
     pub(crate) codex_path: String,
     pub(crate) claude_path: String,
     pub(crate) opencode_path: String,
+    pub(crate) antigravity_path: String,
     /// What the provider last answered the model question with.
     pub(crate) models: Vec<ModelOption>,
     /// Whether that question is in flight.
@@ -1143,6 +1144,7 @@ impl Default for AgentChat {
             codex_path: String::new(),
             claude_path: String::new(),
             opencode_path: String::new(),
+            antigravity_path: String::new(),
             models: Vec::new(),
             fetching_models: false,
             models_error: None,
@@ -1332,6 +1334,7 @@ impl AgentChat {
         self.codex_path = prefs.codex_path.clone();
         self.claude_path = prefs.claude_path.clone();
         self.opencode_path = prefs.opencode_path.clone();
+        self.antigravity_path = prefs.antigravity_path.clone();
         self.chosen_model = prefs.model.trim().to_string();
         self.url_field = TextField::new(prefs.url.clone());
         self.key_env_field = TextField::new(prefs.api_key_env.clone());
@@ -1363,6 +1366,7 @@ impl AgentChat {
             codex_path: self.codex_path.clone(),
             claude_path: self.claude_path.clone(),
             opencode_path: self.opencode_path.clone(),
+            antigravity_path: self.antigravity_path.clone(),
             policy: self.policy.clone(),
             auto_compact_percent: self.auto_compact_percent,
             context_tokens: Some(self.context_tokens),
@@ -1404,6 +1408,14 @@ impl AgentChat {
             return std::iter::once(ReasoningEffort::Default)
                 .chain(efforts.iter().copied())
                 .collect();
+        }
+        if self.backend == "antigravity" {
+            return vec![
+                ReasoningEffort::Default,
+                ReasoningEffort::Low,
+                ReasoningEffort::Medium,
+                ReasoningEffort::High,
+            ];
         }
         controls::effort_choices(self.provider_openai || self.backend == "codex").to_vec()
     }
@@ -2193,7 +2205,14 @@ impl AurisApp {
             auris_agent::validate_attachments(&self.settings.agent, &self.agent_chat.attachments)
         {
             self.agent_chat.attachment_error = Some(
-                if self.agent_chat.attachments.iter().any(|path| {
+                if self.settings.agent.backend == "antigravity"
+                    && self.agent_chat.attachments.iter().any(|path| {
+                        auris_agent::attachment_kind(path)
+                            == Some(auris_agent::AttachmentKind::Image)
+                    })
+                {
+                    self.t(Key::AgentAttachmentImageUnsupported).to_owned()
+                } else if self.agent_chat.attachments.iter().any(|path| {
                     auris_agent::attachment_kind(path) == Some(auris_agent::AttachmentKind::Audio)
                 }) {
                     self.t(Key::AgentAttachmentAudioUnsupported).to_owned()
@@ -4657,7 +4676,7 @@ impl AurisApp {
             .when(
                 matches!(
                     self.settings.agent.backend.as_str(),
-                    "codex" | "claude" | "opencode"
+                    "codex" | "claude" | "opencode" | "antigravity"
                 ) && attachments.iter().any(|path| {
                     auris_agent::attachment_kind(path) == Some(auris_agent::AttachmentKind::Audio)
                 }),
@@ -6852,6 +6871,28 @@ mod tests {
     }
 
     #[gpui::test]
+    fn antigravity_models_switch_the_runtime_and_keep_the_api_route(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences {
+                antigravity_path: "C:/Tools/agy.exe".into(),
+                provider: "openai".into(), url: "https://example.invalid/v1".into(),
+                effort: ReasoningEffort::Xhigh,
+                ..Default::default()
+            };
+            this.agent_chat.load_preferences(&this.settings.agent.clone());
+            this.agent_chat.accept_model_listing(Ok(r#"{"models":[{"name":"agy-fixture","efforts":["low","medium","high"],"connection":{"backend":"antigravity","provider":"openai","url":"","api_key_env":""}}]}"#.into()));
+            this.choose_agent_model_with(0, |_| Ok::<(), ()>(())).unwrap();
+            assert_eq!(this.settings.agent.backend, "antigravity");
+            assert_eq!(this.settings.agent.effort, ReasoningEffort::Default);
+            assert_eq!(this.agent_chat.selected_model_label(), "agy-fixture (Antigravity CLI)");
+            assert_eq!(this.agent_chat.preferences().antigravity_path, "C:/Tools/agy.exe");
+            assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
+            assert_eq!(this.agent_chat.effort_choices(), vec![ReasoningEffort::Default, ReasoningEffort::Low, ReasoningEffort::Medium, ReasoningEffort::High]);
+        });
+    }
+
+    #[gpui::test]
     fn agent_file_drops_attach_references_without_importing_audio(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
@@ -6947,6 +6988,32 @@ mod tests {
             assert!(this.agent_chat.attachment_error.is_some());
             assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
             assert_eq!(this.agent_chat.attachments, [PathBuf::from("mix.wav")]);
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn antigravity_image_rejection_keeps_the_draft_and_all_references(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences {
+                backend: "antigravity".into(),
+                model: "fixture".into(),
+                ..Default::default()
+            };
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.input = TextField::new("Use these references");
+            this.agent_chat.attachments = vec!["image.png".into(), "reference.wav".into()];
+            this.agent_send();
+            assert_eq!(
+                this.agent_chat.attachment_error.as_deref(),
+                Some(this.t(Key::AgentAttachmentImageUnsupported))
+            );
+            assert_eq!(this.agent_chat.input.content(), "Use these references");
+            assert_eq!(this.agent_chat.attachments.len(), 2);
             assert!(this.agent_chat.link.is_none());
         });
     }

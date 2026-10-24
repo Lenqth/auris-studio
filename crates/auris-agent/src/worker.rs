@@ -623,7 +623,10 @@ pub fn list_models_background(
         .name("auris-model-list".into())
         .spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                if matches!(prefs.backend.as_str(), "codex" | "claude" | "opencode") {
+                if matches!(
+                    prefs.backend.as_str(),
+                    "codex" | "claude" | "opencode" | "antigravity"
+                ) {
                     let runtime = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()
@@ -632,6 +635,8 @@ pub fn list_models_background(
                         tokio::time::timeout(MODEL_LIST_PATIENCE, async {
                             if prefs.backend == "opencode" {
                                 backends::opencode::list_models(&prefs).await
+                            } else if prefs.backend == "antigravity" {
+                                backends::antigravity::list_models(&prefs).await
                             } else if prefs.backend == "claude" {
                                 backends::claude::list_models(&prefs).await
                             } else {

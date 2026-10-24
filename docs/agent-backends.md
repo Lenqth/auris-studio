@@ -1,6 +1,6 @@
 # Agent backends
 
-The Agent panel discovers the signed-in Codex, Claude Code and OpenCode CLIs, local Ollama,
+The Agent panel discovers the signed-in Codex, Claude Code, OpenCode and Antigravity CLIs, local Ollama,
 and the API connection configured in Settings > Agent. An `OPENAI_API_KEY` also enables
 discovery at OpenAI's default endpoint. Providers are queried concurrently;
 an unavailable provider does not hide models returned by another.
@@ -190,11 +190,77 @@ model catalogue without inference:
 cargo test -p auris-agent installed_opencode_lists_models_and_opens_a_live_mcp_session -- --ignored
 ```
 
+## Antigravity CLI setup
+
+Install [Antigravity CLI](https://antigravity.google/docs/cli/install/) and run
+`agy` to sign in. Settings > Agent accepts an optional native `agy` / `agy.exe`
+executable path; leaving it empty searches PATH and `.local/bin`. Refresh the
+Agent model menu and select an option labeled **Antigravity CLI**. Model slugs
+come from `agy models`; the rig API URL/key settings are preserved. Default
+reasoning keeps the CLI default; Low, Medium and High are available.
+
+The integration is tested with CLI 1.4.6. It uses the documented
+[stream-json input and output](https://antigravity.google/docs/cli/headless/)
+and structured output. Unlike Codex and Claude Code, this protocol has no external
+tool approval channel and accepts text blocks only. An ephemeral
+[custom agent](https://antigravity.google/docs/subagents/) exposes only `finish`,
+which returns structured toolbox requests without executing them. Auris checks
+all requested tool names and object shapes before dispatch, validates and executes
+each call through the common ToolHost, and sends
+the results back to the same CLI conversation. All document edits therefore use
+the ordinary live permissions and Undo. The text catalog retains parameter units,
+examples and field descriptions. Continuation messages distinguish host instructions
+from untrusted tool results and explicitly request an empty call list when finished.
+Repeated identical tool failures or three consecutive identical request/result
+batches stop the turn without reverting earlier edits. Native CLI
+shell/file/browser/subagent tools are unavailable; no permission bypass flag is used.
+
+Text references and local audio measurements are supported. Image attachments are
+refused before submission, retaining the draft for another backend. Structured
+responses are buffered until validated rather than displaying raw JSON fragments.
+Manual compaction is unavailable. Completed exchanges use Auris conversation
+storage; replacement workers receive historical text and never resume a native
+CLI conversation ID. The CLI may retain its own native transcripts under its
+ordinary profile. Stop closes stdin and terminates the child while Auris cancels
+pending tools and refuses late edits.
+
+The invocation uses a private temporary folder for its agent, schema and log, and
+removes it on shutdown. Authentication stays inside the installed CLI. Because
+the CLI cannot isolate global hooks, MCP servers or plugins per invocation, the
+backend refuses profiles containing those extensions rather than inheriting
+them. It does not edit global CLI configuration or reuse the song folder as a
+CLI workspace. Empty global configuration files are accepted.
+
+`cargo test -p auris-agent antigravity` runs scripted transport, approval, denial
+and Undo tests without an account. The optional signed-in inference check is:
+
+```sh
+cargo test -p auris-agent installed_antigravity_returns_structured_tool_requests_without_native_tools -- --ignored
+```
+
+It requests one structured `add_track` call without executing it or opening a song.
+
+The broader opt-in suite uses the signed-in CLI and real inference:
+
+```sh
+cargo test -p auris-agent installed_antigravity_ -- --ignored --nocapture --test-threads=1
+```
+
+It composes a disposable four-bar melody/bass/drum arrangement, reads back notes and
+harmony, edits pitch/performance/mixer controls, and verifies request-level Undo/Redo.
+It tests sound selection, track renaming, clip copying and playback loops, then
+renders and measures an eight-second WAV, exports MIDI, submits text/audio
+references, restores conversation history in a replacement worker, tests denied and
+cancelled edits, and checks model discovery and independent approval/denial reviews.
+Outputs and conversation files live in temporary directories; no saved song is opened.
+These checks require the `gemini-3.8-flash-low` model and consume inference credits.
+
 ## Runtime boundary
 
 `auris-agent::Worker` owns the background runtime and cancellation. Its backend
 owns the conversation loop: rig runs it locally, while Codex drives an app-server
-child process, Claude Code uses stream-json, and OpenCode uses ACP. Provider protocol types stay
+child process, Claude Code uses stream-json, OpenCode uses ACP, and Antigravity returns
+structured requests for Auris to execute. Provider protocol types stay
 inside the backend. `ToolHost` normalizes flat toolbox calls, serializes authorization and execution, and sends
 live commands to the window. The window owns the session and rechecks permissions
 immediately before an edit.

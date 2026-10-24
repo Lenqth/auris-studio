@@ -2,6 +2,7 @@
 
 use crate::*;
 use std::path::Path;
+pub(super) mod antigravity;
 pub(super) mod claude;
 pub(super) mod codex;
 pub(super) mod opencode;
@@ -56,6 +57,7 @@ pub(crate) enum Backend {
     Codex(auris_session::AgentPreferences),
     Claude(auris_session::AgentPreferences),
     OpenCode(auris_session::AgentPreferences),
+    Antigravity(auris_session::AgentPreferences),
 }
 
 impl Backend {
@@ -74,6 +76,7 @@ impl Backend {
             "codex" => Ok(Self::Codex(prefs.clone())),
             "claude" => Ok(Self::Claude(prefs.clone())),
             "opencode" => Ok(Self::OpenCode(prefs.clone())),
+            "antigravity" => Ok(Self::Antigravity(prefs.clone())),
             other => Err(format!("Unknown agent backend: {other}")),
         }
     }
@@ -89,6 +92,9 @@ impl Backend {
         match self {
             Self::OpenCode(prefs) => {
                 opencode::run(&prefs, bridge, history_path, fresh, history, cancelled).await
+            }
+            Self::Antigravity(prefs) => {
+                antigravity::run(&prefs, bridge, history_path, fresh, history, cancelled).await
             }
             Self::Claude(prefs) => {
                 claude::run(&prefs, bridge, history_path, fresh, history, cancelled).await

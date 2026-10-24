@@ -142,6 +142,7 @@ async fn review(prefs: &auris_session::AgentPreferences, prompt: &str) -> Result
         "codex" => backends::codex::review(prefs, prompt).await?,
         "claude" => backends::claude::review(prefs, prompt).await?,
         "opencode" => backends::opencode::review(prefs, prompt).await?,
+        "antigravity" => backends::antigravity::review(prefs, prompt).await?,
         "" | "rig" => {
             let Command::Run(options) =
                 parse_command(&[], &|name| std::env::var(name).ok(), prefs)?

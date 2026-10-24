@@ -4,8 +4,8 @@ use super::*;
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
     selected_connection: auris_agent::ModelConnection,
-    pub(super) fields: [TextField; 5],
-    pub(super) focus: [FocusHandle; 5],
+    pub(super) fields: [TextField; 6],
+    pub(super) focus: [FocusHandle; 6],
     pub(super) active: Option<usize>,
 }
 
@@ -26,8 +26,10 @@ impl AgentSettings {
                 TextField::new(prefs.codex_path.clone()),
                 TextField::new(prefs.claude_path.clone()),
                 TextField::new(prefs.opencode_path.clone()),
+                TextField::new(prefs.antigravity_path.clone()),
             ],
             focus: [
+                cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
@@ -57,6 +59,7 @@ impl SettingsWindow {
         self.agent.prefs.codex_path = self.agent.fields[2].content().trim().to_owned();
         self.agent.prefs.claude_path = self.agent.fields[3].content().trim().to_owned();
         self.agent.prefs.opencode_path = self.agent.fields[4].content().trim().to_owned();
+        self.agent.prefs.antigravity_path = self.agent.fields[5].content().trim().to_owned();
         let draft = self.agent.prefs.clone();
         let selected_connection = self.agent.selected_connection.clone();
         let result = self.app.update(cx, move |app, cx| {
@@ -72,7 +75,12 @@ impl SettingsWindow {
             prefs.codex_path = draft.codex_path;
             prefs.claude_path = draft.claude_path;
             prefs.opencode_path = draft.opencode_path;
-            if owns_connection && !matches!(prefs.backend.as_str(), "codex" | "claude" | "opencode")
+            prefs.antigravity_path = draft.antigravity_path;
+            if owns_connection
+                && !matches!(
+                    prefs.backend.as_str(),
+                    "codex" | "claude" | "opencode" | "antigravity"
+                )
             {
                 prefs.provider = draft.provider;
                 prefs.url = draft.url;
@@ -124,6 +132,7 @@ impl SettingsWindow {
             "agent-codex-path",
             "agent-claude-path",
             "agent-opencode-path",
+            "agent-antigravity-path",
         ][index];
         let focus = self.agent.focus[index].clone();
         let field = &self.agent.fields[index];
@@ -215,6 +224,9 @@ impl SettingsWindow {
             section_title(self.t(Key::AgentOpenCodePathLabel), &theme),
             self.agent_field(4, cx),
             note(self.t(Key::AgentOpenCodeHelp), &theme),
+            section_title(self.t(Key::AgentAntigravityPathLabel), &theme),
+            self.agent_field(5, cx),
+            note(self.t(Key::AgentAntigravityHelp), &theme),
             section_title(self.t(Key::AgentProviderLabel), &theme),
             provider_control,
             section_title(self.t(Key::AgentUrlLabel), &theme),
@@ -319,6 +331,48 @@ mod tests {
             "{selector} must be inside the scrolling settings body before clicking: {field:?} outside {body:?}"
         );
         crate::harness::click(selector, cx);
+    }
+
+    #[gpui::test]
+    fn antigravity_path_settings_keep_the_selected_model_and_api_connection(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent = AgentPreferences {
+                backend: "antigravity".into(),
+                model: "agy-fixture".into(),
+                opencode_path: "C:/Tools/opencode.exe".into(),
+                provider: "openai".into(),
+                url: "https://example.invalid/v1".into(),
+                ..Default::default()
+            };
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        click_visible_field("agent-antigravity-path", cx);
+        cx.simulate_input("C:/Tools/agy.exe");
+        handle
+            .update(cx, |this, _, cx| {
+                this.apply_agent_with(cx, |_| Ok::<(), String>(()))
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.backend, "antigravity");
+            assert_eq!(this.settings.agent.model, "agy-fixture");
+            assert_eq!(this.settings.agent.opencode_path, "C:/Tools/opencode.exe");
+            assert_eq!(
+                this.agent_chat.preferences().antigravity_path,
+                "C:/Tools/agy.exe"
+            );
+            assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
+        });
     }
 
     #[gpui::test]
