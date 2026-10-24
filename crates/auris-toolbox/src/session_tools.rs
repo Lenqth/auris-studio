@@ -178,7 +178,7 @@ mod tests {
             .unwrap()
             .agent_document_revision()
             .unwrap();
-        let args = json!({"project":path,"expected_revision":revision,"protected_clips":[lead.0],"operation":{"kind":"generate","parts":[
+        let args = json!({"project":path,"expected_revision":revision,"protected_clips":[lead.0],"foreground_clips":[lead.0],"operation":{"kind":"generate","parts":[
             {"track":bass.0,"name":"Bass","part":"bass","start_bar":1,"bars":4,"seed":23},
             {"track":pad.0,"name":"Pad","part":"pad","start_bar":1,"bars":4,"seed":42}
         ]}});
@@ -206,7 +206,7 @@ mod tests {
             suggestions["candidates"][0]["harmony"]["chords"],
             "| Imaj7 | Imaj7 | Imaj7 | Imaj7 |"
         );
-        let apply = json!({"project":path,"expected_revision":suggestions["revision"],"protected_clips":suggestions["protected_clips"],"operation":{
+        let apply = json!({"project":path,"expected_revision":suggestions["revision"],"protected_clips":suggestions["protected_clips"],"foreground_clips":suggestions["foreground_clips"],"operation":{
             "kind":"regenerate","clips":[id.0],"harmony":suggestions["candidates"][0]["harmony"]
         }});
         crate::runtime::call_saved(&groups, "accompaniment", apply.clone()).unwrap();

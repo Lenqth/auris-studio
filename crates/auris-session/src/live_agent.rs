@@ -66,6 +66,9 @@ pub enum Command {
         /// 1..16 distinct melody clip IDs to protect; never inferred from names.
         #[schemars(length(min = 1, max = 16))]
         protected_clips: Vec<u64>,
+        /// 1..16 distinct foreground clips to arrange around, a subset of protected_clips. Includes authored and imported melodies; never inferred from names or recipes.
+        #[schemars(length(min = 1, max = 16))]
+        foreground_clips: Vec<u64>,
         /// Generate configured backing clips or explicitly regenerate selected recipes.
         operation: crate::session::accompaniment::Operation,
     },

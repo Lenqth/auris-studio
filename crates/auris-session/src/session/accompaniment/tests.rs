@@ -1,3 +1,4 @@
+use super::super::generated::project_phrase;
 use super::*;
 use crate::live_agent::{AgentStep, Command};
 use auris_core::Note;
@@ -104,6 +105,7 @@ fn make_command(session: &Session, lead: ClipId, operation: Operation) -> Comman
     Command::Accompaniment {
         expected_revision: session.agent_document_revision().unwrap(),
         protected_clips: vec![lead.0],
+        foreground_clips: vec![lead.0],
         operation,
     }
 }
@@ -111,6 +113,137 @@ fn make_command(session: &Session, lead: ClipId, operation: Operation) -> Comman
 fn execute(session: &mut Session, lead: ClipId, operation: Operation) -> Value {
     let command = make_command(session, lead, operation);
     serde_json::from_str(&session.agent_command(command).unwrap()).unwrap()
+}
+
+#[test]
+fn authored_instrumental_foreground_shapes_backing_without_editing_the_melody() {
+    let (mut session, lead, _, chords) = fixture();
+    session.project.midi_clip_mut(lead).unwrap().notes = (0..4)
+        .flat_map(|bar| {
+            (0..6).map(move |beat| Note::new(72, Ticks(bar * 3840 + beat * 480), Ticks(480)))
+        })
+        .collect();
+    let before = session.project().clone();
+    let request = serde_json::from_value(json!({"kind":"generate","parts":[
+        {"track":chords.0,"name":"Comp","part":"chords","start_bar":1,"bars":4,"seed":42}
+    ]}))
+    .unwrap();
+    let result = execute(&mut session, lead, request);
+    let id = ClipId(result["clips"][0]["clip"].as_u64().unwrap());
+    let actual = session.project.midi_clip(id).unwrap().1;
+    let mut without = before.clone();
+    without.midi_clip_mut(lead).unwrap().notes.clear();
+    let unadapted = project_phrase(
+        &without,
+        actual.start,
+        actual.length,
+        actual.recipe.as_ref().unwrap(),
+        None,
+    );
+    assert_ne!(actual.notes, unadapted, "authored foreground was ignored");
+    assert_eq!(result["foreground_clips"], json!([lead.0]));
+    assert_eq!(result["clips"][0]["adaptation"]["status"], "evaluated");
+    assert_eq!(result["clips"][0]["adaptation"]["changed"], true);
+    assert_eq!(session.project.midi_clip(lead), before.midi_clip(lead));
+}
+
+#[test]
+fn explicit_foreground_is_required_protected_and_validated_before_publication() {
+    let (mut session, lead, bass, chords) = fixture();
+    let before = session.project().clone();
+    for foreground in [vec![], vec![lead.0, lead.0], vec![u64::MAX]] {
+        let command = Command::Accompaniment {
+            expected_revision: session.agent_document_revision().unwrap(),
+            protected_clips: vec![lead.0],
+            foreground_clips: foreground,
+            operation: generate(bass, chords),
+        };
+        assert!(session.agent_command(command).is_err());
+        assert_eq!(session.project(), &before);
+        assert!(!session.can_undo());
+    }
+}
+
+#[test]
+fn foreground_windows_include_loops_and_multiple_sources_without_name_inference() {
+    let (mut session, lead, _, _) = fixture();
+    let clip = session.project.midi_clip_mut(lead).unwrap();
+    clip.length = Ticks(2880);
+    clip.loop_end = Ticks(5760);
+    clip.notes = (0..6)
+        .map(|at| Note::new(72, Ticks(at * 480), Ticks(360)))
+        .collect();
+    let another_track = session
+        .add_default_instrument_track("Not a role name")
+        .unwrap();
+    let another = session
+        .add_midi_clip(another_track, "Held voice", Ticks(2880), Ticks(2880))
+        .unwrap();
+    session
+        .add_note(another, Note::new(67, Ticks::ZERO, Ticks(2880)))
+        .unwrap();
+    let before = session.project().clone();
+    let notes = foreground_notes(&before, &[lead.0, another.0], Ticks(2880), Ticks(5760)).unwrap();
+    assert_eq!(notes.len(), 7);
+    assert_eq!(notes.iter().map(Note::end).max(), Some(Ticks(2880)));
+    session.project.tracks.reverse();
+    for track in &mut session.project.tracks {
+        track.name = "Renamed".into();
+    }
+    assert_eq!(
+        foreground_notes(
+            session.project(),
+            &[lead.0, another.0],
+            Ticks(2880),
+            Ticks(5760)
+        )
+        .unwrap(),
+        notes
+    );
+    session.project.midi_clip_mut(another).unwrap().muted = true;
+    assert_eq!(
+        foreground_notes(
+            session.project(),
+            &[lead.0, another.0],
+            Ticks(2880),
+            Ticks(5760)
+        )
+        .unwrap()
+        .len(),
+        6
+    );
+    assert_eq!(session.project.midi_clip(lead), before.midi_clip(lead));
+}
+
+#[test]
+fn authored_rhythm_and_sustained_ambient_backing_are_not_thinned() {
+    let (session, lead, _, _) = fixture();
+    for (rhythm, style, expected) in [
+        (Some("xxxxxxxx".to_string()), None, "explicit_rhythm"),
+        (
+            None,
+            Some(auris_compose::PerformanceStyle::Ambient),
+            "sustained_ambient_texture",
+        ),
+    ] {
+        let mut recipe = ClipRecipe::new(ClipPreset::Chords, 42);
+        recipe.rhythm = rhythm;
+        recipe.style = style;
+        let (notes, report) = write_backing(
+            session.project(),
+            &[lead.0],
+            Ticks::ZERO,
+            Ticks(3840),
+            &recipe,
+        )
+        .unwrap();
+        assert_eq!(report["status"], expected);
+        assert_eq!(report["changed"], false);
+        assert_eq!(
+            notes,
+            unarranged_project_phrase(session.project(), Ticks::ZERO, Ticks(3840), &recipe)
+        );
+    }
 }
 
 fn changed_harmony(clips: Vec<u64>) -> Operation {
@@ -155,6 +288,7 @@ fn generated_backing_preserves_the_complete_melody_and_undo_redo_are_atomic() {
             .agent_command(Command::Accompaniment {
                 expected_revision: old_revision,
                 protected_clips: vec![lead.0],
+                foreground_clips: vec![lead.0],
                 operation: generate(bass, chords)
             })
             .is_err()

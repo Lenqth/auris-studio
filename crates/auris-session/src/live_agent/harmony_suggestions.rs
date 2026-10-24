@@ -163,7 +163,7 @@ impl Session {
                 "heuristic_score":round(candidate.score),"bars":bars,
                 "harmony":{"start_bar":request.start_bar,"bars":request.bars,"key":key.to_text(),"chords":candidate.chart.to_text()}})
         }).collect();
-        Ok(json!({"revision":self.agent_document_revision()?,"protected_clips":request.melody_clips,
+        Ok(json!({"revision":self.agent_document_revision()?,"protected_clips":request.melody_clips,"foreground_clips":request.melody_clips,
             "key":key.to_text(),"mood":request.mood,"ending":request.ending,"note_count":notes.len(),
             "motif_steps":auris_compose::motif_of(&notes,key),"candidates":candidates,"changed":false,
             "basis":"Authored notes with clip windows and loops; performance transforms, bends, timbre and audio are not evaluated. Scores compare heuristic fit, not artistic quality.",

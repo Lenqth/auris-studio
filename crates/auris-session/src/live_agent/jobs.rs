@@ -73,9 +73,15 @@ impl Session {
             Command::Accompaniment {
                 expected_revision,
                 protected_clips,
+                foreground_clips,
                 operation,
             } => self
-                .begin_accompaniment(&expected_revision, &protected_clips, operation)
+                .begin_accompaniment(
+                    &expected_revision,
+                    &protected_clips,
+                    &foreground_clips,
+                    operation,
+                )
                 .map(|job| AgentJob::Accompaniment(Box::new(job))),
             Command::Arrangement {
                 operation:

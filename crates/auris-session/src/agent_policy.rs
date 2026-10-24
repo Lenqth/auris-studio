@@ -430,7 +430,7 @@ mod tests {
         let operation = Operation::parse(
             "edit_project",
             &serde_json::json!({"command":{
-                "action":"accompaniment","expected_revision":"revision","protected_clips":[1],
+                "action":"accompaniment","expected_revision":"revision","protected_clips":[1],"foreground_clips":[1],
                 "operation":{"kind":"regenerate","clips":[2]}
             }}),
         )
