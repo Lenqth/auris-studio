@@ -548,7 +548,20 @@ The tested AMD Windows audio runtime also had a native crash during a later mode
 reload. A running HTTP service and an earlier successful review do not establish
 restart reliability; inspect `/healthz` and the server log when a request fails.
 
-## Ollama configuration and failure recovery
+## Live agent system prompt
+
+The standard live prompt starts with musical decisions: motif development,
+phrase direction, lyric prosody, harmonic motion, section contrasts, arrangement
+roles and a complete ending. The model chooses a writing order suited to the brief
+and can author accompaniment or use a generation recipe. It completes the requested
+form before repeated local polishing, checks the actual score and rendered passages,
+and distinguishes those observations from listening preference.
+
+The editable source is `crates/auris-agent/src/prompts/composition.md`; the standard
+profile also includes `prompts/live-tools.md` for operation contracts. Shared vocal
+form, phrasing and performance guidance is appended by `default_system_prompt`.
+The experimental modular profile uses the same musical guidance with its workflow
+instructions. Codex and Claude Code receive the same resolved composition prompt.
 
 Settings → Agent includes a multiline **System prompt** editor shared by Codex,
 Claude Code and Rig models. It starts with the current standard prompt in full.
@@ -569,6 +582,8 @@ operation schemas/help, optional workflow responses and permission checks remain
 separate. Approval-review and audio-critic instructions are independent. Saved-file
 MCP uses its own instructions. Custom prompts count toward the local model's
 context budget just like the standard prompt.
+
+## Ollama configuration and failure recovery
 
 Settings → Agent exposes context size (32K, 64K, 128K, 256K) and thinking (model default,
 off, on), stored in shared preferences. Output token limit selects 4K, 8K, 16K,

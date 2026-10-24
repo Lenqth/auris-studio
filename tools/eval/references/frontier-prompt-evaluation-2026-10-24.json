@@ -1,0 +1,3823 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "baseline_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+  "models": [
+    {
+      "backend": "codex",
+      "requested_model": "gpt-6.1-sol",
+      "cli_version": "0.163.0"
+    },
+    {
+      "backend": "claude",
+      "requested_model": "opus",
+      "cli_version": "2.1.309",
+      "resolved_model": null
+    }
+  ],
+  "manifest": "tools/eval/references/frontier-composition-v1.json",
+  "manifest_sha256": "7c48d55fe084837f25e5f2e5111ff9fe78436c2d7fce35b062ad3ffccf2be307",
+  "design": "One development run per case/backend/condition; independent generations, no fixed model seed, no human ratings. The verbose draft was superseded after two mock context-budget regressions, not musical preference. All draft trials are retained. No real Ollama inference or external audio critic.",
+  "limitations": [
+    "The isolated GPUI fixture exposes no installed voices. Panel vocal WAVs contain either a guide or a muted singer, not VOICEVOX.",
+    "Final and baseline vocal scores are separately synthesized using the same installed VOICEVOX 0.26.0 speaker and seed. This does not establish agent synthesis completion.",
+    "Metrics describe completion and signal properties, not musical preference. One run does not establish a quality or reliability improvement."
+  ],
+  "prompt_sha256": {
+    "composition.md": "f588fd8718374f9a0bd37b1d1b3990df880081a9c9c9aedd0ea604c377febadf",
+    "live-tools.md": "d9907b8af5de5d95ed4506abe9c415a139c8bfc3ce88faf99149c91a5c9d8011"
+  },
+  "suites": [
+    {
+      "condition": "after-claude",
+      "suite_path": "target/frontier-prompt-2026-10-24/after-claude/suite.json",
+      "suite_sha256": "74a1015e991f79a40608149272d9e84cfd8e03c18339f11a8baa79cd4d246c8f",
+      "source_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+      "source_diff_sha256": "9c5dc100cf408c5a0b1b8dcc29cf9529a8e4e02540443f1eea31d909754a49d4",
+      "trials": [
+        {
+          "id": "instrumental_arc-01",
+          "case": "instrumental_arc",
+          "repetition": 1,
+          "elapsed_seconds": 310.8672629,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "cab604d0bc80d627f9d4a73b43fc4357c82539244d357247dab7afa6f1be21fd",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 48.0,
+            "frames": 2304000,
+            "lufs": -15.98547649383545,
+            "peak_db": -7.379550933837891,
+            "true_peak_db": -7.373006820678711,
+            "full_scale_samples": 0,
+            "ending_rms_db": -53.1009635925293,
+            "sha256": "2620a924d26079a66a09b4de02ab4bc36ee9dd8662b6d1c6dcb52f483a8b6a47"
+          },
+          "tool_errors": [
+            {
+              "tool": "accompaniment",
+              "error": "Assign the track's drum sounds before generating accompaniment"
+            }
+          ],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "773cc0cc8d9813e35e3dd37d6a459ea1a3db1b9f3c2666cd0328a580d96121d5",
+            "project-02.json": "2b69b7e7cef1890f833cefc784ede58a63b157d1d92323ebefbc21e10492ddfd",
+            "report.json": "2df8fa14726f01153fa9a1900d997eab9c9759cf15ace32835b301db1cbc1435",
+            "result.mid": "ff170737241068e52e7960bc117fe418df1264d9de8827a75316af739c1d34f6",
+            "result.wav": "2620a924d26079a66a09b4de02ab4bc36ee9dd8662b6d1c6dcb52f483a8b6a47",
+            "transcript.json": "c4838288316945e817942cf7c5fc07b2f452b2d3e7e70ac88c9f0fa313908ef9"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 4,
+            "production_record": 6,
+            "tool_help": 2,
+            "edit_harmony": 8,
+            "search_instruments": 1,
+            "rename_track": 1,
+            "add_track": 3,
+            "set_instrument": 3,
+            "add_clip": 5,
+            "read_notes": 5,
+            "edit_notes": 4,
+            "accompaniment": 2,
+            "inspect_instrument": 1,
+            "set_drum_assignment": 6,
+            "set_performance": 2,
+            "inspect_audio": 5,
+            "mixer_graph": 7,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Aメロ"
+              },
+              {
+                "tick": 30720,
+                "label": "つなぎ"
+              },
+              {
+                "tick": 46080,
+                "label": "サビ"
+              },
+              {
+                "tick": 76800,
+                "label": "終わり"
+              },
+              {
+                "tick": 92160,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 120.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "Keys",
+                "type": "instrument",
+                "stored_notes": 236,
+                "recipe_clips": 4,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  48,
+                  81
+                ]
+              },
+              {
+                "name": "Melody",
+                "type": "instrument",
+                "stored_notes": 80,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  69,
+                  88
+                ]
+              },
+              {
+                "name": "Bass",
+                "type": "instrument",
+                "stored_notes": 68,
+                "recipe_clips": 4,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  29,
+                  52
+                ]
+              },
+              {
+                "name": "Drums",
+                "type": "drum",
+                "stored_notes": 208,
+                "recipe_clips": 3,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  36,
+                  49
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 48.0
+        },
+        {
+          "id": "vocal_arc-01",
+          "case": "vocal_arc",
+          "repetition": 1,
+          "elapsed_seconds": 611.9808531,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "0e135001888fd6e4bd078c93066874d5da1e8ebd625406e685d0cfeaa1e248ac",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 96.0,
+            "frames": 4608000,
+            "lufs": -23.0991153717041,
+            "peak_db": -9.395960807800293,
+            "true_peak_db": -9.395960807800293,
+            "full_scale_samples": 0,
+            "ending_rms_db": -52.20660400390625,
+            "sha256": "1043026706718abc0778b032b7f9c4875a359827fc9f36f01a9de03f3bc37db0"
+          },
+          "tool_errors": [
+            {
+              "tool": "accompaniment",
+              "error": "Document changed or an edit is in progress; inspect_project again"
+            },
+            {
+              "tool": "production_record",
+              "error": "unknown field `clips`, expected `entry`"
+            },
+            {
+              "tool": "production_record",
+              "error": "unknown field `clips`, expected `entry`"
+            },
+            {
+              "tool": "production_record",
+              "error": "unknown field `clips`, expected `entry`"
+            },
+            {
+              "tool": "sing",
+              "error": "track 2 names no voice model; choose one first"
+            }
+          ],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "2a4c0ea684624262551a7d1d1a53e288495e3cf513fd426617bc322c8914cbb8",
+            "project-02.json": "f717136d0c76af4c8ca4ca531926c04b813bfc9db499bbc319cf804b79100bdc",
+            "report.json": "236d01d1bc69e1a0c0c6f6439b4c3824395296d46933462b089a7636f1adeed3",
+            "result.mid": "7cb909826780ede7160b1f0ffca5df13adf67ef69496c08af73b9fc13f968627",
+            "result.wav": "1043026706718abc0778b032b7f9c4875a359827fc9f36f01a9de03f3bc37db0",
+            "transcript.json": "c1c8d3da141fcdd9e4da07c7a2f1ce8b9a0ee6e7b9a2bc50396e64c875a498a2"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 4,
+            "production_record": 9,
+            "edit_timeline": 1,
+            "list_voices": 2,
+            "search_documentation": 3,
+            "tool_help": 2,
+            "edit_harmony": 14,
+            "add_track": 3,
+            "rename_track": 1,
+            "add_clip": 10,
+            "read_notes": 8,
+            "edit_notes": 4,
+            "write_lyrics": 4,
+            "accompaniment": 2,
+            "inspect_performance": 3,
+            "set_performance": 1,
+            "inspect_singer": 2,
+            "inspect_audio": 4,
+            "sing": 1,
+            "edit_vocal_notes": 2,
+            "render": 1,
+            "export_midi": 2,
+            "verify_render": 1,
+            "Bash": 4,
+            "edit_clip": 4,
+            "mixer_graph": 2,
+            "remove_track": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Intro"
+              },
+              {
+                "tick": 7680,
+                "label": "Verse 1"
+              },
+              {
+                "tick": 38400,
+                "label": "Chorus 1"
+              },
+              {
+                "tick": 69120,
+                "label": "Interlude"
+              },
+              {
+                "tick": 76800,
+                "label": "Verse 2"
+              },
+              {
+                "tick": 107520,
+                "label": "Last Chorus"
+              },
+              {
+                "tick": 138240,
+                "label": "Outro"
+              },
+              {
+                "tick": 153600,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 100.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "Piano",
+                "type": "instrument",
+                "stored_notes": 274,
+                "recipe_clips": 4,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  50,
+                  76
+                ]
+              },
+              {
+                "name": "Vocal",
+                "type": "singer",
+                "stored_notes": 164,
+                "recipe_clips": 0,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  62,
+                  76
+                ],
+                "has_take": false,
+                "lyrics": [
+                  {
+                    "clip": "Verse 1",
+                    "start_tick": 7680,
+                    "notes": 43,
+                    "unassigned": 0,
+                    "text": "かさをとじたかえりみちみずたまりにそらがあるうつむいてたきょうのぼくがゆれてひかりになる"
+                  },
+                  {
+                    "clip": "Chorus 1",
+                    "start_tick": 38400,
+                    "notes": 39,
+                    "unassigned": 0,
+                    "text": "あめあがりのそらへちいさくふみだそうなみだのあともひかるからあしたへあるいてく"
+                  },
+                  {
+                    "clip": "Verse 2",
+                    "start_tick": 76800,
+                    "notes": 43,
+                    "unassigned": 0,
+                    "text": "ぬれたくつではしりだすにじのはしをおいかけてしまいこんだあのことばをかぜがせなかをおす"
+                  },
+                  {
+                    "clip": "Last Chorus",
+                    "start_tick": 107520,
+                    "notes": 39,
+                    "unassigned": 0,
+                    "text": "あめあがりのそらへちいさくふみだそうきのうのぼくにありがとうあしたへあるいてく"
+                  }
+                ]
+              },
+              {
+                "name": "Piano LH",
+                "type": "instrument",
+                "stored_notes": 87,
+                "recipe_clips": 4,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  28,
+                  55
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 96.0
+        }
+      ],
+      "runtime_executable_sha256": {
+        "auris_studio-38478e7dc11d9b85.exe": "ac50bbb60e0ba6cb02a9160e3d0ce794e574fdaef763cdcd0af6ee38fecb2654"
+      },
+      "runtime_file_count": 275,
+      "runtime_manifest_sha256": "371a5c4e8badc2be6350afafb88cd419808cf387b94fbaf22bdc928d42f544b2"
+    },
+    {
+      "condition": "after-codex",
+      "suite_path": "target/frontier-prompt-2026-10-24/after-codex/suite.json",
+      "suite_sha256": "9081fadfc6180d371fee11e0560bb5dae8876e2084dcd38fab47f1ec3b85c0d1",
+      "source_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+      "source_diff_sha256": "9c5dc100cf408c5a0b1b8dcc29cf9529a8e4e02540443f1eea31d909754a49d4",
+      "trials": [
+        {
+          "id": "instrumental_arc-01",
+          "case": "instrumental_arc",
+          "repetition": 1,
+          "elapsed_seconds": 441.2532738,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "4a0be526e7fa5ccce601a2ceb558d19b7bd944dafaf1224b80847934780eb7fb",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 48.0,
+            "frames": 2304000,
+            "lufs": -18.00109100341797,
+            "peak_db": -5.394437789916992,
+            "true_peak_db": -5.389691352844238,
+            "full_scale_samples": 0,
+            "ending_rms_db": -153.73892211914062,
+            "sha256": "dbe24daa57185d2f9da8819760281d9a97c29e398793afc2d4fcdc67d67d2ee9"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "cd5c50cfb64c1e2197639f8e862e8e486865455820d6266abb3c27977795a497",
+            "project-02.json": "9abdd1a023376512142388760266606edf0f8ca02b368feef66d06b7954dbc01",
+            "report.json": "47a67c9a50fd9a56adb1e852730d5eda07dfa0db1e439e9ebe63990984ef4058",
+            "result.mid": "a7f4c163b317543ef2eff2ad9e3919c4a450a9be56b8929aa231ef0e9180a61e",
+            "result.wav": "dbe24daa57185d2f9da8819760281d9a97c29e398793afc2d4fcdc67d67d2ee9",
+            "transcript.json": "88eeb88749957ed1dba9c3951d6daa079eef01ffb70d64284e0c9f32b5cc3643"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 8,
+            "production_record": 14,
+            "search_instruments": 5,
+            "edit_harmony": 6,
+            "mixer_graph": 15,
+            "edit_timeline": 2,
+            "add_track": 3,
+            "set_instrument": 3,
+            "inspect_instrument": 4,
+            "add_clip": 16,
+            "read_notes": 9,
+            "edit_notes": 3,
+            "rename_track": 1,
+            "set_drum_assignment": 3,
+            "inspect_audio": 22,
+            "inspect_performance": 1,
+            "normalize_mix": 1,
+            "search_documentation": 1,
+            "tool_help": 2,
+            "render": 1,
+            "verify_render": 1,
+            "export_midi": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Aメロ"
+              },
+              {
+                "tick": 30720,
+                "label": "つなぎ"
+              },
+              {
+                "tick": 46080,
+                "label": "サビ"
+              },
+              {
+                "tick": 76800,
+                "label": "終わり"
+              },
+              {
+                "tick": 92160,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 120.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "朝の光 — Piano",
+                "type": "instrument",
+                "stored_notes": 131,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  45,
+                  67
+                ]
+              },
+              {
+                "name": "朝の主題 — Whistle",
+                "type": "instrument",
+                "stored_notes": 88,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  71,
+                  84
+                ]
+              },
+              {
+                "name": "旅立つ足音 — Bass",
+                "type": "instrument",
+                "stored_notes": 57,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  33,
+                  50
+                ]
+              },
+              {
+                "name": "軽い足取り — Drums",
+                "type": "drum",
+                "stored_notes": 217,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  36,
+                  42
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 48.0
+        },
+        {
+          "id": "vocal_arc-01",
+          "case": "vocal_arc",
+          "repetition": 1,
+          "elapsed_seconds": 527.7893869,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "6168fa3edc38020616e4b1670ac78e76b88c72455095ebeec457eba2c83772d4",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 96.0,
+            "frames": 4608000,
+            "lufs": -20.96877098083496,
+            "peak_db": -5.838892936706543,
+            "true_peak_db": -5.837395668029785,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "2091ae716123f9e1928392499b660f6aa9ecbefcb7a6335fccc35b3311e6b6cd"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "bcc752c8b14ee5c09e8e9795b55558fb65f2031d1551030bdac6b4c96d39a0be",
+            "project-02.json": "a696c1ec625a1089de53269e6d2ba5f07aff224d9c9f936b9fcf8f76a5d41092",
+            "report.json": "03b9a4171e8ad1567659f38d9e63e2cc465e6bef3a3c0ec717619575d8f6498a",
+            "result.mid": "74a51285af332bb6ca480af3f8acd8b40039cae194dc7ea27b330e9d80b89a3c",
+            "result.wav": "2091ae716123f9e1928392499b660f6aa9ecbefcb7a6335fccc35b3311e6b6cd",
+            "transcript.json": "520a95e295120f153f941925291d3e916bd97f95d6c002eaf3810000455ff54a"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 9,
+            "production_record": 12,
+            "edit_timeline": 1,
+            "list_voices": 2,
+            "search_instruments": 1,
+            "edit_harmony": 7,
+            "set_instrument": 1,
+            "add_track": 1,
+            "analyze_lyrics": 4,
+            "rename_track": 1,
+            "inspect_singer": 3,
+            "add_clip": 11,
+            "read_notes": 11,
+            "edit_notes": 3,
+            "write_lyrics": 4,
+            "mixer_graph": 5,
+            "repair_lyrics": 7,
+            "diagnose_song": 2,
+            "inspect_audio": 14,
+            "read_report": 7,
+            "inspect_performance": 2,
+            "normalize_mix": 1,
+            "search_documentation": 3,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "イントロ"
+              },
+              {
+                "tick": 7680,
+                "label": "一番"
+              },
+              {
+                "tick": 38400,
+                "label": "サビ"
+              },
+              {
+                "tick": 69120,
+                "label": "間奏"
+              },
+              {
+                "tick": 76800,
+                "label": "二番"
+              },
+              {
+                "tick": 107520,
+                "label": "ラストサビ"
+              },
+              {
+                "tick": 138240,
+                "label": "アウトロ"
+              },
+              {
+                "tick": 153600,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 100.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "ピアノ — 雨上がり",
+                "type": "instrument",
+                "stored_notes": 288,
+                "recipe_clips": 0,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  36,
+                  74
+                ]
+              },
+              {
+                "name": "歌：明日へ一歩（未合成）",
+                "type": "singer",
+                "stored_notes": 192,
+                "recipe_clips": 0,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  60,
+                  72
+                ],
+                "has_take": false,
+                "lyrics": [
+                  {
+                    "clip": "一番",
+                    "start_tick": 7680,
+                    "notes": 48,
+                    "unassigned": 0,
+                    "text": "みずたまりそらがゆれてるとじたかさしずくがおちるいえぬままことばをだいてかえりみちすこしみあげた"
+                  },
+                  {
+                    "clip": "サビ",
+                    "start_tick": 38400,
+                    "notes": 48,
+                    "unassigned": 0,
+                    "text": "あしたへ いっぽ ふみだそう ぬれたみちも ひかりになる あしたへ いっぽ ふみだそう このあしで あすをえらぼう"
+                  },
+                  {
+                    "clip": "二番",
+                    "start_tick": 76800,
+                    "notes": 48,
+                    "unassigned": 0,
+                    "text": "しんごうが あおにかわった みぎあしを そっとだしてく つたえたい ことばができた きみのまど あかりがみえた"
+                  },
+                  {
+                    "clip": "ラストサビ",
+                    "start_tick": 107520,
+                    "notes": 48,
+                    "unassigned": 0,
+                    "text": "あしたへ いっぽ ふみだそう ぬれたみちも ひかりになる あしたへ いっぽ ふみだそう このあしで きみへあるこう"
+                  }
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 96.0
+        }
+      ],
+      "runtime_executable_sha256": {
+        "auris_studio-38478e7dc11d9b85.exe": "ac50bbb60e0ba6cb02a9160e3d0ce794e574fdaef763cdcd0af6ee38fecb2654"
+      },
+      "runtime_file_count": 275,
+      "runtime_manifest_sha256": "371a5c4e8badc2be6350afafb88cd419808cf387b94fbaf22bdc928d42f544b2"
+    },
+    {
+      "condition": "before-claude",
+      "suite_path": "target/frontier-prompt-2026-10-24/before-claude/suite.json",
+      "suite_sha256": "f6d20b9ed6552a9a97036be2502381c1c8cc339d1320cd3084c2a871570b6ec0",
+      "source_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+      "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "trials": [
+        {
+          "id": "instrumental_arc-01",
+          "case": "instrumental_arc",
+          "repetition": 1,
+          "elapsed_seconds": 238.0068552,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "0a58cdc6cda46c45335b7aac385ce2a7d2a2b5a28144ac45a77e1f116f1176fa",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 48.0,
+            "frames": 2304000,
+            "lufs": -16.72226333618164,
+            "peak_db": -7.941120147705078,
+            "true_peak_db": -7.941120147705078,
+            "full_scale_samples": 0,
+            "ending_rms_db": -50.71015548706055,
+            "sha256": "d31be806f54f4a3d4c79002dd1a5e20b051a8952565fded705e1e5bc2373cb1b"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "3daf4ca733945ea36c36af97c1d1f8a46829dc55a57cb78a36d0adcfeed3b90f",
+            "project-02.json": "3439ad1c80e1dc92df0404a4b24faa68759353fddf60b7bd861dc42a1ea7e163",
+            "report.json": "d995013199d333b542c3b8e81bfda674c3db36712848402ba2607e324c92f1c4",
+            "result.mid": "d317668de62d14f1e57830060101403fcc03f35a343e94c7da9b1d870b91a3e0",
+            "result.wav": "d31be806f54f4a3d4c79002dd1a5e20b051a8952565fded705e1e5bc2373cb1b",
+            "transcript.json": "104815d5fb60f9006bbe7cb3aff41221d1d5cccda3625f7209d2f75c0537f2f5"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 5,
+            "production_record": 4,
+            "edit_harmony": 7,
+            "search_instruments": 5,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_track": 3,
+            "add_clip": 1,
+            "read_notes": 4,
+            "edit_notes": 2,
+            "tool_help": 2,
+            "search_documentation": 1,
+            "set_drum_assignment": 5,
+            "accompaniment": 1,
+            "inspect_audio": 6,
+            "mixer_graph": 7,
+            "automation": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Aメロ"
+              },
+              {
+                "tick": 30720,
+                "label": "つなぎ"
+              },
+              {
+                "tick": 46080,
+                "label": "サビ"
+              },
+              {
+                "tick": 76800,
+                "label": "終わり"
+              },
+              {
+                "tick": 92160,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 120.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "主旋律",
+                "type": "instrument",
+                "stored_notes": 82,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  69,
+                  88
+                ]
+              },
+              {
+                "name": "鍵盤",
+                "type": "instrument",
+                "stored_notes": 220,
+                "recipe_clips": 4,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  48,
+                  81
+                ]
+              },
+              {
+                "name": "ベース",
+                "type": "instrument",
+                "stored_notes": 89,
+                "recipe_clips": 4,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  29,
+                  52
+                ]
+              },
+              {
+                "name": "ドラム",
+                "type": "drum",
+                "stored_notes": 240,
+                "recipe_clips": 4,
+                "clip_end_ticks": 88320,
+                "pitch_range": [
+                  36,
+                  42
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 48.0
+        },
+        {
+          "id": "vocal_arc-01",
+          "case": "vocal_arc",
+          "repetition": 1,
+          "elapsed_seconds": 330.1763631,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "06cb624c39571ba12383b49501dc6cc4f7a477e87c6ef2ff588ac8536e8fc293",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 96.0,
+            "frames": 4608000,
+            "lufs": -15.999999046325684,
+            "peak_db": -2.0128273963928223,
+            "true_peak_db": -2.0010111331939697,
+            "full_scale_samples": 0,
+            "ending_rms_db": -45.465457916259766,
+            "sha256": "48e62d49c6c03b333efd52746b17b3df22c41780ea7737c5abff8e2cb3910c69"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "948e08ec47031cf63a7a7658a9f77656dc8c828c3f177c4cbc2c2eff92142344",
+            "project-02.json": "81fe19f3cdb25b62c588f73eda7dd25105df8b79300a8e4ace5ff02cf4c89a64",
+            "report.json": "5659c2c45ed18fe848a8c3e12ea917e8e86208b4f9afcbdbc4105c9ddcd0eb5e",
+            "result.mid": "ec99b054b5ee70d903ab645822f1f7c9ed1f0e9debbbe3364373bf9316aa3156",
+            "result.wav": "48e62d49c6c03b333efd52746b17b3df22c41780ea7737c5abff8e2cb3910c69",
+            "transcript.json": "0c6c3be11fd635cf3a51bfdfdf8748fbc89cae83456619fbb644418bd82418e6"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 3,
+            "production_record": 7,
+            "edit_timeline": 1,
+            "list_voices": 2,
+            "tool_help": 3,
+            "analyze_lyrics": 1,
+            "read_report": 1,
+            "edit_harmony": 14,
+            "add_track": 2,
+            "rename_track": 2,
+            "add_clip": 4,
+            "read_notes": 3,
+            "edit_notes": 2,
+            "write_lyrics": 4,
+            "search_instruments": 1,
+            "set_instrument": 1,
+            "search_documentation": 2,
+            "suggest_harmony": 2,
+            "accompaniment": 1,
+            "inspect_audio": 7,
+            "edit_recipe": 1,
+            "inspect_singer": 2,
+            "normalize_mix": 1,
+            "repair_lyrics": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Intro"
+              },
+              {
+                "tick": 7680,
+                "label": "Verse 1"
+              },
+              {
+                "tick": 38400,
+                "label": "Chorus"
+              },
+              {
+                "tick": 69120,
+                "label": "Interlude"
+              },
+              {
+                "tick": 76800,
+                "label": "Verse 2"
+              },
+              {
+                "tick": 107520,
+                "label": "Last Chorus"
+              },
+              {
+                "tick": 138240,
+                "label": "Outro"
+              },
+              {
+                "tick": 153600,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 100.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "Piano RH",
+                "type": "instrument",
+                "stored_notes": 169,
+                "recipe_clips": 7,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  48,
+                  86
+                ]
+              },
+              {
+                "name": "Vocal",
+                "type": "singer",
+                "stored_notes": 144,
+                "recipe_clips": 0,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  62,
+                  76
+                ],
+                "has_take": false,
+                "lyrics": [
+                  {
+                    "clip": "Verse 1 Vocal",
+                    "start_tick": 7680,
+                    "notes": 37,
+                    "unassigned": 0,
+                    "text": "あめあがりのみちをひとりであるいてたみずたまりにうつるちいさなそらがゆれた"
+                  },
+                  {
+                    "clip": "Chorus 1 Vocal",
+                    "start_tick": 38400,
+                    "notes": 35,
+                    "unassigned": 0,
+                    "text": "あしたへふみだそうぬれたくつのままでにじがみえなくてもこのみちをゆこう"
+                  },
+                  {
+                    "clip": "Verse 2 Vocal",
+                    "start_tick": 76800,
+                    "notes": 37,
+                    "unassigned": 0,
+                    "text": "かどをまがったときゆうひがさしこんだまよいつづけたひびここにおいていくんだ"
+                  },
+                  {
+                    "clip": "Last Chorus Vocal",
+                    "start_tick": 107520,
+                    "notes": 35,
+                    "unassigned": 0,
+                    "text": "あしたへふみだそうぬれたくつのままでそらがひかりだしたこのみちをゆこう"
+                  }
+                ]
+              },
+              {
+                "name": "Piano LH",
+                "type": "instrument",
+                "stored_notes": 120,
+                "recipe_clips": 7,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  29,
+                  52
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 96.0
+        }
+      ],
+      "runtime_executable_sha256": {
+        "auris_studio-38478e7dc11d9b85.exe": "17e1e345ddc4ba2efae9273a7af8e353b7bc7c40041e343bcb93b6b00a4fe285"
+      },
+      "runtime_file_count": 275,
+      "runtime_manifest_sha256": "6c8a045cf867945586bbfa8b7d8bd31a5975004240761f49bdeffa118d2bb687"
+    },
+    {
+      "condition": "before-codex",
+      "suite_path": "target/frontier-prompt-2026-10-24/before-codex/suite.json",
+      "suite_sha256": "ccc60740b7105beace8c2ff89dae5191fcd9493f28418b05aa0a116ff34a9df2",
+      "source_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+      "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "trials": [
+        {
+          "id": "instrumental_arc-01",
+          "case": "instrumental_arc",
+          "repetition": 1,
+          "elapsed_seconds": 545.7852132,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "926654b82f6fb4da74511d6a83dc11caf249733167bfe1188619bb74f7045366",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 48.0,
+            "frames": 2304000,
+            "lufs": -19.999998092651367,
+            "peak_db": -1.7925835847854614,
+            "true_peak_db": -1.771239161491394,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "2314d6bb3eaeacb4add6cb7d23b97b8dc7347a422fad1e8451ebc32921b2e5f2"
+          },
+          "tool_errors": [
+            {
+              "tool": "suggest_harmony",
+              "error": "Use start_bar >= 1 and bars within 1..16"
+            },
+            {
+              "tool": "accompaniment",
+              "error": "octave must be -2..2"
+            },
+            {
+              "tool": "accompaniment",
+              "error": "Assign the track's drum sounds before generating accompaniment"
+            },
+            {
+              "tool": "production_record",
+              "error": "Use a valid key, nonempty text/basis up to 2048 bytes and at most 16 clip IDs"
+            }
+          ],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "b6a5c76dc9d53f11609c3bb0222ef655c971a7d16b70194271e09e7ad8d59aba",
+            "project-02.json": "a885eaf9204e3a70b76416ff17c00dcbcd5d5a859130dd6fdc5c70739e2be443",
+            "report.json": "f5d9084fa4a06694b092cd4c3df6978d3c397d4342fd2a73f60fa365fefb079b",
+            "result.mid": "2e6c504719b10700918f6c12fc2344532000dbdc4a346ff0629f50215ad22f4c",
+            "result.wav": "2314d6bb3eaeacb4add6cb7d23b97b8dc7347a422fad1e8451ebc32921b2e5f2",
+            "transcript.json": "40a8b82e369f79fcffbc4e4fa9741810cf2f3bced4580ddd9b4915488cdcd010"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 13,
+            "production_record": 12,
+            "search_instruments": 1,
+            "mixer_graph": 10,
+            "edit_harmony": 4,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_track": 3,
+            "inspect_instrument": 2,
+            "add_clip": 4,
+            "tool_help": 4,
+            "set_instrument_params": 2,
+            "read_notes": 8,
+            "edit_notes": 1,
+            "suggest_harmony": 5,
+            "inspect_audio": 31,
+            "accompaniment": 4,
+            "set_drum_assignment": 6,
+            "edit_recipe": 4,
+            "inspect_performance": 1,
+            "normalize_mix": 4,
+            "automation": 3,
+            "render": 1,
+            "verify_render": 1,
+            "export_midi": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Aメロ"
+              },
+              {
+                "tick": 30720,
+                "label": "つなぎ"
+              },
+              {
+                "tick": 46080,
+                "label": "サビ"
+              },
+              {
+                "tick": 76800,
+                "label": "終わり"
+              },
+              {
+                "tick": 92160,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 120.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "朝の主題 • マレット",
+                "type": "instrument",
+                "stored_notes": 86,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  64,
+                  81
+                ]
+              },
+              {
+                "name": "光の鍵盤",
+                "type": "instrument",
+                "stored_notes": 178,
+                "recipe_clips": 5,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  48,
+                  79
+                ]
+              },
+              {
+                "name": "歩み • ベース",
+                "type": "instrument",
+                "stored_notes": 46,
+                "recipe_clips": 5,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  36,
+                  45
+                ]
+              },
+              {
+                "name": "控えめなドラム",
+                "type": "drum",
+                "stored_notes": 213,
+                "recipe_clips": 4,
+                "clip_end_ticks": 84480,
+                "pitch_range": [
+                  36,
+                  42
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 48.0
+        },
+        {
+          "id": "vocal_arc-01",
+          "case": "vocal_arc",
+          "repetition": 1,
+          "elapsed_seconds": 645.7205028,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "b6e023b7cecd57605d96634e8ce29557caf8a723fe5f23ad37017f26e0b1be69",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 96.0,
+            "frames": 4608000,
+            "lufs": -19.96880531311035,
+            "peak_db": -5.455646991729736,
+            "true_peak_db": -5.4503374099731445,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "592d777284a9d8a21115be192583aca29781e39e5757308e59db8badbfb29d4d"
+          },
+          "tool_errors": [
+            {
+              "tool": "edit_timeline",
+              "error": "Invalid arguments for edit_timeline: arguments.operation is required; use tool_help for exact fields. unknown field `bpm`, expected `operation`"
+            },
+            {
+              "tool": "accompaniment",
+              "error": "octave must be -2..2"
+            }
+          ],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "4cd825175a2ef85e27cbdaa42e901d27239b679ce7508a751779312f0cb9acb8",
+            "project-02.json": "4cd825175a2ef85e27cbdaa42e901d27239b679ce7508a751779312f0cb9acb8",
+            "report.json": "fe89a3827737a1e24c05d377432d6f090065b41e39f4f619db8b8ecd6b4f94d2",
+            "result.mid": "ef19676436137ce88e1da71ff5c599435eb3bf7d4da0b731deabff0b671ca876",
+            "result.wav": "592d777284a9d8a21115be192583aca29781e39e5757308e59db8badbfb29d4d",
+            "transcript.json": "595136d6dd675a67416f3d62b1b7ea0eebc07f55cb06c10a6ee7f71b608a6614"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 10,
+            "list_voices": 2,
+            "production_record": 17,
+            "edit_timeline": 3,
+            "tool_help": 5,
+            "search_instruments": 1,
+            "add_track": 1,
+            "edit_harmony": 7,
+            "set_instrument": 1,
+            "inspect_instrument": 1,
+            "analyze_lyrics": 3,
+            "add_clip": 4,
+            "read_notes": 8,
+            "mixer_graph": 5,
+            "inspect_singer": 5,
+            "edit_notes": 2,
+            "write_lyrics": 4,
+            "diagnose_song": 4,
+            "suggest_harmony": 4,
+            "read_report": 22,
+            "inspect_audio": 23,
+            "accompaniment": 3,
+            "rename_track": 2,
+            "inspect_performance": 3,
+            "edit_clip": 7,
+            "normalize_mix": 1,
+            "search_documentation": 3,
+            "export_midi": 1,
+            "render": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "イントロ"
+              },
+              {
+                "tick": 7680,
+                "label": "一番"
+              },
+              {
+                "tick": 38400,
+                "label": "サビ"
+              },
+              {
+                "tick": 69120,
+                "label": "間奏"
+              },
+              {
+                "tick": 76800,
+                "label": "二番"
+              },
+              {
+                "tick": 107520,
+                "label": "ラストサビ"
+              },
+              {
+                "tick": 138240,
+                "label": "アウトロ"
+              },
+              {
+                "tick": 153600,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 100.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "内蔵ピアノ",
+                "type": "instrument",
+                "stored_notes": 242,
+                "recipe_clips": 7,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  48,
+                  72
+                ]
+              },
+              {
+                "name": "雨あがり、もう一歩｜歌譜・未合成",
+                "type": "singer",
+                "stored_notes": 169,
+                "recipe_clips": 0,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  60,
+                  72
+                ],
+                "has_take": false,
+                "lyrics": [
+                  {
+                    "clip": "一番：雨あがりの帰り道",
+                    "start_tick": 7680,
+                    "notes": 44,
+                    "unassigned": 0,
+                    "text": "あめあがりのかえりみちみずたまりにそらがあるいえなかったことばたちくつのさきでゆれていた"
+                  },
+                  {
+                    "clip": "サビ：明日へ、もう一歩",
+                    "start_tick": 38400,
+                    "notes": 40,
+                    "unassigned": 0,
+                    "text": "あしたえもういっぽあめのむこうえいっぽこわいままでいいんだこのあしであるきだそう"
+                  },
+                  {
+                    "clip": "二番：また明日と送る",
+                    "start_tick": 76800,
+                    "notes": 45,
+                    "unassigned": 0,
+                    "text": "とじたかさをもちかえてきみにみじかいへんじかくまたあしたとおくりだすあおにかわるみちをゆく"
+                  },
+                  {
+                    "clip": "ラストサビ：この足で",
+                    "start_tick": 107520,
+                    "notes": 40,
+                    "unassigned": 0,
+                    "text": "あしたえもういっぽあめのむこうえいっぽこわいままでいいんだこのあしであるきだそう"
+                  }
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 96.0
+        }
+      ],
+      "runtime_executable_sha256": {
+        "auris_studio-38478e7dc11d9b85.exe": "17e1e345ddc4ba2efae9273a7af8e353b7bc7c40041e343bcb93b6b00a4fe285"
+      },
+      "runtime_file_count": 275,
+      "runtime_manifest_sha256": "6c8a045cf867945586bbfa8b7d8bd31a5975004240761f49bdeffa118d2bb687"
+    },
+    {
+      "condition": "final-claude",
+      "suite_path": "target/frontier-prompt-2026-10-24/final-claude/suite.json",
+      "suite_sha256": "fc2766316876484d95c8452f222e625276b7593550fae53ccabd1044553184e5",
+      "source_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+      "source_diff_sha256": "4da36fa2bb8ada4dc0b234c7470750bb62b587cf09d641f1a194b0ba8c71249a",
+      "trials": [
+        {
+          "id": "instrumental_arc-01",
+          "case": "instrumental_arc",
+          "repetition": 1,
+          "elapsed_seconds": 358.1387601,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "141d3e251b515e6990c38d9cf791e491c0f0cb0426a7c08189647cdcf561e617",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 48.0,
+            "frames": 2304000,
+            "lufs": -16.004222869873047,
+            "peak_db": -2.799387216567993,
+            "true_peak_db": -2.0292506217956543,
+            "full_scale_samples": 0,
+            "ending_rms_db": -60.67420196533203,
+            "sha256": "07f3a52e6d63457d317f87d7c8ce61caacb2a6eeacad8a00500722651c061c82"
+          },
+          "tool_errors": [
+            {
+              "tool": "accompaniment",
+              "error": "Assign the track's drum sounds before generating accompaniment"
+            }
+          ],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "31c32a3f6c1bf9b02dead3a13f0440d12501bfa9e0e0b7ddf368c968ceca70dd",
+            "project-02.json": "7c228eeede66e458861256f2f68cef618f6daa7e4be8ae74e79c7ccc6dd2693b",
+            "report.json": "7fd5a7134e6603adf1c3fca3d134e0d95c9b875a354520b77ebdd87cd6a05dac",
+            "result.mid": "a0e33785cc8999edfe4e1911f519231bf8c2e62b0da683c297e6841a1cc0106d",
+            "result.wav": "07f3a52e6d63457d317f87d7c8ce61caacb2a6eeacad8a00500722651c061c82",
+            "transcript.json": "49a22f088e26e2077895e9688ba80d811adc2cc072c450626283747f69e7ab4f"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 3,
+            "production_record": 7,
+            "tool_help": 3,
+            "edit_harmony": 8,
+            "search_instruments": 4,
+            "rename_track": 1,
+            "add_track": 3,
+            "set_instrument": 3,
+            "add_clip": 1,
+            "read_notes": 4,
+            "edit_notes": 5,
+            "accompaniment": 2,
+            "search_documentation": 1,
+            "set_drum_assignment": 6,
+            "inspect_instrument": 1,
+            "inspect_audio": 14,
+            "mixer_graph": 11,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Aメロ"
+              },
+              {
+                "tick": 30720,
+                "label": "つなぎ"
+              },
+              {
+                "tick": 46080,
+                "label": "サビ"
+              },
+              {
+                "tick": 76800,
+                "label": "終わり"
+              },
+              {
+                "tick": 92160,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 120.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "Piano",
+                "type": "instrument",
+                "stored_notes": 189,
+                "recipe_clips": 4,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  40,
+                  74
+                ]
+              },
+              {
+                "name": "Melody",
+                "type": "instrument",
+                "stored_notes": 82,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  62,
+                  81
+                ]
+              },
+              {
+                "name": "Bass",
+                "type": "instrument",
+                "stored_notes": 67,
+                "recipe_clips": 4,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  31,
+                  52
+                ]
+              },
+              {
+                "name": "Drums",
+                "type": "drum",
+                "stored_notes": 213,
+                "recipe_clips": 4,
+                "clip_end_ticks": 80640,
+                "pitch_range": [
+                  36,
+                  49
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 48.0
+        },
+        {
+          "id": "vocal_arc-01",
+          "case": "vocal_arc",
+          "repetition": 1,
+          "elapsed_seconds": 640.1577324,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "c6979b2efd8bd180ec08c4032678d1dca0c3c95d9328c9f70f4534e568de0d37",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 96.73552083333334,
+            "frames": 4643305,
+            "lufs": -21.073692321777344,
+            "peak_db": -8.483888626098633,
+            "true_peak_db": -8.477375984191895,
+            "full_scale_samples": 0,
+            "ending_rms_db": -58.10919952392578,
+            "sha256": "c05846eca7e17f66b300c4391d904ce90f5ad07108cd28a33e240f8a6b87efa0"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "f71703de3c2b765ea241765b1f576c78fb9f5d8da392c2d04a9c68462bf00703",
+            "project-02.json": "9fc9c5d29a9dd559219d21e0cabd0dc4ee805b6a1793f55b4fb416957431adc5",
+            "report.json": "d394f529ce8663f79a1f6d42507335b12f3d66bd2013be0beec3bf5efd956f95",
+            "result.mid": "8a3151a1daa882802b41a7196f241257c3c96dd1093ef29b1a090005e14cbdd0",
+            "result.wav": "c05846eca7e17f66b300c4391d904ce90f5ad07108cd28a33e240f8a6b87efa0",
+            "transcript.json": "709212ff1a53330a31b507231ff75dbe804069a341157b9cac3df9a7e6856e63"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 4,
+            "production_record": 4,
+            "edit_timeline": 3,
+            "list_voices": 2,
+            "search_documentation": 2,
+            "tool_help": 2,
+            "edit_harmony": 16,
+            "add_track": 2,
+            "rename_track": 1,
+            "add_clip": 7,
+            "read_notes": 7,
+            "edit_notes": 2,
+            "analyze_lyrics": 1,
+            "write_lyrics": 5,
+            "edit_vocal_notes": 3,
+            "search_instruments": 1,
+            "accompaniment": 1,
+            "Write": 1,
+            "inspect_audio": 9,
+            "inspect_singer": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Intro"
+              },
+              {
+                "tick": 7680,
+                "label": "Verse 1"
+              },
+              {
+                "tick": 38400,
+                "label": "Chorus 1"
+              },
+              {
+                "tick": 69120,
+                "label": "Interlude"
+              },
+              {
+                "tick": 76800,
+                "label": "Verse 2"
+              },
+              {
+                "tick": 107520,
+                "label": "Last Chorus"
+              },
+              {
+                "tick": 138240,
+                "label": "Outro"
+              },
+              {
+                "tick": 153600,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 100.0
+                },
+                {
+                  "tick": 145920,
+                  "bpm": 92.0
+                },
+                {
+                  "tick": 149760,
+                  "bpm": 82.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "Piano RH",
+                "type": "instrument",
+                "stored_notes": 354,
+                "recipe_clips": 4,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  36,
+                  88
+                ]
+              },
+              {
+                "name": "Vocal",
+                "type": "singer",
+                "stored_notes": 167,
+                "recipe_clips": 0,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  62,
+                  76
+                ],
+                "has_take": false,
+                "lyrics": [
+                  {
+                    "clip": "Verse 1",
+                    "start_tick": 7680,
+                    "notes": 42,
+                    "unassigned": 0,
+                    "text": "あめあがりのかえりみちかさをたたんでみあげたまだいえないことばがむねのおくでゆれてる"
+                  },
+                  {
+                    "clip": "Chorus 1",
+                    "start_tick": 38400,
+                    "notes": 38,
+                    "unassigned": 0,
+                    "text": "あしたへあるきだそうぬれたくつでかまわないあしたへあるきだそうひかりのほうへ"
+                  },
+                  {
+                    "clip": "Verse 2",
+                    "start_tick": 76800,
+                    "notes": 45,
+                    "unassigned": 0,
+                    "text": "ゆうひのなかまがるかどふみだすあしがかるくなるいえずにいたことばをあしたはきみにつたえたい"
+                  },
+                  {
+                    "clip": "Last Chorus",
+                    "start_tick": 107520,
+                    "notes": 42,
+                    "unassigned": 0,
+                    "text": "あしたへあるきだそうふるえごえでかまわないあしたへあるきだそういまからひかりのほうへ"
+                  }
+                ]
+              },
+              {
+                "name": "Piano LH",
+                "type": "instrument",
+                "stored_notes": 109,
+                "recipe_clips": 4,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  36,
+                  57
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": false,
+          "expected_seconds_at_constant_requested_tempo": 96.0
+        }
+      ],
+      "runtime_executable_sha256": {
+        "auris_studio-38478e7dc11d9b85.exe": "50381af1434e6825392e681c6b67155efc5a3b118fcab6cd1f1be88095d92f43"
+      },
+      "runtime_file_count": 275,
+      "runtime_manifest_sha256": "14712d03c4fd02152283468d9e1d9b610c9a35b2adab9adde55def96fd1a0021"
+    },
+    {
+      "condition": "final-codex",
+      "suite_path": "target/frontier-prompt-2026-10-24/final-codex/suite.json",
+      "suite_sha256": "2806efd3a61349d5311187500f7d380c0f18bbca12f84113564b104b71d507d9",
+      "source_commit": "bb06eae55064ccaf9eeb7b549afd900cdf57c3a3",
+      "source_diff_sha256": "4da36fa2bb8ada4dc0b234c7470750bb62b587cf09d641f1a194b0ba8c71249a",
+      "trials": [
+        {
+          "id": "instrumental_arc-01",
+          "case": "instrumental_arc",
+          "repetition": 1,
+          "elapsed_seconds": 705.7863716,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "2cc9aaa95f9baccfd3639ac0d8aa9b50efabeb837ee68822e4be42dffe635e7a",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 48.0,
+            "frames": 2304000,
+            "lufs": -16.0,
+            "peak_db": -8.342011451721191,
+            "true_peak_db": -8.342011451721191,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "f3bf7d49654ca03e60f3b9468632fa91bebd91c05e7eb3b0be855c750ac25fdc"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "0631b6f294f6a25627bc9fa3f78cf7f2060fe7c02ac046635258de11e2d4fbab",
+            "project-02.json": "0631b6f294f6a25627bc9fa3f78cf7f2060fe7c02ac046635258de11e2d4fbab",
+            "report.json": "92e9bc405f25e37171ae099e2dcaff26d6962e8a71da4da10712b06564ba4b05",
+            "result.mid": "e772e39c8b96921419ef54f4956ce3b56dfe2421034e6fbf238da38a3e88e18c",
+            "result.wav": "f3bf7d49654ca03e60f3b9468632fa91bebd91c05e7eb3b0be855c750ac25fdc",
+            "transcript.json": "6fadd6f07f15746556de707ea734c770e3cbf7b635f70fa2fa1ffa2aadcd96e3"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 5,
+            "production_record": 12,
+            "search_instruments": 5,
+            "edit_timeline": 2,
+            "edit_harmony": 35,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_track": 3,
+            "mixer_graph": 11,
+            "inspect_instrument": 4,
+            "add_clip": 16,
+            "set_instrument_params": 2,
+            "read_notes": 11,
+            "inspect_performance": 10,
+            "tool_help": 5,
+            "edit_notes": 2,
+            "set_drum_assignment": 3,
+            "inspect_audio": 27,
+            "normalize_mix": 2,
+            "automation": 4,
+            "search_documentation": 3,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "Aメロ — 朝のホーム"
+              },
+              {
+                "tick": 30720,
+                "label": "つなぎ — 動き出す車窓"
+              },
+              {
+                "tick": 46080,
+                "label": "サビ — ひらける空"
+              },
+              {
+                "tick": 76800,
+                "label": "終わり — 朝の余韻"
+              },
+              {
+                "tick": 92160,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 120.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "朝のホーム — 主旋律",
+                "type": "instrument",
+                "stored_notes": 65,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  71,
+                  88
+                ]
+              },
+              {
+                "name": "鍵盤 — ひかりの和音",
+                "type": "instrument",
+                "stored_notes": 131,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  53,
+                  69
+                ]
+              },
+              {
+                "name": "ベース — 旅の足取り",
+                "type": "instrument",
+                "stored_notes": 61,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  33,
+                  50
+                ]
+              },
+              {
+                "name": "ドラム — 小さな鼓動",
+                "type": "drum",
+                "stored_notes": 240,
+                "recipe_clips": 0,
+                "clip_end_ticks": 92160,
+                "pitch_range": [
+                  36,
+                  42
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 48.0
+        },
+        {
+          "id": "vocal_arc-01",
+          "case": "vocal_arc",
+          "repetition": 1,
+          "elapsed_seconds": 561.3671496,
+          "exit_code": 0,
+          "transport_pass": true,
+          "config_sha256": "bab645ea07798bc857e0b80c05b9889ce2393c9df5347f54661f969255069f1b",
+          "delivery_present": true,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 96.0,
+            "frames": 4608000,
+            "lufs": -19.982370376586914,
+            "peak_db": -6.876473426818848,
+            "true_peak_db": -6.874223709106445,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "caaf03c6ec18db842972db780073e06bd27ec5efa4424cf166ff969f4d3c48f2"
+          },
+          "tool_errors": [],
+          "artifacts": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "80c1b60ba7d09edc95c3f5e10de85eda1151399560ad7cd538b77c97287b6e02",
+            "project-02.json": "c6968d4a60f4fc60e412e26102613be61b6b1d6cbceb637cf498da645ce88179",
+            "report.json": "5ec1648edd210d9b92c10d5f5c3ec703e85aa6aff4f6703438eadabe30b67b5e",
+            "result.mid": "3737529e108924d4f1147205b6f312f7751f0192fd9210e425ac03b7737d9188",
+            "result.wav": "caaf03c6ec18db842972db780073e06bd27ec5efa4424cf166ff969f4d3c48f2",
+            "transcript.json": "bb66b21786c164603d95bfa8ba04d2f49d3c8e5bf0db835d9b80a413e6052298"
+          },
+          "ratings": {
+            "request_fit": null,
+            "melody": null,
+            "form": null,
+            "ensemble": null,
+            "sound": null
+          },
+          "turn_failures": [
+            null,
+            null
+          ],
+          "tool_calls": {
+            "inspect_project": 5,
+            "production_record": 13,
+            "list_voices": 2,
+            "search_instruments": 1,
+            "edit_timeline": 2,
+            "add_track": 1,
+            "tool_help": 7,
+            "inspect_singer": 4,
+            "analyze_lyrics": 3,
+            "set_instrument": 1,
+            "edit_harmony": 7,
+            "add_clip": 11,
+            "rename_track": 2,
+            "read_notes": 11,
+            "edit_notes": 4,
+            "mixer_graph": 2,
+            "write_lyrics": 4,
+            "inspect_instrument": 1,
+            "inspect_performance": 4,
+            "diagnose_song": 2,
+            "read_report": 2,
+            "inspect_audio": 22,
+            "normalize_mix": 1,
+            "search_documentation": 4,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "score": {
+            "sections": [
+              {
+                "tick": 0,
+                "label": "イントロ"
+              },
+              {
+                "tick": 7680,
+                "label": "一番"
+              },
+              {
+                "tick": 38400,
+                "label": "サビ"
+              },
+              {
+                "tick": 69120,
+                "label": "間奏"
+              },
+              {
+                "tick": 76800,
+                "label": "二番"
+              },
+              {
+                "tick": 107520,
+                "label": "ラストサビ"
+              },
+              {
+                "tick": 138240,
+                "label": "アウトロ"
+              },
+              {
+                "tick": 153600,
+                "label": null
+              }
+            ],
+            "tempo": {
+              "points": [
+                {
+                  "tick": 0,
+                  "bpm": 100.0
+                }
+              ]
+            },
+            "signatures": {
+              "points": [
+                {
+                  "tick": 0,
+                  "signature": {
+                    "numerator": 4,
+                    "denominator": 4
+                  }
+                }
+              ]
+            },
+            "tracks": [
+              {
+                "name": "ピアノ — 雨上がり",
+                "type": "instrument",
+                "stored_notes": 249,
+                "recipe_clips": 0,
+                "clip_end_ticks": 153600,
+                "pitch_range": [
+                  40,
+                  69
+                ]
+              },
+              {
+                "name": "歌メロ・歌詞（未合成） — 明日へ、一歩",
+                "type": "singer",
+                "stored_notes": 188,
+                "recipe_clips": 0,
+                "clip_end_ticks": 138240,
+                "pitch_range": [
+                  60,
+                  72
+                ],
+                "has_take": false,
+                "lyrics": [
+                  {
+                    "clip": "一番 — 雨あがり",
+                    "start_tick": 7680,
+                    "notes": 44,
+                    "unassigned": 0,
+                    "text": "あめあがりのかえりみちみずたまりにそらがあるとじたかさをにぎりしめいえなかったことおもう"
+                  },
+                  {
+                    "clip": "サビ — 明日へ、一歩",
+                    "start_tick": 38400,
+                    "notes": 50,
+                    "unassigned": 0,
+                    "text": "あしたえいっぽふみだそうこぼれたなみだもつれてゆこうくものきれまにひかるみちぼくわぼくのあすをえらぶ"
+                  },
+                  {
+                    "clip": "二番 — 青の交差点",
+                    "start_tick": 76800,
+                    "notes": 44,
+                    "unassigned": 0,
+                    "text": "あおにかわるこうさてんたちどまらずわたりだすきみえおくるありがとうぬれたくつであすえゆく"
+                  },
+                  {
+                    "clip": "ラストサビ — 決心",
+                    "start_tick": 107520,
+                    "notes": 50,
+                    "unassigned": 0,
+                    "text": "あしたえいっぽふみだそうこぼれたなみだもつれてゆこうくものきれまにひかるみちぼくわぼくのあすをえらぶ"
+                  }
+                ]
+              }
+            ]
+          },
+          "duration_matches_constant_requested_tempo": true,
+          "expected_seconds_at_constant_requested_tempo": 96.0
+        }
+      ],
+      "runtime_executable_sha256": {
+        "auris_studio-38478e7dc11d9b85.exe": "50381af1434e6825392e681c6b67155efc5a3b118fcab6cd1f1be88095d92f43"
+      },
+      "runtime_file_count": 275,
+      "runtime_manifest_sha256": "14712d03c4fd02152283468d9e1d9b610c9a35b2adab9adde55def96fd1a0021"
+    }
+  ],
+  "synthesis": [
+    {
+      "source": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\before-claude\\vocal_arc-01\\project-02.json",
+      "source_sha256": "81fe19f3cdb25b62c588f73eda7dd25105df8b79300a8e4ace5ff02cf4c89a64",
+      "method": "Postprocessing the frozen score, not agent synthesis success",
+      "voice": "C:\\Users\\uthree\\.config\\auris-studio\\Voices\\VOICEVOX singer.voicevox.json",
+      "speaker": "ずんだもん / ノーマル",
+      "seed": 0,
+      "score_and_mix_settings_unchanged": true,
+      "mix": {
+        "seconds": 96.0,
+        "sha256": "22cc3b0d58a4d5aec348ea09612da867fd9d682a7c3bad0d71ea308a60b0d3c1",
+        "peak_dbfs": 0.0,
+        "rms_dbfs": -15.61,
+        "clipped_samples": 536,
+        "finite": true,
+        "last_100ms": {
+          "peak_dbfs": -37.24,
+          "rms_dbfs": -46.56,
+          "clipped_samples": 0,
+          "finite": true
+        }
+      },
+      "vocal": {
+        "seconds": 86.42133333333334,
+        "sha256": "2dcb8b2e3c4aaf776b289f6eb0a1e897673d54088d3726317912a5cf0c2bdaaa",
+        "track": 2,
+        "last_note_end_seconds": 86.4,
+        "peak_dbfs": -5.24,
+        "rms_dbfs": -22.78,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "regions": [
+        {
+          "region": "verse_1",
+          "start_seconds": 4.8,
+          "end_seconds": 24,
+          "notes": 37,
+          "blank_lyrics": 0,
+          "lyrics": "あめあがりのみちをひとりであるいてたみずたまりにうつるちいさなそらがゆれた",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.79,
+            "rms_dbfs": -24.75,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -0.33,
+            "rms_dbfs": -17.16,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "chorus_1",
+          "start_seconds": 24,
+          "end_seconds": 43.2,
+          "notes": 35,
+          "blank_lyrics": 0,
+          "lyrics": "あしたへふみだそうぬれたくつのままでにじがみえなくてもこのみちをゆこう",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -5.24,
+            "rms_dbfs": -20.54,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": 0.0,
+            "rms_dbfs": -13.05,
+            "clipped_samples": 398,
+            "finite": true
+          }
+        },
+        {
+          "region": "verse_2",
+          "start_seconds": 48,
+          "end_seconds": 67.2,
+          "notes": 37,
+          "blank_lyrics": 0,
+          "lyrics": "かどをまがったときゆうひがさしこんだまよいつづけたひびここにおいていくんだ",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.84,
+            "rms_dbfs": -24.69,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -0.38,
+            "rms_dbfs": -17.08,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "final_chorus",
+          "start_seconds": 67.2,
+          "end_seconds": 86.4,
+          "notes": 35,
+          "blank_lyrics": 0,
+          "lyrics": "あしたへふみだそうぬれたくつのままでそらがひかりだしたこのみちをゆこう",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -5.48,
+            "rms_dbfs": -20.9,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": 0.0,
+            "rms_dbfs": -13.2,
+            "clipped_samples": 138,
+            "finite": true
+          }
+        }
+      ],
+      "status": "complete",
+      "condition": "before-claude",
+      "take_state": "current",
+      "section_coverage": {
+        "interpretation": "Authored onsets in unmuted clips, including counted loop repeats; sustained notes are counted only where they begin. Counts do not prove a complete verse, valid pronunciation, audibility or musical quality. Compare every planned sung section with read_notes; instrumental sections may have no vocals. Looped words are reused lyrics, not a newly written verse. analysis_complete=false means partial counts, not verified absence. A current take verifies synthesis freshness only.",
+        "next_section_offset": null,
+        "sections": [
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 7680,
+            "instance": 1,
+            "label": "Intro",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 1,
+            "start_tick": 0,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 38400,
+            "instance": 1,
+            "label": "Verse 1",
+            "looped_note_attacks": 0,
+            "lyric_notes": 37,
+            "note_attacks": 37,
+            "phoneme_notes": 37,
+            "start_bar": 3,
+            "start_tick": 7680,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 69120,
+            "instance": 1,
+            "label": "Chorus",
+            "looped_note_attacks": 0,
+            "lyric_notes": 35,
+            "note_attacks": 35,
+            "phoneme_notes": 35,
+            "start_bar": 11,
+            "start_tick": 38400,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 76800,
+            "instance": 1,
+            "label": "Interlude",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 19,
+            "start_tick": 69120,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 107520,
+            "instance": 1,
+            "label": "Verse 2",
+            "looped_note_attacks": 0,
+            "lyric_notes": 37,
+            "note_attacks": 37,
+            "phoneme_notes": 37,
+            "start_bar": 21,
+            "start_tick": 76800,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 138240,
+            "instance": 1,
+            "label": "Last Chorus",
+            "looped_note_attacks": 0,
+            "lyric_notes": 35,
+            "note_attacks": 35,
+            "phoneme_notes": 35,
+            "start_bar": 29,
+            "start_tick": 107520,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 153600,
+            "instance": 1,
+            "label": "Outro",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 37,
+            "start_tick": 138240,
+            "unassigned_notes": 0
+          }
+        ],
+        "total_sections": 7,
+        "unbounded_last_section": false
+      },
+      "audition_render": {
+        "document_unchanged": true,
+        "files": [
+          {
+            "attenuation_db": -3.4904465675354004,
+            "ceiling_db": -1.0,
+            "encoded": {
+              "bit_depth": 24,
+              "channels": 2,
+              "ending_rms_db": -48.95590591430664,
+              "frames": 4608000,
+              "full_scale_samples": 0,
+              "lufs": -13.453744888305664,
+              "peak_db": -1.017237901687622,
+              "sample_rate": 48000,
+              "seconds": 96.0,
+              "sha256": "ff73a2f881008de8ae3c2cc91bcbb5bd57354d9c020b7e2ea59c157748d1b141",
+              "true_peak_db": -1.0000048875808716
+            },
+            "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\before-claude\\audition.wav",
+            "source_true_peak_db": 2.49044132232666
+          }
+        ]
+      },
+      "audition_preparation": {
+        "purpose": "Audition the synthesized score; do not mistake a muted singer for successful vocal delivery",
+        "unmuted_singer_tracks": [],
+        "all_other_score_and_mix_fields_unchanged": true
+      }
+    },
+    {
+      "source": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\before-codex\\vocal_arc-01\\project-02.json",
+      "source_sha256": "4cd825175a2ef85e27cbdaa42e901d27239b679ce7508a751779312f0cb9acb8",
+      "method": "Postprocessing the frozen score, not agent synthesis success",
+      "voice": "C:\\Users\\uthree\\.config\\auris-studio\\Voices\\VOICEVOX singer.voicevox.json",
+      "speaker": "ずんだもん / ノーマル",
+      "seed": 0,
+      "score_and_mix_settings_unchanged": true,
+      "mix": {
+        "seconds": 96.0,
+        "sha256": "592d777284a9d8a21115be192583aca29781e39e5757308e59db8badbfb29d4d",
+        "peak_dbfs": -5.46,
+        "rms_dbfs": -22.73,
+        "clipped_samples": 0,
+        "finite": true,
+        "last_100ms": {
+          "peak_dbfs": -240.0,
+          "rms_dbfs": -240.0,
+          "clipped_samples": 0,
+          "finite": true
+        }
+      },
+      "vocal": {
+        "seconds": 86.112,
+        "sha256": "be49d5c578960e33edb637bb31820391fc46371d253e7624ce798a11e390a4eb",
+        "track": 2,
+        "last_note_end_seconds": 86.1,
+        "peak_dbfs": -7.11,
+        "rms_dbfs": -24.34,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "regions": [
+        {
+          "region": "verse_1",
+          "start_seconds": 4.8,
+          "end_seconds": 24,
+          "notes": 44,
+          "blank_lyrics": 0,
+          "lyrics": "あめあがりのかえりみちみずたまりにそらがあるいえなかったことばたちくつのさきでゆれていた",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -9.78,
+            "rms_dbfs": -24.83,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -8.78,
+            "rms_dbfs": -24.41,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "chorus_1",
+          "start_seconds": 24,
+          "end_seconds": 43.2,
+          "notes": 40,
+          "blank_lyrics": 0,
+          "lyrics": "あしたえもういっぽあめのむこうえいっぽこわいままでいいんだこのあしであるきだそう",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.11,
+            "rms_dbfs": -23.14,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -8.06,
+            "rms_dbfs": -21.4,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "verse_2",
+          "start_seconds": 48,
+          "end_seconds": 67.2,
+          "notes": 45,
+          "blank_lyrics": 0,
+          "lyrics": "とじたかさをもちかえてきみにみじかいへんじかくまたあしたとおくりだすあおにかわるみちをゆく",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.37,
+            "rms_dbfs": -24.51,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -5.94,
+            "rms_dbfs": -22.89,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "final_chorus",
+          "start_seconds": 67.2,
+          "end_seconds": 86.4,
+          "notes": 40,
+          "blank_lyrics": 0,
+          "lyrics": "あしたえもういっぽあめのむこうえいっぽこわいままでいいんだこのあしであるきだそう",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.19,
+            "rms_dbfs": -23.08,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -7.42,
+            "rms_dbfs": -21.52,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        }
+      ],
+      "status": "complete",
+      "condition": "before-codex",
+      "take_state": "current",
+      "section_coverage": {
+        "interpretation": "Authored onsets in unmuted clips, including counted loop repeats; sustained notes are counted only where they begin. Counts do not prove a complete verse, valid pronunciation, audibility or musical quality. Compare every planned sung section with read_notes; instrumental sections may have no vocals. Looped words are reused lyrics, not a newly written verse. analysis_complete=false means partial counts, not verified absence. A current take verifies synthesis freshness only.",
+        "next_section_offset": null,
+        "sections": [
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 7680,
+            "instance": 1,
+            "label": "イントロ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 1,
+            "start_tick": 0,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 38400,
+            "instance": 1,
+            "label": "一番",
+            "looped_note_attacks": 0,
+            "lyric_notes": 44,
+            "note_attacks": 44,
+            "phoneme_notes": 44,
+            "start_bar": 3,
+            "start_tick": 7680,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 69120,
+            "instance": 1,
+            "label": "サビ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 40,
+            "note_attacks": 40,
+            "phoneme_notes": 40,
+            "start_bar": 11,
+            "start_tick": 38400,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 76800,
+            "instance": 1,
+            "label": "間奏",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 19,
+            "start_tick": 69120,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 107520,
+            "instance": 1,
+            "label": "二番",
+            "looped_note_attacks": 0,
+            "lyric_notes": 45,
+            "note_attacks": 45,
+            "phoneme_notes": 45,
+            "start_bar": 21,
+            "start_tick": 76800,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 138240,
+            "instance": 1,
+            "label": "ラストサビ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 40,
+            "note_attacks": 40,
+            "phoneme_notes": 40,
+            "start_bar": 29,
+            "start_tick": 107520,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 153600,
+            "instance": 1,
+            "label": "アウトロ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 37,
+            "start_tick": 138240,
+            "unassigned_notes": 0
+          }
+        ],
+        "total_sections": 7,
+        "unbounded_last_section": false
+      },
+      "audition_render": {
+        "document_unchanged": true,
+        "files": [
+          {
+            "attenuation_db": 0.0,
+            "ceiling_db": -1.0,
+            "encoded": {
+              "bit_depth": 24,
+              "channels": 2,
+              "ending_rms_db": null,
+              "frames": 4608000,
+              "full_scale_samples": 0,
+              "lufs": -17.30974769592285,
+              "peak_db": -2.55639910697937,
+              "sample_rate": 48000,
+              "seconds": 96.0,
+              "sha256": "bdcd9963a29dc6db69d6debb5c0ece216624c01296104e80ba71e6244e9b5cdf",
+              "true_peak_db": -2.5438947677612305
+            },
+            "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\before-codex\\audition.wav",
+            "source_true_peak_db": -2.5438952445983887
+          }
+        ]
+      },
+      "audition_preparation": {
+        "purpose": "Audition the synthesized score; do not mistake a muted singer for successful vocal delivery",
+        "unmuted_singer_tracks": [
+          2
+        ],
+        "all_other_score_and_mix_fields_unchanged": true
+      }
+    },
+    {
+      "source": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\final-claude\\vocal_arc-01\\project-02.json",
+      "source_sha256": "9fc9c5d29a9dd559219d21e0cabd0dc4ee805b6a1793f55b4fb416957431adc5",
+      "method": "Postprocessing the frozen score, not agent synthesis success",
+      "voice": "C:\\Users\\uthree\\.config\\auris-studio\\Voices\\VOICEVOX singer.voicevox.json",
+      "speaker": "ずんだもん / ノーマル",
+      "seed": 0,
+      "score_and_mix_settings_unchanged": true,
+      "mix": {
+        "seconds": 96.73552083333334,
+        "sha256": "db78fc40d5ebeaa7af47c86967c52eda54e8e6b939b957aba4b3d9e58530632d",
+        "peak_dbfs": -4.62,
+        "rms_dbfs": -22.31,
+        "clipped_samples": 0,
+        "finite": true,
+        "last_100ms": {
+          "peak_dbfs": -48.5,
+          "rms_dbfs": -58.43,
+          "clipped_samples": 0,
+          "finite": true
+        }
+      },
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 100.0
+          },
+          {
+            "tick": 145920,
+            "bpm": 92.0
+          },
+          {
+            "tick": 149760,
+            "bpm": 82.0
+          }
+        ]
+      },
+      "requested_40_bar_seconds": 96.73552492046659,
+      "vocal": {
+        "seconds": 86.26133333333334,
+        "sha256": "c61883d833fb3a807ed2e29471d8c22fd3db7530eae5072a0449cc42ed69fd34",
+        "track": 2,
+        "last_note_end_seconds": 86.25,
+        "peak_dbfs": -5.7,
+        "rms_dbfs": -22.25,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "regions": [
+        {
+          "region": "verse_1",
+          "start_seconds": 4.8,
+          "end_seconds": 24.0,
+          "notes": 42,
+          "blank_lyrics": 0,
+          "lyrics": "あめあがりのかえりみちかさをたたんでみあげたまだいえないことばがむねのおくでゆれてる",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -6.17,
+            "rms_dbfs": -24.59,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -5.73,
+            "rms_dbfs": -24.29,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "chorus_1",
+          "start_seconds": 24.0,
+          "end_seconds": 43.2,
+          "notes": 38,
+          "blank_lyrics": 0,
+          "lyrics": "あしたへあるきだそうぬれたくつでかまわないあしたへあるきだそうひかりのほうへ",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -5.7,
+            "rms_dbfs": -20.16,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -4.62,
+            "rms_dbfs": -19.84,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "verse_2",
+          "start_seconds": 48.0,
+          "end_seconds": 67.2,
+          "notes": 45,
+          "blank_lyrics": 0,
+          "lyrics": "ゆうひのなかまがるかどふみだすあしがかるくなるいえずにいたことばをあしたはきみにつたえたい",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.03,
+            "rms_dbfs": -23.13,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -6.53,
+            "rms_dbfs": -22.87,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "final_chorus",
+          "start_seconds": 67.2,
+          "end_seconds": 86.4,
+          "notes": 42,
+          "blank_lyrics": 0,
+          "lyrics": "あしたへあるきだそうふるえごえでかまわないあしたへあるきだそういまからひかりのほうへ",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -6.16,
+            "rms_dbfs": -20.54,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -5.24,
+            "rms_dbfs": -20.04,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        }
+      ],
+      "status": "complete",
+      "condition": "final-claude",
+      "take_state": "current",
+      "section_coverage": {
+        "interpretation": "Authored onsets in unmuted clips, including counted loop repeats; sustained notes are counted only where they begin. Counts do not prove a complete verse, valid pronunciation, audibility or musical quality. Compare every planned sung section with read_notes; instrumental sections may have no vocals. Looped words are reused lyrics, not a newly written verse. analysis_complete=false means partial counts, not verified absence. A current take verifies synthesis freshness only.",
+        "next_section_offset": null,
+        "sections": [
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 7680,
+            "instance": 1,
+            "label": "Intro",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 1,
+            "start_tick": 0,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 38400,
+            "instance": 1,
+            "label": "Verse 1",
+            "looped_note_attacks": 0,
+            "lyric_notes": 42,
+            "note_attacks": 42,
+            "phoneme_notes": 42,
+            "start_bar": 3,
+            "start_tick": 7680,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 69120,
+            "instance": 1,
+            "label": "Chorus 1",
+            "looped_note_attacks": 0,
+            "lyric_notes": 38,
+            "note_attacks": 38,
+            "phoneme_notes": 38,
+            "start_bar": 11,
+            "start_tick": 38400,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 76800,
+            "instance": 1,
+            "label": "Interlude",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 19,
+            "start_tick": 69120,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 107520,
+            "instance": 1,
+            "label": "Verse 2",
+            "looped_note_attacks": 0,
+            "lyric_notes": 45,
+            "note_attacks": 45,
+            "phoneme_notes": 45,
+            "start_bar": 21,
+            "start_tick": 76800,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 138240,
+            "instance": 1,
+            "label": "Last Chorus",
+            "looped_note_attacks": 0,
+            "lyric_notes": 42,
+            "note_attacks": 42,
+            "phoneme_notes": 42,
+            "start_bar": 29,
+            "start_tick": 107520,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 153600,
+            "instance": 1,
+            "label": "Outro",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 37,
+            "start_tick": 138240,
+            "unassigned_notes": 0
+          }
+        ],
+        "total_sections": 7,
+        "unbounded_last_section": false
+      },
+      "audition_render": {
+        "document_unchanged": true,
+        "files": [
+          {
+            "attenuation_db": 0.0,
+            "ceiling_db": -1.0,
+            "encoded": {
+              "bit_depth": 24,
+              "channels": 2,
+              "ending_rms_db": -58.10919952392578,
+              "frames": 4643305,
+              "full_scale_samples": 0,
+              "lufs": -17.00208854675293,
+              "peak_db": -4.624054431915283,
+              "sample_rate": 48000,
+              "seconds": 96.73552083333334,
+              "sha256": "db78fc40d5ebeaa7af47c86967c52eda54e8e6b939b957aba4b3d9e58530632d",
+              "true_peak_db": -4.614172458648682
+            },
+            "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\final-claude\\audition.wav",
+            "source_true_peak_db": -4.614172458648682
+          }
+        ]
+      },
+      "audition_preparation": {
+        "purpose": "Audition the synthesized score; do not mistake a muted singer for successful vocal delivery",
+        "unmuted_singer_tracks": [],
+        "all_other_score_and_mix_fields_unchanged": true
+      }
+    },
+    {
+      "source": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\final-codex\\vocal_arc-01\\project-02.json",
+      "source_sha256": "c6968d4a60f4fc60e412e26102613be61b6b1d6cbceb637cf498da645ce88179",
+      "method": "Postprocessing the frozen score, not agent synthesis success",
+      "voice": "C:\\Users\\uthree\\.config\\auris-studio\\Voices\\VOICEVOX singer.voicevox.json",
+      "speaker": "ずんだもん / ノーマル",
+      "seed": 0,
+      "score_and_mix_settings_unchanged": true,
+      "mix": {
+        "seconds": 96.0,
+        "sha256": "1707a947da1abe24909bee55b55a7c97a5870a9d800f505c6ecfd6b5ca739697",
+        "peak_dbfs": -1.13,
+        "rms_dbfs": -20.66,
+        "clipped_samples": 0,
+        "finite": true,
+        "last_100ms": {
+          "peak_dbfs": -240.0,
+          "rms_dbfs": -240.0,
+          "clipped_samples": 0,
+          "finite": true
+        }
+      },
+      "tempo_map": {
+        "points": [
+          {
+            "tick": 0,
+            "bpm": 100.0
+          }
+        ]
+      },
+      "requested_40_bar_seconds": 96.0,
+      "vocal": {
+        "seconds": 86.112,
+        "sha256": "12954c7ec62889c787e28a9028788e72612b12253ace31f69d331ce43935017f",
+        "track": 2,
+        "last_note_end_seconds": 86.1,
+        "peak_dbfs": -5.58,
+        "rms_dbfs": -24.81,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "regions": [
+        {
+          "region": "verse_1",
+          "start_seconds": 4.8,
+          "end_seconds": 24.0,
+          "notes": 44,
+          "blank_lyrics": 0,
+          "lyrics": "あめあがりのかえりみちみずたまりにそらがあるとじたかさをにぎりしめいえなかったことおもう",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -9.01,
+            "rms_dbfs": -25.14,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -4.26,
+            "rms_dbfs": -20.91,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "chorus_1",
+          "start_seconds": 24.0,
+          "end_seconds": 43.2,
+          "notes": 50,
+          "blank_lyrics": 0,
+          "lyrics": "あしたえいっぽふみだそうこぼれたなみだもつれてゆこうくものきれまにひかるみちぼくわぼくのあすをえらぶ",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -7.75,
+            "rms_dbfs": -24.11,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -2.15,
+            "rms_dbfs": -19.38,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "verse_2",
+          "start_seconds": 48.0,
+          "end_seconds": 67.2,
+          "notes": 44,
+          "blank_lyrics": 0,
+          "lyrics": "あおにかわるこうさてんたちどまらずわたりだすきみえおくるありがとうぬれたくつであすえゆく",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -5.58,
+            "rms_dbfs": -25.02,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -1.13,
+            "rms_dbfs": -20.64,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        },
+        {
+          "region": "final_chorus",
+          "start_seconds": 67.2,
+          "end_seconds": 86.4,
+          "notes": 50,
+          "blank_lyrics": 0,
+          "lyrics": "あしたえいっぽふみだそうこぼれたなみだもつれてゆこうくものきれまにひかるみちぼくわぼくのあすをえらぶ",
+          "quiet_notes_below_minus60": [],
+          "vocal": {
+            "peak_dbfs": -5.98,
+            "rms_dbfs": -23.2,
+            "clipped_samples": 0,
+            "finite": true
+          },
+          "mix": {
+            "peak_dbfs": -1.62,
+            "rms_dbfs": -18.63,
+            "clipped_samples": 0,
+            "finite": true
+          }
+        }
+      ],
+      "status": "complete",
+      "condition": "final-codex",
+      "take_state": "current",
+      "section_coverage": {
+        "interpretation": "Authored onsets in unmuted clips, including counted loop repeats; sustained notes are counted only where they begin. Counts do not prove a complete verse, valid pronunciation, audibility or musical quality. Compare every planned sung section with read_notes; instrumental sections may have no vocals. Looped words are reused lyrics, not a newly written verse. analysis_complete=false means partial counts, not verified absence. A current take verifies synthesis freshness only.",
+        "next_section_offset": null,
+        "sections": [
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 7680,
+            "instance": 1,
+            "label": "イントロ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 1,
+            "start_tick": 0,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 38400,
+            "instance": 1,
+            "label": "一番",
+            "looped_note_attacks": 0,
+            "lyric_notes": 44,
+            "note_attacks": 44,
+            "phoneme_notes": 44,
+            "start_bar": 3,
+            "start_tick": 7680,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 69120,
+            "instance": 1,
+            "label": "サビ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 50,
+            "note_attacks": 50,
+            "phoneme_notes": 50,
+            "start_bar": 11,
+            "start_tick": 38400,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 76800,
+            "instance": 1,
+            "label": "間奏",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 19,
+            "start_tick": 69120,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 107520,
+            "instance": 1,
+            "label": "二番",
+            "looped_note_attacks": 0,
+            "lyric_notes": 44,
+            "note_attacks": 44,
+            "phoneme_notes": 44,
+            "start_bar": 21,
+            "start_tick": 76800,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 138240,
+            "instance": 1,
+            "label": "ラストサビ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 50,
+            "note_attacks": 50,
+            "phoneme_notes": 50,
+            "start_bar": 29,
+            "start_tick": 107520,
+            "unassigned_notes": 0
+          },
+          {
+            "analysis_complete": true,
+            "continuation_notes": 0,
+            "end_tick": 153600,
+            "instance": 1,
+            "label": "アウトロ",
+            "looped_note_attacks": 0,
+            "lyric_notes": 0,
+            "note_attacks": 0,
+            "phoneme_notes": 0,
+            "start_bar": 37,
+            "start_tick": 138240,
+            "unassigned_notes": 0
+          }
+        ],
+        "total_sections": 7,
+        "unbounded_last_section": false
+      },
+      "audition_render": {
+        "document_unchanged": true,
+        "files": [
+          {
+            "attenuation_db": 0.0,
+            "ceiling_db": -1.0,
+            "encoded": {
+              "bit_depth": 24,
+              "channels": 2,
+              "ending_rms_db": null,
+              "frames": 4608000,
+              "full_scale_samples": 0,
+              "lufs": -16.378063201904297,
+              "peak_db": -1.1300363540649414,
+              "sample_rate": 48000,
+              "seconds": 96.0,
+              "sha256": "1707a947da1abe24909bee55b55a7c97a5870a9d800f505c6ecfd6b5ca739697",
+              "true_peak_db": -1.0977345705032349
+            },
+            "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\final-codex\\audition.wav",
+            "source_true_peak_db": -1.0977345705032349
+          }
+        ]
+      },
+      "audition_preparation": {
+        "purpose": "Audition the synthesized score; do not mistake a muted singer for successful vocal delivery",
+        "unmuted_singer_tracks": [],
+        "all_other_score_and_mix_fields_unchanged": true
+      }
+    }
+  ],
+  "midi_file_audit": [
+    {
+      "path": "target/frontier-prompt-2026-10-24/after-claude/instrumental_arc-01/result.mid",
+      "seconds": 47.25,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "Keys",
+          "note_on": 332
+        },
+        {
+          "name": "Melody",
+          "note_on": 80
+        },
+        {
+          "name": "Bass",
+          "note_on": 68
+        },
+        {
+          "name": "Drums",
+          "note_on": 208
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/after-claude/vocal_arc-01/result.mid",
+      "seconds": 96.0,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "Piano",
+          "note_on": 274
+        },
+        {
+          "name": "Piano LH",
+          "note_on": 87
+        },
+        {
+          "name": "Vocal Melody",
+          "note_on": 164
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/after-codex/instrumental_arc-01/result.mid",
+      "seconds": 46.2875,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "朝の光 — Piano",
+          "note_on": 131
+        },
+        {
+          "name": "朝の主題 — Whistle",
+          "note_on": 88
+        },
+        {
+          "name": "旅立つ足音 — Bass",
+          "note_on": 57
+        },
+        {
+          "name": "軽い足取り — Drums",
+          "note_on": 217
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/after-codex/vocal_arc-01/result.mid",
+      "seconds": 92.39999999999999,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "ピアノ — 雨上がり",
+          "note_on": 288
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/before-claude/instrumental_arc-01/result.mid",
+      "seconds": 48.0,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "主旋律",
+          "note_on": 82
+        },
+        {
+          "name": "鍵盤",
+          "note_on": 220
+        },
+        {
+          "name": "ベース",
+          "note_on": 89
+        },
+        {
+          "name": "ドラム",
+          "note_on": 240
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/before-claude/vocal_arc-01/result.mid",
+      "seconds": 96.0,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "Piano RH",
+          "note_on": 169
+        },
+        {
+          "name": "Piano LH",
+          "note_on": 120
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/before-codex/instrumental_arc-01/result.mid",
+      "seconds": 46.901041666666664,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "朝の主題 • マレット",
+          "note_on": 86
+        },
+        {
+          "name": "光の鍵盤",
+          "note_on": 178
+        },
+        {
+          "name": "歩み • ベース",
+          "note_on": 46
+        },
+        {
+          "name": "控えめなドラム",
+          "note_on": 213
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/before-codex/vocal_arc-01/result.mid",
+      "seconds": 95.04125,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "内蔵ピアノ",
+          "note_on": 242
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/final-claude/instrumental_arc-01/result.mid",
+      "seconds": 47.0,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "Piano",
+          "note_on": 189
+        },
+        {
+          "name": "Melody",
+          "note_on": 82
+        },
+        {
+          "name": "Bass",
+          "note_on": 67
+        },
+        {
+          "name": "Drums",
+          "note_on": 213
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/final-claude/vocal_arc-01/result.mid",
+      "seconds": 96.735524,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "Piano RH",
+          "note_on": 354
+        },
+        {
+          "name": "Piano LH",
+          "note_on": 109
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/final-codex/instrumental_arc-01/result.mid",
+      "seconds": 46.75,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "朝のホーム — 主旋律",
+          "note_on": 65
+        },
+        {
+          "name": "鍵盤 — ひかりの和音",
+          "note_on": 131
+        },
+        {
+          "name": "ベース — 旅の足取り",
+          "note_on": 61
+        },
+        {
+          "name": "ドラム — 小さな鼓動",
+          "note_on": 240
+        }
+      ]
+    },
+    {
+      "path": "target/frontier-prompt-2026-10-24/final-codex/vocal_arc-01/result.mid",
+      "seconds": 93.48,
+      "ticks_per_beat": 960,
+      "tracks": [
+        {
+          "name": "Untitled",
+          "note_on": 0
+        },
+        {
+          "name": "ピアノ — 雨上がり",
+          "note_on": 249
+        }
+      ]
+    }
+  ],
+  "listening_pairs": [
+    {
+      "id": "pair-01",
+      "backend": "codex",
+      "case": "instrumental_arc",
+      "target_lufs": -23,
+      "sources": [
+        {
+          "condition": "final",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\final-codex\\instrumental_arc-01\\result.wav",
+          "sha256": "f3bf7d49654ca03e60f3b9468632fa91bebd91c05e7eb3b0be855c750ac25fdc",
+          "original_lufs": -16.0,
+          "source_true_peak_db": -8.342011451721191,
+          "label": "A",
+          "gain_db": -7.0,
+          "copy_sha256": "f91b0c1b5a930a45d14c43d31f987e2bac94550969ad2617736ffc50ee2a64d1"
+        },
+        {
+          "condition": "before",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\before-codex\\instrumental_arc-01\\result.wav",
+          "sha256": "2314d6bb3eaeacb4add6cb7d23b97b8dc7347a422fad1e8451ebc32921b2e5f2",
+          "original_lufs": -19.999998092651367,
+          "source_true_peak_db": -1.771239161491394,
+          "label": "B",
+          "gain_db": -3.000001907348633,
+          "copy_sha256": "57033e1654eb5f07cabcc08db73159229c71ba9eeb1ac770847ec92f7b3c3554"
+        }
+      ],
+      "human_ratings": null
+    },
+    {
+      "id": "pair-02",
+      "backend": "codex",
+      "case": "vocal_arc",
+      "target_lufs": -23,
+      "sources": [
+        {
+          "condition": "final",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\final-codex\\audition.wav",
+          "sha256": "1707a947da1abe24909bee55b55a7c97a5870a9d800f505c6ecfd6b5ca739697",
+          "original_lufs": -16.378063201904297,
+          "source_true_peak_db": -1.0977345705032349,
+          "label": "A",
+          "gain_db": -6.621936798095703,
+          "copy_sha256": "234896e29397c7903dbda78b57d9dd11ebae1b23710d6e2c4a68e0dfb80929a5"
+        },
+        {
+          "condition": "before",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\before-codex\\audition.wav",
+          "sha256": "bdcd9963a29dc6db69d6debb5c0ece216624c01296104e80ba71e6244e9b5cdf",
+          "original_lufs": -17.30974769592285,
+          "source_true_peak_db": -2.5438947677612305,
+          "label": "B",
+          "gain_db": -5.690252304077148,
+          "copy_sha256": "9dc329aea43d538c228564fb1828e68c20a42c66bb65f3ec37ca93d79c266ea0"
+        }
+      ],
+      "human_ratings": null
+    },
+    {
+      "id": "pair-03",
+      "backend": "claude",
+      "case": "instrumental_arc",
+      "target_lufs": -23,
+      "sources": [
+        {
+          "condition": "before",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\before-claude\\instrumental_arc-01\\result.wav",
+          "sha256": "d31be806f54f4a3d4c79002dd1a5e20b051a8952565fded705e1e5bc2373cb1b",
+          "original_lufs": -16.72226333618164,
+          "source_true_peak_db": -7.941120147705078,
+          "label": "A",
+          "gain_db": -6.277736663818359,
+          "copy_sha256": "cc1042a19706a5c162386dd2c7df9545d0a4b4ddf42dd94c407f01a62184ce5c"
+        },
+        {
+          "condition": "final",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\final-claude\\instrumental_arc-01\\result.wav",
+          "sha256": "07f3a52e6d63457d317f87d7c8ce61caacb2a6eeacad8a00500722651c061c82",
+          "original_lufs": -16.004222869873047,
+          "source_true_peak_db": -2.0292506217956543,
+          "label": "B",
+          "gain_db": -6.995777130126953,
+          "copy_sha256": "fed29c86fd4bbfd0b12ed3dc23d78afb064ff14bdd03bbba5196a605b0561a34"
+        }
+      ],
+      "human_ratings": null
+    },
+    {
+      "id": "pair-04",
+      "backend": "claude",
+      "case": "vocal_arc",
+      "target_lufs": -23,
+      "sources": [
+        {
+          "condition": "final",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\final-claude\\audition.wav",
+          "sha256": "db78fc40d5ebeaa7af47c86967c52eda54e8e6b939b957aba4b3d9e58530632d",
+          "original_lufs": -17.00208854675293,
+          "source_true_peak_db": -4.614172458648682,
+          "label": "A",
+          "gain_db": -5.99791145324707,
+          "copy_sha256": "9b8b2e1de98244194cea342d24cdde99a00128ae5ee3cb6fad92d4d8bd5ba341"
+        },
+        {
+          "condition": "before",
+          "path": "C:\\Users\\uthree\\.codex\\worktrees\\c76b\\auris-studio\\target\\frontier-prompt-2026-10-24\\synthesis\\before-claude\\audition.wav",
+          "sha256": "ff73a2f881008de8ae3c2cc91bcbb5bd57354d9c020b7e2ea59c157748d1b141",
+          "original_lufs": -13.453744888305664,
+          "source_true_peak_db": -1.0000048875808716,
+          "label": "B",
+          "gain_db": -9.546255111694336,
+          "copy_sha256": "1760ca7a2b0d525a061d78df2ab7d61b73ac28a424e84335facaae90b4f6990c"
+        }
+      ],
+      "human_ratings": null
+    }
+  ],
+  "synthesis_runtime": {
+    "files": {
+      "auris-mcp.exe": "3877aeb9cd3e2e6738e861e78319827a60d6c3f313068bb64812fb057446bd58",
+      "auris.exe": "3a92d6ea036e5cb840526d04453a3bbaab09122a4dabd7627714a7e849573245",
+      "DirectML.dll": "9c9e6d822561c6c41b90e6994b3e8857cf1d66dbfb1e0c4c799c7c89b4e92da1"
+    },
+    "voice_sha256": "4736fd99c595efd18e381da0d2f2e2c702e983c657bf9d7a148fde04f015eef6",
+    "voice": "C:\\Users\\uthree\\.config\\auris-studio\\Voices\\VOICEVOX singer.voicevox.json",
+    "seed": 0
+  },
+  "listening_level_verification": [
+    {
+      "file": "pair-01-A.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -33.4 LUFS\n\n  Loudness range:\n    LRA:         3.5 LU\n    Threshold: -43.4 LUFS\n    LRA low:   -25.3 LUFS\n    LRA high:  -21.9 LUFS\n\n  True peak:\n    Peak:      -15.3 dBFS\n[out#0/null @ 0000017b5646dcc0] video:0KiB audio:9000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:00:48.00 bitrate=N/A speed= 273x elapsed=0:00:00.17"
+    },
+    {
+      "file": "pair-01-B.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -33.2 LUFS\n\n  Loudness range:\n    LRA:         6.4 LU\n    Threshold: -43.3 LUFS\n    LRA low:   -26.9 LUFS\n    LRA high:  -20.5 LUFS\n\n  True peak:\n    Peak:       -4.8 dBFS\n[out#0/null @ 000001ff46fa0400] video:0KiB audio:9000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:00:48.00 bitrate=N/A speed= 262x elapsed=0:00:00.18"
+    },
+    {
+      "file": "pair-02-A.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -33.6 LUFS\n\n  Loudness range:\n    LRA:        12.0 LU\n    Threshold: -43.7 LUFS\n    LRA low:   -32.1 LUFS\n    LRA high:  -20.1 LUFS\n\n  True peak:\n    Peak:       -7.7 dBFS\n[out#0/null @ 000002334a96f1c0] video:0KiB audio:18000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:01:36.00 bitrate=N/A speed= 273x elapsed=0:00:00.35"
+    },
+    {
+      "file": "pair-02-B.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -33.3 LUFS\n\n  Loudness range:\n    LRA:         5.5 LU\n    Threshold: -43.3 LUFS\n    LRA low:   -26.7 LUFS\n    LRA high:  -21.3 LUFS\n\n  True peak:\n    Peak:       -8.2 dBFS\n[out#0/null @ 0000023c2eeb0400] video:0KiB audio:18000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:01:36.00 bitrate=N/A speed= 273x elapsed=0:00:00.35"
+    },
+    {
+      "file": "pair-03-A.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -33.2 LUFS\n\n  Loudness range:\n    LRA:         3.9 LU\n    Threshold: -43.1 LUFS\n    LRA low:   -25.5 LUFS\n    LRA high:  -21.6 LUFS\n\n  True peak:\n    Peak:      -14.2 dBFS\n[out#0/null @ 000001e0dd340c40] video:0KiB audio:9000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:00:48.00 bitrate=N/A speed= 275x elapsed=0:00:00.17"
+    },
+    {
+      "file": "pair-03-B.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -33.1 LUFS\n\n  Loudness range:\n    LRA:         5.7 LU\n    Threshold: -42.9 LUFS\n    LRA low:   -26.2 LUFS\n    LRA high:  -20.5 LUFS\n\n  True peak:\n    Peak:       -9.0 dBFS\n[out#0/null @ 00000290f0bdfe40] video:0KiB audio:9000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:00:48.00 bitrate=N/A speed= 267x elapsed=0:00:00.17"
+    },
+    {
+      "file": "pair-04-A.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -34.0 LUFS\n\n  Loudness range:\n    LRA:        15.6 LU\n    Threshold: -43.9 LUFS\n    LRA low:   -35.8 LUFS\n    LRA high:  -20.2 LUFS\n\n  True peak:\n    Peak:      -10.6 dBFS\n[out#0/null @ 000001a6e6f60b00] video:0KiB audio:18138KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:01:36.73 bitrate=N/A speed= 267x elapsed=0:00:00.36"
+    },
+    {
+      "file": "pair-04-B.wav",
+      "lufs": -23.0,
+      "summary": "Summary:\n\n  Integrated loudness:\n    I:         -23.0 LUFS\n    Threshold: -34.6 LUFS\n\n  Loudness range:\n    LRA:        18.3 LU\n    Threshold: -44.5 LUFS\n    LRA low:   -39.1 LUFS\n    LRA high:  -20.8 LUFS\n\n  True peak:\n    Peak:      -10.5 dBFS\n[out#0/null @ 000001a5a1bcf340] video:0KiB audio:18000KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:01:36.00 bitrate=N/A speed= 268x elapsed=0:00:00.35"
+    }
+  ],
+  "analysis_scripts": {
+    "synthesize.py": {
+      "path": "target/frontier-prompt-2026-10-24/synthesize.py",
+      "sha256": "52e593d4aea77d6e56e5ed6d2312cbb5edf25d414a3148b6086794b8d8136b20"
+    },
+    "protect.py": {
+      "path": "target/frontier-prompt-2026-10-24/protect.py",
+      "sha256": "2f523aeafe9c87620217cbf4dabd120af6eccc49e04005a735d8bf975da5970a"
+    },
+    "collect.py": {
+      "path": "target/frontier-prompt-2026-10-24/collect.py",
+      "sha256": "77f7408c302cbe2dec7c4c4860f5742135023be0ea0adf6ac302f704c11a5166"
+    },
+    "make_listening.py": {
+      "path": "target/frontier-prompt-2026-10-24/make_listening.py",
+      "sha256": "65eb55c570c37f1d95d955ceb09ee9a62ca0e08b48fecbedd3664420762ba388"
+    }
+  },
+  "validation": {
+    "cargo_test_auris_agent": {
+      "passed": 119,
+      "ignored": 6
+    },
+    "cargo_test_auris_gpui_bins": {
+      "passed": 1154,
+      "ignored": 9
+    },
+    "cargo_clippy_workspace_all_targets": "passed",
+    "cargo_fmt_all_check": "passed",
+    "pytest_composition_quality": 9,
+    "ruff_composition_quality": "passed"
+  },
+  "independent_findings": [
+    {
+      "condition": "final-claude",
+      "case": "vocal_arc",
+      "finding": "Bars 39 and 40 slow to 92 and 82 BPM: 40 bars render as 96.7355 seconds, not 96 seconds at fixed 100 BPM."
+    },
+    {
+      "condition": "all vocal cases",
+      "finding": "Current MIDI exporter excludes singer tracks. Complete vocal score remains in project snapshots; MIDI presence does not establish complete vocal delivery."
+    },
+    {
+      "condition": "final-claude",
+      "case": "vocal_arc",
+      "finding": "The final model report attributes 167 exported MIDI notes to vocals. Independent MIDI parsing finds 354 piano RH and 109 piano LH notes, no vocal track."
+    }
+  ]
+}
