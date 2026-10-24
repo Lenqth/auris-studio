@@ -124,6 +124,15 @@ fn command(
     for setting in overrides {
         command.args(["-c", setting]);
     }
+    command.args(["-c", "features.fast_mode=true"]);
+    command.args([
+        "-c",
+        if prefs.fast_mode {
+            "service_tier=\"fast\""
+        } else {
+            "service_tier=\"default\""
+        },
+    ]);
     if let Some(token) = token {
         command.env("AURIS_LIVE_MCP_TOKEN", token);
     }
@@ -687,6 +696,35 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     #[test]
+    fn fast_mode_overrides_inherited_service_tiers_in_both_directions() {
+        let cwd = tempfile::tempdir().unwrap();
+        for fast_mode in [false, true] {
+            let prefs = auris_session::AgentPreferences {
+                codex_path: if cfg!(windows) {
+                    "C:/Tools/codex.exe"
+                } else {
+                    "/usr/local/bin/codex"
+                }
+                .into(),
+                fast_mode,
+                ..Default::default()
+            };
+            let command = command(&prefs, cwd.path(), &[], None).unwrap();
+            let args: Vec<_> = command
+                .as_std()
+                .get_args()
+                .map(|arg| arg.to_string_lossy())
+                .collect();
+            let tier = if fast_mode { "fast" } else { "default" };
+            assert!(
+                args.iter()
+                    .any(|arg| *arg == format!("service_tier=\"{tier}\""))
+            );
+            assert!(args.iter().any(|arg| *arg == "features.fast_mode=true"));
+        }
+    }
+
+    #[test]
     fn only_the_live_worker_enables_native_execution_tools() {
         let cwd = tempfile::tempdir().unwrap();
         let prefs = auris_session::AgentPreferences {
@@ -948,10 +986,18 @@ mod tests {
     async fn installed_codex_connects_to_the_live_mcp_catalog() {
         let (bridge, _commands, _events) = crate::worker::test_bridge();
         let mcp = LiveMcp::start(ToolHost::new(bridge)).await.unwrap();
-        let prefs = auris_session::AgentPreferences::default();
+        let prefs = auris_session::AgentPreferences {
+            fast_mode: true,
+            ..Default::default()
+        };
         let cwd = tempfile::tempdir().unwrap();
         let mut rpc = Rpc::connect(&prefs, cwd.path(), Some(&mcp)).await.unwrap();
         let thread = rpc.request("thread/start", json!({"cwd":cwd.path(),"ephemeral":true,"sandbox":"read-only","approvalPolicy":"on-request","baseInstructions":crate::preamble()})).await.unwrap();
+        // Some CLI versions canonicalize the renamed fast tier to its original API name.
+        assert!(matches!(
+            thread["serviceTier"].as_str(),
+            Some("fast" | "priority")
+        ));
         let status = rpc
             .request(
                 "mcpServerStatus/list",

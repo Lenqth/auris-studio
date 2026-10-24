@@ -106,7 +106,7 @@ fn command(
             "--settings",
         ])
         .arg(
-            json!({"disableAllHooks":true,"autoMemoryEnabled":false,"enabledPlugins":{},
+            json!({"disableAllHooks":true,"autoMemoryEnabled":false,"enabledPlugins":{},"fastMode":prefs.fast_mode,
             "permissions":{"allow":["mcp__auris_live__*"],"ask":if native { NATIVE_TOOLS } else { &[] }}})
             .to_string(),
         )
@@ -830,12 +830,42 @@ mod tests {
             .unwrap();
         let settings: Value = serde_json::from_str(&settings[1]).unwrap();
         assert_eq!(settings["permissions"]["ask"], json!(NATIVE_TOOLS));
+        assert_eq!(settings["fastMode"], false);
         assert!(
             validate_tools(
                 &json!({"tools":["Bash","Read","Edit","mcp__auris_live__inspect_project"]})
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn fast_mode_is_passed_in_session_settings_without_reducing_effort() {
+        let cwd = tempfile::tempdir().unwrap();
+        let prefs = auris_session::AgentPreferences {
+            claude_path: if cfg!(windows) {
+                "C:/Tools/claude.exe"
+            } else {
+                "/usr/local/bin/claude"
+            }
+            .into(),
+            fast_mode: true,
+            effort: auris_session::ReasoningEffort::High,
+            ..prefs()
+        };
+        let command = command(&prefs, cwd.path(), true).unwrap();
+        let args: Vec<_> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect();
+        let settings = args
+            .windows(2)
+            .find(|pair| pair[0] == "--settings")
+            .unwrap();
+        let settings: Value = serde_json::from_str(&settings[1]).unwrap();
+        assert_eq!(settings["fastMode"], true);
+        assert!(args.windows(2).any(|pair| pair == ["--effort", "high"]));
     }
 
     #[tokio::test]

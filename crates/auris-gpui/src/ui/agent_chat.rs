@@ -1004,6 +1004,7 @@ pub(crate) struct AgentChat {
     pub(crate) thinking: Option<bool>,
     /// Provider-native reasoning effort.
     pub(crate) effort: ReasoningEffort,
+    pub(crate) fast_mode: bool,
     /// The transcript, oldest first.
     pub(crate) entries: Vec<ChatEntry>,
     /// The message being written.
@@ -1139,6 +1140,7 @@ impl Default for AgentChat {
             output_tokens: 4096,
             thinking: None,
             effort: ReasoningEffort::Default,
+            fast_mode: false,
             entries: Vec::new(),
             input: TextField::new(String::new()),
             chosen_model: String::new(),
@@ -1337,6 +1339,7 @@ impl AgentChat {
         self.output_tokens = prefs.output_tokens.unwrap_or(4096);
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
+        self.fast_mode = prefs.fast_mode;
         self.provider_openai = prefs.provider.trim() == "openai";
         self.discovery_endpoint = prefs.discovery_endpoint.clone();
         self.backend = prefs.backend.clone();
@@ -1384,6 +1387,7 @@ impl AgentChat {
             output_tokens: Some(self.output_tokens),
             thinking: self.thinking,
             effort: self.effort,
+            fast_mode: self.fast_mode,
             provider: match self.provider_openai {
                 true => "openai".to_string(),
                 false => "ollama".to_string(),
@@ -4158,6 +4162,27 @@ impl AurisApp {
                         cx,
                     )),
             )
+            .when(self.agent_chat.preferences().supports_fast_mode(), |row| {
+                row.child(
+                    button_enabled(
+                        "agent-fast-mode",
+                        self.t(Key::AgentFastMode).to_owned(),
+                        ButtonStyle::Ghost,
+                        ButtonState::available(self.agent_chat.fast_mode, enabled),
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.agent_fast_mode();
+                            cx.notify();
+                        }),
+                    )
+                    .tooltip(crate::ui::tooltip::keyed_tip(
+                        self.t(Key::AgentFastModeHelp).to_owned(),
+                        "",
+                        &theme,
+                    )),
+                )
+            })
             .when(self.agent_chat.model_menu && enabled, |this| {
                 let names = self
                     .agent_chat
@@ -7059,6 +7084,64 @@ mod tests {
         crate::harness::paint(&app, cx);
         let menu = cx.debug_bounds("agent-effort-option-popup").unwrap();
         assert!(menu.bottom() <= effort.top());
+    }
+
+    #[gpui::test]
+    fn fast_mode_visibility_and_preferences_follow_the_connection(cx: &mut gpui::TestAppContext) {
+        for (backend, supported) in [
+            ("codex", true),
+            ("claude", true),
+            ("opencode", false),
+            ("antigravity", false),
+            ("rig", false),
+        ] {
+            // GPUI 0.2 retains debug bounds for removed elements; use a fresh window per route.
+            let (app, cx) = crate::harness::open(cx);
+            app.update(cx, |this, _| {
+                this.panels.show(crate::dock::Panel::Agent);
+                this.settings.agent = AgentPreferences {
+                    backend: backend.into(),
+                    model: "test".into(),
+                    fast_mode: true,
+                    effort: ReasoningEffort::High,
+                    ..Default::default()
+                };
+                this.agent_chat
+                    .load_preferences(&this.settings.agent.clone());
+                this.agent_chat.models_loaded = true;
+                this.agent_chat.busy = true;
+                assert!(this.agent_chat.preferences().fast_mode);
+                assert_eq!(this.agent_chat.preferences().effort, ReasoningEffort::High);
+            });
+            crate::harness::paint(&app, cx);
+            assert_eq!(cx.debug_bounds("agent-fast-mode").is_some(), supported);
+            if supported {
+                crate::harness::click("agent-fast-mode", cx);
+                app.read_with(cx, |this, _| assert!(this.agent_chat.fast_mode));
+            }
+        }
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences {
+                backend: "codex".into(),
+                model: "test".into(),
+                effort: ReasoningEffort::High,
+                ..Default::default()
+            };
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.busy = false;
+            this.agent_fast_mode_with(|settings| {
+                assert!(settings.agent.fast_mode);
+                assert_eq!(settings.agent.effort, ReasoningEffort::High);
+                Ok::<(), &str>(())
+            })
+            .unwrap();
+            assert!(this.settings.agent.fast_mode);
+            assert!(this.agent_fast_mode_with(|_| Err("write failed")).is_err());
+            assert!(this.agent_chat.fast_mode);
+            assert!(this.settings.agent.fast_mode);
+        });
     }
 
     #[gpui::test]

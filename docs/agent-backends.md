@@ -18,6 +18,15 @@ to the model; Codex's advertised reasoning levels determine its choices. Permiss
 rules open from the approval-mode menu on the left. The circular send control
 becomes Stop during a turn.
 
+The **Fast** toggle beside reasoning effort requests fast mode for Codex, Claude Code,
+and OpenAI's own API connection. It is saved independently of reasoning effort and is
+disabled while a turn is running. Model and account eligibility still apply, and providers
+may charge additional usage. Codex uses its `service_tier` setting, Claude Code receives
+session-local `fastMode` settings, and the OpenAI API receives `service_tier` on requests.
+See [Codex speed](https://learn.chatgpt.com/docs/agent-configuration/speed),
+[Claude Code fast mode](https://code.claude.com/docs/en/fast-mode), and
+[OpenAI API fast mode](https://developers.openai.com/api/docs/guides/fast-mode).
+
 Consecutive tool calls share a collapsed summary showing their count and any
 running or failed calls. Open the group to inspect each call's arguments and
 result; user messages and assistant replies keep separate groups apart.

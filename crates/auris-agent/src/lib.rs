@@ -54,6 +54,8 @@ struct Options {
     thinking: Option<bool>,
     /// Provider-native reasoning effort.
     effort: ReasoningEffort,
+    /// Request fast service without changing reasoning effort.
+    fast_mode: bool,
     /// The API dialect.
     provider: Provider,
     /// Base URL override; each provider has its own default.
@@ -256,6 +258,9 @@ fn parse_args(
         output_tokens,
         thinking,
         effort,
+        fast_mode: prefs.fast_mode
+            && provider == Provider::OpenAi
+            && url.as_deref().is_none_or(is_openai),
         provider,
         url,
         model,
@@ -598,10 +603,17 @@ fn build_with(
             }
             let client = config.client();
             let mut builder = AgentBuilder::new(client.completion(&options.model));
+            let mut params = serde_json::json!({});
             if options.effort != ReasoningEffort::Default {
-                builder = builder.additional_params(serde_json::json!({
-                    "reasoning_effort": options.effort.as_str()
-                }));
+                params["reasoning_effort"] = options.effort.as_str().into();
+            }
+            if options.fast_mode {
+                params["service_tier"] = "fast".into();
+            } else if options.url.as_deref().is_none_or(is_openai) {
+                params["service_tier"] = "default".into();
+            }
+            if params.as_object().is_some_and(|params| !params.is_empty()) {
+                builder = builder.additional_params(params);
             }
             Ok(armed(builder))
         }
@@ -1884,13 +1896,14 @@ mod tests {
 
         let done = completion(r#"{"role":"assistant","content":"ready"}"#, "stop");
         let (url, seen) = mock_server(vec![done]);
-        let Command::Run(options) = parse(
+        let Command::Run(mut options) = parse(
             &format!("--provider openai --model mock --url {url} --effort low"),
             &no_env,
         )
         .unwrap() else {
             panic!()
         };
+        options.fast_mode = true;
         let agent = build_agent(&options).unwrap();
         converse_with_bridge(
             &agent,
@@ -1905,6 +1918,7 @@ mod tests {
         .unwrap();
         let body: serde_json::Value = serde_json::from_str(&seen.lock().unwrap()[0]).unwrap();
         assert_eq!(body["reasoning_effort"], "low");
+        assert_eq!(body["service_tier"], "fast");
     }
 
     #[tokio::test]
@@ -2128,6 +2142,7 @@ mod tests {
             thinking: None,
             effort: ReasoningEffort::Default,
             provider: Provider::OpenAi,
+            fast_mode: false,
             url: Some(url),
             model: "mock".to_string(),
             key: Some("test-key".to_string()),
@@ -2193,6 +2208,7 @@ mod tests {
             thinking: None,
             effort: ReasoningEffort::Default,
             provider: Provider::OpenAi,
+            fast_mode: false,
             url: Some(url),
             model: "mock".to_string(),
             key: Some("test-key".to_string()),
