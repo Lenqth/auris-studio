@@ -7,6 +7,64 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.10.0 — 2026-10-24
+
+### Installation and updates
+
+* **Install the desktop application on Windows and macOS.** Releases now include a per-user
+  Windows installer and a universal macOS DMG alongside the portable archives. The desktop,
+  command-line tools, update helper and Japanese dictionary come from the same build.
+* **Check for updates from the application.** Installed copies can download updates in the
+  background and apply them after quitting or choosing Restart and Update. Portable copies
+  and source builds open the release page instead. Background updates can be disabled in Settings.
+
+### Composition and agents
+
+* **Use installed Codex and Claude Code backends.** Both share the live session tools, streamed
+  progress, cancellation and permission controls. Persistent conversations keep separate histories,
+  drafts and attachments, with clearer model selection and reasons when sending is unavailable.
+* **Generate accompaniment around a protected melody.** Add or regenerate selected backing parts
+  in one undoable operation, request melody-aware harmony proposals, and inspect arrangement,
+  phrase breathing and instrument-aware endings before accepting bounded repairs.
+* **Shape and verify the performance.** Agents can inspect and edit articulations, strum, groove,
+  pitch, expression and automation, then read back the performed notes and curves. Recipe controls,
+  regeneration and checkpoints use the same commands across frontends.
+* **Review audio before delivering it.** Agents can audition unsaved work, compare immutable
+  renders, import references and prepare audio or MIDI exports without saving over the open project.
+  A reusable composition skill documents the desktop, CLI and MCP workflows.
+
+### Mixer, singing and sound libraries
+
+* **Edit signal flow in the mixer graph.** Connect tracks and buses, use parallel outputs,
+  inspect live wire levels, and arrange or zoom the graph. Layout and camera state are saved
+  with the project, and graph moves support Undo.
+* **Preserve VOICEVOX consonants when changing dynamics.** Velocity and expression scale decoded
+  audio instead of weakening the Engine's articulation. Extended kana, anticipated consonants,
+  short gaps and duration validation are handled more consistently.
+* **Inspect and repair lyrics explicitly.** Lyric diagnostics expose phrase capacity and timing
+  problems; guarded repairs preserve unrelated notes and reject stale changes.
+* **Reuse imported SoundFonts across projects.** A shared library catalog makes imported fonts
+  available to new sessions. Library icons retain their source-type colors.
+
+### Rendering, editing and reliability
+
+* **Render hosted plugins more reliably.** VST3 instruments activate their main output and use
+  the correct offline processing mode and block configuration. CLAP instruments release held
+  notes when transport stops, and plugin loading respects configured trust boundaries.
+* **Keep rendered peaks within the ceiling.** True-peak limiting accounts for inter-sample
+  overshoot, and agent exports measure and attenuate overloaded audio before integer encoding.
+* **Keep desktop edits and unsaved work intact.** macOS quit and close requests use the unsaved
+  work flow; native text editing, clipboard operations, note gestures, drum remapping and settings
+  field caret placement receive cross-platform fixes. Permission-rule migration preserves denials
+  without broadening old grants.
+
+### Compatibility
+
+* Projects are saved as format 32. Formats 27 through 31, including v0.9.0 projects, can be opened;
+  saving writes format 32, which older applications may not read. Keep a copy before upgrading.
+* macOS 13.4 or newer and Rust 1.95 or newer are required. Windows release builds include ASIO.
+  Desktop installers remain unsigned; platform first-launch instructions are in the release notes.
+
 ## 0.9.0 — 2026-10-19
 
 ### Instruments and arrangements
