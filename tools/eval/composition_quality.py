@@ -70,15 +70,20 @@ def manifest(path: Path) -> dict:
     return value
 
 
-def frozen_source(reference: Path, runtime: dict[str, str]) -> dict:
+def frozen_source(
+    reference: Path, runtime: dict[str, str], snapshot: Path | None = None
+) -> dict:
     """Bind a reused executable to previously captured source, never today's checkout."""
-    prior = read_json(reference)
+    payload = reference.read_bytes()
+    prior = json.loads(payload)
     if prior.get("runtime") != runtime:
         raise ValueError("Frozen runtime does not match the source suite")
+    if snapshot is not None:
+        snapshot.write_bytes(payload)
     return {
         key: prior[key]
         for key in ("source_commit", "source_diff", "untracked_rust_sources")
-    } | {"source_reference_sha256": digest(reference)}
+    } | {"source_reference_sha256": hashlib.sha256(payload).hexdigest()}
 
 
 def run(args) -> None:
@@ -152,7 +157,11 @@ def run(args) -> None:
         "trials": [],
     }
     if getattr(args, "source_suite", None):
-        provenance.update(frozen_source(args.source_suite, provenance["runtime"]))
+        provenance.update(
+            frozen_source(
+                args.source_suite, provenance["runtime"], output / "source-suite.json"
+            )
+        )
     write_json(output / "suite.json", provenance)
     for case in suite["cases"]:
         if case["split"] != args.split or (args.case and case["id"] not in args.case):

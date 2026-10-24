@@ -110,9 +110,14 @@ def test_frozen_source_uses_original_provenance_and_rejects_changed_runtime(tmp_
         "untracked_rust_sources": {"draft.rs": "original source"},
     }
     quality.write_json(reference, original)
-    bound = quality.frozen_source(reference, original["runtime"])
+    snapshot = tmp_path / "source-suite.json"
+    bound = quality.frozen_source(reference, original["runtime"], snapshot)
     assert bound["source_commit"] == "original-commit"
     assert bound["untracked_rust_sources"] == original["untracked_rust_sources"]
     assert bound["source_reference_sha256"] == quality.digest(reference)
+    assert snapshot.read_bytes() == reference.read_bytes()
+    quality.write_json(reference, original | {"trials": [{"id": "later-result"}]})
+    assert bound["source_reference_sha256"] == quality.digest(snapshot)
+    assert quality.digest(reference) != quality.digest(snapshot)
     with pytest.raises(ValueError, match="runtime"):
         quality.frozen_source(reference, {"test.exe": "different-binary"})

@@ -1,0 +1,3534 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "human_preference_ratings": null,
+  "interpretation": "Transport, exact-edit contracts and encoded measurements are separate from musical quality. Retained failures are not excluded. Zero CLI token counters mean unavailable, not zero cost. Runtime manifest hashes are SHA256 of sorted compact JSON; full DLL hashes remain in the suites.",
+  "tests": {
+    "workspace_rust_passed": 4516,
+    "additional_regressions_passed": 2,
+    "pytest_passed": 12,
+    "workspace_clippy": "passed",
+    "rustfmt": "passed",
+    "ruff": "passed"
+  },
+  "suites": {
+    "before": {
+      "suite": "target/quality-final/before/suite.json",
+      "suite_sha256": "f84df71750fd2eee989e2df4fbd5d9685ca8daec26193bd716ede292e5bf946a",
+      "source_commit": "406277cc667ada60d6e51f4345e8282137c3efbf",
+      "source_reference_sha256": "ccb303229878b8478b107b60bc30bf8e6ad4446a92ef5d5ec7386dc54935dda2",
+      "runtime_manifest_sha256": "05d980d4a407c2f3a867c13824d8eabfd690fd83d13b8a1c017f16b9590bc7bb",
+      "executables": {
+        "auris_studio-e4bbabb890304372.exe": "67f8dbb478f9f6ecbdcfdcc2205dfaea167acc160d0a8fef72f53e75973acd70"
+      },
+      "manifest_sha256": "fa290de5bebbbbf206b56c2587a64971d19f8ed273be52a1601fb9453f20e4e2",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "legacy",
+      "context_tokens": null,
+      "trials": [
+        {
+          "id": "holdout_waltz-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 161.67402969999966,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -24.0,
+            "peak_db": -6.024744510650635,
+            "true_peak_db": -6.011991500854492,
+            "full_scale_samples": 0,
+            "ending_rms_db": -116.61627960205078,
+            "sha256": "5153c196cca38beb3b51de08f5890776cbd75835506f4aecfe6a20b0c4e81505"
+          },
+          "tool_calls": {
+            "inspect_project": 6,
+            "search_instruments": 1,
+            "mixer_graph": 3,
+            "tool_help": 3,
+            "inspect_instrument": 2,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "set_instrument": 3,
+            "add_track": 2,
+            "add_clip": 3,
+            "rename_track": 1,
+            "set_instrument_params": 1,
+            "read_notes": 3,
+            "edit_notes": 1,
+            "search_documentation": 3,
+            "suggest_harmony": 4,
+            "inspect_performance": 3,
+            "inspect_audio": 13,
+            "accompaniment": 2,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 2
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 101,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "dc16275dc0afed20ff4e2843858ac57dfb9fe2f212bec67076e66c37df515528",
+            "project-02.json": "dc16275dc0afed20ff4e2843858ac57dfb9fe2f212bec67076e66c37df515528"
+          },
+          "expected_seconds": 20.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_waltz-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 291.5825625999987,
+          "tool_errors": 3,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -22.999996185302734,
+            "peak_db": -5.1665143966674805,
+            "true_peak_db": -5.1665143966674805,
+            "full_scale_samples": 0,
+            "ending_rms_db": -90.02323150634766,
+            "sha256": "1f825321888257c1b073dce017d471ae0fb1159c10a53ee6d4c8684e61f11111"
+          },
+          "tool_calls": {
+            "inspect_project": 5,
+            "search_instruments": 1,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "rename_track": 1,
+            "inspect_instrument": 1,
+            "tool_help": 2,
+            "add_track": 2,
+            "add_clip": 1,
+            "search_documentation": 4,
+            "set_instrument": 2,
+            "read_notes": 3,
+            "edit_notes": 1,
+            "suggest_harmony": 4,
+            "inspect_audio": 11,
+            "mixer_graph": 12,
+            "set_instrument_params": 2,
+            "accompaniment": 2,
+            "inspect_performance": 2,
+            "normalize_mix": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 5
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 99,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "5046dc741b51df2e05ce4090f9eb284fea0338a6929080d4013bc3e00f0a45c3",
+            "project-02.json": "5046dc741b51df2e05ce4090f9eb284fea0338a6929080d4013bc3e00f0a45c3"
+          },
+          "expected_seconds": 20.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_waltz-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 218.1469718999997,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -20.0,
+            "peak_db": -4.19821310043335,
+            "true_peak_db": -4.184154987335205,
+            "full_scale_samples": 0,
+            "ending_rms_db": -39.49179458618164,
+            "sha256": "9f25d6f9d96591ee161a8a721efd81a2bb4bf249fa0044aaed5b1f68df541258"
+          },
+          "tool_calls": {
+            "inspect_project": 5,
+            "search_instruments": 1,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "tool_help": 4,
+            "set_instrument": 3,
+            "add_track": 2,
+            "add_clip": 1,
+            "rename_track": 1,
+            "inspect_instrument": 1,
+            "read_notes": 3,
+            "edit_notes": 1,
+            "search_documentation": 3,
+            "inspect_audio": 8,
+            "suggest_harmony": 4,
+            "inspect_performance": 1,
+            "mixer_graph": 2,
+            "accompaniment": 2,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 2
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 121,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "7e8d2bb1ef7e511da5ec871f690812058759467a950a1435e988a82f275c5724",
+            "project-02.json": "7e8d2bb1ef7e511da5ec871f690812058759467a950a1435e988a82f275c5724"
+          },
+          "expected_seconds": 20.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_folk_change-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 254.30549750000137,
+          "tool_errors": 1,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -29.3640079498291,
+            "peak_db": -16.042089462280273,
+            "true_peak_db": -16.042089462280273,
+            "full_scale_samples": 0,
+            "ending_rms_db": -54.447174072265625,
+            "sha256": "0a54bd74626054a9e47ea1dca410d044354cd286d702dffa5979d3a9742cb788"
+          },
+          "tool_calls": {
+            "inspect_project": 6,
+            "read_notes": 3,
+            "inspect_performance": 2,
+            "tool_help": 4,
+            "edit_clip_curve": 6,
+            "search_instruments": 2,
+            "inspect_audio": 12,
+            "suggest_harmony": 1,
+            "mixer_graph": 7,
+            "edit_harmony": 3,
+            "add_track": 2,
+            "set_instrument": 2,
+            "accompaniment": 2,
+            "edit_recipe": 2,
+            "preview": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 4
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 79,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "f0104c0d6e2439d9a4df23b41110b1353a48afff1575765a8a8fe16939d1baaf",
+            "project-02.json": "f0104c0d6e2439d9a4df23b41110b1353a48afff1575765a8a8fe16939d1baaf"
+          },
+          "expected_seconds": 16.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true,
+          "protected_clip_fully_preserved": true,
+          "tempo_and_meter_preserved": true
+        },
+        {
+          "id": "holdout_folk_change-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 251.53498349999973,
+          "tool_errors": 1,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -29.360063552856445,
+            "peak_db": -16.86384391784668,
+            "true_peak_db": -16.86384391784668,
+            "full_scale_samples": 0,
+            "ending_rms_db": -73.34444427490234,
+            "sha256": "2d75c2e63c3933747a31c6dcdf35a00adb6f702fea74b77d140eb5c393f9fbe1"
+          },
+          "tool_calls": {
+            "inspect_project": 7,
+            "read_notes": 4,
+            "inspect_performance": 4,
+            "inspect_audio": 14,
+            "tool_help": 5,
+            "suggest_harmony": 2,
+            "search_instruments": 2,
+            "mixer_graph": 8,
+            "edit_clip_curve": 4,
+            "search_documentation": 4,
+            "inspect_instrument": 5,
+            "edit_harmony": 2,
+            "add_track": 3,
+            "set_instrument": 4,
+            "set_instrument_params": 1,
+            "accompaniment": 2,
+            "render": 1,
+            "verify_render": 1,
+            "export_midi": 1,
+            "cli_command": 2
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 89,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "6d1f6c75bc51658d7b805c948d981b15ddb00ef04b36622eba8b27352877876d",
+            "project-02.json": "6d1f6c75bc51658d7b805c948d981b15ddb00ef04b36622eba8b27352877876d"
+          },
+          "expected_seconds": 16.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true,
+          "protected_clip_fully_preserved": true,
+          "tempo_and_meter_preserved": true
+        },
+        {
+          "id": "holdout_folk_change-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 281.96669100000145,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -29.79405403137207,
+            "peak_db": -17.033899307250977,
+            "true_peak_db": -17.030662536621094,
+            "full_scale_samples": 0,
+            "ending_rms_db": -44.873023986816406,
+            "sha256": "7bbd93009243be842cc1de85db2f48d52d64cdcfa002e0a6c9f85ae673b04b3a"
+          },
+          "tool_calls": {
+            "inspect_project": 6,
+            "read_notes": 3,
+            "inspect_performance": 2,
+            "inspect_audio": 13,
+            "tool_help": 8,
+            "search_instruments": 2,
+            "mixer_graph": 8,
+            "suggest_harmony": 1,
+            "edit_clip_curve": 8,
+            "inspect_instrument": 4,
+            "search_documentation": 3,
+            "edit_timeline": 1,
+            "edit_harmony": 2,
+            "add_track": 2,
+            "set_instrument": 2,
+            "set_instrument_params": 2,
+            "accompaniment": 1,
+            "edit_recipe": 1,
+            "cli_command": 8,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 72,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "052e7428783eab4a5ab2c54aa4c10c06944cd79f8647be167f100d7f313b406a",
+            "project-02.json": "052e7428783eab4a5ab2c54aa4c10c06944cd79f8647be167f100d7f313b406a"
+          },
+          "expected_seconds": 16.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true,
+          "protected_clip_fully_preserved": true,
+          "tempo_and_meter_preserved": true
+        },
+        {
+          "id": "holdout_rhythm_first-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 359.58668580000085,
+          "tool_errors": 1,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 17.142854166666666,
+            "frames": 822857,
+            "lufs": -23.000011444091797,
+            "peak_db": -2.305971145629883,
+            "true_peak_db": -2.3042383193969727,
+            "full_scale_samples": 0,
+            "ending_rms_db": -44.31180953979492,
+            "sha256": "793699d4b63cea817e265733ab7f313548bd421120d0bbd6f49eca71120a1525"
+          },
+          "tool_calls": {
+            "inspect_project": 9,
+            "search_instruments": 1,
+            "mixer_graph": 10,
+            "edit_timeline": 2,
+            "edit_harmony": 1,
+            "tool_help": 6,
+            "add_clip": 1,
+            "inspect_audio": 15,
+            "rename_track": 2,
+            "read_notes": 9,
+            "edit_notes": 1,
+            "inspect_instrument": 3,
+            "suggest_harmony": 1,
+            "add_track": 4,
+            "set_instrument_params": 2,
+            "set_instrument": 4,
+            "set_drum_assignment": 5,
+            "accompaniment": 2,
+            "edit_recipe": 23,
+            "inspect_performance": 3,
+            "cli_command": 5,
+            "search_documentation": 2,
+            "edit_clip": 28,
+            "set_loop": 1,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 139,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "4552a37085c451c210b5ac1d131da87be379f1d5a21a3a7202b0a78d5bfca0c6",
+            "project-02.json": "4552a37085c451c210b5ac1d131da87be379f1d5a21a3a7202b0a78d5bfca0c6"
+          },
+          "expected_seconds": 17.142857142857142,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_rhythm_first-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 317.73618839999835,
+          "tool_errors": 4,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 17.142854166666666,
+            "frames": 822857,
+            "lufs": -22.9999942779541,
+            "peak_db": -4.801639556884766,
+            "true_peak_db": -4.694756984710693,
+            "full_scale_samples": 0,
+            "ending_rms_db": -26.013755798339844,
+            "sha256": "94d0fab67a2d914d29d5e2bfed02cd2902a9cd39c8b7bc9c0e2e97c83ba4c913"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "search_instruments": 4,
+            "tool_help": 3,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "rename_track": 2,
+            "inspect_instrument": 3,
+            "add_clip": 1,
+            "read_notes": 8,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 16,
+            "set_instrument_params": 2,
+            "add_track": 4,
+            "set_instrument": 4,
+            "mixer_graph": 8,
+            "set_drum_assignment": 5,
+            "accompaniment": 2,
+            "cli_command": 6,
+            "search_documentation": 4,
+            "edit_recipe": 10,
+            "inspect_performance": 3,
+            "edit_clip": 6,
+            "set_loop": 1,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 143,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "3402964b10578713d48bbe92fd639e0ed8f027c3ac87f955bfa7b28bb65a8745",
+            "project-02.json": "3402964b10578713d48bbe92fd639e0ed8f027c3ac87f955bfa7b28bb65a8745"
+          },
+          "expected_seconds": 17.142857142857142,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_rhythm_first-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 365.2250525999989,
+          "tool_errors": 4,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 17.142854166666666,
+            "frames": 822857,
+            "lufs": -20.647754669189453,
+            "peak_db": -3.0987606048583984,
+            "true_peak_db": -2.976384401321411,
+            "full_scale_samples": 0,
+            "ending_rms_db": -39.23433303833008,
+            "sha256": "97d9c997c21619267644e50876190b83da0b20e90c2c45f8b021bad64227aa7b"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "search_instruments": 5,
+            "tool_help": 6,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "rename_track": 2,
+            "set_instrument": 5,
+            "inspect_instrument": 3,
+            "add_track": 4,
+            "set_instrument_params": 2,
+            "add_clip": 1,
+            "read_notes": 4,
+            "edit_notes": 1,
+            "suggest_harmony": 1,
+            "inspect_performance": 3,
+            "inspect_audio": 16,
+            "mixer_graph": 9,
+            "cli_command": 7,
+            "search_documentation": 5,
+            "accompaniment": 4,
+            "set_drum_assignment": 5,
+            "edit_recipe": 4,
+            "edit_clip": 5,
+            "set_loop": 1,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 120,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "cc3effc9f94fe41bff0d0e30a628427e64f1eb3666c83e21c7c92250054be6a2",
+            "project-02.json": "cc3effc9f94fe41bff0d0e30a628427e64f1eb3666c83e21c7c92250054be6a2"
+          },
+          "expected_seconds": 17.142857142857142,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_return-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 294.6597984,
+          "tool_errors": 3,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 52.36364583333334,
+            "frames": 2513455,
+            "lufs": -20.65613555908203,
+            "peak_db": -2.106273651123047,
+            "true_peak_db": -1.5000038146972656,
+            "full_scale_samples": 0,
+            "ending_rms_db": -71.87957000732422,
+            "sha256": "2e90f1eff96dfb370bf960c85b4269960db2dfd03349845e57416bb87bb8d301"
+          },
+          "tool_calls": {
+            "inspect_project": 9,
+            "edit_timeline": 2,
+            "edit_harmony": 5,
+            "search_instruments": 3,
+            "tool_help": 7,
+            "add_clip": 3,
+            "inspect_instrument": 4,
+            "read_notes": 5,
+            "edit_notes": 1,
+            "rename_track": 1,
+            "suggest_harmony": 3,
+            "add_track": 4,
+            "inspect_audio": 17,
+            "set_instrument": 4,
+            "mixer_graph": 7,
+            "set_instrument_params": 1,
+            "accompaniment": 3,
+            "set_drum_assignment": 6,
+            "inspect_performance": 3,
+            "edit_recipe": 2,
+            "normalize_mix": 1,
+            "cli_command": 7,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 431,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "79984cda01c73e44b1616804d82f3f9b969e5481d978f6424418d02157f0c4e3",
+            "project-02.json": "79984cda01c73e44b1616804d82f3f9b969e5481d978f6424418d02157f0c4e3"
+          },
+          "expected_seconds": 52.36363636363637,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_return-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 264.0104156000016,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 52.36364583333334,
+            "frames": 2513455,
+            "lufs": -20.0,
+            "peak_db": -3.850956439971924,
+            "true_peak_db": -3.8441381454467773,
+            "full_scale_samples": 0,
+            "ending_rms_db": -40.50339126586914,
+            "sha256": "b23b9948303fcb969d16db28aacee7c2cd5fea3dd88a636911745deee11bef08"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "search_instruments": 2,
+            "edit_timeline": 2,
+            "edit_harmony": 7,
+            "inspect_instrument": 5,
+            "tool_help": 6,
+            "add_clip": 3,
+            "read_notes": 7,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 18,
+            "add_track": 4,
+            "set_instrument": 4,
+            "cli_command": 7,
+            "mixer_graph": 7,
+            "set_drum_assignment": 6,
+            "set_instrument_params": 1,
+            "accompaniment": 2,
+            "search_documentation": 1,
+            "inspect_performance": 3,
+            "edit_recipe": 2,
+            "normalize_mix": 1,
+            "rename_track": 1,
+            "edit_clip": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 436,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "f02db2fea30db3bad523f002e446fffc818159a60495977e8155dd1d71e7847e",
+            "project-02.json": "f02db2fea30db3bad523f002e446fffc818159a60495977e8155dd1d71e7847e"
+          },
+          "expected_seconds": 52.36363636363637,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_return-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 364.0707059000015,
+          "tool_errors": 5,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 52.36364583333334,
+            "frames": 2513455,
+            "lufs": -20.64369010925293,
+            "peak_db": -1.0437835454940796,
+            "true_peak_db": -1.0000042915344238,
+            "full_scale_samples": 0,
+            "ending_rms_db": -55.725830078125,
+            "sha256": "44b4c6e1f545861a1b4b9bec08348a0fa4aa386a27c7edffa30ad2f3a742a835"
+          },
+          "tool_calls": {
+            "inspect_project": 9,
+            "search_instruments": 1,
+            "mixer_graph": 13,
+            "tool_help": 3,
+            "inspect_instrument": 5,
+            "edit_timeline": 2,
+            "edit_harmony": 4,
+            "set_instrument_params": 3,
+            "add_clip": 3,
+            "read_notes": 7,
+            "search_documentation": 2,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 22,
+            "inspect_performance": 4,
+            "add_track": 4,
+            "set_instrument": 4,
+            "rename_track": 1,
+            "accompaniment": 4,
+            "edit_recipe": 4,
+            "set_drum_assignment": 6,
+            "normalize_mix": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2,
+            "cli_command": 6
+          },
+          "failures": [],
+          "usage": [
+            null,
+            null
+          ],
+          "midi_notes": 431,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "98323bcea1b63bc97818d1b00850eff3fb9be1ffa70e6bcf4f76aa52a13fe27d",
+            "project-02.json": "98323bcea1b63bc97818d1b00850eff3fb9be1ffa70e6bcf4f76aa52a13fe27d"
+          },
+          "expected_seconds": 52.36363636363637,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        }
+      ]
+    },
+    "after": {
+      "suite": "target/quality-final/after/suite.json",
+      "suite_sha256": "b43915a7d24e4d78a5f7d5a95c6bae6eb523b0fcb1223cb79125f9597510ce02",
+      "source_commit": "af296ceef9e80534de872fd6a6d64ec7c1442628",
+      "source_reference_sha256": "a08e1473bd4a31ae36e903bf32506c60ccb8b2b07adfb9d13af1caedc9c04463",
+      "runtime_manifest_sha256": "0e4352948d48e3ccdc719b68840b63c2e96ccc4e414cbaeaa82e73ce72ff6306",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8f7f732d9aaf0d800e118fa27ae1bec51eee03a3b8c135b7996b659e2db7be40"
+      },
+      "manifest_sha256": "fa290de5bebbbbf206b56c2587a64971d19f8ed273be52a1601fb9453f20e4e2",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "legacy",
+      "context_tokens": 65536,
+      "trials": [
+        {
+          "id": "holdout_folk_change-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 373.145972600003,
+          "tool_errors": 3,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -28.531862258911133,
+            "peak_db": -16.818700790405273,
+            "true_peak_db": -16.806514739990234,
+            "full_scale_samples": 0,
+            "ending_rms_db": -97.79632568359375,
+            "sha256": "38dd0e2731cd9a395735846581493bcd879cead473fc1312752a27c133bb2e1c"
+          },
+          "tool_calls": {
+            "inspect_project": 11,
+            "read_notes": 6,
+            "inspect_performance": 5,
+            "suggest_harmony": 2,
+            "inspect_audio": 17,
+            "search_instruments": 1,
+            "tool_help": 7,
+            "mixer_graph": 8,
+            "edit_clip_curve": 7,
+            "inspect_instrument": 3,
+            "production_record": 14,
+            "search_documentation": 5,
+            "automation": 1,
+            "edit_harmony": 3,
+            "add_track": 2,
+            "set_instrument": 2,
+            "set_instrument_params": 2,
+            "accompaniment": 2,
+            "preview": 2,
+            "edit_recipe": 3,
+            "verify_render": 3,
+            "cli_command": 11,
+            "render": 1,
+            "export_midi": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 83,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "b92e10211187c85b352305c41522e30bc41262e3e900fa3f38a65b75775f8d87",
+            "project-02.json": "b92e10211187c85b352305c41522e30bc41262e3e900fa3f38a65b75775f8d87"
+          },
+          "expected_seconds": 16.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true,
+          "protected_clip_fully_preserved": true,
+          "tempo_and_meter_preserved": true
+        },
+        {
+          "id": "holdout_folk_change-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 379.7275438999968,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -30.00822639465332,
+            "peak_db": -17.03428077697754,
+            "true_peak_db": -17.03105354309082,
+            "full_scale_samples": 0,
+            "ending_rms_db": -44.816471099853516,
+            "sha256": "c773c8034d2244ee398c279489395b4c9ad0fd081c13a0ba74c9641cb46aaf53"
+          },
+          "tool_calls": {
+            "inspect_project": 9,
+            "read_notes": 4,
+            "inspect_performance": 6,
+            "inspect_audio": 21,
+            "tool_help": 8,
+            "suggest_harmony": 1,
+            "search_instruments": 2,
+            "mixer_graph": 8,
+            "inspect_instrument": 3,
+            "search_documentation": 7,
+            "edit_clip_curve": 9,
+            "production_record": 15,
+            "edit_harmony": 2,
+            "add_track": 2,
+            "set_instrument": 2,
+            "set_instrument_params": 1,
+            "accompaniment": 2,
+            "cli_command": 6,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 69,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "ca40a5a96bdf2ccae6879f99c0240f930f7e4be8de9a8ef0dcec08695c35db31",
+            "project-02.json": "ca40a5a96bdf2ccae6879f99c0240f930f7e4be8de9a8ef0dcec08695c35db31"
+          },
+          "expected_seconds": 16.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true,
+          "protected_clip_fully_preserved": true,
+          "tempo_and_meter_preserved": true
+        },
+        {
+          "id": "holdout_folk_change-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 298.09541949999766,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -28.50771141052246,
+            "peak_db": -15.878801345825195,
+            "true_peak_db": -15.867496490478516,
+            "full_scale_samples": 0,
+            "ending_rms_db": -45.68819808959961,
+            "sha256": "f49ff6e8b4f30b7e775c0643596b81935d66fc794e3359d3c25e789424daf95e"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "read_notes": 4,
+            "inspect_performance": 10,
+            "inspect_audio": 10,
+            "search_instruments": 1,
+            "suggest_harmony": 2,
+            "tool_help": 3,
+            "production_record": 10,
+            "edit_clip_curve": 6,
+            "automation": 1,
+            "mixer_graph": 2,
+            "search_documentation": 4,
+            "edit_harmony": 2,
+            "add_track": 2,
+            "set_instrument": 2,
+            "inspect_instrument": 2,
+            "accompaniment": 2,
+            "preview": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 7
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 58,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "6979443bfdd7ab224cea13f5e34caf73ce4e3f876732882326ebe6eca956d4a0",
+            "project-02.json": "6979443bfdd7ab224cea13f5e34caf73ce4e3f876732882326ebe6eca956d4a0"
+          },
+          "expected_seconds": 16.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true,
+          "protected_clip_fully_preserved": true,
+          "tempo_and_meter_preserved": true
+        },
+        {
+          "id": "holdout_return-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 458.6656851000007,
+          "tool_errors": 6,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 52.36364583333334,
+            "frames": 2513455,
+            "lufs": -19.216123580932617,
+            "peak_db": -1.3189715147018433,
+            "true_peak_db": -1.3000036478042603,
+            "full_scale_samples": 0,
+            "ending_rms_db": -50.58587646484375,
+            "sha256": "5574447d1e5ccffdd8452de3dda8b9020b661e3ef029774834e40d06e0506fbe"
+          },
+          "tool_calls": {
+            "inspect_project": 16,
+            "production_record": 17,
+            "edit_timeline": 2,
+            "edit_harmony": 9,
+            "search_instruments": 4,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "inspect_instrument": 4,
+            "add_track": 3,
+            "tool_help": 3,
+            "mixer_graph": 9,
+            "set_instrument_params": 1,
+            "add_clip": 3,
+            "read_notes": 8,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "cli_command": 8,
+            "inspect_audio": 33,
+            "search_documentation": 3,
+            "accompaniment": 3,
+            "set_drum_assignment": 6,
+            "inspect_performance": 3,
+            "normalize_mix": 2,
+            "edit_recipe": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 447,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "6c88b3a06633777b91edc21cd80a9d2fc4251d0ba2aa9b85e36643cbbc5f340b",
+            "project-02.json": "6c88b3a06633777b91edc21cd80a9d2fc4251d0ba2aa9b85e36643cbbc5f340b"
+          },
+          "expected_seconds": 52.36363636363637,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_return-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 488.82319220000136,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 52.36364583333334,
+            "frames": 2513455,
+            "lufs": -16.436288833618164,
+            "peak_db": -1.0460128784179688,
+            "true_peak_db": -1.0000042915344238,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "f2a313d709c38c09409a04910b568676e393f58c96b21465ef4b9c2ede5a7586"
+          },
+          "tool_calls": {
+            "inspect_project": 14,
+            "production_record": 14,
+            "edit_timeline": 1,
+            "edit_harmony": 4,
+            "search_instruments": 1,
+            "tool_help": 5,
+            "inspect_instrument": 6,
+            "rename_track": 2,
+            "add_clip": 3,
+            "read_notes": 7,
+            "mixer_graph": 8,
+            "add_track": 4,
+            "set_instrument": 4,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 21,
+            "search_documentation": 4,
+            "accompaniment": 4,
+            "set_drum_assignment": 6,
+            "inspect_performance": 3,
+            "edit_recipe": 9,
+            "set_instrument_params": 1,
+            "edit_clip": 1,
+            "normalize_mix": 1,
+            "preview": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 8
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 337,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "d7dc082c4863b97785616cc528a2443b56a6c34531f75564d0fe27a072fc137d",
+            "project-02.json": "d7dc082c4863b97785616cc528a2443b56a6c34531f75564d0fe27a072fc137d"
+          },
+          "expected_seconds": 52.36363636363637,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_return-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 321.94662640000024,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 52.36364583333334,
+            "frames": 2513455,
+            "lufs": -19.999996185302734,
+            "peak_db": -4.691924095153809,
+            "true_peak_db": -4.604760646820068,
+            "full_scale_samples": 0,
+            "ending_rms_db": null,
+            "sha256": "9fab00e6c193f6b17e1df799fbeb441bb7fbd58d8a1ad8ab9161923a2dc9b0cc"
+          },
+          "tool_calls": {
+            "inspect_project": 11,
+            "search_instruments": 2,
+            "production_record": 16,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "tool_help": 2,
+            "add_clip": 3,
+            "add_track": 3,
+            "set_instrument": 3,
+            "inspect_instrument": 3,
+            "read_notes": 5,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "mixer_graph": 6,
+            "inspect_audio": 25,
+            "set_instrument_params": 1,
+            "accompaniment": 2,
+            "search_documentation": 2,
+            "edit_recipe": 3,
+            "rename_track": 1,
+            "inspect_performance": 3,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 6
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 274,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "46357afe6363a58655a0d8c6d3cdd14db9d3f4ad3f9b7fb8d43b0b7e17348850",
+            "project-02.json": "46357afe6363a58655a0d8c6d3cdd14db9d3f4ad3f9b7fb8d43b0b7e17348850"
+          },
+          "expected_seconds": 52.36363636363637,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_rhythm_first-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 433.8569650000027,
+          "tool_errors": 7,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 17.142854166666666,
+            "frames": 822857,
+            "lufs": -22.26629066467285,
+            "peak_db": -3.6761560440063477,
+            "true_peak_db": -3.5506083965301514,
+            "full_scale_samples": 0,
+            "ending_rms_db": -26.238367080688477,
+            "sha256": "4b56249de19d7027c01567dfa16e6e374deb13376e51ce2c80d5a6aab8956472"
+          },
+          "tool_calls": {
+            "inspect_project": 13,
+            "production_record": 12,
+            "search_instruments": 2,
+            "tool_help": 5,
+            "edit_timeline": 1,
+            "edit_harmony": 5,
+            "rename_track": 1,
+            "inspect_instrument": 5,
+            "add_clip": 1,
+            "read_notes": 9,
+            "search_documentation": 5,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 14,
+            "set_instrument_params": 2,
+            "add_track": 4,
+            "set_instrument": 4,
+            "mixer_graph": 7,
+            "accompaniment": 7,
+            "set_drum_assignment": 3,
+            "cli_command": 11,
+            "edit_recipe": 4,
+            "edit_clip": 8,
+            "set_loop": 1,
+            "inspect_performance": 3,
+            "normalize_mix": 1,
+            "preview": 1,
+            "edit_clip_curve": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 131,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "351993ef1f9cb5911abad0171198924a5e09ce125b943fce5d533800e72a64f0",
+            "project-02.json": "351993ef1f9cb5911abad0171198924a5e09ce125b943fce5d533800e72a64f0"
+          },
+          "expected_seconds": 17.142857142857142,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_rhythm_first-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 446.9609735999984,
+          "tool_errors": 4,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 17.142854166666666,
+            "frames": 822857,
+            "lufs": -23.999998092651367,
+            "peak_db": -4.24192476272583,
+            "true_peak_db": -3.555762529373169,
+            "full_scale_samples": 0,
+            "ending_rms_db": -52.70464324951172,
+            "sha256": "b2c311898540bf47d8df8f09e8d02ada0a9a343f9d72b49b3d01ee2207023aaa"
+          },
+          "tool_calls": {
+            "inspect_project": 17,
+            "production_record": 20,
+            "search_instruments": 1,
+            "tool_help": 4,
+            "edit_timeline": 2,
+            "edit_harmony": 5,
+            "inspect_instrument": 4,
+            "add_track": 4,
+            "add_clip": 1,
+            "mixer_graph": 9,
+            "set_instrument": 4,
+            "set_instrument_params": 3,
+            "read_notes": 14,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 15,
+            "set_drum_assignment": 5,
+            "search_documentation": 3,
+            "accompaniment": 4,
+            "rename_track": 2,
+            "cli_command": 10,
+            "edit_recipe": 6,
+            "edit_clip": 8,
+            "inspect_performance": 4,
+            "set_loop": 1,
+            "normalize_mix": 2,
+            "preview": 1,
+            "verify_render": 2,
+            "render": 1,
+            "export_midi": 1,
+            "read_report": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 110,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "16783de979708fb8f429537236daef30cd7a3bc9907cdee4b095fbd4e8895581",
+            "project-02.json": "16783de979708fb8f429537236daef30cd7a3bc9907cdee4b095fbd4e8895581"
+          },
+          "expected_seconds": 17.142857142857142,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_rhythm_first-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 508.0119298999998,
+          "tool_errors": 4,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 17.142854166666666,
+            "frames": 822857,
+            "lufs": -21.338071823120117,
+            "peak_db": -4.435418128967285,
+            "true_peak_db": -4.3929762840271,
+            "full_scale_samples": 0,
+            "ending_rms_db": -26.21824836730957,
+            "sha256": "dd0a35645893b588acb8f774b68449d576250c09bb7432362cd3fdd14d0ed23b"
+          },
+          "tool_calls": {
+            "inspect_project": 18,
+            "production_record": 18,
+            "search_instruments": 3,
+            "tool_help": 4,
+            "edit_timeline": 2,
+            "edit_harmony": 4,
+            "rename_track": 2,
+            "set_instrument": 5,
+            "inspect_instrument": 3,
+            "add_clip": 1,
+            "search_documentation": 3,
+            "set_instrument_params": 2,
+            "read_notes": 15,
+            "add_track": 4,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 24,
+            "set_drum_assignment": 5,
+            "set_loop": 1,
+            "mixer_graph": 8,
+            "accompaniment": 5,
+            "cli_command": 7,
+            "edit_clip": 8,
+            "edit_recipe": 1,
+            "inspect_performance": 9,
+            "normalize_mix": 1,
+            "preview": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 127,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "f189460a042c424a5767f651db34411bf9b4971c0a827f54e95c9406832c89c2",
+            "project-02.json": "f189460a042c424a5767f651db34411bf9b4971c0a827f54e95c9406832c89c2"
+          },
+          "expected_seconds": 17.142857142857142,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_waltz-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 362.0038283000031,
+          "tool_errors": 1,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -20.0,
+            "peak_db": -5.517518043518066,
+            "true_peak_db": -5.516992092132568,
+            "full_scale_samples": 0,
+            "ending_rms_db": -41.13947677612305,
+            "sha256": "3d72243643e2e440102dbafdbae0501aa5bcc4231062c45ed568305498cf7112"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "production_record": 11,
+            "search_instruments": 1,
+            "tool_help": 2,
+            "inspect_instrument": 3,
+            "mixer_graph": 6,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "add_track": 2,
+            "add_clip": 3,
+            "set_instrument": 2,
+            "search_documentation": 2,
+            "read_notes": 4,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 9,
+            "accompaniment": 2,
+            "inspect_performance": 11,
+            "rename_track": 1,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2,
+            "cli_command": 6
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 91,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "bab72dcd2f48de9ffcfcbaea1e7172f9427b904e7bb8bddd2a896834887a99bc",
+            "project-02.json": "bab72dcd2f48de9ffcfcbaea1e7172f9427b904e7bb8bddd2a896834887a99bc"
+          },
+          "expected_seconds": 20.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_waltz-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 353.8493935999977,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -23.000001907348633,
+            "peak_db": -4.986762046813965,
+            "true_peak_db": -4.959000110626221,
+            "full_scale_samples": 0,
+            "ending_rms_db": -86.21207427978516,
+            "sha256": "649ef77325879149fabe2355c136a8f9f832f203c857897e9595ca4255ef69da"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "production_record": 15,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "search_instruments": 1,
+            "tool_help": 2,
+            "rename_track": 1,
+            "set_instrument": 3,
+            "add_track": 2,
+            "add_clip": 3,
+            "inspect_instrument": 1,
+            "read_notes": 6,
+            "edit_notes": 1,
+            "search_documentation": 3,
+            "suggest_harmony": 3,
+            "set_instrument_params": 1,
+            "mixer_graph": 2,
+            "accompaniment": 2,
+            "inspect_audio": 16,
+            "inspect_performance": 4,
+            "edit_recipe": 3,
+            "normalize_mix": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2,
+            "cli_command": 9
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 88,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "e3e0b12b56514f3b1e529df9adaceeaced1a696b864d550de2b14d052a4784c8",
+            "project-02.json": "e3e0b12b56514f3b1e529df9adaceeaced1a696b864d550de2b14d052a4784c8"
+          },
+          "expected_seconds": 20.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        },
+        {
+          "id": "holdout_waltz-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 308.08687839999766,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 20.0,
+            "frames": 960000,
+            "lufs": -19.999998092651367,
+            "peak_db": -4.803966999053955,
+            "true_peak_db": -4.736664772033691,
+            "full_scale_samples": 0,
+            "ending_rms_db": -78.27720642089844,
+            "sha256": "8dd4c858811d7e85d9ba75ef419a523a0bafb7e4f222001760d50d6cc7d8c048"
+          },
+          "tool_calls": {
+            "inspect_project": 8,
+            "production_record": 12,
+            "inspect_audio": 13,
+            "search_instruments": 1,
+            "tool_help": 3,
+            "edit_timeline": 2,
+            "edit_harmony": 3,
+            "rename_track": 1,
+            "set_instrument": 3,
+            "inspect_instrument": 1,
+            "add_track": 2,
+            "add_clip": 3,
+            "search_documentation": 3,
+            "read_notes": 4,
+            "edit_notes": 1,
+            "suggest_harmony": 4,
+            "mixer_graph": 5,
+            "accompaniment": 1,
+            "inspect_performance": 3,
+            "normalize_mix": 1,
+            "edit_clip_curve": 3,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 5
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 132,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "5e80cc8ab84439b324c58ce773c72ba300635a6951cbbcee7e6ce1b2a79474b4",
+            "project-02.json": "5e80cc8ab84439b324c58ce773c72ba300635a6951cbbcee7e6ce1b2a79474b4"
+          },
+          "expected_seconds": 20.0,
+          "duration_matches": true,
+          "requested_tempo_and_meter": true
+        }
+      ]
+    },
+    "prompt-legacy": {
+      "suite": "target/quality-final/prompt-legacy/suite.json",
+      "suite_sha256": "7e7570960ffff7e6d3d5af2a16e965ed004dd318b962332e3115ee605138a6ef",
+      "source_commit": "478ff401695b76f4708baa1ece7ed9edf61e0b1c",
+      "source_reference_sha256": "cb2043aad08c1376c26694476e75b52ec63b52dda506cfa1f5bd68c8e57b3398",
+      "runtime_manifest_sha256": "6a16c4d28ca8fd5958c310e1ed66cc4b8291521ca88291d72115d0691385c768",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8105ae6558a65a66a78a2d19a98db10d9f89cd49c74d5f51bc6367c9b18040d4"
+      },
+      "manifest_sha256": "fa290de5bebbbbf206b56c2587a64971d19f8ed273be52a1601fb9453f20e4e2",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "legacy",
+      "context_tokens": null,
+      "trials": [
+        {
+          "id": "loop_title-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 383.7914020999997,
+          "tool_errors": 7,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -22.0,
+            "peak_db": -4.2541656494140625,
+            "true_peak_db": -4.010612487792969,
+            "full_scale_samples": 0,
+            "ending_rms_db": -42.30868911743164,
+            "sha256": "016c1664229bbe20e2935d332a63b8041a7a528a957c114320c148331162ba44"
+          },
+          "tool_calls": {
+            "inspect_project": 15,
+            "production_record": 11,
+            "search_instruments": 2,
+            "edit_timeline": 1,
+            "edit_harmony": 4,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "inspect_instrument": 4,
+            "tool_help": 4,
+            "add_clip": 1,
+            "add_track": 3,
+            "cli_command": 9,
+            "search_documentation": 6,
+            "set_instrument_params": 2,
+            "read_notes": 4,
+            "edit_notes": 1,
+            "suggest_harmony": 3,
+            "inspect_audio": 11,
+            "mixer_graph": 6,
+            "set_loop": 1,
+            "accompaniment": 4,
+            "set_drum_assignment": 3,
+            "inspect_performance": 3,
+            "edit_recipe": 5,
+            "normalize_mix": 2,
+            "preview": 1,
+            "edit_clip_curve": 1,
+            "verify_render": 2,
+            "render": 1,
+            "export_midi": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 98,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "b8c814b9357dab5e153d087470a7aeab982ed45ede119bbd4add6fa23c7cf5a9",
+            "project-02.json": "b8c814b9357dab5e153d087470a7aeab982ed45ede119bbd4add6fa23c7cf5a9"
+          }
+        },
+        {
+          "id": "loop_title-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 288.07178700000077,
+          "tool_errors": 2,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -17.9999942779541,
+            "peak_db": -2.612870931625366,
+            "true_peak_db": -2.3933162689208984,
+            "full_scale_samples": 0,
+            "ending_rms_db": -35.112056732177734,
+            "sha256": "2d1eb7e6d7d7d08f22b306f5703815e9e6683664c9e4cc1fdd51a54f613a4391"
+          },
+          "tool_calls": {
+            "inspect_project": 11,
+            "production_record": 11,
+            "search_instruments": 2,
+            "mixer_graph": 5,
+            "edit_timeline": 1,
+            "edit_harmony": 2,
+            "rename_track": 1,
+            "inspect_instrument": 2,
+            "tool_help": 7,
+            "add_clip": 1,
+            "add_track": 3,
+            "cli_command": 6,
+            "set_instrument": 3,
+            "read_notes": 6,
+            "search_documentation": 9,
+            "edit_notes": 1,
+            "set_drum_assignment": 3,
+            "suggest_harmony": 1,
+            "set_instrument_params": 1,
+            "set_loop": 1,
+            "inspect_audio": 12,
+            "inspect_performance": 2,
+            "accompaniment": 3,
+            "edit_recipe": 2,
+            "normalize_mix": 1,
+            "preview": 1,
+            "verify_render": 2,
+            "render": 1,
+            "export_midi": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 114,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "d76ace436e4ed5a11f5a3945c92c4e8298f2dc318d7cb2b5e8c410d3a72c88b1",
+            "project-02.json": "d76ace436e4ed5a11f5a3945c92c4e8298f2dc318d7cb2b5e8c410d3a72c88b1"
+          }
+        },
+        {
+          "id": "loop_title-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 376.3005148000011,
+          "tool_errors": 3,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -20.000001907348633,
+            "peak_db": -4.266760349273682,
+            "true_peak_db": -4.241913795471191,
+            "full_scale_samples": 0,
+            "ending_rms_db": -31.411346435546875,
+            "sha256": "061f0f025d90f1d0ed04535dc9a5fe271f3606c32a2362a0ae4abdab3f878b81"
+          },
+          "tool_calls": {
+            "inspect_project": 18,
+            "production_record": 14,
+            "edit_timeline": 1,
+            "edit_harmony": 5,
+            "search_instruments": 2,
+            "tool_help": 5,
+            "mixer_graph": 9,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_track": 3,
+            "inspect_instrument": 2,
+            "add_clip": 1,
+            "search_documentation": 6,
+            "read_notes": 6,
+            "edit_notes": 1,
+            "set_drum_assignment": 3,
+            "suggest_harmony": 1,
+            "accompaniment": 4,
+            "set_loop": 1,
+            "inspect_audio": 14,
+            "inspect_performance": 2,
+            "normalize_mix": 2,
+            "preview": 3,
+            "cli_command": 11,
+            "edit_recipe": 2,
+            "verify_render": 2,
+            "render": 1,
+            "export_midi": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 168,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "e7920dbfb90c7021c50fa185985caba4711c7360e26364a7af81c3c0b88a374f",
+            "project-02.json": "e7920dbfb90c7021c50fa185985caba4711c7360e26364a7af81c3c0b88a374f"
+          }
+        }
+      ]
+    },
+    "prompt-modular": {
+      "suite": "target/quality-final/prompt-modular/suite.json",
+      "suite_sha256": "841901374c86a9ed6b3453485d01cc0dcc7682fbbba91907871a8e73de67d16e",
+      "source_commit": "478ff401695b76f4708baa1ece7ed9edf61e0b1c",
+      "source_reference_sha256": "cb2043aad08c1376c26694476e75b52ec63b52dda506cfa1f5bd68c8e57b3398",
+      "runtime_manifest_sha256": "6a16c4d28ca8fd5958c310e1ed66cc4b8291521ca88291d72115d0691385c768",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8105ae6558a65a66a78a2d19a98db10d9f89cd49c74d5f51bc6367c9b18040d4"
+      },
+      "manifest_sha256": "fa290de5bebbbbf206b56c2587a64971d19f8ed273be52a1601fb9453f20e4e2",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "modular",
+      "context_tokens": null,
+      "trials": [
+        {
+          "id": "loop_title-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 408.18372850000014,
+          "tool_errors": 0,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -20.968402862548828,
+            "peak_db": -5.567732334136963,
+            "true_peak_db": -5.512269973754883,
+            "full_scale_samples": 0,
+            "ending_rms_db": -25.675825119018555,
+            "sha256": "08483b91d5bf0c691a0ed47de7b34d716b533c3340df9336a87cc9fa3479e332"
+          },
+          "tool_calls": {
+            "inspect_project": 13,
+            "production_record": 17,
+            "tool_help": 25,
+            "search_instruments": 1,
+            "edit_timeline": 2,
+            "search_documentation": 6,
+            "edit_harmony": 3,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "inspect_instrument": 4,
+            "add_clip": 4,
+            "cli_command": 7,
+            "read_notes": 7,
+            "edit_notes": 2,
+            "set_instrument_params": 2,
+            "add_track": 3,
+            "edit_clip": 10,
+            "mixer_graph": 15,
+            "set_loop": 1,
+            "inspect_audio": 17,
+            "candidates": 4,
+            "capabilities": 1,
+            "normalize_mix": 1,
+            "preview": 2,
+            "history": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 161,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "5268921861d072c9caa2de71310e7a6ccdc9df9ca0c80e1cbd2ac6e64206acee",
+            "project-02.json": "5268921861d072c9caa2de71310e7a6ccdc9df9ca0c80e1cbd2ac6e64206acee"
+          }
+        },
+        {
+          "id": "loop_title-02",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 522.3261532999968,
+          "tool_errors": 4,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -20.000001907348633,
+            "peak_db": -3.107983112335205,
+            "true_peak_db": -2.956430673599243,
+            "full_scale_samples": 0,
+            "ending_rms_db": -26.775035858154297,
+            "sha256": "ff9947b8c24f6bbe77bd8a583e28065491768a10659f02413b271ce726a21e38"
+          },
+          "tool_calls": {
+            "inspect_project": 9,
+            "production_record": 15,
+            "tool_help": 26,
+            "edit_timeline": 2,
+            "search_instruments": 1,
+            "edit_harmony": 5,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_clip": 4,
+            "add_track": 3,
+            "search_documentation": 11,
+            "read_notes": 7,
+            "inspect_instrument": 4,
+            "edit_notes": 2,
+            "mixer_graph": 4,
+            "cli_command": 12,
+            "set_instrument_params": 1,
+            "inspect_performance": 4,
+            "set_drum_assignment": 3,
+            "set_performance": 1,
+            "set_loop": 1,
+            "inspect_audio": 10,
+            "preview": 3,
+            "candidates": 14,
+            "normalize_mix": 1,
+            "read_report": 68,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 153,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "508af589ec478a69f84a031b284cfe739fb9b2eda9b94fd17f85868e45cfa6fb",
+            "project-02.json": "508af589ec478a69f84a031b284cfe739fb9b2eda9b94fd17f85868e45cfa6fb"
+          }
+        },
+        {
+          "id": "loop_title-03",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 435.7155351000001,
+          "tool_errors": 3,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 19.2,
+            "frames": 921600,
+            "lufs": -21.999998092651367,
+            "peak_db": -4.189117908477783,
+            "true_peak_db": -4.15035343170166,
+            "full_scale_samples": 0,
+            "ending_rms_db": -24.559110641479492,
+            "sha256": "0cff09316e21fac3beb97cc6a71b8b4772fd72d398038ae33953b5d4354ff4e6"
+          },
+          "tool_calls": {
+            "inspect_project": 11,
+            "production_record": 16,
+            "tool_help": 27,
+            "search_instruments": 1,
+            "edit_timeline": 2,
+            "edit_harmony": 2,
+            "rename_track": 1,
+            "set_instrument": 4,
+            "add_clip": 4,
+            "read_notes": 8,
+            "inspect_instrument": 4,
+            "cli_command": 9,
+            "search_documentation": 7,
+            "edit_notes": 3,
+            "set_instrument_params": 2,
+            "add_track": 3,
+            "mixer_graph": 5,
+            "set_drum_assignment": 3,
+            "set_loop": 1,
+            "inspect_audio": 13,
+            "normalize_mix": 1,
+            "preview": 2,
+            "candidates": 12,
+            "list_mcp_resources": 1,
+            "list_mcp_resource_templates": 1,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 178,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "2982904062f20890f2b3038f932e0cf0942144bc82f3fdef691f73ccf00a7435",
+            "project-01.json": "b26c3d6a4a5ee051c092eb5bd1ac3d173f586d2b8e8f1bded2dc2c9212da1191",
+            "project-02.json": "b26c3d6a4a5ee051c092eb5bd1ac3d173f586d2b8e8f1bded2dc2c9212da1191"
+          }
+        }
+      ]
+    },
+    "smoke-codex": {
+      "suite": "target/quality-final/smoke-codex/suite.json",
+      "suite_sha256": "3e006ee695247687ee768ecf0626ed19b2df9766a466834e6fc66a7a7e3ea01c",
+      "source_commit": "478ff401695b76f4708baa1ece7ed9edf61e0b1c",
+      "source_reference_sha256": null,
+      "runtime_manifest_sha256": "6a16c4d28ca8fd5958c310e1ed66cc4b8291521ca88291d72115d0691385c768",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8105ae6558a65a66a78a2d19a98db10d9f89cd49c74d5f51bc6367c9b18040d4"
+      },
+      "manifest_sha256": "970fd80a7a66b0d5a56191ddbe086de9ed51d857ca78bed693a38af0d04d0c7c",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "modular",
+      "context_tokens": null,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": true,
+          "delivery_present": false,
+          "elapsed_seconds": 238.0645442999994,
+          "tool_errors": 2,
+          "encoded": null,
+          "tool_calls": {
+            "inspect_project": 9,
+            "production_record": 20,
+            "tool_help": 12,
+            "read_notes": 7,
+            "phrase_variation": 1,
+            "candidates": 7,
+            "inspect_audio": 2,
+            "edit_clip_curve": 261,
+            "history": 6,
+            "inspect_performance": 3,
+            "cli_command": 3
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": null,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-02.json": "2f72a97a66e539cf6cdeddd72acffb786c9e7ad6bbe9308f063ee57d5a7fd8d4",
+            "project-03.json": "2f72a97a66e539cf6cdeddd72acffb786c9e7ad6bbe9308f063ee57d5a7fd8d4"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": true,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "create",
+                  "expected_revision": "891903d56ae9c3380b7a6d956f3ec6c92ed09be3e024303d0743dc09ccc83f77",
+                  "candidates": [
+                    {
+                      "purpose": "実行経路検証：先頭小節の3音目（clip 3/index 2）の音高76→77だけを変え、その他を完全に保持。未採用の比較用1案。",
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "start_tick": 0,
+                          "end_tick": 2880,
+                          "protected_indices": [
+                            0,
+                            1,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19,
+                            20,
+                            21,
+                            22,
+                            23
+                          ],
+                          "operation": {
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 960,
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:TcpkPAdWH9c:4",
+                  "candidate": 0,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:TcpkPAdWH9c:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "preview",
+                  "round_id": "candidates:TcpkPAdWH9c:4",
+                  "range": {
+                    "start_bar": 1,
+                    "bars": 1
+                  }
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:TcpkPAdWH9c:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:TcpkPAdWH9c:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "apply",
+                  "round_id": "candidates:TcpkPAdWH9c:4",
+                  "candidate": 1,
+                  "expected_revision": "891903d56ae9c3380b7a6d956f3ec6c92ed09be3e024303d0743dc09ccc83f77"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "undo",
+                  "group": 2,
+                  "expected_revision": 9
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "redo",
+                  "group": 2,
+                  "expected_revision": 10
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": true,
+          "contract_pass": false
+        }
+      ]
+    },
+    "smoke-claude": {
+      "suite": "target/quality-final/smoke-claude/suite.json",
+      "suite_sha256": "439e4bf5ee00bb5098a3ca8b7f854bbc6f17d38963d4856fd2ad6e94ffce00e2",
+      "source_commit": "478ff401695b76f4708baa1ece7ed9edf61e0b1c",
+      "source_reference_sha256": "cb2043aad08c1376c26694476e75b52ec63b52dda506cfa1f5bd68c8e57b3398",
+      "runtime_manifest_sha256": "6a16c4d28ca8fd5958c310e1ed66cc4b8291521ca88291d72115d0691385c768",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8105ae6558a65a66a78a2d19a98db10d9f89cd49c74d5f51bc6367c9b18040d4"
+      },
+      "manifest_sha256": "970fd80a7a66b0d5a56191ddbe086de9ed51d857ca78bed693a38af0d04d0c7c",
+      "backend": "claude",
+      "model": "sonnet",
+      "prompt_profile": "modular",
+      "context_tokens": null,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 82.60355630000049,
+          "tool_errors": 0,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 8.0,
+            "frames": 384000,
+            "lufs": -27.80960464477539,
+            "peak_db": -16.45528221130371,
+            "true_peak_db": -16.45488929748535,
+            "full_scale_samples": 0,
+            "ending_rms_db": -31.099544525146484,
+            "sha256": "bb41b8765806c32aa7984679169a16694155427430e9c1c96a235dbcb21dc375"
+          },
+          "tool_calls": {
+            "inspect_project": 3,
+            "production_record": 7,
+            "read_notes": 3,
+            "phrase_variation": 1,
+            "candidates": 4,
+            "edit_clip_curve": 4,
+            "history": 3,
+            "Bash": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 24,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-02.json": "2f72a97a66e539cf6cdeddd72acffb786c9e7ad6bbe9308f063ee57d5a7fd8d4",
+            "project-03.json": "2f72a97a66e539cf6cdeddd72acffb786c9e7ad6bbe9308f063ee57d5a7fd8d4"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": true,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "create",
+                  "expected_revision": "891903d56ae9c3380b7a6d956f3ec6c92ed09be3e024303d0743dc09ccc83f77",
+                  "candidates": [
+                    {
+                      "purpose": "先頭小節の3音目のみ半音上げ(76→77)、他は保持",
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "start_tick": 0,
+                          "end_tick": 2880,
+                          "protected_indices": [
+                            0,
+                            1,
+                            3,
+                            4,
+                            5
+                          ],
+                          "operation": {
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 960,
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "preview",
+                  "round_id": "candidates:Ub7Ry1X1gk4:4",
+                  "range": {
+                    "start_bar": 1,
+                    "bars": 1
+                  }
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:Ub7Ry1X1gk4:4",
+                  "candidate": 1,
+                  "clip": 3
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "apply",
+                  "round_id": "candidates:Ub7Ry1X1gk4:4",
+                  "candidate": 1,
+                  "expected_revision": "891903d56ae9c3380b7a6d956f3ec6c92ed09be3e024303d0743dc09ccc83f77"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "undo",
+                  "group": 2,
+                  "expected_revision": 9
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "redo",
+                  "group": 2,
+                  "expected_revision": 10
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": true,
+          "contract_pass": false
+        }
+      ]
+    },
+    "smoke-rig": {
+      "suite": "target/quality-final/smoke-rig/suite.json",
+      "suite_sha256": "1bc9969e4cc5274094516bef7a5cb8389e3e0f00db8e4e4faeb33ef75bee91f6",
+      "source_commit": "478ff401695b76f4708baa1ece7ed9edf61e0b1c",
+      "source_reference_sha256": "cb2043aad08c1376c26694476e75b52ec63b52dda506cfa1f5bd68c8e57b3398",
+      "runtime_manifest_sha256": "6a16c4d28ca8fd5958c310e1ed66cc4b8291521ca88291d72115d0691385c768",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8105ae6558a65a66a78a2d19a98db10d9f89cd49c74d5f51bc6367c9b18040d4"
+      },
+      "manifest_sha256": "970fd80a7a66b0d5a56191ddbe086de9ed51d857ca78bed693a38af0d04d0c7c",
+      "backend": "rig",
+      "model": "qwen3.8:27b",
+      "prompt_profile": "modular",
+      "context_tokens": null,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": false,
+          "delivery_present": false,
+          "elapsed_seconds": 356.48103360000096,
+          "tool_errors": 0,
+          "encoded": null,
+          "tool_calls": {
+            "inspect_project": 1,
+            "production_record": 3,
+            "read_notes": 1,
+            "tool_help": 3,
+            "phrase_variation": 1,
+            "candidates": 2
+          },
+          "failures": [
+            "PromptError: PromptCancelled: estimated context budget 69725 tokens (tools, history and 4096 output reserve) exceeds requested 65536; increase Agent Panel context/--context-tokens or start a fresh conversation. Earlier edits remain in the open document and may be unsaved."
+          ],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": null,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0",
+            "project-01.json": "f05cf8ed45f3ab5daaa395391f4d81cf66077e8964d4ce5638a85d6e7f6992e0"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": false,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "candidates": [
+                    {
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "end_tick": 2880,
+                          "operation": {
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ],
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 960
+                          },
+                          "protected_indices": [
+                            0,
+                            1,
+                            3,
+                            4,
+                            5
+                          ],
+                          "start_tick": 0
+                        }
+                      },
+                      "purpose": "先頭小節の3音目(index 2)のみ半音上げ(76→77)。リズム・強弱・他音・テンポ・拍子は完全保持"
+                    }
+                  ],
+                  "expected_revision": "891903d56ae9c3380b7a6d956f3ec6c92ed09be3e024303d0743dc09ccc83f77",
+                  "kind": "create"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "candidate": 1,
+                  "clip": 3,
+                  "kind": "read",
+                  "offset": 0,
+                  "round_id": "candidates:4ViYdM4FLrE:4"
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": false,
+          "contract_pass": false
+        }
+      ]
+    },
+    "smoke-v2-codex": {
+      "suite": "target/quality-final/smoke-v2-codex/suite.json",
+      "suite_sha256": "e670e5219d362b44c3512199d56bc6d7996ae1b8a8466fe2b86084fb43bbdca1",
+      "source_commit": "af296ceef9e80534de872fd6a6d64ec7c1442628",
+      "source_reference_sha256": null,
+      "runtime_manifest_sha256": "0e4352948d48e3ccdc719b68840b63c2e96ccc4e414cbaeaa82e73ce72ff6306",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8f7f732d9aaf0d800e118fa27ae1bec51eee03a3b8c135b7996b659e2db7be40"
+      },
+      "manifest_sha256": "3329d28f03f8bba82b00e9e29ba89275ce8983c6dcf3379adcec28202e1bff59",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "modular",
+      "context_tokens": 65536,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 197.8563817000031,
+          "tool_errors": 1,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -30.08561134338379,
+            "peak_db": -17.088756561279297,
+            "true_peak_db": -17.087387084960938,
+            "full_scale_samples": 0,
+            "ending_rms_db": -36.43044662475586,
+            "sha256": "c73df9b107606518e94e1bc6781e930a70d65f7a334b07b6ad4dbe6e0b9cdc8c"
+          },
+          "tool_calls": {
+            "inspect_project": 7,
+            "production_record": 18,
+            "tool_help": 10,
+            "read_notes": 4,
+            "phrase_variation": 1,
+            "candidates": 6,
+            "history": 1,
+            "inspect_audio": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 2,
+            "read_report": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 24,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-01.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-02.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-03.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": false,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "create",
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613",
+                  "candidates": [
+                    {
+                      "purpose": "実行経路検証：先頭1小節の3音目（clip 3 index 2）だけをMIDI 76→77にし、他の音符・強弱・コントローラー・テンポ・拍子を保つ。未採用で原曲と同一区間を比較する。",
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "start_tick": 0,
+                          "end_tick": 2880,
+                          "protected_indices": [
+                            0,
+                            1,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19,
+                            20,
+                            21,
+                            22,
+                            23
+                          ],
+                          "operation": {
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 1920,
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:FRDR6HU-CBY:4",
+                  "candidate": 0,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:FRDR6HU-CBY:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "preview",
+                  "round_id": "candidates:FRDR6HU-CBY:4",
+                  "range": {
+                    "start_bar": 1,
+                    "bars": 1
+                  }
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "cancel",
+                  "round_id": "candidates:FRDR6HU-CBY:4"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:FRDR6HU-CBY:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": false
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": false,
+          "contract_pass": false
+        }
+      ]
+    },
+    "smoke-v2-claude": {
+      "suite": "target/quality-final/smoke-v2-claude/suite.json",
+      "suite_sha256": "3bbff6988230bd89827341a9455d8876bc8c20044b2ea8c12f295a9d2052e77b",
+      "source_commit": "af296ceef9e80534de872fd6a6d64ec7c1442628",
+      "source_reference_sha256": "a08e1473bd4a31ae36e903bf32506c60ccb8b2b07adfb9d13af1caedc9c04463",
+      "runtime_manifest_sha256": "0e4352948d48e3ccdc719b68840b63c2e96ccc4e414cbaeaa82e73ce72ff6306",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8f7f732d9aaf0d800e118fa27ae1bec51eee03a3b8c135b7996b659e2db7be40"
+      },
+      "manifest_sha256": "3329d28f03f8bba82b00e9e29ba89275ce8983c6dcf3379adcec28202e1bff59",
+      "backend": "claude",
+      "model": "sonnet",
+      "prompt_profile": "modular",
+      "context_tokens": 65536,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 85.57749420000255,
+          "tool_errors": 0,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -30.057344436645508,
+            "peak_db": -16.55683135986328,
+            "true_peak_db": -16.554458618164062,
+            "full_scale_samples": 0,
+            "ending_rms_db": -36.43044662475586,
+            "sha256": "481fcfd4d386180f27c4c7a85b9683d7cbae9a649acea75e507efc614db2b7db"
+          },
+          "tool_calls": {
+            "inspect_project": 3,
+            "production_record": 7,
+            "read_notes": 3,
+            "phrase_variation": 1,
+            "candidates": 4,
+            "edit_clip_curve": 4,
+            "history": 3,
+            "Bash": 2,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 24,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-01.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-02.json": "ddbc73854c584d819bbade0bd110ea40de492f9ae46ea292af1edb110573b1b2",
+            "project-03.json": "ddbc73854c584d819bbade0bd110ea40de492f9ae46ea292af1edb110573b1b2"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": true,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "create",
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613",
+                  "candidates": [
+                    {
+                      "purpose": "先頭小節の3音目(index 2)のみ半音上げた案",
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "start_tick": 0,
+                          "end_tick": 2880,
+                          "protected_indices": [
+                            0,
+                            1
+                          ],
+                          "operation": {
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 1920,
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:0UMJUQxH7ro:4",
+                  "candidate": 1,
+                  "clip": 3
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "preview",
+                  "round_id": "candidates:0UMJUQxH7ro:4",
+                  "range": {
+                    "start_bar": 1,
+                    "bars": 1
+                  }
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "apply",
+                  "round_id": "candidates:0UMJUQxH7ro:4",
+                  "candidate": 1,
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "undo",
+                  "group": 2,
+                  "expected_revision": 9
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "redo",
+                  "group": 2,
+                  "expected_revision": 10
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": true,
+          "contract_pass": true
+        }
+      ]
+    },
+    "smoke-v2-rig": {
+      "suite": "target/quality-final/smoke-v2-rig/suite.json",
+      "suite_sha256": "2fc5e20223bcf189678c0d702986b1c4eb01bc5cf851fb642e054fa1ea220ab9",
+      "source_commit": "af296ceef9e80534de872fd6a6d64ec7c1442628",
+      "source_reference_sha256": "a08e1473bd4a31ae36e903bf32506c60ccb8b2b07adfb9d13af1caedc9c04463",
+      "runtime_manifest_sha256": "0e4352948d48e3ccdc719b68840b63c2e96ccc4e414cbaeaa82e73ce72ff6306",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "8f7f732d9aaf0d800e118fa27ae1bec51eee03a3b8c135b7996b659e2db7be40"
+      },
+      "manifest_sha256": "3329d28f03f8bba82b00e9e29ba89275ce8983c6dcf3379adcec28202e1bff59",
+      "backend": "rig",
+      "model": "qwen3.8:27b",
+      "prompt_profile": "modular",
+      "context_tokens": 131072,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 2286.6661956000025,
+          "tool_errors": 3,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -30.057344436645508,
+            "peak_db": -16.55683135986328,
+            "true_peak_db": -16.554458618164062,
+            "full_scale_samples": 0,
+            "ending_rms_db": -36.43044662475586,
+            "sha256": "481fcfd4d386180f27c4c7a85b9683d7cbae9a649acea75e507efc614db2b7db"
+          },
+          "tool_calls": {
+            "inspect_project": 4,
+            "production_record": 12,
+            "tool_help": 8,
+            "read_notes": 6,
+            "phrase_variation": 1,
+            "candidates": 4,
+            "history": 3,
+            "inspect_performance": 1,
+            "render": 2,
+            "export_midi": 1,
+            "verify_render": 1,
+            "inspect_audio": 1
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 25319,
+              "conversation_reported_output_tokens": 6872,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 27624,
+              "conversation_reported_output_tokens": 11554,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 27949,
+              "conversation_reported_output_tokens": 16629,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 24,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-01.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-02.json": "ddbc73854c584d819bbade0bd110ea40de492f9ae46ea292af1edb110573b1b2",
+            "project-03.json": "ddbc73854c584d819bbade0bd110ea40de492f9ae46ea292af1edb110573b1b2"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": true,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "candidates": [
+                    {
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "end_tick": 2880,
+                          "operation": {
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ],
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 1920
+                          },
+                          "protected_indices": [
+                            0,
+                            1
+                          ],
+                          "start_tick": 0
+                        }
+                      },
+                      "purpose": "先頭小節の3音目(index 2, E5=76)を半音だけF5=77に上げる。それ以外の音符・強弱・リズム・テンポ・拍子は完全に保持。"
+                    }
+                  ],
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613",
+                  "kind": "create"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "candidate": 1,
+                  "clip": 3,
+                  "kind": "read",
+                  "round_id": "candidates:KRXBp5JLBDQ:4"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "preview",
+                  "range": {
+                    "bars": 1,
+                    "start_bar": 1
+                  },
+                  "round_id": "candidates:KRXBp5JLBDQ:4"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "candidate": 1,
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613",
+                  "kind": "apply",
+                  "round_id": "candidates:KRXBp5JLBDQ:4"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "expected_revision": 9,
+                  "group": 2,
+                  "kind": "undo"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "expected_revision": 10,
+                  "group": 2,
+                  "kind": "redo"
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": true,
+          "contract_pass": true
+        }
+      ]
+    },
+    "smoke-v2-codex-pending-fix": {
+      "suite": "target/quality-final/smoke-v2-codex-pending-fix/suite.json",
+      "suite_sha256": "4b709976fb7c3d1021debb350c2bf1b0f0ac2945b5fbbfe1718b91ca59426a87",
+      "source_commit": "6848a27e32b8a1ee5438a58c11b07658843542fd",
+      "source_reference_sha256": null,
+      "runtime_manifest_sha256": "4ee5dda5d1cec5500311a45c24930f146006396ecaaae64bfbe5a9ed1c2dbc8e",
+      "executables": {
+        "auris_studio-38478e7dc11d9b85.exe": "fbc731c20ed2a7154ab08f6b5d827b505fa2a07e84c3249cf6148cf3ad42a835"
+      },
+      "manifest_sha256": "3329d28f03f8bba82b00e9e29ba89275ce8983c6dcf3379adcec28202e1bff59",
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "prompt_profile": "modular",
+      "context_tokens": 65536,
+      "trials": [
+        {
+          "id": "exact_phrase_round-01",
+          "transport_pass": true,
+          "delivery_present": true,
+          "elapsed_seconds": 325.1764017000023,
+          "tool_errors": 0,
+          "encoded": {
+            "sample_rate": 48000,
+            "channels": 2,
+            "bit_depth": 24,
+            "seconds": 16.0,
+            "frames": 768000,
+            "lufs": -30.057344436645508,
+            "peak_db": -16.55683135986328,
+            "true_peak_db": -16.554458618164062,
+            "full_scale_samples": 0,
+            "ending_rms_db": -36.43044662475586,
+            "sha256": "481fcfd4d386180f27c4c7a85b9683d7cbae9a649acea75e507efc614db2b7db"
+          },
+          "tool_calls": {
+            "inspect_project": 13,
+            "production_record": 27,
+            "tool_help": 14,
+            "read_notes": 8,
+            "phrase_variation": 1,
+            "candidates": 6,
+            "inspect_audio": 3,
+            "edit_clip_curve": 261,
+            "history": 6,
+            "render": 1,
+            "export_midi": 1,
+            "verify_render": 1,
+            "cli_command": 3,
+            "read_report": 2
+          },
+          "failures": [],
+          "usage": [
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            },
+            {
+              "last_reported_input_context_tokens": 0,
+              "conversation_reported_output_tokens": 0,
+              "interpretation": "Backend-reported counters; input is the last reported context, not cumulative billable input. Zero may mean unavailable."
+            }
+          ],
+          "midi_notes": 24,
+          "unsaved": true,
+          "project_snapshots": {
+            "project-00.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-01.json": "268751b6ff306de4c7a9361087397792cea426c2ca2f6f7e68e72958941a1514",
+            "project-02.json": "ddbc73854c584d819bbade0bd110ea40de492f9ae46ea292af1edb110573b1b2",
+            "project-03.json": "ddbc73854c584d819bbade0bd110ea40de492f9ae46ea292af1edb110573b1b2"
+          },
+          "preview_preserved_document": true,
+          "final_exact_requested_pitch_only": true,
+          "transaction_calls": [
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "create",
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613",
+                  "candidates": [
+                    {
+                      "purpose": "実行経路の検証：先頭小節の3音目（clip 3 index 2）だけをMIDI 76から77へ半音上げ、その他の音符・強弱・コントローラー・テンポ・拍子と内蔵音源を保つ。採用は保留。",
+                      "edit": {
+                        "kind": "variation",
+                        "request": {
+                          "clip": 3,
+                          "start_tick": 0,
+                          "end_tick": 2880,
+                          "protected_indices": [
+                            0,
+                            1,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19,
+                            20,
+                            21,
+                            22,
+                            23
+                          ],
+                          "operation": {
+                            "kind": "pitches",
+                            "preserve_prefix_until_tick": 1920,
+                            "changes": [
+                              {
+                                "index": 2,
+                                "pitch": 77
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:g6sjXKLO-9Y:4",
+                  "candidate": 0,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:g6sjXKLO-9Y:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "preview",
+                  "round_id": "candidates:g6sjXKLO-9Y:4",
+                  "range": {
+                    "start_bar": 1,
+                    "bars": 1
+                  }
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "read",
+                  "round_id": "candidates:g6sjXKLO-9Y:4",
+                  "candidate": 1,
+                  "clip": 3,
+                  "offset": 0
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "candidates",
+              "args": {
+                "operation": {
+                  "kind": "apply",
+                  "round_id": "candidates:g6sjXKLO-9Y:4",
+                  "candidate": 1,
+                  "expected_revision": "a398c82fb2775ea20821be83da1d0c904a42cc6d8f364d703ec685ef0d487613"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "undo",
+                  "group": 2,
+                  "expected_revision": 9
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "redo",
+                  "group": 2,
+                  "expected_revision": 10
+                }
+              },
+              "ok": true
+            },
+            {
+              "tool": "history",
+              "args": {
+                "operation": {
+                  "kind": "read"
+                }
+              },
+              "ok": true
+            }
+          ],
+          "undo_redo_completed": true,
+          "contract_pass": true
+        }
+      ]
+    }
+  }
+}

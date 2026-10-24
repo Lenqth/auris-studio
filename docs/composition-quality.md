@@ -38,6 +38,8 @@ captured from the current checkout: build and start the runner before changing
 that source. When reusing a frozen runtime, pass `--source-suite <suite.json>`:
 the runner verifies identical runtime hashes and retains the original source
 provenance rather than attributing the binary to today's checkout.
+It freezes the exact reference bytes in `source-suite.json`, so a still-running
+source suite cannot invalidate the recorded reference hash by appending results.
 Controller services may change behind the same model name; retain
 timestamps and compare under the closest available service conditions.
 
@@ -85,7 +87,7 @@ compares baseline `406277cc` with implementation `da89dc96`, using Codex CLI 0.1
 `gpt-6.1-sol`. This exploratory pilot selected the first two development tasks while the
 larger run was in progress; it is not a preregistered efficacy study. Both selected tasks
 have three trials per condition, with no selected trial omitted. The four holdout tasks
-remain unevaluated. The complete manifest remains available for broader development runs.
+were unevaluated in that pilot. The complete manifest remains available for broader development runs.
 
 | Condition | Task | Completed with WAV/MIDI | Failed tool calls, total | Wall time range | Trials reporting changed accompaniment |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -115,3 +117,13 @@ rating form; the separate key reveals their identities. Original levels are reta
 No human preference ratings have been collected, so musical improvement remains unproven.
 The [critic calibration](audio-critic-calibration.md) likewise did not validate the current
 audio model for automatic musical selection.
+
+## Follow-up validation of production records and candidates
+
+The [follow-up report](composition-quality-validation-2026-10-24.md) covers
+conversation records, immutable candidates, scoped variation, modular prompts
+and real backend trials. It retains all 24 holdout deliveries and the six-trial
+development prompt ablation, including recovered tool errors and runtime-smoke
+failures. Human preference remains unscored. The candidate catalog and modular
+prompt stay opt-in; see [candidate tools](composition-candidates.md) and
+[workflow configuration](composition-workflows.md).
