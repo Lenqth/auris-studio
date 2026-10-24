@@ -44,6 +44,8 @@ enum Provider {
 /// Everything the command line decided.
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
+    /// Resolved system prompt, captured from preferences when the worker starts.
+    system_prompt: String,
     /// Explicit Ollama request context, including tools, history and output.
     context_tokens: u32,
     /// Ollama output limit per response.
@@ -249,6 +251,7 @@ fn parse_args(
         return Err("--max-turns must be positive".into());
     }
     Ok(Command::Run(Options {
+        system_prompt: system_prompt(prefs),
         context_tokens,
         output_tokens,
         thinking,
@@ -298,10 +301,24 @@ fn parse_command(
     }
 }
 
-/// What the model is told once, before the conversation: the shared workflow, plus what only
-/// this frontend knows — where it is standing, and who it is talking to.
-fn preamble() -> String {
+/// Built-in shared live-agent prompt for the active prompt profile.
+/// Settings displays this text when no replacement has been saved.
+pub fn default_system_prompt() -> String {
     preamble_for_profile(toolbox::composition_workflows::enabled())
+}
+
+/// Resolves the user's replacement prompt, preserving its text exactly unless blank.
+pub fn system_prompt(prefs: &auris_session::AgentPreferences) -> String {
+    if prefs.system_prompt.trim().is_empty() {
+        default_system_prompt()
+    } else {
+        prefs.system_prompt.clone()
+    }
+}
+
+#[cfg(test)]
+fn preamble() -> String {
+    default_system_prompt()
 }
 
 fn preamble_for_profile(modular: bool) -> String {
@@ -531,8 +548,8 @@ fn strip_markup(text: &str) -> String {
 }
 
 /// File-free editing and reference tools for the rig agent.
-fn armed(builder: AgentBuilder, bridge: Option<Bridge>) -> Agent {
-    let mut builder = builder.preamble(preamble()).dynamic_tools(Vec::new());
+fn armed(builder: AgentBuilder, bridge: Option<Bridge>, prompt: &str) -> Agent {
+    let mut builder = builder.preamble(prompt).dynamic_tools(Vec::new());
     for definition in host::ToolHost::definitions() {
         let tool_name = definition.name.clone();
         let bridge = bridge.clone();
@@ -593,7 +610,9 @@ fn build_agent(options: &Options) -> Result<Agent, String> {
 }
 
 fn build_for_worker(options: &Options, bridge: Option<Bridge>) -> Result<Agent, String> {
-    build_with(options, |builder| armed(builder, bridge))
+    build_with(options, |builder| {
+        armed(builder, bridge, &options.system_prompt)
+    })
 }
 
 fn build_with(
@@ -1359,6 +1378,39 @@ async fn converse(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn custom_system_prompt_replaces_defaults_in_the_provider_request() {
+        let custom = "二番から最後まで。\nKeep the motif and leave room for the voice.";
+        let (url, seen) = mock_server(vec![completion(
+            r#"{"role":"assistant","content":"Done"}"#,
+            "stop",
+        )]);
+        let prefs = auris_session::AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            system_prompt: custom.into(),
+            ..Default::default()
+        };
+        let Command::Run(options) = parse_args(&[], &|_| None, &prefs).unwrap() else {
+            panic!("run options expected");
+        };
+        let agent = build_agent(&options).unwrap();
+        converse(&agent, Message::user("Compose"), Vec::new(), 1, true, None)
+            .await
+            .unwrap();
+        let requests = seen.lock().unwrap();
+        let body: serde_json::Value = serde_json::from_str(&requests[0]).unwrap();
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(
+            body["messages"][0]["content"],
+            serde_json::json!([{"type":"text", "text":custom}])
+        );
+        let mut defaults = prefs;
+        defaults.system_prompt = " \n ".into();
+        assert_eq!(system_prompt(&defaults), default_system_prompt());
+    }
+
     #[test]
     fn experimental_prompt_keeps_safety_contracts_and_the_same_catalog() {
         let catalog = host::ToolHost::definitions()
@@ -2121,6 +2173,7 @@ mod tests {
         ]);
 
         let agent = build_agent(&Options {
+            system_prompt: preamble(),
             context_tokens: 32768,
             output_tokens: 4096,
             thinking: None,
@@ -2185,6 +2238,7 @@ mod tests {
         let attachments = vec![clip.display().to_string()];
 
         let agent = build_agent(&Options {
+            system_prompt: preamble(),
             context_tokens: 32768,
             output_tokens: 4096,
             thinking: None,

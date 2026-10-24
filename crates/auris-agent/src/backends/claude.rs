@@ -110,7 +110,7 @@ fn command(
             "permissions":{"allow":["mcp__auris_live__*"],"ask":if native { NATIVE_TOOLS } else { &[] }}})
             .to_string(),
         )
-        .args(["--system-prompt", &if native { super::cli_preamble() } else { crate::approval_review::INSTRUCTIONS.into() }])
+        .args(["--system-prompt", &if native { super::cli_preamble(prefs) } else { crate::approval_review::INSTRUCTIONS.into() }])
         .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -775,6 +775,7 @@ mod tests {
     fn command_limits_tools_and_keeps_the_mcp_token_out_of_arguments() {
         let cwd = tempfile::tempdir().unwrap();
         let prefs = auris_session::AgentPreferences {
+            system_prompt: "Custom music instructions\n二番も作る".into(),
             claude_path: if cfg!(windows) {
                 "C:/Tools/claude.exe"
             } else {
@@ -799,12 +800,21 @@ mod tests {
                 .any(|arg| arg.contains("Bearer") || arg.contains("bypassPermissions"))
         );
         assert_eq!(command.as_std().get_current_dir(), Some(cwd.path()));
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--system-prompt", crate::approval_review::INSTRUCTIONS])
+        );
         let native = super::command(&prefs, cwd.path(), true).unwrap();
         let args: Vec<_> = native
             .as_std()
             .get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
+        assert!(
+            args.windows(2).any(|pair| pair[0] == "--system-prompt"
+                && pair[1] == super::super::cli_preamble(&prefs))
+        );
+        assert!(args.iter().any(|arg| arg.starts_with(&prefs.system_prompt)));
         assert!(
             args.windows(2)
                 .any(|args| args == ["--permission-mode", "default"])

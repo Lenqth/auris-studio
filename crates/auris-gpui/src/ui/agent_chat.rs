@@ -1020,6 +1020,7 @@ pub(crate) struct AgentChat {
     /// Optional native Codex executable path.
     pub(crate) codex_path: String,
     pub(crate) claude_path: String,
+    system_prompt: String,
     /// What the provider last answered the model question with.
     pub(crate) models: Vec<ModelOption>,
     /// Whether that question is in flight.
@@ -1141,6 +1142,7 @@ impl Default for AgentChat {
             backend: String::new(),
             codex_path: String::new(),
             claude_path: String::new(),
+            system_prompt: String::new(),
             models: Vec::new(),
             fetching_models: false,
             models_error: None,
@@ -1329,6 +1331,7 @@ impl AgentChat {
         self.backend = prefs.backend.clone();
         self.codex_path = prefs.codex_path.clone();
         self.claude_path = prefs.claude_path.clone();
+        self.system_prompt.clone_from(&prefs.system_prompt);
         self.chosen_model = prefs.model.trim().to_string();
         self.url_field = TextField::new(prefs.url.clone());
         self.key_env_field = TextField::new(prefs.api_key_env.clone());
@@ -1359,6 +1362,7 @@ impl AgentChat {
             backend: self.backend.clone(),
             codex_path: self.codex_path.clone(),
             claude_path: self.claude_path.clone(),
+            system_prompt: self.system_prompt.clone(),
             policy: self.policy.clone(),
             auto_compact_percent: self.auto_compact_percent,
             context_tokens: Some(self.context_tokens),

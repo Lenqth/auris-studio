@@ -550,6 +550,26 @@ restart reliability; inspect `/healthz` and the server log when a request fails.
 
 ## Ollama configuration and failure recovery
 
+Settings → Agent includes a multiline **System prompt** editor shared by Codex,
+Claude Code and Rig models. It starts with the current standard prompt in full.
+Editing replaces the common prompt; it is not appended to the standard text.
+Enter inserts a line break; the platform Control/Command+Enter shortcut applies
+the settings. The editor supports Japanese input, clipboard operations and wheel
+scrolling without moving the selection.
+
+**Apply** saves the prompt in the application's agent preferences and uses it
+from the next request. A running request finishes with its original settings.
+Closing Settings without applying leaves the saved prompt unchanged. **Restore
+standard prompt** restores the draft; apply it to resume following built-in
+defaults, including future updates. A blank prompt also selects those defaults.
+A failed save retains the draft and leaves the active preferences unchanged.
+
+This edits the live agent's shared instructions. Native CLI tool guidance,
+operation schemas/help, optional workflow responses and permission checks remain
+separate. Approval-review and audio-critic instructions are independent. Saved-file
+MCP uses its own instructions. Custom prompts count toward the local model's
+context budget just like the standard prompt.
+
 Settings → Agent exposes context size (32K, 64K, 128K, 256K) and thinking (model default,
 off, on), stored in shared preferences. Output token limit selects 4K, 8K, 16K,
 32K, or 64K per response and applies to the next request. Raising output also raises
