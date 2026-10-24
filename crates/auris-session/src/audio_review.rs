@@ -12,6 +12,8 @@ use std::time::Duration;
 use base64::Engine;
 use serde_json::{Value, json};
 
+pub mod assessment;
+
 const MAX_AUDIO_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
@@ -168,7 +170,7 @@ pub fn review_audio_cancellable(
     let mut request = json!({
         "model":options.model,
         "messages":[
-            {"role":"system","content":"Review the supplied recordings. Describe audible musical details, state uncertainty, and suggest a concrete local change only when supported. You review audio; you do not edit the project."},
+            {"role":"system","content":"Review the supplied recordings using the requested response format. Base observations on audible evidence and state uncertainty. Recording order carries no quality information. You review audio; you do not edit the project. Do not invent perception when audio is unavailable."},
             {"role":"user","content":content}
         ],
         "stream":false,

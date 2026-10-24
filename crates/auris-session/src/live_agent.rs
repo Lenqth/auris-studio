@@ -360,7 +360,7 @@ pub enum Command {
         /// Optional track ID for solo routing; omit for the mix.
         track: Option<u64>,
     },
-    /// Render the current unsaved mix and send actual WAV audio to the configured audio critic (AURIS_AUDIO_URL/MODEL). Returns fallible observations, exact WAV measurements, document revision and audition_id. Start inside the arrangement; 1..8 bars, at most 30 seconds. For composition, review a completed phrase, make a supported local edit, read back its state, then listen to the same bars with compare_to set to the earlier audition_id. No edit is required when the critic cannot judge. The latest four IDs are retained in this open document. No save or Undo; network permission applies. This is a separate model's review, not proof that you heard the music.
+    /// Render the unsaved mix and send actual WAV audio to the configured critic. Use focus for single-excerpt diagnosis. For blind A/B, pass compare_to and a neutral aspect, omitting focus; order is randomized and the critic sees no edit narrative. Returns typed timestamped observations or an explicit assessment_error, exact WAV measurements, revision and audition_id. Preference, tie and cannot_judge are distinct; confidence is uncalibrated. Never automatically adopt an edit from this verdict alone. Use 1..8 bars, at most 30 seconds, inside the arrangement. Retains four IDs with matching bars/timing. No save or Undo; network permission applies. Separate-model feedback is not proof that you heard the music.
     Listen {
         /// First bar, starting at 1.
         #[schemars(range(min = 1))]
@@ -368,10 +368,12 @@ pub enum Command {
         /// Number of bars, 1..8, fitting at most thirty seconds.
         #[schemars(range(min = 1, max = 8))]
         bars: u32,
-        /// Short question about audible instrumentation, balance or phrasing, up to 4000 bytes.
+        /// Diagnostic question for one excerpt, up to 4000 bytes. Must be omitted for comparison.
         focus: Option<String>,
         /// Opaque audition_id from this open document, with the same bars and timing.
         compare_to: Option<String>,
+        /// Neutral comparison criterion, required with compare_to and omitted for diagnosis. Comparison never forwards an editing narrative.
+        aspect: Option<crate::audio_review::assessment::ComparisonAspect>,
     },
 
     /// Search instruments by text, acoustic reference, or bounded browsing. Copy returned sound IDs into set_instrument. Paging, filters and acoustic-index status are shared across backends.
@@ -858,9 +860,15 @@ impl Session {
                 bars,
                 focus,
                 compare_to,
+                aspect,
             } => {
-                let job =
-                    self.begin_listening(start_bar, bars, focus.as_deref(), compare_to.as_deref())?;
+                let job = self.begin_listening(
+                    start_bar,
+                    bars,
+                    focus.as_deref(),
+                    compare_to.as_deref(),
+                    aspect,
+                )?;
                 let result = job.run(&std::sync::atomic::AtomicBool::new(false))?;
                 self.continue_listening(result)
             }

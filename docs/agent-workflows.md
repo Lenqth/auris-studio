@@ -379,9 +379,18 @@ Call `listen` with `{"start_bar":9,"bars":4,"focus":"Describe the melody and acc
 It returns `audition_id`, the captured document revision/range, `audio_sent`, the critic's
 review and measurements of both the source render and the actual encoded WAV. After a
 supported local edit, read back the affected notes or mixer and call `listen` on the same
-bars with `compare_to` set to the earlier `audition_id`. A tempo or meter change requires
+bars with `compare_to` set to the earlier `audition_id`, `aspect` set to `balance`,
+`phrasing`, `ensemble`, `sound` or `musical_coherence`, and `focus` omitted. A tempo or meter change requires
 a new baseline. The last four raw excerpts are retained in the open session; replacing
 the document or closing the session expires them. IDs are opaque, not file paths.
+
+Single-excerpt diagnosis accepts a descriptive question. Comparison accepts only a neutral
+criterion: the critic receives anonymous A/B recordings in randomized order, with no edit
+narrative. The response contains `assessment` with timestamped observations and an explicit
+preference, tie or `cannot_judge`. Invalid JSON or evidence yields `assessment_error` and no
+usable judgment, while `audio_sent` still records successful delivery. The returned A/B mapping
+is revealed to the caller after review. Confidence and preferences are uncalibrated claims;
+they must not automatically select edits. See [critic calibration](audio-critic-calibration.md).
 
 Each request covers 1–8 bars and at most 30 seconds, rendered at 48 kHz without effect
 tails. Both comparison excerpts use one common protective attenuation when needed for
@@ -437,7 +446,7 @@ a separate audio critic receives actual audio and cannot modify the project.
 3. Make one supported local correction, or preserve the music when the evidence
    does not justify a change. Keep a checkpoint when a comparison may need restoring.
 4. Read back the edit, then call `listen` on the same range with `compare_to` set
-   to the first `audition_id`. Both excerpts use the same protective attenuation;
+   to the first `audition_id`, a neutral `aspect`, and no `focus`. Both excerpts use the same protective attenuation;
    the original raw excerpt stays immutable. Tempo/meter or range changes require
    a new baseline.
 5. Keep, refine or restore the edit according to the evidence, and stop when the

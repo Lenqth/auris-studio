@@ -96,6 +96,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                         bars,
                         focus,
                         compare_to,
+                        aspect,
                     } = command
                     {
                         return crate::saved_listening::run(
@@ -104,6 +105,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                             bars,
                             focus.as_deref(),
                             compare_to.as_deref(),
+                            aspect,
                         );
                     }
                     let before = command.is_mutating().then(|| session.project().clone());

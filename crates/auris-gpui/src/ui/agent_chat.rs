@@ -2387,6 +2387,7 @@ impl AurisApp {
             bars,
             focus,
             compare_to,
+            aspect,
         } = serde_json::from_value(command.clone()).map_err(|error| error.to_string())?
         else {
             return Err("Expected listen".into());
@@ -2400,6 +2401,7 @@ impl AurisApp {
             bars,
             focus.as_deref(),
             compare_to.as_deref(),
+            aspect,
         )?;
         let link = self.agent_chat.link.as_mut().ok_or("The agent stopped")?;
         if link.listening.is_some() {

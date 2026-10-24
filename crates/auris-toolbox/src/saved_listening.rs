@@ -1,6 +1,7 @@
 //! Saved calls retain opaque audio baselines while using the live session's listening command.
 
 use crate::*;
+use auris_session::audio_review::assessment::ComparisonAspect;
 use auris_session::{audio_audition::ListeningContext, audio_review::AudioReviewOptions};
 use std::sync::{Mutex, OnceLock};
 
@@ -13,6 +14,7 @@ pub(crate) fn run(
     bars: u32,
     focus: Option<&str>,
     compare_to: Option<&str>,
+    aspect: Option<ComparisonAspect>,
 ) -> Result<String, String> {
     run_with_options(
         session,
@@ -20,6 +22,7 @@ pub(crate) fn run(
         bars,
         focus,
         compare_to,
+        aspect,
         AudioReviewOptions::from_env()?,
     )
 }
@@ -30,6 +33,7 @@ fn run_with_options(
     bars: u32,
     focus: Option<&str>,
     compare_to: Option<&str>,
+    aspect: Option<ComparisonAspect>,
     options: AudioReviewOptions,
 ) -> Result<String, String> {
     let key = session
@@ -48,8 +52,8 @@ fn run_with_options(
     };
     session.swap_listening_context(&mut context);
     let result = (|| {
-        let job =
-            session.begin_listening_with_options(start_bar, bars, focus, compare_to, options)?;
+        let job = session
+            .begin_listening_with_options(start_bar, bars, focus, compare_to, aspect, options)?;
         let result = job.run(crate::cancellation::current().flag())?;
         session.continue_listening(result)
     })();
@@ -170,7 +174,7 @@ mod tests {
             ollama_url: None,
         };
         let first: Value = serde_json::from_str(
-            &run_with_options(&mut session, 1, 1, None, None, options.clone()).unwrap(),
+            &run_with_options(&mut session, 1, 1, None, None, None, options.clone()).unwrap(),
         )
         .unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), original);
@@ -186,6 +190,7 @@ mod tests {
                 1,
                 None,
                 first["audition_id"].as_str(),
+                Some(ComparisonAspect::Balance),
                 options,
             )
             .unwrap(),
@@ -198,7 +203,8 @@ mod tests {
         let compared = submitted_wavs(&requests[1]);
         assert_eq!(original.len(), 1);
         assert_eq!(compared.len(), 2);
-        assert_eq!(original[0], compared[0]);
+        let baseline_index = usize::from(second["comparison"]["b"] == "baseline");
+        assert_eq!(original[0], compared[baseline_index]);
         assert_ne!(compared[0], compared[1]);
     }
 }

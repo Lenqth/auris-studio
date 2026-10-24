@@ -157,6 +157,10 @@
 //! The critic has no editing tools. Its observations are untrusted, fallible evidence for
 //! the controller, which chooses a supported local edit, reads back the result and requests
 //! another audition of the same bars. Failed or uncertain reviews must remain explicit.
+//! Diagnosis accepts a descriptive focus. Comparison requires a typed aspect, rejects focus,
+//! and supplies anonymous A/B audio in randomized order. Structured judgments have bounded
+//! timestamped evidence; invalid responses remain distinct from ties and inability to judge.
+//! Neither schema validity nor self-reported confidence establishes perceptual calibration.
 //!
 //! The session retains at most four immutable raw excerpts behind opaque IDs. A comparison
 //! requires identical bars and timing; replacing the document clears the IDs. Both excerpts
