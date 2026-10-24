@@ -297,7 +297,7 @@ jobs:
         run: |
           $version = $env:RELEASE_NAME -replace '^v', ''
           $installer = (Resolve-Path "auris-studio-v$version-windows-x86_64-setup.exe").Path
-          $installDir = Join-Path $env:RUNNER_TEMP 'auris-installer-smoke'
+          $installDir = Join-Path $env:RUNNER_TEMP 'Auris installer smoke'
           $setup = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$installDir`"") -Wait -PassThru -WindowStyle Hidden
           if ($setup.ExitCode -ne 0) { throw "Installer exited with code $($setup.ExitCode)." }
           try {
@@ -305,6 +305,23 @@ jobs:
             if ($env:AURIS_UPDATE_HELPER -eq 'true') { $files += 'auris-update-helper.exe' }
             foreach ($file in $files) {
               if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Missing installed file: $file" }
+            }
+            if ($env:AURIS_UPDATE_HELPER -eq 'true') {
+              # Exercise the shipped helper from outside the installation, after its parent
+              # exits. A placeholder old executable proves that setup really replaces it.
+              $helper = Join-Path $env:RUNNER_TEMP 'auris-update-helper-smoke.exe'
+              Copy-Item -LiteralPath (Join-Path $installDir 'auris-update-helper.exe') -Destination $helper
+              $app = Join-Path $installDir 'auris-studio.exe'
+              $expectedHash = (Get-FileHash -LiteralPath $app -Algorithm SHA256).Hash
+              Set-Content -LiteralPath $app -Value 'old executable placeholder'
+              $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+              $report = Join-Path $env:RUNNER_TEMP 'auris-update-result.json'
+              $parent = Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', 'exit 0') -WindowStyle Hidden -Wait -PassThru
+              $update = Start-Process -FilePath $helper -ArgumentList @('apply', '--parent-pid', "$($parent.Id)", '--package', "`"$installer`"", '--app', "`"$app`"", '--sha256', $digest, '--result-file', "`"$report`"") -WindowStyle Hidden -Wait -PassThru
+              if ($update.ExitCode -ne 0) { throw "Update helper exited with code $($update.ExitCode)." }
+              $result = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+              if ($result.status -ne 'success') { throw "Update failed: $($result.message)" }
+              if ((Get-FileHash -LiteralPath $app -Algorithm SHA256).Hash -ne $expectedHash) { throw 'Update did not replace the installed executable.' }
             }
             & (Join-Path $installDir 'auris.exe') help | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Installed auris CLI exited with code $LASTEXITCODE." }

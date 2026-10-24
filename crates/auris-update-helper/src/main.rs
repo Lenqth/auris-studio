@@ -346,7 +346,9 @@ fn validate_file_name(path: &Path, expected: &str) -> Result<(), UpdateError> {
 fn verify_package(package: &Path, expected: &str) -> Result<(), UpdateError> {
     let mut file = std::fs::File::open(package)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
+    // The Windows main thread has a 1 MiB stack. Keep streaming storage on the heap;
+    // an inlined stack buffer can overflow before argument parsing or error reporting.
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let count = std::io::Read::read(&mut file, &mut buffer)?;
         if count == 0 {
@@ -615,8 +617,9 @@ mod tests {
     fn package_digest_must_match_before_apply() {
         let directory = tempfile::tempdir().unwrap();
         let package = directory.path().join("package.bin");
-        std::fs::write(&package, b"auris update").unwrap();
-        let digest = hex::encode(Sha256::digest(b"auris update"));
+        let contents = vec![0x5a; 1024 * 1024 + 1];
+        std::fs::write(&package, &contents).unwrap();
+        let digest = hex::encode(Sha256::digest(&contents));
         assert!(verify_package(&package, &digest).is_ok());
         assert!(verify_package(&package, &"00".repeat(32)).is_err());
         directory.close().unwrap();
