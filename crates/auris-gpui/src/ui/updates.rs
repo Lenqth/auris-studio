@@ -53,7 +53,7 @@ impl AurisApp {
                 self.set_status("");
             }
         }
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
         if enabled && !was_enabled && installed_target().is_some() {
@@ -326,6 +326,10 @@ impl AurisApp {
     /// Use the same save guard as Quit before requesting an update restart.
     pub(crate) fn restart_for_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !matches!(self.update_phase, UpdatePhase::Ready(_)) {
+            return;
+        }
+        if crate::project_windows::installed(cx) {
+            crate::project_windows::request_restart(self.project_window, cx);
             return;
         }
         crate::termination::activate(window, cx);

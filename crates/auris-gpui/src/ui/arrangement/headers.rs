@@ -644,7 +644,7 @@ impl AurisApp {
                                                     theme.accent,
                                                     &theme,
                                                     cx.listener(move |this, _, _, cx| {
-                                                        this.toggle_monitoring(id);
+                                                        this.toggle_monitoring(id, cx);
                                                         cx.notify();
                                                     }),
                                                 )

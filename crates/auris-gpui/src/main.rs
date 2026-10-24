@@ -25,6 +25,7 @@ mod i18n;
 mod keymap;
 mod logbook;
 mod menu;
+mod project_windows;
 mod settings_window;
 mod startup_soundfonts;
 mod termination;
@@ -38,9 +39,8 @@ mod ui;
 use std::path::PathBuf;
 
 use auris_session::{Settings, WindowPlacement};
-use gpui::{App, AppContext, Application, Bounds, Pixels, WindowBounds, WindowOptions, px, size};
+use gpui::{App, Application, Bounds, Pixels, WindowBounds, px, size};
 
-use app::AurisApp;
 use dock::PanelLayout;
 use menu::{MenuState, menus};
 
@@ -83,74 +83,29 @@ fn main() {
             MenuState::default(),
         ));
 
-        let remembered = Settings::load().window;
-        let window = cx
-            .open_window(
-                WindowOptions {
-                    window_bounds: Some(opening_window_bounds(remembered, cx)),
-                    window_min_size: Some(size(px(640.0), px(480.0))),
-                    titlebar: Some(titlebar::options("Auris Studio")),
-                    focus: true,
-                    ..Default::default()
-                },
-                |_, cx| cx.new(AurisApp::new),
-            )
-            .expect("could not open the main window");
-
-        // Start only after a window exists: the first launch may need a large download, and
-        // its progress belongs in a responsive window. The test harness never enters `main`.
+        project_windows::install(cx);
+        let window = project_windows::create(cx).expect("could not open the main window");
         window
-            .update(cx, |view, _, cx| view.download_missing_soundfonts(cx))
+            .update(cx, |view, _, cx| {
+                view.download_missing_soundfonts(cx);
+                view.start_auto_updates(cx);
+                view.acquire_audio(cx);
+            })
             .ok();
-        window
-            .update(cx, |view, _, cx| view.start_auto_updates(cx))
-            .ok();
-
-        // Quit is normally handled by the main window's view (`AurisApp::on_quit`) so an
-        // unsaved document can stop it. But a Quit can also land where no view is listening —
-        // dispatch goes to the *active* window, and the Settings window listens for nothing —
-        // and quitting from there would lose the main window's document just the same. So the
-        // fallback runs the same guard through the main window instead of quitting on the spot.
-        cx.on_action(move |_: &actions::Quit, cx: &mut App| {
-            if window
-                .update(cx, |view, window, cx| view.quit_asking(window, cx))
-                .is_err()
-            {
-                // The document window is already gone; nothing remains to guard.
-                termination::quit(cx);
-            }
-        });
-
-        // A project named on the command line, which is how Windows and a terminal hand one
-        // over. Opened *after* the window exists, through the same path the file dialog and a
-        // dropped file use: it reports what it opened, deals with missing audio, and paints a
-        // frame before it starts decoding, none of which could happen if the document were
-        // loaded before the window.
+        cx.on_action(|_: &actions::Quit, cx| project_windows::request_quit(cx));
         if let Some(path) = project_argument(std::env::args_os()) {
             window
                 .update(cx, |view, _, cx| view.open_project_at(path, cx))
                 .ok();
         }
-        // And the ones macOS hands over as events, at launch or later. Later there may be
-        // unsaved work, so these go through the guard a dropped project does.
         cx.spawn(async move |cx| {
             loop {
                 if termination::take_request() {
-                    let _ = window.update(cx, |view, window, cx| view.quit_asking(window, cx));
+                    let _ = cx.update(project_windows::request_quit);
                 }
                 while let Ok(urls) = open_requests.try_recv() {
-                    let Some(path) = urls.iter().find_map(|url| handed_over_project(url)) else {
-                        continue;
-                    };
-                    let opened = window.update(cx, |view, _, cx| {
-                        let pending = ui::prompt::PendingAction::OpenDropped(path.clone());
-                        if view.confirm_discard(pending) {
-                            view.open_project_at(path, cx);
-                        }
-                        cx.notify();
-                    });
-                    if opened.is_err() {
-                        return;
+                    for path in urls.iter().filter_map(|url| handed_over_project(url)) {
+                        let _ = cx.update(|cx| project_windows::open(Some(path), cx));
                     }
                 }
                 cx.background_executor()
@@ -159,48 +114,6 @@ fn main() {
             }
         })
         .detach();
-
-        // The key bindings are dispatched to the focused view, so focus the app up front —
-        // otherwise the space bar would not start playback until something was clicked. The
-        // arrangement rather than the window itself: a binding scoped to a panel is only on the
-        // dispatch path while that panel holds the keyboard, and the arrangement is where the
-        // work starts. Everything bound at the window level is on the path from there too.
-        window
-            .update(cx, |view, window, cx| {
-                view.focus_pane(app::Pane::Arrangement, window);
-
-                // The close button is the last thing standing between an afternoon's work and
-                // nothing. Returning `false` keeps the window open and leaves the sheet asking.
-                let asked = cx.entity().downgrade();
-                window.on_window_should_close(cx, move |_window, cx| {
-                    asked
-                        .update(cx, |this, cx| {
-                            if this.compose_progress.is_some() {
-                                return false;
-                            }
-                            let go = this.confirm_discard(ui::prompt::PendingAction::CloseWindow);
-                            if go {
-                                this.save_window_placement();
-                            }
-                            cx.notify();
-                            go
-                        })
-                        .unwrap_or(true)
-                });
-            })
-            .ok();
-
-        // The project window is the application. Settings is a panel that happens to be a window
-        // of its own, with no document to lose; leaving it up after the project window closed
-        // meant an app that had not quit and a panel whose controls silently did nothing.
-        let main = gpui::AnyWindowHandle::from(window).window_id();
-        cx.on_window_closed(move |cx| {
-            if !cx.windows().iter().any(|open| open.window_id() == main) {
-                termination::quit(cx);
-            }
-        })
-        .detach();
-
         cx.activate(true);
     });
 }

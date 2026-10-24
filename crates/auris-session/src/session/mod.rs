@@ -168,7 +168,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use auris_core::param::ParamDescriptor;
-use auris_core::time::{Seconds, Ticks};
+use auris_core::time::Ticks;
 use auris_core::{AudioSourceBank, PluginRegistry, Project, SourceId, TrackId};
 use auris_engine::{
     AudioDevice, AudioDeviceInfo, AudioSettings, EngineCommand, EngineError, EngineHandle,
@@ -187,6 +187,8 @@ use crate::settings::AudioPreferences;
 /// How to start a session.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SessionOptions {
+    /// Start without claiming hardware, while allowing later realtime activation.
+    pub audio_suspended: bool,
     /// Open an audio output device. `false` gives a silent engine that still accepts commands,
     /// which is what a CLI or a test wants.
     pub audio: bool,
@@ -239,6 +241,7 @@ impl Default for SessionOptions {
     fn default() -> Self {
         Self {
             audio: true,
+            audio_suspended: false,
             gpu: true,
             audio_preferences: AudioPreferences::default(),
             sample_rate: 48_000.0,
@@ -386,6 +389,8 @@ pub struct Session {
     audio: AudioPreferences,
     /// Whether this session must never claim a real device, however it is reconfigured.
     headless: bool,
+    audio_suspended: bool,
+    suspended_playhead: Ticks,
 
     history: History,
     agent_request: Option<agent_history::AgentRequest>,
@@ -652,7 +657,7 @@ impl Session {
             block_frames: Some(audio.block_frames.max(16)),
             ..AudioSettings::default()
         };
-        let (device, engine) = if options.audio {
+        let (device, engine) = if options.audio && !options.audio_suspended {
             start_audio(&settings)?
         } else {
             // `start_audio` opens the default device, which a headless tool must not do — it
@@ -687,6 +692,8 @@ impl Session {
             gpu,
             audio,
             headless: !options.audio,
+            audio_suspended: options.audio_suspended,
+            suspended_playhead: Ticks::ZERO,
             history: History::default(),
             agent_request: None,
             agent_request_serial: 0,
@@ -829,9 +836,8 @@ impl Session {
             }
             return Ok(());
         }
-        // Capture the position in seconds, not frames: the new device may run at a different
-        // rate, and frames counted at the old one would land somewhere else entirely.
-        let playhead = self.engine.playhead_seconds();
+        // Musical position survives a device-rate change and a suspended engine alike.
+        let playhead = self.playhead();
         let settings = AudioSettings {
             host: preferences.host.clone(),
             device: preferences.device.clone(),
@@ -844,7 +850,7 @@ impl Session {
         let had_input = self.input.take().is_some();
         self.input_channels = None;
         self.device = None;
-        let (device, engine) = if self.headless {
+        let (device, engine) = if self.headless || self.audio_suspended {
             auris_engine::start_silent(&settings)
         } else {
             start_audio(&settings).map_err(|error| SessionError::AudioRestart(error.to_string()))?
@@ -878,8 +884,65 @@ impl Session {
         // The new engine starts with no graph, no loop and a playhead at zero.
         self.rebuild_graph();
         self.publish_loop();
-        self.seek(self.project.tempo_map.seconds_to_ticks(Seconds(playhead)));
+        self.seek(playhead);
         Ok(())
+    }
+
+    /// Whether this document currently leaves realtime hardware to another session.
+    pub fn audio_suspended(&self) -> bool {
+        self.audio_suspended
+    }
+
+    /// Releases or reacquires realtime hardware without replacing the document or its history.
+    ///
+    /// The caller must suspend the previous owner before activating another session. Recording
+    /// prevents a transfer. Headless sessions remain headless even when activated.
+    pub fn set_audio_suspended(&mut self, suspended: bool) -> Result<(), SessionError> {
+        if self.audio_suspended == suspended {
+            return Ok(());
+        }
+        if self.is_recording() {
+            return Err(SessionError::RecordingInProgress);
+        }
+        let position = self.playhead();
+        self.stop();
+        self.release_typed_notes();
+        self.stop_monitoring();
+        self.input = None;
+        self.input_channels = None;
+        self.device = None;
+        // Leave a usable silent engine on failure, never a handle to a retired device.
+        let settings = AudioSettings {
+            host: self.audio.host.clone(),
+            device: self.audio.device.clone(),
+            sample_rate: self
+                .audio
+                .sample_rate
+                .or(Some(self.engine.sample_rate() as u32)),
+            block_frames: Some(self.audio.block_frames.max(16)),
+            ..AudioSettings::default()
+        };
+        let (device, engine) = auris_engine::start_silent(&settings);
+        self.device = Some(device);
+        self.engine = engine;
+        self.audio_suspended = true;
+        let result = if !suspended && !self.headless {
+            start_audio(&settings)
+                .map(|(device, engine)| {
+                    self.device = Some(device);
+                    self.engine = engine;
+                })
+                .map_err(|error| SessionError::AudioRestart(error.to_string()))
+        } else {
+            Ok(())
+        };
+        if result.is_ok() {
+            self.audio_suspended = suspended;
+        }
+        self.rebuild_graph();
+        self.publish_loop();
+        self.seek(position);
+        result
     }
 
     /// Housekeeping a frontend should call periodically — once per rendered frame is plenty.
@@ -1746,6 +1809,40 @@ mod tests {
         assert!(!status.running);
         assert!(!session.is_playing());
         assert!(session.project().tracks.is_empty());
+    }
+
+    #[test]
+    fn audio_handoff_preserves_document_history_and_headless_contract() {
+        let mut session = session();
+        session.add_audio_track("Keep me");
+        let before = session.project().clone();
+        let revision = session.revision();
+        session.set_audio_suspended(true).unwrap();
+        assert!(session.audio_suspended());
+        session.seek(Ticks(1920));
+        assert_eq!(session.playhead(), Ticks(1920));
+        session
+            .set_audio_preferences(AudioPreferences::default())
+            .unwrap();
+        assert!(session.audio_suspended());
+        assert_eq!(session.playhead(), Ticks(1920));
+        session.set_audio_suspended(false).unwrap();
+        assert!(!session.audio_status().running);
+        assert_eq!(session.project(), &before);
+        assert_eq!(session.revision(), revision);
+        assert!(session.undo().is_some());
+        assert!(session.project().tracks.is_empty());
+    }
+
+    #[test]
+    fn suspended_sessions_cannot_open_an_input() {
+        let mut session = session();
+        let track = session.add_audio_track("Input");
+        session.set_audio_suspended(true).unwrap();
+        assert!(session.set_track_monitoring(track, true).is_err());
+        assert!(session.start_recording(Some(track)).is_err());
+        assert!(!session.monitoring());
+        assert!(!session.is_recording());
     }
 
     #[test]

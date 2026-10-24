@@ -1721,6 +1721,8 @@ strings! {
         ja: "ステム書き出しの対象がありません。音を出すトラックを追加してください"
     }
     ErrorRecordingInProgress { en: "stop the recording before changing the audio device", ja: "オーディオデバイスを変更する前に録音を停止してください" }
+    OtherProjectRecording { en: "Another project is recording. Stop its recording before starting audio here.", ja: "別のプロジェクトで録音中です。そちらの録音を停止してから再生・録音を開始してください。" }
+    ProjectAudioSuspended { en: "Audio is now used by another project. Press Play to switch back.", ja: "音声出力を別のプロジェクトに切り替えました。再生ボタンでこのプロジェクトに戻せます。" }
     ErrorNotRecording { en: "no recording is running", ja: "録音していません" }
     ErrorNoVoice {
         en: "choose a voice model for this track first",

@@ -325,7 +325,7 @@ impl AurisApp {
                             theme.playing,
                             &theme,
                             cx.listener(|this, _, _, cx| {
-                                this.toggle_play();
+                                this.toggle_play(cx);
                                 cx.notify();
                             }),
                         )
@@ -984,8 +984,11 @@ impl AurisApp {
     /// than once. Somebody recording through an interface that monitors in hardware and who turns
     /// this on as well hears themselves twice, a few milliseconds apart, and the fix is to turn
     /// one of them off — which is only obvious to somebody who has been told there are two.
-    pub(crate) fn toggle_monitoring(&mut self, track: TrackId) {
+    pub(crate) fn toggle_monitoring(&mut self, track: TrackId, cx: &mut gpui::Context<Self>) {
         let wanted = !self.session.is_monitored(track);
+        if wanted && !self.acquire_audio(cx) {
+            return;
+        }
         if let Err(error) = self.session.set_track_monitoring(track, wanted) {
             let line = self.failure(Key::CmdToggleMonitoring, &error);
             self.set_failed_status(line);
@@ -1038,6 +1041,9 @@ impl AurisApp {
             self.finish_recording();
             return;
         }
+        if !self.acquire_audio(cx) {
+            return;
+        }
         match self.session.start_recording(self.selected_track) {
             Ok(()) => {
                 if !self.session.is_playing() {
@@ -1075,7 +1081,7 @@ impl AurisApp {
     }
 
     /// Puts a recording failure on the status line, named after the command that failed.
-    fn report_session_error(&mut self, error: &SessionError) {
+    pub(crate) fn report_session_error(&mut self, error: &SessionError) {
         let line = self.failure(Key::CmdRecord, error);
         self.set_failed_status(line);
     }

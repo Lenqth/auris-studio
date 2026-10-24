@@ -78,7 +78,10 @@ impl AurisApp {
             .cloned()
     }
 
-    fn play_ready_chords(&mut self) {
+    fn play_ready_chords(&mut self, cx: &mut Context<Self>) {
+        if !self.acquire_audio(cx) {
+            return;
+        }
         if let Some(preview) = &self.song_preview.ready {
             match self.session.play_chord_preview(preview) {
                 Ok(()) => {
@@ -111,7 +114,7 @@ impl AurisApp {
             return;
         }
         if !alternative && self.song_preview.ready.is_some() {
-            self.play_ready_chords();
+            self.play_ready_chords(cx);
             cx.notify();
             return;
         }
@@ -150,7 +153,7 @@ impl AurisApp {
                 match rendered {
                     Ok(preview) => {
                         this.song_preview.ready = Some(preview);
-                        this.play_ready_chords();
+                        this.play_ready_chords(cx);
                     }
                     Err(error) => {
                         this.song_preview.ready = fallback;

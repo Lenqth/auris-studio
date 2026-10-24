@@ -23,6 +23,21 @@
 //! each crate's own front page explains what that crate is for, and this one explains why the
 //! boundaries between them are where they are.
 //!
+//! # Multiple project windows
+//!
+//! Each desktop project window owns a separate session, undo history, recovery workspace,
+//! agent conversation and background jobs. File-open requests are routed by the application;
+//! an already-open path activates its existing window. Closing one project leaves the others
+//! alive. Application quit collects save decisions from every project before closing any.
+//!
+//! Realtime audio has one owner. Other sessions use [`crate::Session::set_audio_suspended`]
+//! to release hardware while retaining their documents and offline rendering capabilities.
+//! An explicit playback, recording or monitoring command transfers ownership; focus alone
+//! does not. A recording session refuses suspension. Headless sessions never acquire hardware.
+//! The desktop coordinates the windows; device lifecycle remains in the session layer.
+//! Settings editors save differences against their previous snapshots with
+//! [`crate::Settings::save_changes`] so an unrelated setting from another window survives.
+//!
 //! # Agent conversations
 //!
 //! A conversation also retains a bounded `memory.production.json` beside model memory.

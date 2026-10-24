@@ -112,7 +112,13 @@ impl Render for AurisApp {
             .get_or_insert(window.window_handle().window_id());
         self.singer_portraits.release_images(window);
         self.spectrograms.release_images(window);
-        if cfg!(target_os = "macos") {
+        if crate::project_windows::installed(cx)
+            && window.is_window_active()
+            && !self.main_was_active
+        {
+            self.refresh_shared_settings();
+        }
+        if cfg!(target_os = "macos") && window.is_window_active() {
             let state = crate::menu::MenuState {
                 can_undo: self.session.can_undo(),
                 can_redo: self.session.can_redo(),
@@ -124,7 +130,7 @@ impl Render for AurisApp {
                 musical_typing: self.session.typing_keyboard().enabled(),
             };
             let snapshot = (self.language(), self.panels.clone(), state);
-            if self.native_menu_snapshot.as_ref() != Some(&snapshot) {
+            if !self.main_was_active || self.native_menu_snapshot.as_ref() != Some(&snapshot) {
                 cx.set_menus(crate::menu::menus(snapshot.0, &snapshot.1, snapshot.2));
                 self.native_menu_snapshot = Some(snapshot);
             }
@@ -2068,7 +2074,7 @@ impl AurisApp {
                 _ => {}
             }
             true
-        } else if self.compose_progress.is_some() || self.typing_key(event) {
+        } else if self.compose_progress.is_some() || self.typing_key(event, cx) {
             true
         } else if self.menu.is_some() {
             self.menu_key(event, window, cx)
@@ -2275,7 +2281,7 @@ impl AurisApp {
     /// the mode is on — see [`crate::actions::reachable_from`]. A bound key never reaches a key
     /// listener in gpui, so there is nothing here that could have taken `k` back off the
     /// metronome by itself.
-    fn typing_key(&mut self, event: &gpui::KeyDownEvent) -> bool {
+    fn typing_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) -> bool {
         if event.keystroke.key == "escape" && self.cancel_drum_learn() {
             return true;
         }
@@ -2303,6 +2309,9 @@ impl AurisApp {
         };
         let before: std::collections::BTreeSet<_> =
             self.session.typing_keyboard().sounding().collect();
+        if MusicalTyping::role(key).is_some() && !self.acquire_audio(cx) {
+            return true;
+        }
         let claimed = self.session.typing_press(track, key);
         let learned = claimed.then(|| {
             self.session
@@ -2501,7 +2510,7 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.toggle_play();
+        self.toggle_play(cx);
         cx.notify();
     }
 
@@ -2589,7 +2598,7 @@ impl AurisApp {
             .copied()
             .or_else(|| self.record_target())
         {
-            Some(track) => self.toggle_monitoring(track),
+            Some(track) => self.toggle_monitoring(track, cx),
             None => {
                 let line =
                     self.failure(Key::CmdToggleMonitoring, &SessionError::NothingToRecordOnto);
@@ -2642,7 +2651,11 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.new_project_asking();
+        if crate::project_windows::installed(cx) {
+            crate::project_windows::open(None, cx);
+        } else {
+            self.new_project_asking();
+        }
         cx.notify();
     }
 
@@ -2652,6 +2665,10 @@ impl AurisApp {
 
     /// Apply the same save guard to keyboard, menu and native macOS termination requests.
     pub(crate) fn quit_asking(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::project_windows::installed(cx) {
+            crate::project_windows::request_quit(cx);
+            return;
+        }
         crate::termination::activate(window, cx);
         if self.compose_progress.is_some() {
             return;

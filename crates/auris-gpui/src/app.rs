@@ -1519,8 +1519,11 @@ pub(crate) struct DiskWatchTaskState {
     pub(crate) cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
-/// The whole application.
+/// One project window, its session and its editing state.
 pub struct AurisApp {
+    pub(crate) pending_audition: Option<crate::project_windows::AuditionRequest>,
+    pub(crate) opening_project: Option<std::path::PathBuf>,
+    pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
     pub(crate) session: Session,
 
@@ -1853,6 +1856,7 @@ pub struct AurisApp {
 
     /// Preferences that outlive the session.
     pub(crate) settings: Settings,
+    pub(crate) settings_baseline: std::rc::Rc<std::cell::RefCell<Settings>>,
     /// Language every string in the window is looked up in.
     pub(crate) language: Language,
     /// The user's key bindings.
@@ -1891,6 +1895,7 @@ fn session_options(settings: &Settings) -> SessionOptions {
         audio_preferences: settings.audio.clone(),
         autosave: settings.autosave && live,
         audio: live,
+        audio_suspended: live,
         gpu: live,
         shipped_fonts: live,
         soundfont_library: live.then(|| auris_session::config_dir().join("soundfonts.json")),
@@ -1950,8 +1955,24 @@ impl Drop for AurisApp {
 }
 
 impl AurisApp {
-    /// Builds the application, starting audio and opening an empty document.
+    /// Builds an empty project window with realtime audio initially suspended.
     pub fn new(cx: &mut Context<Self>) -> Self {
+        cx.on_release(|this, cx| {
+            let windows: Vec<gpui::AnyWindowHandle> = [
+                this.settings_window.map(Into::into),
+                this.voice_setup_window.map(Into::into),
+                this.rhythm_window.map(Into::into),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            cx.defer(move |cx| {
+                for handle in windows {
+                    let _ = handle.update(cx, |_, window, _| window.remove_window());
+                }
+            });
+        })
+        .detach();
         cx.on_app_quit(|this, cx| {
             if !this.update_helper_started
                 && let crate::ui::updates::UpdatePhase::Ready(update) = &this.update_phase
@@ -2040,6 +2061,7 @@ impl AurisApp {
                 cx.background_executor().timer(REPAINT_INTERVAL).await;
                 if this
                     .update(cx, |this, cx| {
+                        this.poll_pending_audition(cx);
                         this.session.poll();
                         this.poll_song_search();
                         // Here rather than while drawing, and here rather than in `poll`: the
@@ -2099,6 +2121,9 @@ impl AurisApp {
                 Err(error) => (Default::default(), Some(error.to_string())),
             };
         let mut app = Self {
+            pending_audition: None,
+            opening_project: None,
+            project_window: None,
             session,
             theme,
             appearance,
@@ -2230,6 +2255,7 @@ impl AurisApp {
             spectrogram_tracks: Default::default(),
             spectrograms: Default::default(),
             lane_scroll: px(0.0),
+            settings_baseline: std::rc::Rc::new(std::cell::RefCell::new(settings.clone())),
             settings,
             language,
             pointer: input.pointer,
@@ -2646,7 +2672,10 @@ impl AurisApp {
     }
 
     /// Starts or stops playback.
-    pub(crate) fn toggle_play(&mut self) {
+    pub(crate) fn toggle_play(&mut self, cx: &mut Context<Self>) {
+        if !self.session.is_playing() && !self.acquire_audio(cx) {
+            return;
+        }
         self.session.toggle_play();
     }
 
@@ -2860,6 +2889,11 @@ impl AurisApp {
         }
         self.stop_audition();
         self.session.play_note_selection_preview(&preview);
+        if self.session.audio_suspended() {
+            self.pending_audition = Some(crate::project_windows::AuditionRequest::Selection(
+                preview.clone(),
+            ));
+        }
         self.note_selection_preview = Some(preview);
     }
 
@@ -2889,7 +2923,7 @@ impl AurisApp {
     }
 
     /// Sounds a set of notes, replacing anything already sounding.
-    fn sound(
+    pub(crate) fn sound(
         &mut self,
         track: TrackId,
         pitches: Vec<u8>,
@@ -2897,6 +2931,15 @@ impl AurisApp {
         note_index: Option<usize>,
     ) {
         self.stop_audition();
+        if self.session.audio_suspended() {
+            self.pending_audition = Some(crate::project_windows::AuditionRequest::Notes {
+                track,
+                pitches,
+                velocity,
+                note_index,
+            });
+            return;
+        }
         // A voiced singer track auditions through its own voice: the grabbed note is sung
         // by the model off the main thread and played back as audio, so what a drag sounds
         // like is what the take will sing. The formant preview remains for tracks with no
@@ -2969,6 +3012,7 @@ impl AurisApp {
 
     /// Releases whatever is being auditioned.
     pub(crate) fn stop_audition(&mut self) {
+        self.pending_audition = None;
         if self.note_selection_preview.take().is_some() {
             self.session.stop_note_selection_preview();
         }
@@ -3153,7 +3197,7 @@ impl AurisApp {
     ) -> Result<String, SessionError> {
         self.session.set_audio_preferences(audio)?;
         self.settings.audio = self.session.audio_preferences().clone();
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
 
@@ -3170,7 +3214,7 @@ impl AurisApp {
     pub(crate) fn apply_language(&mut self, preference: Option<Language>, cx: &mut App) {
         self.settings.language = preference;
         self.language = self.settings.language();
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
         // The system menu bar belongs to the platform, not to a view, so it is rebuilt rather
@@ -3283,7 +3327,7 @@ impl AurisApp {
         }
         self.session.set_autosave(enabled);
         self.settings.autosave = enabled;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3291,7 +3335,7 @@ impl AurisApp {
     /// Turns note-length snapping on or off and remembers the choice.
     pub(crate) fn apply_snap_note_lengths(&mut self, enabled: bool) {
         self.settings.snap_note_lengths = enabled;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3299,7 +3343,7 @@ impl AurisApp {
     /// Installs and saves toolbar preferences without changing the document.
     pub(crate) fn apply_toolbar(&mut self, toolbar: auris_session::ToolbarPreferences) {
         self.settings.toolbar = toolbar;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             self.set_status(error.to_string());
         }
     }
@@ -3314,7 +3358,7 @@ impl AurisApp {
         self.sung_failures.clear();
         self.session.set_singer_acceleration(acceleration);
         self.settings.singer_acceleration = acceleration;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3332,7 +3376,7 @@ impl AurisApp {
             .set_japanese_dictionary(folder.as_deref())
             .map_err(|error| crate::i18n::error_text(&error, self.language()))?;
         self.settings.japanese_dictionary = folder;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
         Ok(())
@@ -3369,7 +3413,7 @@ impl AurisApp {
     /// while a window is dragged is a hundred writes to answer a question nobody asked yet.
     /// Best-effort, like every other preference.
     pub(crate) fn save_window_placement(&self) {
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3380,7 +3424,7 @@ impl AurisApp {
     /// unlike the audio preferences this cannot fail and has nothing to restart.
     pub(crate) fn apply_export(&mut self, export: ExportPreferences) {
         self.settings.export = export;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3401,6 +3445,9 @@ impl AurisApp {
 
     /// Opens the settings window, or brings the open one forward.
     pub(crate) fn open_settings(&mut self, cx: &mut Context<Self>) {
+        if crate::project_windows::installed(cx) {
+            self.refresh_shared_settings();
+        }
         if let Some(handle) = self.settings_window
             && handle
                 .update(cx, |_, window, _| window.activate_window())
@@ -3823,7 +3870,7 @@ mod hidden_panel_input_tests {
 }
 
 /// The status line describing what the audio backend ended up doing.
-fn audio_line(status: &auris_session::AudioStatus, language: Language) -> String {
+pub(crate) fn audio_line(status: &auris_session::AudioStatus, language: Language) -> String {
     let engine = if status.running {
         messages::audio_status(
             language,

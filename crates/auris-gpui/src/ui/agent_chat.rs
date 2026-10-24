@@ -2921,7 +2921,7 @@ impl AurisApp {
     /// The child read its configuration at spawn, so a change means a new child; dropping the
     /// link is enough, because the next message spawns one.
     pub(crate) fn agent_apply_settings(&mut self) -> Result<(), auris_session::SessionError> {
-        self.agent_apply_settings_with(|settings| settings.save())
+        self.agent_apply_settings_with(self.settings_saver())
     }
 
     fn agent_apply_settings_with<E>(
@@ -3328,13 +3328,8 @@ impl AurisApp {
                                     &theme,
                                     cx.listener(|this, _, _, cx| {
                                         if let Some(path) = this.agent_chat.produced_project.clone()
-                                            && this.confirm_discard(
-                                                crate::ui::prompt::PendingAction::OpenDropped(
-                                                    path.clone(),
-                                                ),
-                                            )
                                         {
-                                            this.open_project_at(path, cx);
+                                            this.open_project_window(path, cx);
                                         }
                                     }),
                                 ))
@@ -3963,7 +3958,7 @@ impl AurisApp {
 
     /// Applies one model choice immediately, just like a pointer selection.
     fn choose_agent_model(&mut self, index: usize) {
-        let result = self.choose_agent_model_with(index, |settings| settings.save());
+        let result = self.choose_agent_model_with(index, self.settings_saver());
         if let Err(error) = result {
             let message = crate::i18n::error_text(&error, self.language());
             self.agent_chat.models_error = Some(message);

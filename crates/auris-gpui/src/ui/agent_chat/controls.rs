@@ -275,7 +275,7 @@ impl AurisApp {
     }
 
     fn save_agent_policy(&mut self, previous: AgentPreferences) {
-        if let Err(error) = self.save_agent_policy_with(previous, |settings| settings.save()) {
+        if let Err(error) = self.save_agent_policy_with(previous, self.settings_saver()) {
             self.agent_chat
                 .push_entry(ChatEntry::Error(error.to_string()));
         }
@@ -312,7 +312,7 @@ impl AurisApp {
         self.agent_chat.effort = effort;
         self.agent_chat.thinking = None;
         self.agent_chat.controls.effort_menu = false;
-        if let Err(error) = self.agent_write_through_with(|settings| settings.save()) {
+        if let Err(error) = self.agent_write_through_with(self.settings_saver()) {
             (self.agent_chat.effort, self.agent_chat.thinking) = previous;
             self.agent_chat
                 .push_entry(ChatEntry::Error(error.to_string()));
@@ -396,8 +396,9 @@ impl AurisApp {
     }
 
     pub(super) fn agent_approval(&mut self, answer: Approval) {
+        let save = self.settings_saver();
         let result = self.agent_approval_with_save(answer, |settings| {
-            settings.save().map_err(|error| error.to_string())
+            save(settings).map_err(|error| error.to_string())
         });
         if let Err(error) = result {
             self.agent_chat.push_entry(ChatEntry::Error(error));
