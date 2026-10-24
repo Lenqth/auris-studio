@@ -136,6 +136,7 @@ impl AurisApp {
     /// Opens the editor for one plugin, replacing whatever was open.
     pub(crate) fn open_plugin_window(&mut self, subject: PluginSubject) {
         self.close_physical_view();
+        self.parameter_list = Default::default();
         self.plugin_window = Some(PluginWindow { subject });
         self.raise_auxiliary = Some(crate::auxiliary_window::Surface::Plugin);
     }
@@ -236,14 +237,36 @@ impl AurisApp {
             }
             _ => None,
         };
-        let controls = self.param_controls(
-            &descriptors,
-            move |param| subject.param_target(param),
-            subject.id_prefix(),
-            cx,
-        );
-
         let physical = self.physical_model_display(cx);
+        // The native editor leaves this window open behind it. Building thousands of hidden
+        // controls on every meter tick otherwise starves the same UI thread that drives it.
+        let body = if descriptors.len() > 128 && physical.is_none() {
+            self.parameter_list(
+                descriptors,
+                move |param| subject.param_target(param),
+                subject.id_prefix(),
+                cx,
+            )
+        } else {
+            div()
+                .id("pw-body")
+                .debug_selector(|| "pw-body".into())
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .p_2()
+                .children(physical)
+                .children(self.param_controls(
+                    &descriptors,
+                    move |param| subject.param_target(param),
+                    subject.id_prefix(),
+                    cx,
+                ))
+                .into_any_element()
+        };
         Some(
             div()
                 .size_full()
@@ -345,20 +368,7 @@ impl AurisApp {
                         .into_any_element()
                 }))
                 .children(caution.map(|key| caution_strip(self.t(key), &theme)))
-                .child(
-                    div()
-                        .id("pw-body")
-                        .debug_selector(|| "pw-body".into())
-                        .flex_1()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .p_2()
-                        .children(physical)
-                        .children(controls),
-                )
+                .child(body)
                 .into_any_element(),
         )
     }
@@ -402,6 +412,157 @@ impl AurisApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        static PARAMETER_ROWS_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    struct LargeParameterEditor {
+        app: gpui::Entity<AurisApp>,
+        descriptors: std::sync::Arc<Vec<ParamDescriptor>>,
+    }
+
+    impl gpui::Render for LargeParameterEditor {
+        fn render(
+            &mut self,
+            _: &mut gpui::Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            let list = self.app.update(cx, |app, cx| {
+                app.parameter_list(
+                    self.descriptors.clone(),
+                    |param| {
+                        PARAMETER_ROWS_BUILT.with(|count| count.set(count.get() + 1));
+                        ParamTarget::Instrument {
+                            track: TrackId(1),
+                            param,
+                        }
+                    },
+                    "large-test",
+                    cx,
+                )
+            });
+            div()
+                .key_context(crate::actions::KEY_CONTEXT)
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(list)
+        }
+    }
+
+    fn large_parameter_editor(
+        cx: &mut gpui::TestAppContext,
+    ) -> (gpui::Entity<AurisApp>, &mut gpui::VisualTestContext) {
+        let (app, _) = crate::harness::open(cx);
+        let descriptors = std::sync::Arc::new(
+            (0..3000)
+                .map(|id| ParamDescriptor::new(ParamId(id), "test", "Parameter", 0., 1., 0.5))
+                .collect(),
+        );
+        PARAMETER_ROWS_BUILT.with(|count| count.set(0));
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            cx.observe(&app, |_, _, cx| cx.notify()).detach();
+            LargeParameterEditor {
+                app: app.clone(),
+                descriptors,
+            }
+        });
+        cx.run_until_parked();
+        (app, cx)
+    }
+
+    #[gpui::test]
+    fn large_parameter_editor_builds_only_visible_rows(cx: &mut gpui::TestAppContext) {
+        let (_, _) = large_parameter_editor(cx);
+        let built = PARAMETER_ROWS_BUILT.with(|count| count.get());
+        assert!(
+            built > 0 && built < 200,
+            "built {built} rows for a 3000-parameter plugin"
+        );
+    }
+
+    #[gpui::test]
+    fn large_parameter_editor_scrolls_to_the_last_parameter(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = large_parameter_editor(cx);
+        let body = cx.debug_bounds("pw-body").unwrap();
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position: body.center(),
+            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-1_000_000.))),
+            ..Default::default()
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("large-test-param-2999").is_some());
+    }
+
+    #[gpui::test]
+    fn large_parameter_editor_tabs_across_unrendered_rows(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = large_parameter_editor(cx);
+        cx.update(|window, cx| {
+            window.focus(&app.read(cx).parameter_list.rows[0]);
+            window.focus_next();
+        });
+        for _ in 0..60 {
+            cx.simulate_keystrokes("tab");
+            cx.run_until_parked();
+        }
+        cx.update(|window, cx| {
+            let rows = &app.read(cx).parameter_list.rows;
+            assert!(
+                rows[60].contains_focused(window, cx),
+                "focused row: {:?}",
+                rows.iter().position(|row| row.contains_focused(window, cx))
+            );
+        });
+        for _ in 0..60 {
+            cx.simulate_keystrokes("shift-tab");
+            cx.run_until_parked();
+        }
+        cx.update(|window, cx| {
+            assert!(app.read(cx).parameter_list.rows[0].contains_focused(window, cx));
+        });
+    }
+
+    #[gpui::test]
+    #[ignore = "requires AURIS_VST3_SMOKE_PLUGIN; measures the real plugin parameter window"]
+    fn external_plugin_window_frame_cost(cx: &mut gpui::TestAppContext) {
+        use crate::{auxiliary_window::Surface, harness};
+        let path = std::path::PathBuf::from(std::env::var_os("AURIS_VST3_SMOKE_PLUGIN").unwrap());
+        let (app, cx) = harness::open(cx);
+        let track = app.update(cx, |app, _| {
+            let info = app.session.vst3_plugins_in(&path).unwrap().remove(0);
+            let track = app
+                .session
+                .add_default_instrument_track("External")
+                .unwrap();
+            app.session
+                .set_vst3_instrument(track, &path, &info.class_id)
+                .unwrap();
+            track
+        });
+        harness::paint(&app, cx);
+        app.update(cx, |app, _| {
+            app.open_plugin_window(PluginSubject::Instrument(track))
+        });
+        harness::paint(&app, cx);
+        let handle = app.read_with(cx, |app, _| app.auxiliary_windows[&Surface::Plugin]);
+        let mut utility = gpui::VisualTestContext::from_window(handle.into(), cx);
+        let count = app.update(&mut utility, |app, _| {
+            app.session.instrument_descriptors(track).len()
+        });
+        assert!(
+            count > 1000,
+            "use a large plugin for this regression: {count}"
+        );
+        let start = std::time::Instant::now();
+        for _ in 0..30 {
+            harness::paint(&app, &mut utility);
+        }
+        eprintln!(
+            "{count} parameters, 30 host editor frames: {:?}",
+            start.elapsed()
+        );
+    }
 
     #[test]
     fn closing_a_plugin_window_stops_its_analysis_before_taking_it() {

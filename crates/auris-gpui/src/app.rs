@@ -1740,6 +1740,7 @@ pub struct AurisApp {
     pub(crate) palette: Option<crate::ui::palette::Palette>,
     /// The open plugin editor, if any.
     pub(crate) plugin_window: Option<crate::ui::plugin_window::PluginWindow>,
+    pub(crate) parameter_list: crate::ui::inspector::ParameterListState,
     /// Native utility and detached panel windows sharing this document.
     pub(crate) auxiliary_windows: std::collections::BTreeMap<
         crate::auxiliary_window::Surface,
@@ -2191,6 +2192,7 @@ impl AurisApp {
             recovery_queue,
             palette: None,
             plugin_window: None,
+            parameter_list: Default::default(),
             auxiliary_windows: Default::default(),
             main_was_active: false,
             event_window: None,
