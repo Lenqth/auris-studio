@@ -35,7 +35,8 @@ pub enum Category {
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
-    /// Stable key for replacement, up to 64 ASCII letters/digits/underscores/hyphens.
+    /// Stable key for replacement, up to 64 ASCII letters/digits/dots/underscores/hyphens.
+    #[schemars(length(min = 1, max = 64), regex(pattern = r"^[A-Za-z0-9_.-]+$"))]
     pub key: String,
     /// Musical category.
     pub category: Category,
@@ -149,7 +150,7 @@ impl Record {
                     || !entry
                         .key
                         .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
                     || entry.text.trim().is_empty()
                     || entry.text.len() > 2048
                     || entry.basis.trim().is_empty()
@@ -276,6 +277,32 @@ pub fn verification_regions(project: &Project) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dotted_production_keys_survive_replacement_and_resume() {
+        let mut record = Record::default();
+        for text in ["first", "updated"] {
+            record
+                .update(Operation::Put {
+                    entry: Entry {
+                        key: "local_edit.validation.intent".into(),
+                        category: Category::Intent,
+                        source: Source::AgentAssumption,
+                        basis: "runtime trial".into(),
+                        text: text.into(),
+                        clips: vec![],
+                    },
+                })
+                .unwrap();
+        }
+        let restored: Record =
+            serde_json::from_slice(&serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(restored.entries.len(), 1);
+        assert_eq!(restored.entries[0].text, "updated");
+        let mut invalid = restored.entries[0].clone();
+        invalid.key = "not/a/path".into();
+        assert!(record.update(Operation::Put { entry: invalid }).is_err());
+        assert_eq!(record.entries.len(), 1);
+    }
     #[test]
     fn evidence_invalidates_on_revision_or_document_and_never_verifies_human_listening() {
         let mut record = Record::default();
