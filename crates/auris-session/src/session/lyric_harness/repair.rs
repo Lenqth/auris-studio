@@ -17,7 +17,11 @@ fn musical_slots(notes: &[(usize, &Note)]) -> Vec<serde_json::Value> {
 }
 
 fn note_labels(candidate: &LyricCandidate, moras: &[MoraAnalysis]) -> Vec<String> {
-    if candidate.reading.is_some() || split_kana_lyric(candidate.text.trim()).is_none() {
+    let written: String = moras.iter().map(|m| m.text.as_str()).collect();
+    if candidate.reading.is_some()
+        || written != candidate.text.trim()
+        || split_kana_lyric(candidate.text.trim()).is_none()
+    {
         // Match write_lyrics: retain the original surface on the first note, while each
         // continuation carries its own explicit pronunciation rather than guessing a reading.
         std::iter::once(candidate.text.trim().to_string())
@@ -411,6 +415,7 @@ impl Session {
                     }
                 }
             }
+            self.sync_singer_clip_names();
             applied = true;
         }
         Ok(serde_json::json!({

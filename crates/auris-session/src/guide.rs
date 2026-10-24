@@ -2105,6 +2105,14 @@ pub mod singing {
     //! writes both fields; [`Session::set_note_phonemes`](crate::Session::set_note_phonemes)
     //! writes the phonemes alone and leaves the word as spelt.
     //!
+    //! Singer clip names contain the complete written lyrics in note-onset order, excluding
+    //! `+` continuation markers. They are derived by the session without shortening or using
+    //! phonemes. Composition retains the original section text; when mora labels cannot retain
+    //! its exact spelling, the first note carries the original text and the rest carry `+`,
+    //! with pronunciation still pinned separately on every note. A split through a continuation
+    //! carries the written word into the new clip. Lyric writing rejects insufficient note slots
+    //! before recording an edit, so neither the score nor its name silently loses the tail.
+    //!
     //! Which corrections reach the sound is a backend capability, exposed through
     //! [`Session::singer_capabilities`](crate::Session::singer_capabilities) and
     //! [`VoiceCapabilities`](crate::VoiceCapabilities). VOICEVOX derives pronunciation and

@@ -307,6 +307,7 @@ impl Session {
             // A pin belongs to the phoneme it was placed on; the new word has new ones.
             note.phoneme_seconds.clear();
         }
+        self.sync_singer_clip_names();
         Ok(())
     }
 
@@ -373,7 +374,7 @@ impl Session {
         // Each note's new words, worked out in full before anything is recorded. The moras come
         // with their phonemes attached — asking `kana_phonemes` of each mora on its own would
         // lose ー its vowel, which only the mora before it knows.
-        let portions: Vec<(String, Vec<String>)> = match split_kana_lyric(text.trim()) {
+        let mut portions: Vec<(String, Vec<String>)> = match split_kana_lyric(text.trim()) {
             Some(moras) => moras,
             None => {
                 let phonemes = lyric_phonemes(text, self.japanese.as_ref())?;
@@ -388,7 +389,30 @@ impl Session {
             }
         };
 
-        let filled = order.len().min(portions.len());
+        if portions.len() > order.len() {
+            return Err(SessionError::InvalidNotes(format!(
+                "Lyrics require {} note slots, but only {} are available; add notes or shorten the lyrics explicitly",
+                portions.len(),
+                order.len()
+            )));
+        }
+        // Kana can stay on individual notes when doing so preserves the exact surface.
+        // Punctuation, spacing, kanji and other graphemes must survive pronunciation parsing.
+        let surface: String = portions
+            .iter()
+            .filter(|(text, _)| text != LYRIC_CONTINUATION)
+            .map(|(text, _)| text.as_str())
+            .collect();
+        if surface != text.trim() {
+            for (index, (lyric, _)) in portions.iter_mut().enumerate() {
+                *lyric = if index == 0 {
+                    text.trim().to_owned()
+                } else {
+                    LYRIC_CONTINUATION.to_owned()
+                };
+            }
+        }
+        let filled = portions.len();
         if filled == 0 {
             return Ok(0);
         }
@@ -404,6 +428,7 @@ impl Session {
                 }
             }
         }
+        self.sync_singer_clip_names();
         Ok(filled)
     }
 
@@ -4124,6 +4149,31 @@ mod tests {
         assert_eq!(filled, 2);
         let notes = &session.midi_clip(clip).unwrap().notes;
         assert_eq!(notes[2].lyric, "ら", "the third note keeps its word");
+    }
+
+    #[test]
+    fn singer_clip_names_keep_complete_written_lyrics_and_undo() {
+        let (mut session, _, clip) = sung(80);
+        let text = "さくらさいた".repeat(10);
+        session
+            .write_lyrics(clip, &(0..80).collect::<Vec<_>>(), &text)
+            .unwrap();
+        assert_eq!(session.midi_clip(clip).unwrap().name, text);
+        let before = session.project().clone();
+        session.set_note_lyric(clip, 79, "は").unwrap();
+        assert_eq!(session.midi_clip(clip).unwrap().name, format!("{text}は"));
+        session.undo();
+        assert_eq!(session.project(), &before);
+        assert!(session.rename_clip(clip, "Verse…").is_err());
+        assert_eq!(session.midi_clip(clip).unwrap().name, text);
+    }
+
+    #[test]
+    fn lyrics_that_do_not_fit_are_rejected_without_truncation_or_history() {
+        let (mut session, _, clip) = sung(2);
+        let before = session.project().clone();
+        assert!(session.write_lyrics(clip, &[0, 1], "さくら").is_err());
+        assert_eq!(session.project(), &before);
     }
 
     #[test]

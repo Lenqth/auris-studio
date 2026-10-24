@@ -104,6 +104,45 @@ fn settle_debounce(app: &mut AurisApp) {
 }
 
 #[gpui::test]
+fn agent_lyrics_name_the_complete_singer_clip_and_undo_with_the_score(cx: &mut TestAppContext) {
+    let (app, cx) = open(cx);
+    let text = "サクラサイタ".repeat(8);
+    app.update(cx, |this, _| {
+        let track = this.session.add_singer_track("Singer");
+        let clip = this
+            .session
+            .add_midi_clip(track, "Verse", Ticks::ZERO, Ticks(480 * 48))
+            .unwrap();
+        this.session
+            .replace_notes(
+                clip,
+                (0..48)
+                    .map(|index| Note::new(60, Ticks(index * 480), Ticks(480)))
+                    .collect(),
+            )
+            .unwrap();
+        let before = this.session.project().clone();
+        this.session
+            .agent_command(auris_session::live_agent::Command::WriteLyrics {
+                clip: clip.0,
+                text: text.clone(),
+                from: None,
+            })
+            .unwrap();
+        assert_eq!(this.session.midi_clip(clip).unwrap().name, text);
+        assert_eq!(
+            this.session.midi_clip(clip).unwrap().notes[0].phonemes,
+            ["s", "a"]
+        );
+        this.session.undo();
+        assert_eq!(this.session.project(), &before);
+        this.session.redo();
+        assert_eq!(this.session.midi_clip(clip).unwrap().name, text);
+    });
+    crate::harness::paint(&app, cx);
+}
+
+#[gpui::test]
 fn invalid_singer_lyrics_reveal_and_highlight_the_editable_note(cx: &mut TestAppContext) {
     let scratch = Scratch::new("invalid-lyric");
     let voice = scratch.voice("singer.voicevox.json");
