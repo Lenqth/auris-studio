@@ -36,11 +36,12 @@ impl ToolGroups {
     pub fn instructions(&self) -> String {
         if self.0.is_empty() || self.0.iter().any(|g| g == "all") {
             return format!(
-                "{INSTRUCTIONS}{}{}{}{}",
+                "{INSTRUCTIONS}{}{}{}{}{}",
                 crate::MELODY_PHRASING_INSTRUCTIONS,
                 crate::ACCOMPANIMENT_INSTRUCTIONS,
                 crate::PERFORMANCE_INSTRUCTIONS,
-                crate::arrangement_instructions()
+                crate::arrangement_instructions(),
+                crate::composition_workflows::VOCAL_SONG_FORM
             );
         }
         let mut text = String::from(
@@ -64,6 +65,13 @@ impl ToolGroups {
         }
         if self.allows("set_performance") {
             text.push_str(crate::PERFORMANCE_INSTRUCTIONS);
+        }
+        if self
+            .0
+            .iter()
+            .any(|g| matches!(g.as_str(), "manual" | "vocals" | "composition"))
+        {
+            text.push_str(crate::composition_workflows::VOCAL_SONG_FORM);
         }
         if self
             .0
@@ -343,6 +351,22 @@ mod tests {
                 .contains(crate::ACCOMPANIMENT_INSTRUCTIONS)
         );
         let mix = ToolGroups::parse("mix").unwrap();
+        for groups in [
+            ToolGroups::default(),
+            manual,
+            composition,
+            ToolGroups::parse("vocals").unwrap(),
+        ] {
+            assert!(
+                groups
+                    .instructions()
+                    .contains(crate::composition_workflows::VOCAL_SONG_FORM)
+            );
+        }
+        assert!(
+            !mix.instructions()
+                .contains(crate::composition_workflows::VOCAL_SONG_FORM)
+        );
         assert!(!mix.allows("accompaniment"));
         assert!(!mix.allows("suggest_harmony"));
         assert!(

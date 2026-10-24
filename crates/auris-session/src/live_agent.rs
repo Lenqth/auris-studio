@@ -302,13 +302,16 @@ pub enum Command {
         #[serde(default)]
         offset: usize,
     },
-    /// Read one singer's selected voice, available speakers, and whether its take is missing, current or stale. Does not load a model. Call after voice selection, lyrics, and singing to verify the result.
+    /// Read voice, speakers, take state and section_coverage of note/lyric onsets. Follow next_section_offset and compare later sung sections with the plan. Read-only; no model loading.
     InspectSinger {
         /// Stable singer track ID.
         track: u64,
         /// Zero-based speaker offset; follow next_offset for voices with more than 128 speakers.
         #[serde(default)]
         offset: usize,
+        /// Zero-based section page offset, independent of speaker offset. Follow section_coverage.next_section_offset.
+        #[serde(default)]
+        section_offset: usize,
     },
     /// Choose a local installed singing voice and optional speaker for a singer track. Use list_voices for paths, then inspect_singer for speaker names. To change speaker, repeat the selected voice path with a speaker. Validates before editing; failure leaves the track unchanged. One transaction. Remote network/device model paths and remote VOICEVOX servers are refused; local loopback VOICEVOX is supported.
     SetSingerVoice {
@@ -805,9 +808,11 @@ impl Session {
                         .to_string(),
                 )
             }
-            Command::InspectSinger { track, offset } => {
-                self.agent_inspect_singer(TrackId(track), offset)
-            }
+            Command::InspectSinger {
+                track,
+                offset,
+                section_offset,
+            } => self.agent_inspect_singer(TrackId(track), offset, section_offset),
             command @ (Command::Accompaniment { .. }
             | Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }

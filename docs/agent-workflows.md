@@ -327,6 +327,40 @@ outline do not create section metadata. A short loop can remain one section.
 
 ### Live vocal production
 
+The shared harness treats a new vocal-song request without a short-form limit as
+a complete song: plan and write the second verse and later chorus/ending as well
+as the first verse. Explicit lengths, one-chorus demos, excerpts and local edits
+retain their requested scope. Plan actual section ranges before writing notes;
+give later verses their own lyrics and narrative development, with intentional
+melodic reuse and accompaniment changes. A first-verse sketch is an intermediate
+result. This guidance applies to both default and experimental prompt profiles.
+
+`inspect_singer` includes `section_coverage`, even without a selected voice or a
+rendered take. Named sections report note attacks, lyric-bearing notes, phoneme
+assignments, continuation markers, unassigned notes and attacks from clip loops.
+Use `section_coverage.next_section_offset` as `section_offset` to read the next
+page of at most 32 sections; this is independent of speaker-list `offset`.
+Explicit section endings include planned later sections beyond the current score.
+`unbounded_last_section` flags a final label with no inferable positive range.
+Counts cover authored onsets in unmuted clips, before performance; sustained notes
+count only where they begin. `track_muted` separately reports the track state.
+Inspection is read-only and caps note checks at 100,000 per page. A section with
+`analysis_complete:false` has partial counts, which cannot establish absence.
+
+Compare coverage with the planned sung sections and read back their actual
+notes/lyrics. Empty instrumental introductions, breaks and endings are valid.
+Looped lyrics do not establish a newly written second verse; positive counts or
+a current take alone do not establish complete lyrics, correct pronunciation or
+musical quality. Synthesize the complete score when requested. If synthesis is
+blocked, preserve the score and report the specific unfinished work.
+
+The [vocal form smoke cases](../tools/eval/references/vocal-song-form-v1.json)
+exercise an unspecified song and a 16-bar one-chorus request. Run them with
+`composition_quality.py run --manifest tools/eval/references/vocal-song-form-v1.json
+--no-candidate-tools --repetitions 1` and the normal executable/output arguments.
+The [recorded score checks](../tools/eval/references/vocal-song-form-validation-2026-10-24.json)
+cover initial completion and readback; they do not evaluate singing or listening quality.
+
 `edit_vocal_notes` applies 1..256 ordered lyric, phoneme, timing-pin or pitch-ornament
 corrections to one singer clip. Supply `expected_revision` from `read_notes`.
 `inspect_singer` reports manual-phoneme/timing support and the model frame hop;

@@ -306,7 +306,11 @@ fn preamble() -> String {
 
 fn preamble_for_profile(modular: bool) -> String {
     if modular {
-        return toolbox::composition_workflows::COMMON.to_owned();
+        return format!(
+            "{}{}",
+            toolbox::composition_workflows::COMMON,
+            toolbox::composition_workflows::VOCAL_SONG_FORM
+        );
     }
     let mut text = "You edit the document currently open in Auris Studio. Answer in the user's language.
 Call inspect_project first. Use the operation-specific tools with flat JSON arguments,
@@ -314,8 +318,8 @@ without command or action wrappers. Use the numeric IDs returned by inspection a
 On resume, read its production_record context. Keep intent, roles, motifs, decisions and unresolved issues in production_record with explicit user quotes or agent assumptions. Refresh inspect_project after edits before verification; old observations cannot verify the new revision. Check section excerpts, transitions, ending and loop seam; report unverified coverage honestly.
 For a song request, choose the harmony, melody, rhythm and arrangement yourself.
 For a new composition, use edit_harmony to write the chosen key and Roman-numeral chord progression into the document before writing the notes. Audible chord notes alone do not populate the project's harmony map. Update an existing progression only when the requested edit calls for it; edit_harmony never regenerates existing notes.
-Plan the song's form too, and write each section with edit_harmony section, start_bar and bars (section alone is valid). Use meaningful labels such as Intro, Verse, Chorus, Bridge and Outro where musically appropriate, in the user's language if requested. Clip names or a prose outline do not populate the section lane. Cover the intended arrangement with named sections and verify their positions and lengths with inspect_project before claiming a new composition is finished. Keep short loops or explicitly requested single-section pieces simple; preserve existing structure on local edits.
-For a vocal song, add_track kind singer, add_clip and edit_notes create the score. list_voices discovers local voice paths; set_singer_voice selects a voice and optional named speaker. inspect_singer reads back the selected voice, offered speakers and take state. write_lyrics uses the singer clip ID and optional zero-based storage index from read_notes; verify the filled count and lyrics. analyze_lyrics establishes readings/moras; diagnose_song checks specs or explicit live phrase comparisons without editing. Before a local repair, read_notes and diagnose_song, then use repair_lyrics with fixed target/reference/required_keywords. Preview at most three alternatives and apply only a passing candidate with the unchanged revision. Recheck all related phrases and review semantic preservation. Stop after three alternatives; report unresolved diagnostics and the contract changes needed. Diagnostic reading overrides do not persist; repair_lyrics applies a reading to target note slots. A structural pass is not an artistic or semantic judgment. Then sing creates the actual playback take on a worker; inspect_singer must report a current take before claiming vocals are finished. Missing voices, unavailable synthesis servers and failed/cancelled synthesis are errors, never completed vocals. These live operations leave the document unsaved and are undoable.
+For new compositions, write the intended form with edit_harmony section, start_bar and bars; section alone is valid. Clip names and prose do not populate the section lane. Verify positions/lengths with inspect_project. Respect short forms and preserve structure on local edits.
+For vocals, add_track kind singer, add_clip and edit_notes create the score. list_voices/set_singer_voice select an installed voice; write_lyrics assigns words. Verify filled slots with read_notes. analyze_lyrics supplies readings; diagnose_song checks phrase fit. For repair_lyrics fix target/reference/required_keywords, preview at most three alternatives and apply only a passing candidate at the unchanged revision. Recheck related phrases and meaning; diagnostic readings do not persist. A structural pass is not artistic approval. sing creates playback; inspect_singer must confirm a current take before claiming synthesis finished. Missing voices and failed/cancelled synthesis remain unresolved.
 
 For alternative audio transcription, export_audio_attachment returns a separate exact-original local file plus its byte hash. Analyze it with local tools/code when available; delivery is not listening. Import your complete source-second note JSON with import_transcription, inline or by absolute local path; at_tick is the absolute insertion tick. Declare the real method/model/program hash and uncertainty; never impersonate Basic Pitch or invent notes from filenames/tempo/chords. Supply every note's relative strength; if dynamics were not measured, disclose uniform dynamics in limitations. Provenance claims are not verification. Use transcribe_audio with explicit backend kind yin, basic_pitch or muscriptor; recognition returns draft_id without editing. Then import_transcription explicitly accepts it. Read back notes and inspect_audio before claiming a finished cover.
 Use search_instruments with request {\"mode\":\"text\",\"query\":\"piano\"} for focused search.
@@ -372,6 +376,7 @@ unchanged unless the user's request or other evidence supports an edit. Never in
 Listening does not save, normalize or repair the mix: use source measurements to correct overloads."
         .to_owned();
     text.push_str(toolbox::MELODY_PHRASING_INSTRUCTIONS);
+    text.push_str(toolbox::composition_workflows::VOCAL_SONG_FORM);
     text.push_str(toolbox::ACCOMPANIMENT_INSTRUCTIONS);
     text.push_str(toolbox::PERFORMANCE_INSTRUCTIONS);
     text.push_str(toolbox::arrangement_instructions());
@@ -1363,6 +1368,7 @@ mod tests {
         let modular = preamble_for_profile(true);
         let legacy = preamble_for_profile(false);
         for text in [&modular, &legacy] {
+            assert!(text.contains(toolbox::composition_workflows::VOCAL_SONG_FORM));
             for contract in [
                 "inspect_project",
                 "read_notes",

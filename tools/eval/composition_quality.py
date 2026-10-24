@@ -113,7 +113,7 @@ def run(args) -> None:
         "model": args.model,
         "backend": getattr(args, "backend", "codex"),
         "prompt_profile": getattr(args, "prompt_profile", "legacy"),
-        "candidate_tools_enabled": True,
+        "candidate_tools_enabled": args.candidate_tools,
         "context_tokens": args.context_tokens,
         "runner_sha256": digest(Path(__file__)),
         "split": args.split,
@@ -192,7 +192,7 @@ def run(args) -> None:
                 if provenance["prompt_profile"] == "modular"
                 else "0",
                 AURIS_ARRANGEMENT_HARNESS="0",
-                AURIS_COMPOSITION_CANDIDATES="1",
+                AURIS_COMPOSITION_CANDIDATES="1" if args.candidate_tools else "0",
             )
             started = time.monotonic()
             with (output / f"{trial_id}.log").open("w", encoding="utf-8") as log:
@@ -364,6 +364,12 @@ def main() -> None:
     )
     runner.add_argument(
         "--prompt-profile", choices=["legacy", "modular"], default="legacy"
+    )
+    runner.add_argument(
+        "--candidate-tools",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Advertise candidate tools (use --no-candidate-tools for the default app catalog)",
     )
     runner.add_argument(
         "--source-suite",

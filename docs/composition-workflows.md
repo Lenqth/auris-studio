@@ -6,9 +6,16 @@ same, so prompt experiments do not silently compare different tools. The default
 continues to use the existing prompt until listening evidence supports a change.
 Use `AURIS_COMPOSITION_CANDIDATES=1` independently to advertise candidate tools;
 keep that flag equal in both prompt conditions. The evaluation runner enables it
-in both conditions. Its local-model context defaults to 64k and can be recorded
+in both conditions; use `--no-candidate-tools` to test the default application
+catalog instead. Its local-model context defaults to 64k and can be recorded
 explicitly with `--context-tokens`; a larger budget in an experiment does not
 change application defaults.
+
+Both profiles share the full vocal-song form guidance: unspecified new songs
+include a second verse and later chorus/ending, while explicit short forms and
+local edits keep their scope. The default profile therefore gets this behavior
+without enabling experimental workflows. See [live vocal production](agent-workflows.md#live-vocal-production)
+for section coverage and score readback.
 
 `production_record` accepts `select_workflow` with `workflow` (`composition`,
 `accompaniment`, `vocals`, `local_edit`, `delivery`) and `writing_order`
