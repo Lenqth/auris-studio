@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "source_commit": "6a717c5d7d607e2a32c30f5d5682dd6b33890182",
+  "source_snapshot": "target/vocal-song-form-2026-10-24/full_vocal_song-01/project-02.json",
+  "source_sha256": "f5498c9d7bdb843b870b6aecb80f364e9c925ff02bcb6948422065ca657cb363",
+  "method": "Synthesize the unchanged complete score with auris sing; render its saved take with auris render; inspect freshness through the canonical MCP inspect_singer command; measure waveform regions and transcribe both vocal-only and mix without a lyric prompt.",
+  "score_and_mix_settings_unchanged": true,
+  "voice": {
+    "engine": "VOICEVOX 0.26.0",
+    "speaker": "ずんだもん / ノーマル",
+    "query_style_id": 6000,
+    "decode_style_id": 3003,
+    "seed": 0
+  },
+  "take_state": "current",
+  "vocal_seconds": 86.112,
+  "last_authored_note_end_seconds": 86.1,
+  "mix_seconds": 96.0,
+  "mix_measurements": {
+    "peak_dbfs": -6.73,
+    "rms_dbfs": -23.17,
+    "clipped_samples": 0,
+    "finite": true
+  },
+  "regions": [
+    {
+      "region": "verse-2",
+      "start_seconds": 48,
+      "end_seconds": 67.2,
+      "notes": 31,
+      "unassigned": 0,
+      "notes_below_minus_60_dbfs": [],
+      "vocal": {
+        "peak_dbfs": -7.49,
+        "rms_dbfs": -24.3,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "mix": {
+        "peak_dbfs": -6.73,
+        "rms_dbfs": -24.13,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "expected_lyrics": "とおまわりのひもむだじゃなかったねぬれたくつのままひかりをさがす"
+    },
+    {
+      "region": "final-chorus",
+      "start_seconds": 67.2,
+      "end_seconds": 86.4,
+      "notes": 33,
+      "unassigned": 0,
+      "notes_below_minus_60_dbfs": [],
+      "vocal": {
+        "peak_dbfs": -7.07,
+        "rms_dbfs": -21.34,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "mix": {
+        "peak_dbfs": -6.79,
+        "rms_dbfs": -21.34,
+        "clipped_samples": 0,
+        "finite": true
+      },
+      "expected_lyrics": "くものむこうへとあしたをむかえにちいさないっぽをあしたへつないでく"
+    }
+  ],
+  "ending": [
+    {
+      "audio": "vocal",
+      "seconds": 86.112,
+      "last_active_above_minus_80_seconds": 86.11195833333333,
+      "last_100ms_rms_dbfs": -42.28210910289966,
+      "last_10ms_peak_dbfs": -59.13688953233303,
+      "final_sample_peak_dbfs": -74.51716413885329
+    },
+    {
+      "audio": "mix",
+      "seconds": 96.0,
+      "last_active_above_minus_80_seconds": 95.06402083333333,
+      "last_100ms_rms_dbfs": -240.0,
+      "last_10ms_peak_dbfs": -240.0,
+      "final_sample_peak_dbfs": -240.0
+    }
+  ],
+  "asr": {
+    "model": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+    "device": "cpu",
+    "compute_type": "int8",
+    "beam_size": 5,
+    "initial_prompt": null,
+    "condition_on_previous_text": false,
+    "results": [
+      {
+        "region": "verse-2",
+        "audio": "vocal",
+        "text": "遠回りの日も 無駄じゃなかったね濡れた靴のまま 光を探す",
+        "kana": "とおまわりのにちもむだじゃなかったねぬれたくつのままひかりをさがす",
+        "reference": "とおまわりのひもむだじゃなかったねぬれたくつのままひかりをさがす",
+        "cer": 0.0625,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 9.5,
+            "text": "遠回りの日も 無駄じゃなかったね"
+          },
+          {
+            "start": 9.5,
+            "end": 19.12,
+            "text": "濡れた靴のまま 光を探す"
+          }
+        ]
+      },
+      {
+        "region": "verse-2",
+        "audio": "mix",
+        "text": "遠回りの日も 無駄じゃなかったね濡れた靴のまま 光を探す",
+        "kana": "とおまわりのにちもむだじゃなかったねぬれたくつのままひかりをさがす",
+        "reference": "とおまわりのひもむだじゃなかったねぬれたくつのままひかりをさがす",
+        "cer": 0.0625,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 9.6,
+            "text": "遠回りの日も 無駄じゃなかったね"
+          },
+          {
+            "start": 9.6,
+            "end": 19.3,
+            "text": "濡れた靴のまま 光を探す"
+          }
+        ]
+      },
+      {
+        "region": "final-chorus",
+        "audio": "vocal",
+        "text": "雲の向こうへと 明日を迎えに小さな一歩を 明日へ繋いでく",
+        "kana": "くものむこうへとあしたをむかえにちいさないっぽをあしたへつないでく",
+        "reference": "くものむこうへとあしたをむかえにちいさないっぽをあしたへつないでく",
+        "cer": 0.0,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 9.5,
+            "text": "雲の向こうへと 明日を迎えに"
+          },
+          {
+            "start": 9.5,
+            "end": 19.2,
+            "text": "小さな一歩を 明日へ繋いでく"
+          }
+        ]
+      },
+      {
+        "region": "final-chorus",
+        "audio": "mix",
+        "text": "雲の向こうへと 明日を迎えに小さな一歩を 明日へ繋いでく",
+        "kana": "くものむこうへとあしたをむかえにちいさないっぽをあしたへつないでく",
+        "reference": "くものむこうへとあしたをむかえにちいさないっぽをあしたへつないでく",
+        "cer": 0.0,
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 9.5,
+            "text": "雲の向こうへと 明日を迎えに"
+          },
+          {
+            "start": 9.5,
+            "end": 19.5,
+            "text": "小さな一歩を 明日へ繋いでく"
+          }
+        ]
+      }
+    ]
+  },
+  "interpretation": {
+    "later_section_completion": "pass",
+    "lyric_recognition": "The verse-2 and final-chorus transcripts contain all intended phrases in both the isolated vocal and the mix.",
+    "normalization_caveat": "The raw verse-2 kana CER is 0.0625 because pykakasi reads the recognized word 日 as にち rather than the intended ひ. This text-normalization ambiguity is not evidence of an audible error. The unmodified ASR transcript is retained.",
+    "limits": "Automated waveform and ASR checks do not replace human judgments of singing naturalness or verify every phoneme. This validates one local VOICEVOX voice through the session synthesis path, not autonomous live-agent voice selection or every backend."
+  },
+  "excerpt": {
+    "file": "verse-2-to-ending.wav",
+    "from_seconds": 47.4,
+    "to_seconds": 96.0
+  },
+  "local_artifact_root": "target\\vocal-song-synthesis-2026-10-24",
+  "artifact_sha256": {
+    "RainAfter/RainAfter.auris": "571236287bf12c8144495c3f47fb952375158e73d9dd33d7763530c009953a89",
+    "full-song.wav": "703c3b22c8aca81d6d19a76a8353a49117a72b5262ae54c4e3f3d0fa6fcabb1e",
+    "verse-2-to-ending.wav": "c3357f6424e29d2157c08520ad1df71d673eef91d4c16c2fd61a815e951729de",
+    "verse-2-vocal.wav": "ec95a9f03e526d5bce956e944e711cec211ac66129b3296f8e45794a8b3f5a5e",
+    "final-chorus-vocal.wav": "bc7cd5b8cb027d89dd4353243ee8036aa48f274a468d7affefa17df321d7d9c3",
+    "waveform-audit.json": "a48d1c697934766daa4b0650d7ed7a4db084fda4504b7c4f54db2fd0673cc86e",
+    "take-inspection.json": "7a7f20786a4a111a32582f89945f98612851ef9d8c7bf8f2a1dc82c2b2e35280",
+    "asr-audit.json": "11298a05587899e23b00a2faf4d2ee269a459528890a06b6570a086d238dc859",
+    "ending-audit.json": "649ed2a3e9b5c2ce681a5e37c43c8e81fd004372d61b35df9b8ac3cc712b9d62",
+    "analyze.py": "e25c75d9ac4936589ab502d568e8d27f43278d0c4b2b9895100f398842116c1d",
+    "inspect_take.py": "5ba347924d55d61011d96d5384e6124e3146364e22b7bae0252b0d8399f2c80c",
+    "voice-used.voicevox.json": "4736fd99c595efd18e381da0d2f2e2c702e983c657bf9d7a148fde04f015eef6"
+  },
+  "cli_sha256": "ff5175bd23de81fc4cee0bf1a0181cc2ea7c3c72dad71d17e36b93d87125f9de"
+}
