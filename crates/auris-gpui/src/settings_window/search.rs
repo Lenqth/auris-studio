@@ -59,6 +59,7 @@ impl Section {
         match self {
             Self::Agent => &[
                 Key::AgentPanel,
+                Key::AgentSystemPrompt,
                 Key::AgentProviderLabel,
                 Key::AgentBackendLabel,
                 Key::AgentCodexPathLabel,

@@ -12,6 +12,7 @@ pub use jobs::{AgentJob, AgentResult, AgentStep};
 mod harmony;
 pub mod note_editing;
 pub mod performance;
+pub mod phrase_variation;
 
 /// Read or reverse one complete live agent request using the session's ordinary history.
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
@@ -54,6 +55,18 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Propose exact local pitch variation with fixed rhythm and protected opening, or cadence pitch/length changes, without editing. Explicit clip-relative range and protected indices are enforced. Returns before/after notes and an equivalent edit_notes patch. Use candidates variation to compare and adopt the exact result; structural validity does not establish musical quality.
+    PhraseVariation {
+        /// Current content revision from read_notes.
+        expected_revision: String,
+        /// Explicit range, protected notes and allowed changes.
+        request: phrase_variation::Request,
+    },
+    /// Compare a baseline and 1..3 exact instrument-note or accompaniment alternatives without editing. Create binds snapshots to this document/revision for fifteen minutes; read returns exact note differences; preview renders the same short range with common gain. Apply adopts the selected snapshot as one Undo without regeneration. Cancel retains the original. At most three rounds per revision and three previews per round; stop and report unresolved choices at the limit. These tools establish no musical preference. Read tool_help for operation fields.
+    Candidates {
+        /// Create, read, preview, apply or cancel a bounded candidate round.
+        operation: crate::session::candidates::Operation,
+    },
     /// Suggest up to three melody-aware chord progressions without changing notes or harmony. Pass request with melody_clips, start_bar, bars and optional key/mood/ending. Keeps a plain alternative; 7th, sus4 and diminished colour needs melodic evidence and appropriate resolution, never a complexity quota. Returns explanations, tensions, a content revision and harmony objects usable by accompaniment. Read tool_help for bounds. These are heuristic proposals; compare and audition before claiming musical improvement.
     SuggestHarmony {
         /// Explicit foreground clips and musical intent for one short phrase.
@@ -66,6 +79,9 @@ pub enum Command {
         /// 1..16 distinct melody clip IDs to protect; never inferred from names.
         #[schemars(length(min = 1, max = 16))]
         protected_clips: Vec<u64>,
+        /// 1..16 distinct foreground clips to arrange around, a subset of protected_clips. Includes authored and imported melodies; never inferred from names or recipes.
+        #[schemars(length(min = 1, max = 16))]
+        foreground_clips: Vec<u64>,
         /// Generate configured backing clips or explicitly regenerate selected recipes.
         operation: crate::session::accompaniment::Operation,
     },
@@ -107,6 +123,11 @@ pub enum Command {
         operation: crate::CheckpointOperation,
         /// Current revision required for restore; omitted for list/create.
         expected_revision: Option<String>,
+    },
+    /// Find audio on Wikimedia Commons or by local filename, inspect a source, import a direct HTTP(S) audio URL, or trim/reverse a clip into a new asset. Original files remain intact; processing is one Undo and rejects stale revisions. EQ uses mixer_graph add_effect with auris.fx.eq, then parameters/set_parameter. search_online needs no API key; download needs an audio URL, not a webpage. Attribution is not verified rights.
+    AudioAssets {
+        /// Material operation, performed off the UI thread.
+        operation: crate::session::audio_assets::Operation,
     },
     /// Import a local audio file as a new track at an absolute tick position. Existing music and tempo are preserved. Copy and decode run off the UI thread; cancellation or document changes discard the staged import. One Undo removes it.
     ImportAudio {
@@ -286,13 +307,16 @@ pub enum Command {
         #[serde(default)]
         offset: usize,
     },
-    /// Read one singer's selected voice, available speakers, and whether its take is missing, current or stale. Does not load a model. Call after voice selection, lyrics, and singing to verify the result.
+    /// Read voice, speakers, take state and section_coverage of note/lyric onsets. Follow next_section_offset and compare later sung sections with the plan. Read-only; no model loading.
     InspectSinger {
         /// Stable singer track ID.
         track: u64,
         /// Zero-based speaker offset; follow next_offset for voices with more than 128 speakers.
         #[serde(default)]
         offset: usize,
+        /// Zero-based section page offset, independent of speaker offset. Follow section_coverage.next_section_offset.
+        #[serde(default)]
+        section_offset: usize,
     },
     /// Choose a local installed singing voice and optional speaker for a singer track. Use list_voices for paths, then inspect_singer for speaker names. To change speaker, repeat the selected voice path with a speaker. Validates before editing; failure leaves the track unchanged. One transaction. Remote network/device model paths and remote VOICEVOX servers are refused; local loopback VOICEVOX is supported.
     SetSingerVoice {
@@ -357,7 +381,7 @@ pub enum Command {
         /// Optional track ID for solo routing; omit for the mix.
         track: Option<u64>,
     },
-    /// Render the current unsaved mix and send actual WAV audio to the configured audio critic (AURIS_AUDIO_URL/MODEL). Returns fallible observations, exact WAV measurements, document revision and audition_id. Start inside the arrangement; 1..8 bars, at most 30 seconds. For composition, review a completed phrase, make a supported local edit, read back its state, then listen to the same bars with compare_to set to the earlier audition_id. No edit is required when the critic cannot judge. The latest four IDs are retained in this open document. No save or Undo; network permission applies. This is a separate model's review, not proof that you heard the music.
+    /// Render the unsaved mix and send actual WAV audio to the configured critic. Use focus for single-excerpt diagnosis. For blind A/B, pass compare_to and a neutral aspect, omitting focus; order is randomized and the critic sees no edit narrative. Returns typed timestamped observations or an explicit assessment_error, exact WAV measurements, revision and audition_id. Preference, tie and cannot_judge are distinct; confidence is uncalibrated. Never automatically adopt an edit from this verdict alone. Use 1..8 bars, at most 30 seconds, inside the arrangement. Retains four IDs with matching bars/timing. No save or Undo; network permission applies. Separate-model feedback is not proof that you heard the music.
     Listen {
         /// First bar, starting at 1.
         #[schemars(range(min = 1))]
@@ -365,10 +389,12 @@ pub enum Command {
         /// Number of bars, 1..8, fitting at most thirty seconds.
         #[schemars(range(min = 1, max = 8))]
         bars: u32,
-        /// Short question about audible instrumentation, balance or phrasing, up to 4000 bytes.
+        /// Diagnostic question for one excerpt, up to 4000 bytes. Must be omitted for comparison.
         focus: Option<String>,
         /// Opaque audition_id from this open document, with the same bars and timing.
         compare_to: Option<String>,
+        /// Neutral comparison criterion, required with compare_to and omitted for diagnosis. Comparison never forwards an editing narrative.
+        aspect: Option<crate::audio_review::assessment::ComparisonAspect>,
     },
 
     /// Search instruments by text, acoustic reference, or bounded browsing. Copy returned sound IDs into set_instrument. Paging, filters and acoustic-index status are shared across backends.
@@ -490,6 +516,11 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::AudioAssets { operation } => operation.is_mutating(),
+            Self::Candidates { operation } => matches!(
+                operation,
+                crate::session::candidates::Operation::Apply { .. }
+            ),
             Self::Arrangement { operation } => operation.is_mutating(),
             Self::RepairLyrics { request } => request.apply,
             Self::History { operation } => !matches!(operation, HistoryOperation::Read),
@@ -500,6 +531,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::PhraseVariation { .. }
             | Self::SuggestHarmony { .. }
             | Self::AnalyzeLyrics { .. }
             | Self::DiagnoseSong { .. }
@@ -523,9 +555,15 @@ impl Command {
     pub fn needs_worker(&self) -> bool {
         matches!(
             self,
-            Self::Arrangement {
-                operation: crate::arrangement::Operation::Validate { .. }
-            } | Self::Accompaniment { .. }
+            Self::AudioAssets { .. }
+                | Self::Candidates {
+                    operation: crate::session::candidates::Operation::Create { .. }
+                        | crate::session::candidates::Operation::Preview { .. }
+                }
+                | Self::Arrangement {
+                    operation: crate::arrangement::Operation::Validate { .. }
+                }
+                | Self::Accompaniment { .. }
                 | Self::ListVoices { .. }
                 | Self::SetSingerVoice { .. }
                 | Self::Sing { .. }
@@ -595,6 +633,11 @@ impl Session {
             );
         }
         match command {
+            Command::PhraseVariation {
+                expected_revision,
+                request,
+            } => self.agent_phrase_variation(&expected_revision, request),
+            Command::Candidates { operation } => self.agent_candidates(operation),
             Command::SuggestHarmony { request } => self.agent_suggest_harmony(request),
             Command::Arrangement {
                 operation:
@@ -774,10 +817,13 @@ impl Session {
                         .to_string(),
                 )
             }
-            Command::InspectSinger { track, offset } => {
-                self.agent_inspect_singer(TrackId(track), offset)
-            }
-            command @ (Command::Accompaniment { .. }
+            Command::InspectSinger {
+                track,
+                offset,
+                section_offset,
+            } => self.agent_inspect_singer(TrackId(track), offset, section_offset),
+            command @ (Command::AudioAssets { .. }
+            | Command::Accompaniment { .. }
             | Command::ListVoices { .. }
             | Command::SetSingerVoice { .. }
             | Command::Sing { .. }
@@ -836,6 +882,8 @@ impl Session {
                     })
                     .collect();
                 Ok(serde_json::json!({"title":project.name, "tracks":tracks, "revision":self.agent_document_revision()?,
+                    "document_instance":self.document_instance(), "session_revision":self.revision(),
+                    "verification_regions":crate::production_record::verification_regions(project),
                     "sample_rate":project.sample_rate,"duration_seconds":project.duration_seconds(), "harmony":project.harmony,
                     "sections":project.sections, "tempo_map":project.tempo_map, "signatures":project.signatures, "loop_region":project.loop_region, "loop_enabled":project.loop_enabled, "ticks_per_quarter":Ticks::QUARTER.raw()})
                 .to_string())
@@ -855,9 +903,15 @@ impl Session {
                 bars,
                 focus,
                 compare_to,
+                aspect,
             } => {
-                let job =
-                    self.begin_listening(start_bar, bars, focus.as_deref(), compare_to.as_deref())?;
+                let job = self.begin_listening(
+                    start_bar,
+                    bars,
+                    focus.as_deref(),
+                    compare_to.as_deref(),
+                    aspect,
+                )?;
                 let result = job.run(&std::sync::atomic::AtomicBool::new(false))?;
                 self.continue_listening(result)
             }

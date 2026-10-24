@@ -307,7 +307,7 @@ impl Guard {
             bridge: None,
             output_tokens: output_tokens as usize,
             schema_tokens: estimated_tokens(&serialized)
-                + estimated_tokens(&preamble())
+                + estimated_tokens(agent.run_spec().preamble.as_deref().unwrap_or_default())
                 + output_tokens as usize,
             state: Mutex::new(State::default()),
             activity: Arc::new(Mutex::new((Instant::now(), 0))),
@@ -523,6 +523,30 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn context_guard_budgets_the_configured_prompt() {
+        let mut prefs = auris_session::AgentPreferences {
+            model: "mock".into(),
+            system_prompt: "Short prompt".into(),
+            ..Default::default()
+        };
+        let Command::Run(short) = parse_args(&[], &|_| None, &prefs).unwrap() else {
+            panic!()
+        };
+        let agent = build_for_worker(&short, None).unwrap();
+        let short_guard = Guard::new(&agent, Some(32768), 4096).await.unwrap();
+        prefs.system_prompt = "長い制作方針。\n".repeat(2000);
+        let Command::Run(long) = parse_args(&[], &|_| None, &prefs).unwrap() else {
+            panic!()
+        };
+        let agent = build_for_worker(&long, None).unwrap();
+        let long_guard = Guard::new(&agent, Some(32768), 4096).await.unwrap();
+        assert_eq!(
+            long_guard.schema_tokens - short_guard.schema_tokens,
+            estimated_tokens(&long.system_prompt) - estimated_tokens(&short.system_prompt)
+        );
+    }
     use rig_core::message::{CallId, ToolName};
 
     #[test]

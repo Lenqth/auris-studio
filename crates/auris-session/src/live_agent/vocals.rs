@@ -3,6 +3,7 @@ use super::*;
 use crate::{
     SingPlan, SingerLandingJob, SingerLandingResult, SingerVoiceLoadJob, SingerVoiceLoadResult,
 };
+mod coverage;
 #[cfg(test)]
 mod tests;
 use std::{
@@ -17,7 +18,7 @@ pub struct VocalJob {
 
 enum Work {
     Discover {
-        settings: crate::Settings,
+        settings: Box<crate::Settings>,
         offset: usize,
     },
     Load {
@@ -29,7 +30,7 @@ enum Work {
     },
     Render {
         voice: SingerVoiceLoadResult,
-        plan: SingPlan,
+        plan: Box<SingPlan>,
         landing: SingerLandingJob,
     },
 }
@@ -147,7 +148,10 @@ impl Session {
         settings: crate::Settings,
     ) -> Result<VocalJob, String> {
         let work = match command {
-            Command::ListVoices { offset } => Work::Discover { settings, offset },
+            Command::ListVoices { offset } => Work::Discover {
+                settings: Box::new(settings),
+                offset,
+            },
             Command::SetSingerVoice {
                 track,
                 voice,
@@ -211,7 +215,7 @@ impl Session {
                 if select {
                     self.set_singer_voice_selection_from_load(track, &voice, speaker.as_deref())
                         .map_err(|e| e.to_string())?;
-                    self.agent_inspect_singer(track, 0)?
+                    self.agent_inspect_singer(track, 0, 0)?
                 } else {
                     let plan = self
                         .sing_plan_from_voice_load(track, seed, &voice)
@@ -222,7 +226,7 @@ impl Session {
                     return Ok(VocalStep::Work(Box::new(VocalJob {
                         work: Work::Render {
                             voice,
-                            plan,
+                            plan: Box::new(plan),
                             landing,
                         },
                     })));
@@ -249,14 +253,14 @@ impl Session {
         &self,
         track: TrackId,
         offset: usize,
+        section_offset: usize,
     ) -> Result<String, String> {
         let info = self.singer_voice_info(track).map_err(|e| e.to_string())?;
         let capabilities = self.singer_capabilities(track).map_err(|e| e.to_string())?;
-        let frame_hop = self
-            .project()
-            .track(track)
-            .and_then(|track| track.kind.as_singer())
-            .map(|singer| singer.frame_hop);
+        let owner = self.project().track(track).ok_or("Unknown singer track")?;
+        let singer = owner.kind.as_singer().ok_or("Expected a singer track")?;
+        let section_coverage = coverage::sections(self.project(), singer, section_offset)?;
+        let frame_hop = singer.frame_hop;
         let total = info.as_ref().map_or(0, |info| info.speakers.len());
         if offset > total {
             return Err("offset exceeds speaker count".into());
@@ -267,13 +271,9 @@ impl Session {
             "speaker":info.speaker,"speakers":info.speakers.iter().skip(offset).take(128).collect::<Vec<_>>(),
             "speakers_total":info.speakers.len()
         }));
-        let seed = self
-            .project()
-            .track(track)
-            .and_then(|track| track.kind.as_singer())
-            .and_then(|singer| singer.take.as_ref())
-            .map(|take| take.seed);
+        let seed = singer.take.as_ref().map(|take| take.seed);
         Ok(serde_json::json!({"track":track.0,"voice":voice,"take_seed":seed,"next_offset":(next < total).then_some(next),
+            "section_coverage":section_coverage,"track_muted":owner.mixer.mute,
             "capabilities":{"manual_phonemes":capabilities.manual_phonemes,"phoneme_timing":capabilities.phoneme_timing,"frame_hop_seconds":frame_hop},
             "take_state":match self.singer_take_state(track).map_err(|e|e.to_string())? {
                 crate::SingerTakeState::Absent => "missing",

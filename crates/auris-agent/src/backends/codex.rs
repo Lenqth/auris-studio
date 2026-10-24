@@ -450,10 +450,11 @@ async fn conversation(
         }
         _ => (memory::Memory::default(), None),
     };
+    bridge.bind_production_history(generation.as_ref())?;
     if !preloaded {
         bridge.emit(json!({"event":"history","summary":memory.summary,"turns":memory.turns}));
     }
-    let thread = rpc.request("thread/start", json!({"model":prefs.model,"cwd":cwd,"ephemeral":true,"sandbox":"read-only","approvalPolicy":"untrusted","baseInstructions":super::cli_preamble()})).await?;
+    let thread = rpc.request("thread/start", json!({"model":prefs.model,"cwd":cwd,"ephemeral":true,"sandbox":"read-only","approvalPolicy":"untrusted","baseInstructions":super::cli_preamble(prefs)})).await?;
     let thread_id = thread["thread"]["id"]
         .as_str()
         .ok_or("Codex did not return a thread ID")?
@@ -789,7 +790,7 @@ mod tests {
             let (client, server) = tokio::io::duplex(32768);
             let (reader, writer) = tokio::io::split(client);
             let mut rpc = Rpc::transport(None, writer, reader);
-            let prefs = auris_session::AgentPreferences { backend:"codex".into(), model:"fixture".into(), ..Default::default() };
+            let prefs = auris_session::AgentPreferences { backend:"codex".into(), model:"fixture".into(), system_prompt:"Write a second verse.\nKeep the motif.".into(), ..Default::default() };
             let cwd = tempfile::tempdir().unwrap();
             let audio = cwd.path().join("reference.wav");
             let history = cwd.path().join("memory.json");
@@ -802,6 +803,7 @@ mod tests {
                 let (reader, mut writer) = tokio::io::split(server);
                 let mut lines = BufReader::new(reader).lines();
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                assert_eq!(request["params" ]["baseInstructions"], super::super::cli_preamble(&prefs));
                 assert_eq!(request["method"], "thread/start");
                 assert_eq!(request["params"]["sandbox"], "read-only");
                 reply(&mut writer, json!({"id":request["id"],"result":{"thread":{"id":"thread"}}})).await;
@@ -976,14 +978,22 @@ mod tests {
     #[tokio::test]
     #[ignore = "runs one real Codex turn using the signed-in ChatGPT subscription"]
     async fn installed_codex_edits_an_unsaved_song() {
-        let mut prefs = auris_session::AgentPreferences {
+        let prefs = auris_session::AgentPreferences {
             backend: "codex".into(),
+            model: "gpt-6.1-sol".into(),
+            system_prompt: "You edit the open Auris document. For the prompt settings smoke check, call inspect_project, then add_track exactly once with name Codex custom prompt lead and kind instrument. Do not change anything else or use native tools. No notes or rendering are needed. Report completion.".into(),
             ..Default::default()
         };
         let listing: Value = serde_json::from_str(&list_models(&prefs).await.unwrap()).unwrap();
-        prefs.model = listing["models"][0]["name"].as_str().unwrap().to_owned();
+        assert!(
+            listing["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|model| model["name"] == prefs.model)
+        );
         let mut worker = crate::Worker::spawn(prefs, None, true, None).unwrap();
-        worker.send(&json!({"say":"Transport smoke test: inspect_project, then call add_track exactly once with name Codex smoke lead and kind instrument. Do not change anything else, search for instruments, or render audio. No notes are needed. Report completion.","policy":auris_session::agent_policy::Policy::default()}).to_string()).unwrap();
+        worker.send(&json!({"say":"Run the prompt settings smoke check from your system instructions.","policy":auris_session::agent_policy::Policy::default()}).to_string()).unwrap();
         let mut session =
             auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
         let before = session.project().clone();
@@ -1037,8 +1047,9 @@ mod tests {
                 .project()
                 .tracks
                 .iter()
-                .any(|track| track.name == "Codex smoke lead")
+                .any(|track| track.name == "Codex custom prompt lead")
         );
+        assert_eq!(session.project().tracks.len(), before.tracks.len() + 1);
         assert!(session.path().is_none());
         assert!(session.is_dirty());
         session.undo();

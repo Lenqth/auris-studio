@@ -117,6 +117,16 @@ pub(crate) fn wrapped_area_offset_at(
     position: Point<Pixels>,
 ) -> Option<usize> {
     let (bounds, scroll_y, _) = WRAPPED_AREA.with(Cell::get)?;
+    wrapped_offset_at(window, text, position, bounds, scroll_y)
+}
+
+fn wrapped_offset_at(
+    window: &mut Window,
+    text: &str,
+    position: Point<Pixels>,
+    bounds: Bounds<Pixels>,
+    scroll_y: Pixels,
+) -> Option<usize> {
     let width = (bounds.size.width - FIELD_PADDING * 2.0).max(px(1.0));
     let shared: SharedString = text.to_string().into();
     let run = window.text_style().to_run(shared.len());
@@ -214,6 +224,75 @@ pub(crate) fn editable_wrapped_area<V: gpui::EntityInputHandler>(
                 marked.clone(),
                 focused,
                 &theme,
+                None,
+            );
+        },
+    )
+    .size_full()
+}
+
+/// Per-editor scrolling and hit-test geometry for long prose, independent of other windows.
+#[derive(Default)]
+pub(crate) struct ProseViewport {
+    bounds: Option<Bounds<Pixels>>,
+    scroll: Pixels,
+    maximum: Pixels,
+    watched: Option<usize>,
+}
+
+impl ProseViewport {
+    /// Scroll without moving the text selection.
+    pub(crate) fn scroll_by(&mut self, delta: Pixels) {
+        self.scroll = (self.scroll - delta).clamp(px(0.0), self.maximum);
+    }
+
+    /// Follow the caret again after typing, navigation or resetting the editor.
+    pub(crate) fn follow_caret(&mut self) {
+        self.watched = None;
+    }
+
+    /// Resolve a click against this editor's own last painted viewport.
+    pub(crate) fn offset_at(
+        &self,
+        window: &mut Window,
+        text: &str,
+        position: Point<Pixels>,
+    ) -> Option<usize> {
+        wrapped_offset_at(window, text, position, self.bounds?, self.scroll)
+    }
+}
+
+/// A wrapped editor with wheel scrolling and an independently owned viewport.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "text input state and its viewport"
+)]
+pub(crate) fn editable_scrolling_area<V: gpui::EntityInputHandler>(
+    text: SharedString,
+    selection: Range<usize>,
+    marked: Option<Range<usize>>,
+    focused: bool,
+    focus: gpui::FocusHandle,
+    view: gpui::Entity<V>,
+    theme: Theme,
+    viewport: std::rc::Rc<std::cell::RefCell<ProseViewport>>,
+) -> impl IntoElement + use<V> {
+    canvas(
+        |_, _, _| (),
+        move |bounds, _, window, cx| {
+            if focused {
+                window.handle_input(&focus, ElementInputHandler::new(bounds, view.clone()), cx);
+            }
+            paint_wrapped_area(
+                window,
+                cx,
+                bounds,
+                &text,
+                &selection,
+                marked.clone(),
+                focused,
+                &theme,
+                Some(&viewport),
             );
         },
     )
@@ -454,6 +533,7 @@ fn paint_wrapped_area(
     marked: Option<Range<usize>>,
     focused: bool,
     theme: &Theme,
+    viewport: Option<&std::cell::RefCell<ProseViewport>>,
 ) {
     let width = (bounds.size.width - FIELD_PADDING * 2.0).max(px(1.0));
     let mut run = window.text_style().to_run(text.len());
@@ -483,12 +563,28 @@ fn paint_wrapped_area(
     let visible_rows = ((bounds.size.height - AREA_PADDING_Y * 2.0) / AREA_LINE_HEIGHT)
         .floor()
         .max(1.0) as usize;
-    let scroll_y = AREA_LINE_HEIGHT * first_visible_row(watched_row, visible_rows) as f32;
-    let total_rows = shaped
+    let mut scroll_y = AREA_LINE_HEIGHT * first_visible_row(watched_row, visible_rows) as f32;
+    let total_rows: usize = shaped
         .iter()
         .map(|line| line.wrap_boundaries().len() + 1)
         .sum();
-    WRAPPED_AREA.with(|area| area.set(Some((bounds, scroll_y, total_rows))));
+    if let Some(viewport) = viewport {
+        let mut viewport = viewport.borrow_mut();
+        let resized = viewport
+            .bounds
+            .is_none_or(|previous| previous.size != bounds.size);
+        viewport.bounds = Some(bounds);
+        viewport.maximum = AREA_LINE_HEIGHT * total_rows.saturating_sub(visible_rows) as f32;
+        if resized || viewport.watched != Some(watched) {
+            let caret_top = AREA_LINE_HEIGHT * watched_row as f32;
+            viewport.scroll = viewport.scroll.min(caret_top).max(scroll_y);
+        }
+        viewport.watched = Some(watched);
+        viewport.scroll = viewport.scroll.clamp(px(0.0), viewport.maximum);
+        scroll_y = viewport.scroll;
+    } else {
+        WRAPPED_AREA.with(|area| area.set(Some((bounds, scroll_y, total_rows))));
+    }
 
     paint::clipped(window, bounds, |window| {
         let left = bounds.origin.x + FIELD_PADDING;
@@ -544,10 +640,12 @@ fn paint_wrapped_area(
             left + watched_position.x,
             top + AREA_LINE_HEIGHT * watched_row as f32,
         );
-        crate::ui::text_field::set_caret_bounds(Bounds {
-            origin: caret,
-            size: size(px(1.0), AREA_LINE_HEIGHT),
-        });
+        if focused {
+            crate::ui::text_field::set_caret_bounds(Bounds {
+                origin: caret,
+                size: size(px(1.0), AREA_LINE_HEIGHT),
+            });
+        }
         if focused && selection.is_empty() {
             paint::rect(
                 window,

@@ -327,6 +327,40 @@ outline do not create section metadata. A short loop can remain one section.
 
 ### Live vocal production
 
+The shared harness treats a new vocal-song request without a short-form limit as
+a complete song: plan and write the second verse and later chorus/ending as well
+as the first verse. Explicit lengths, one-chorus demos, excerpts and local edits
+retain their requested scope. Plan actual section ranges before writing notes;
+give later verses their own lyrics and narrative development, with intentional
+melodic reuse and accompaniment changes. A first-verse sketch is an intermediate
+result. This guidance applies to both default and experimental prompt profiles.
+
+`inspect_singer` includes `section_coverage`, even without a selected voice or a
+rendered take. Named sections report note attacks, lyric-bearing notes, phoneme
+assignments, continuation markers, unassigned notes and attacks from clip loops.
+Use `section_coverage.next_section_offset` as `section_offset` to read the next
+page of at most 32 sections; this is independent of speaker-list `offset`.
+Explicit section endings include planned later sections beyond the current score.
+`unbounded_last_section` flags a final label with no inferable positive range.
+Counts cover authored onsets in unmuted clips, before performance; sustained notes
+count only where they begin. `track_muted` separately reports the track state.
+Inspection is read-only and caps note checks at 100,000 per page. A section with
+`analysis_complete:false` has partial counts, which cannot establish absence.
+
+Compare coverage with the planned sung sections and read back their actual
+notes/lyrics. Empty instrumental introductions, breaks and endings are valid.
+Looped lyrics do not establish a newly written second verse; positive counts or
+a current take alone do not establish complete lyrics, correct pronunciation or
+musical quality. Synthesize the complete score when requested. If synthesis is
+blocked, preserve the score and report the specific unfinished work.
+
+The [vocal form smoke cases](../tools/eval/references/vocal-song-form-v1.json)
+exercise an unspecified song and a 16-bar one-chorus request. Run them with
+`composition_quality.py run --manifest tools/eval/references/vocal-song-form-v1.json
+--no-candidate-tools --repetitions 1` and the normal executable/output arguments.
+The [recorded score checks](../tools/eval/references/vocal-song-form-validation-2026-10-24.json)
+cover initial completion and readback; they do not evaluate singing or listening quality.
+
 `edit_vocal_notes` applies 1..256 ordered lyric, phoneme, timing-pin or pitch-ornament
 corrections to one singer clip. Supply `expected_revision` from `read_notes`.
 `inspect_singer` reports manual-phoneme/timing support and the model frame hop;
@@ -379,9 +413,18 @@ Call `listen` with `{"start_bar":9,"bars":4,"focus":"Describe the melody and acc
 It returns `audition_id`, the captured document revision/range, `audio_sent`, the critic's
 review and measurements of both the source render and the actual encoded WAV. After a
 supported local edit, read back the affected notes or mixer and call `listen` on the same
-bars with `compare_to` set to the earlier `audition_id`. A tempo or meter change requires
+bars with `compare_to` set to the earlier `audition_id`, `aspect` set to `balance`,
+`phrasing`, `ensemble`, `sound` or `musical_coherence`, and `focus` omitted. A tempo or meter change requires
 a new baseline. The last four raw excerpts are retained in the open session; replacing
 the document or closing the session expires them. IDs are opaque, not file paths.
+
+Single-excerpt diagnosis accepts a descriptive question. Comparison accepts only a neutral
+criterion: the critic receives anonymous A/B recordings in randomized order, with no edit
+narrative. The response contains `assessment` with timestamped observations and an explicit
+preference, tie or `cannot_judge`. Invalid JSON or evidence yields `assessment_error` and no
+usable judgment, while `audio_sent` still records successful delivery. The returned A/B mapping
+is revealed to the caller after review. Confidence and preferences are uncalibrated claims;
+they must not automatically select edits. See [critic calibration](audio-critic-calibration.md).
 
 Each request covers 1–8 bars and at most 30 seconds, rendered at 48 kHz without effect
 tails. Both comparison excerpts use one common protective attenuation when needed for
@@ -437,7 +480,7 @@ a separate audio critic receives actual audio and cannot modify the project.
 3. Make one supported local correction, or preserve the music when the evidence
    does not justify a change. Keep a checkpoint when a comparison may need restoring.
 4. Read back the edit, then call `listen` on the same range with `compare_to` set
-   to the first `audition_id`. Both excerpts use the same protective attenuation;
+   to the first `audition_id`, a neutral `aspect`, and no `focus`. Both excerpts use the same protective attenuation;
    the original raw excerpt stays immutable. Tempo/meter or range changes require
    a new baseline.
 5. Keep, refine or restore the edit according to the evidence, and stop when the
@@ -504,6 +547,41 @@ guarantee of mix quality.
 The tested AMD Windows audio runtime also had a native crash during a later model
 reload. A running HTTP service and an earlier successful review do not establish
 restart reliability; inspect `/healthz` and the server log when a request fails.
+
+## Live agent system prompt
+
+The standard live prompt starts with musical decisions: motif development,
+phrase direction, lyric prosody, harmonic motion, section contrasts, arrangement
+roles and a complete ending. The model chooses a writing order suited to the brief
+and can author accompaniment or use a generation recipe. It completes the requested
+form before repeated local polishing, checks the actual score and rendered passages,
+and distinguishes those observations from listening preference.
+
+The editable source is `crates/auris-agent/src/prompts/composition.md`; the standard
+profile also includes `prompts/live-tools.md` for operation contracts. Shared vocal
+form, phrasing and performance guidance is appended by `default_system_prompt`.
+The experimental modular profile uses the same musical guidance with its workflow
+instructions. Codex and Claude Code receive the same resolved composition prompt.
+
+Settings → Agent includes a multiline **System prompt** editor shared by Codex,
+Claude Code and Rig models. It starts with the current standard prompt in full.
+Editing replaces the common prompt; it is not appended to the standard text.
+Enter inserts a line break; the platform Control/Command+Enter shortcut applies
+the settings. The editor supports Japanese input, clipboard operations and wheel
+scrolling without moving the selection.
+
+**Apply** saves the prompt in the application's agent preferences and uses it
+from the next request. A running request finishes with its original settings.
+Closing Settings without applying leaves the saved prompt unchanged. **Restore
+standard prompt** restores the draft; apply it to resume following built-in
+defaults, including future updates. A blank prompt also selects those defaults.
+A failed save retains the draft and leaves the active preferences unchanged.
+
+This edits the live agent's shared instructions. Native CLI tool guidance,
+operation schemas/help, optional workflow responses and permission checks remain
+separate. Approval-review and audio-critic instructions are independent. Saved-file
+MCP uses its own instructions. Custom prompts count toward the local model's
+context budget just like the standard prompt.
 
 ## Ollama configuration and failure recovery
 

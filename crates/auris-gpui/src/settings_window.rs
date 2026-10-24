@@ -1924,6 +1924,10 @@ fn output_device_preferences(
 
 impl HasTextField for SettingsWindow {
     fn text_changed(&mut self) {
+        if self.agent.active == Some(agent::AgentSettings::PROMPT_FIELD) {
+            self.agent.prompt_viewport.borrow_mut().follow_caret();
+            return;
+        }
         if self.editing_search {
             self.dropdown_menu = None;
             self.body_scroll.set_offset(gpui::point(px(0.0), px(0.0)));

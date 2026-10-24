@@ -6,11 +6,22 @@ assigned drums. Requests contain roles, ranges and recipe controls; responses co
 note counts and recipe summaries rather than complete note arrays.
 
 Inspect the project first. Identify the foreground by its musical role and copy its clip IDs
-into `protected_clips`. Protection preserves the entire clips, including authored notes,
+into both `foreground_clips` and `protected_clips`. The foreground must be a nonempty
+subset of protected clips. It explicitly selects written melody notes for chord/arpeggio
+spacing, including hand-written and imported notes without a recipe. Additional protected
+clips need not participate in this musical foreground. Protection preserves the entire clips, including authored notes,
 curves, lyrics, performance and recipes. It does not infer a new progression from the melody.
 Choose harmony deliberately with `suggest_harmony` and `edit_harmony`; existing phrase-writing and backing-adjustment
 algorithms perform the score. A seventh, suspension or diminished chord is a musical choice,
 not a required proportion of the chart.
+
+The explicit foreground combines selected note windows and loop repetitions, skipping muted
+tracks/clips and zero-velocity notes. It is bounded to 4096 stored and expanded notes per target.
+Performance transforms, bends and solo routing are not simulated. Each returned clip includes
+an `adaptation` report with source note count, before/after backing count, whether the score
+changed, and a reason when adaptation is bypassed. Explicit rhythms, driving chord density,
+sustained ambient textures and bass/pad/drum roles retain their pattern. No preference claim
+is implied by a changed score or lower note count.
 
 ## Propose harmony from the motif
 
@@ -46,7 +57,7 @@ outside the chord. These are symbolic heuristics, not listening results or artis
 The analysis reads authored notes within clip windows, including loops; performance transforms,
 bends, timbre and audio are outside its evidence. Audition unresolved tensions in context.
 
-The response's `revision` and `protected_clips`, plus a chosen candidate's `harmony` object,
+The response's `revision`, `protected_clips` and `foreground_clips`, plus a chosen candidate's `harmony` object,
 feed directly into `accompaniment` with `operation.kind = "regenerate"` and explicit backing
 clip IDs. This applies harmony and rewrites only those clips in one Undo step. If the project
 changes before acceptance, request fresh suggestions. For new backing, apply the selected
@@ -69,6 +80,7 @@ Saved calls add a `project` path or project ID to the same arguments.
 {
   "expected_revision": "revision-from-inspect_project",
   "protected_clips": [10],
+  "foreground_clips": [10],
   "operation": {
     "kind": "generate",
     "parts": [
@@ -101,6 +113,7 @@ read a current revision and pass those IDs with a harmony replacement:
 {
   "expected_revision": "current-revision",
   "protected_clips": [10],
+  "foreground_clips": [10],
   "operation": {
     "kind": "regenerate",
     "clips": [11],

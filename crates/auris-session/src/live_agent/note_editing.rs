@@ -171,77 +171,7 @@ impl Session {
         if self.agent_document_revision()? != expected_revision {
             return Err("Document changed; call read_notes again before editing".into());
         }
-        let mut replacements = Vec::with_capacity(edits.len());
-        let mut seen = HashSet::new();
-        let mut total = 0usize;
-        for edit in edits {
-            let clip = match &edit {
-                NoteEdit::Patch { clip, .. } | NoteEdit::Replace { clip, .. } => ClipId(*clip),
-            };
-            if !seen.insert(clip) {
-                return Err("Duplicate clip in edits".into());
-            }
-            let (_, target) = self
-                .project()
-                .midi_clip(clip)
-                .ok_or("Unknown MIDI clip ID")?;
-            let notes = match edit {
-                NoteEdit::Replace { notes, .. } => {
-                    notes.into_iter().map(AuthoredNote::into_note).collect()
-                }
-                NoteEdit::Patch {
-                    remove,
-                    update,
-                    add,
-                    ..
-                } => {
-                    if remove.len() > 65_536 || update.len() > 65_536 || add.len() > 65_536 {
-                        return Err("At most 65536 note changes per clip".into());
-                    }
-                    let removals: HashSet<_> = remove.iter().copied().collect();
-                    if removals.len() != remove.len()
-                        || remove.iter().any(|&i| i >= target.notes.len())
-                    {
-                        return Err("Remove indices must be unique existing note indices".into());
-                    }
-                    let mut notes = target.notes.clone();
-                    let mut updated = HashSet::new();
-                    for change in update {
-                        if removals.contains(&change.index) || !updated.insert(change.index) {
-                            return Err(
-                                "Cannot update a removed note or the same note twice".into()
-                            );
-                        }
-                        let note = notes.get_mut(change.index).ok_or("Unknown note index")?;
-                        if let Some(value) = change.pitch {
-                            note.pitch = value;
-                        }
-                        if let Some(value) = change.start_tick {
-                            note.start = Ticks(value);
-                        }
-                        if let Some(value) = change.length_ticks {
-                            note.length = Ticks(value);
-                        }
-                        if let Some(value) = change.velocity {
-                            note.velocity = value;
-                        }
-                    }
-                    let mut index = 0;
-                    notes.retain(|_| {
-                        let keep = !removals.contains(&index);
-                        index += 1;
-                        keep
-                    });
-                    notes.extend(add.into_iter().map(AuthoredNote::into_note));
-                    notes
-                }
-            };
-            total += notes.len();
-            if total > 65_536 {
-                return Err("At most 65536 resulting notes per batch".into());
-            }
-            replacements.push((clip, notes));
-        }
+        let replacements = note_replacements(self.project(), edits)?;
         let changed = self.replace_notes_batch(replacements)?;
         Ok(
             serde_json::json!({"changed_clips":changed,"revision":self.agent_document_revision()?})
@@ -250,6 +180,103 @@ impl Session {
     }
 }
 
+fn note_replacements(
+    project: &Project,
+    edits: Vec<NoteEdit>,
+) -> Result<Vec<(ClipId, Vec<Note>)>, String> {
+    if edits.is_empty() || edits.len() > 16 {
+        return Err("edits must contain 1..16 clips".into());
+    }
+    let mut replacements = Vec::with_capacity(edits.len());
+    let mut seen = HashSet::new();
+    let mut total = 0usize;
+    for edit in edits {
+        let clip = match &edit {
+            NoteEdit::Patch { clip, .. } | NoteEdit::Replace { clip, .. } => ClipId(*clip),
+        };
+        if !seen.insert(clip) {
+            return Err("Duplicate clip in edits".into());
+        }
+        let (_, target) = project.midi_clip(clip).ok_or("Unknown MIDI clip ID")?;
+        let notes = match edit {
+            NoteEdit::Replace { notes, .. } => {
+                notes.into_iter().map(AuthoredNote::into_note).collect()
+            }
+            NoteEdit::Patch {
+                remove,
+                update,
+                add,
+                ..
+            } => {
+                if remove.len() > 65_536 || update.len() > 65_536 || add.len() > 65_536 {
+                    return Err("At most 65536 note changes per clip".into());
+                }
+                let removals: HashSet<_> = remove.iter().copied().collect();
+                if removals.len() != remove.len() || remove.iter().any(|&i| i >= target.notes.len())
+                {
+                    return Err("Remove indices must be unique existing note indices".into());
+                }
+                let mut notes = target.notes.clone();
+                let mut updated = HashSet::new();
+                for change in update {
+                    if removals.contains(&change.index) || !updated.insert(change.index) {
+                        return Err("Cannot update a removed note or the same note twice".into());
+                    }
+                    let note = notes.get_mut(change.index).ok_or("Unknown note index")?;
+                    if let Some(value) = change.pitch {
+                        note.pitch = value;
+                    }
+                    if let Some(value) = change.start_tick {
+                        note.start = Ticks(value);
+                    }
+                    if let Some(value) = change.length_ticks {
+                        note.length = Ticks(value);
+                    }
+                    if let Some(value) = change.velocity {
+                        note.velocity = value;
+                    }
+                }
+                let mut index = 0;
+                notes.retain(|_| {
+                    let keep = !removals.contains(&index);
+                    index += 1;
+                    keep
+                });
+                notes.extend(add.into_iter().map(AuthoredNote::into_note));
+                notes
+            }
+        };
+        total += notes.len();
+        if total > 65_536 {
+            return Err("At most 65536 resulting notes per batch".into());
+        }
+        replacements.push((clip, notes));
+    }
+    Ok(replacements)
+}
+
+pub(crate) fn candidate_project(
+    project: &Project,
+    edits: Vec<NoteEdit>,
+) -> Result<Project, String> {
+    let replacements = note_replacements(project, edits)?;
+    let mut candidate = project.clone();
+    for (clip, notes) in replacements {
+        let (track, target) = project.midi_clip(clip).ok_or("Unknown MIDI clip")?;
+        if project
+            .track(track)
+            .is_some_and(|t| matches!(t.kind, auris_core::project::TrackKind::Singer(_)))
+        {
+            return Err(
+                "Note candidates require instrument or drum clips; singer notes require synthesis"
+                    .into(),
+            );
+        }
+        *candidate.midi_clip_mut(clip).ok_or("Unknown MIDI clip")? =
+            crate::session::notes::replacement_clip(target, notes).map_err(|e| e.to_string())?;
+    }
+    Ok(candidate)
+}
 #[cfg(test)]
 mod tests {
     use super::*;

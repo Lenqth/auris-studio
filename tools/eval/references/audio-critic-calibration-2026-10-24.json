@@ -1,0 +1,764 @@
+{
+  "schema_version": 1,
+  "worker_sha256": "709f9515e3e79db2df102c884c48d68d59f677e28bbfc5a09be5df1106d6d133",
+  "interpretation": "Identity false preferences and order sensitivity measure calibration failures. Impairment controls are screening hypotheses, not universal musical preferences. Cannot-judge and invalid responses are not passes.",
+  "trials": [
+    {
+      "id": "identity-0-ab",
+      "kind": "identity",
+      "variant": 0,
+      "reference_label": "a",
+      "paths": [
+        "reference-0.wav",
+        "identity-0.wav"
+      ],
+      "hashes": [
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6",
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "identity-0-ba",
+      "kind": "identity",
+      "variant": 0,
+      "reference_label": "b",
+      "paths": [
+        "identity-0.wav",
+        "reference-0.wav"
+      ],
+      "hashes": [
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6",
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "silence-0-ab",
+      "kind": "silence",
+      "variant": 0,
+      "reference_label": "a",
+      "paths": [
+        "reference-0.wav",
+        "silence-0.wav"
+      ],
+      "hashes": [
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6",
+        "07d5270232673e00361785888c8f0c05851b1bb1d2aa2fd22a6101d03af3a5e7"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "silence-0-ba",
+      "kind": "silence",
+      "variant": 0,
+      "reference_label": "b",
+      "paths": [
+        "silence-0.wav",
+        "reference-0.wav"
+      ],
+      "hashes": [
+        "07d5270232673e00361785888c8f0c05851b1bb1d2aa2fd22a6101d03af3a5e7",
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [
+            {
+              "detail": "audible evidence of music",
+              "end_seconds": 4.0,
+              "excerpt": "a",
+              "start_seconds": 0.0
+            },
+            {
+              "detail": "audible evidence of music",
+              "end_seconds": 4.0,
+              "excerpt": "b",
+              "start_seconds": 0.0
+            }
+          ],
+          "reason": "both excerpts contain music, but no discernible preference can be made based on the provided audio.",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[{\"excerpt\":\"a\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"audible evidence of music\"},{\"excerpt\":\"b\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"audible evidence of music\"}],\"reason\":\"both excerpts contain music, but no discernible preference can be made based on the provided audio.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "clipping-0-ab",
+      "kind": "clipping",
+      "variant": 0,
+      "reference_label": "a",
+      "paths": [
+        "reference-0.wav",
+        "clipping-0.wav"
+      ],
+      "hashes": [
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6",
+        "5b7ec42433bce4dda3034912852d068d31a034d2fa7879d4931d20359071888a"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge the sound difference between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge the sound difference between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "clipping-0-ba",
+      "kind": "clipping",
+      "variant": 0,
+      "reference_label": "b",
+      "paths": [
+        "clipping-0.wav",
+        "reference-0.wav"
+      ],
+      "hashes": [
+        "5b7ec42433bce4dda3034912852d068d31a034d2fa7879d4931d20359071888a",
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge the sound difference between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge the sound difference between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "disordered_pitch-0-ab",
+      "kind": "disordered_pitch",
+      "variant": 0,
+      "reference_label": "a",
+      "paths": [
+        "reference-0.wav",
+        "disordered_pitch-0.wav"
+      ],
+      "hashes": [
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6",
+        "a00121c1502c6a918cdf1242a128759f843ed38ce359464735d6a2552afb1a2f"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts due to lack of discernible musical content.",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts due to lack of discernible musical content.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "disordered_pitch-0-ba",
+      "kind": "disordered_pitch",
+      "variant": 0,
+      "reference_label": "b",
+      "paths": [
+        "disordered_pitch-0.wav",
+        "reference-0.wav"
+      ],
+      "hashes": [
+        "a00121c1502c6a918cdf1242a128759f843ed38ce359464735d6a2552afb1a2f",
+        "5a88987b97a76c88e66d71fc812923cdb4748d827d8d4da9943aae4fe2e339b6"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "identity-1-ab",
+      "kind": "identity",
+      "variant": 1,
+      "reference_label": "a",
+      "paths": [
+        "reference-1.wav",
+        "identity-1.wav"
+      ],
+      "hashes": [
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d",
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "identity-1-ba",
+      "kind": "identity",
+      "variant": 1,
+      "reference_label": "b",
+      "paths": [
+        "identity-1.wav",
+        "reference-1.wav"
+      ],
+      "hashes": [
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d",
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "silence-1-ab",
+      "kind": "silence",
+      "variant": 1,
+      "reference_label": "a",
+      "paths": [
+        "reference-1.wav",
+        "silence-1.wav"
+      ],
+      "hashes": [
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d",
+        "07d5270232673e00361785888c8f0c05851b1bb1d2aa2fd22a6101d03af3a5e7"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "silence-1-ba",
+      "kind": "silence",
+      "variant": 1,
+      "reference_label": "b",
+      "paths": [
+        "silence-1.wav",
+        "reference-1.wav"
+      ],
+      "hashes": [
+        "07d5270232673e00361785888c8f0c05851b1bb1d2aa2fd22a6101d03af3a5e7",
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "clipping-1-ab",
+      "kind": "clipping",
+      "variant": 1,
+      "reference_label": "a",
+      "paths": [
+        "reference-1.wav",
+        "clipping-1.wav"
+      ],
+      "hashes": [
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d",
+        "54d44c88da9e11acfb852538342d1f1f640a762e53334ef3867c84e5c9d77723"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge the sound difference between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge the sound difference between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "clipping-1-ba",
+      "kind": "clipping",
+      "variant": 1,
+      "reference_label": "b",
+      "paths": [
+        "clipping-1.wav",
+        "reference-1.wav"
+      ],
+      "hashes": [
+        "54d44c88da9e11acfb852538342d1f1f640a762e53334ef3867c84e5c9d77723",
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge the difference in sound between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge the difference in sound between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "disordered_pitch-1-ab",
+      "kind": "disordered_pitch",
+      "variant": 1,
+      "reference_label": "a",
+      "paths": [
+        "reference-1.wav",
+        "disordered_pitch-1.wav"
+      ],
+      "hashes": [
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d",
+        "0d79ad92433b9bd185e86174abcc205460f80ce32307344b00aff30be8c5fcd8"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts due to lack of discernible musical content.",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts due to lack of discernible musical content.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "disordered_pitch-1-ba",
+      "kind": "disordered_pitch",
+      "variant": 1,
+      "reference_label": "b",
+      "paths": [
+        "disordered_pitch-1.wav",
+        "reference-1.wav"
+      ],
+      "hashes": [
+        "0d79ad92433b9bd185e86174abcc205460f80ce32307344b00aff30be8c5fcd8",
+        "844d5f31aae230f6be16cd87efad478e3d0f9a86d92f273c26769a047df4233d"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [
+            {
+              "detail": "audible evidence of music",
+              "end_seconds": 4.0,
+              "excerpt": "a",
+              "start_seconds": 0.0
+            },
+            {
+              "detail": "audible evidence of music",
+              "end_seconds": 4.0,
+              "excerpt": "b",
+              "start_seconds": 0.0
+            }
+          ],
+          "reason": "both excerpts contain music, but no discernible preference can be made based on the provided audio.",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[{\"excerpt\":\"a\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"audible evidence of music\"},{\"excerpt\":\"b\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"audible evidence of music\"}],\"reason\":\"both excerpts contain music, but no discernible preference can be made based on the provided audio.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "identity-2-ab",
+      "kind": "identity",
+      "variant": 2,
+      "reference_label": "a",
+      "paths": [
+        "reference-2.wav",
+        "identity-2.wav"
+      ],
+      "hashes": [
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c",
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "identity-2-ba",
+      "kind": "identity",
+      "variant": 2,
+      "reference_label": "b",
+      "paths": [
+        "identity-2.wav",
+        "reference-2.wav"
+      ],
+      "hashes": [
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c",
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "silence-2-ab",
+      "kind": "silence",
+      "variant": 2,
+      "reference_label": "a",
+      "paths": [
+        "reference-2.wav",
+        "silence-2.wav"
+      ],
+      "hashes": [
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c",
+        "07d5270232673e00361785888c8f0c05851b1bb1d2aa2fd22a6101d03af3a5e7"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts due to lack of discernible musical content.",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts due to lack of discernible musical content.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "silence-2-ba",
+      "kind": "silence",
+      "variant": 2,
+      "reference_label": "b",
+      "paths": [
+        "silence-2.wav",
+        "reference-2.wav"
+      ],
+      "hashes": [
+        "07d5270232673e00361785888c8f0c05851b1bb1d2aa2fd22a6101d03af3a5e7",
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge musical coherence between the two excerpts due to lack of discernible musical content.",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge musical coherence between the two excerpts due to lack of discernible musical content.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "clipping-2-ab",
+      "kind": "clipping",
+      "variant": 2,
+      "reference_label": "a",
+      "paths": [
+        "reference-2.wav",
+        "clipping-2.wav"
+      ],
+      "hashes": [
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c",
+        "b5778423abc9f4257000d942067b4add96b18ba1001890e313d2160bdd30edd1"
+      ],
+      "reply": {
+        "assessment": null,
+        "assessment_error": "Critic returned invalid assessment JSON",
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[{\"excerpt\":\"a\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"audible sound\"}]}"
+      },
+      "outcome": "invalid_response"
+    },
+    {
+      "id": "clipping-2-ba",
+      "kind": "clipping",
+      "variant": 2,
+      "reference_label": "b",
+      "paths": [
+        "clipping-2.wav",
+        "reference-2.wav"
+      ],
+      "hashes": [
+        "b5778423abc9f4257000d942067b4add96b18ba1001890e313d2160bdd30edd1",
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot judge the sound difference between the two excerpts",
+          "uncertainty": "high",
+          "verdict": "cannot_judge"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"cannot_judge\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot judge the sound difference between the two excerpts\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "cannot_judge"
+    },
+    {
+      "id": "disordered_pitch-2-ab",
+      "kind": "disordered_pitch",
+      "variant": 2,
+      "reference_label": "a",
+      "paths": [
+        "reference-2.wav",
+        "disordered_pitch-2.wav"
+      ],
+      "hashes": [
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c",
+        "920ceb7bd5a664a36029f5fda8e0d9752c72b28fe36bc7a4ab61ea637cc7606f"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [],
+          "reason": "cannot_judge",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[],\"reason\":\"cannot_judge\",\"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    },
+    {
+      "id": "disordered_pitch-2-ba",
+      "kind": "disordered_pitch",
+      "variant": 2,
+      "reference_label": "b",
+      "paths": [
+        "disordered_pitch-2.wav",
+        "reference-2.wav"
+      ],
+      "hashes": [
+        "920ceb7bd5a664a36029f5fda8e0d9752c72b28fe36bc7a4ab61ea637cc7606f",
+        "ceb83aac1ad3197dd74f86034c617a81e4f0cea01f261a8e31176fb84c684b3c"
+      ],
+      "reply": {
+        "assessment": {
+          "confidence": "low",
+          "kind": "comparison",
+          "observations": [
+            {
+              "detail": "short musical excerpt",
+              "end_seconds": 4.0,
+              "excerpt": "a",
+              "start_seconds": 0.0
+            },
+            {
+              "detail": "short musical excerpt",
+              "end_seconds": 4.0,
+              "excerpt": "b",
+              "start_seconds": 0.0
+            }
+          ],
+          "reason": "Both excerpts are short musical pieces, and no discernible preference can be made based on the provided audio.",
+          "uncertainty": "high",
+          "verdict": "tie"
+        },
+        "assessment_error": null,
+        "audio_sent": true,
+        "model": "gemma4:e2b",
+        "raw_response": "{\"kind\":\"comparison\",\"verdict\":\"tie\",\"confidence\":\"low\",\"observations\":[{\"excerpt\":\"a\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"short musical excerpt\"},{\"excerpt\":\"b\",\"start_seconds\":0.0,\"end_seconds\":4.0,\"detail\":\"short musical excerpt\"}],\"reason\":\"Both excerpts are short musical pieces, and no discernible preference can be made based on the provided audio.\", \"uncertainty\":\"high\"}"
+      },
+      "outcome": "tie"
+    }
+  ],
+  "counts": {
+    "cannot_judge": 15,
+    "invalid_response": 1,
+    "tie": 8
+  },
+  "environment": {
+    "critic": {
+      "name": "gemma4:e2b",
+      "digest": "7fbdbf8f5e45a75bb122155ed546e765b4d9c53a1285f62fd9f506baa1c5a47e",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "gemma4",
+        "families": [
+          "gemma4"
+        ],
+        "parameter_size": "5.1B",
+        "quantization_level": "Q4_K_M",
+        "context_length": 131072,
+        "embedding_length": 1536,
+        "runner": "ggml"
+      }
+    },
+    "codex": "codex-cli 0.163.0",
+    "ollama": "0.40.5",
+    "platform": "Microsoft Windows NT 10.0.26300.0"
+  },
+  "measured_at": "2026-10-24T03:44:43.8093044Z",
+  "conclusion": "All 24 requests delivered audio. Fifteen judgments abstained, eight tied, and one response omitted required fields. No impairment preference was demonstrated. This model is not validated for automatic musical selection."
+}

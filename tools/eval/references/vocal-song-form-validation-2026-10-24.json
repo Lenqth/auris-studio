@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "scope": "Score-scope smoke tests; one run per case with an initial request and a readback turn.",
+  "backend": "codex",
+  "model": "gpt-6.1-sol",
+  "prompt_profile": "legacy",
+  "candidate_tools_enabled": false,
+  "manifest_sha256": "149f8917beb6e7cf57976cd2526cccb56529421f16b127dea6b1be1be0155741",
+  "source_base_commit": "c4e9ea88b7dc8915e815eb53190c005dc0d1bc52",
+  "source_diff_sha256": "97a97f7da4510dc3061e66abc8cbafe31a21933da1db4328e35adba0b03adf2d",
+  "runner_sha256": "058a8d74663acbf7b65c66619ec508cd522da972805372cd135e0aefe4b947e0",
+  "untracked_rust_sha256": {
+    "crates/auris-session/src/live_agent/vocals/coverage.rs": "ce6abe46a1f136bb59b9e9d6387ad90111bc482a35d13e4a30c56ef7d20e94b2"
+  },
+  "suite_sha256": "059561ab5a3c257290f7aff0941d187d3e268457a306d92c32e5148b24186568",
+  "automated_checks": {
+    "workspace_passed": 4520,
+    "workspace_failed": 0,
+    "workspace_ignored": 34,
+    "clippy_workspace_all_targets": "passed",
+    "python_tests_passed": 9,
+    "ruff": "passed",
+    "default_32k_inspection_regression": "passed"
+  },
+  "cases": [
+    {
+      "case": "full_vocal_song",
+      "transport_pass": true,
+      "elapsed_seconds": 413.7,
+      "tool_errors": 1,
+      "scope_pass_after_initial_turn_and_readback": true,
+      "snapshots": [
+        {
+          "file": "target\\vocal-song-form-2026-10-24\\full_vocal_song-01\\project-01.json",
+          "sha256": "4d74e6559a83405311aa97e64058bef2463fdc2f211a1893d054b2596fe81714",
+          "bars": 40.0,
+          "sections": [
+            {
+              "label": "Intro",
+              "start_bar": 1.0,
+              "bars": 2.0,
+              "singer_onsets": 0,
+              "backing_onsets": 32,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "label": "Verse 1",
+              "start_bar": 3.0,
+              "bars": 8.0,
+              "singer_onsets": 31,
+              "backing_onsets": 69,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "a9507fe0d8b46b1716b002b6fe0af74098a1cbc3764bd03ad7c441b0c41f481d"
+            },
+            {
+              "label": "Chorus 1",
+              "start_bar": 11.0,
+              "bars": 8.0,
+              "singer_onsets": 33,
+              "backing_onsets": 69,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "7d9102aac30fdab6b7464bd68cbf496e125dda1fcf5ce3b3421dac54f8598f44"
+            },
+            {
+              "label": "Interlude",
+              "start_bar": 19.0,
+              "bars": 2.0,
+              "singer_onsets": 0,
+              "backing_onsets": 27,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "label": "Verse 2",
+              "start_bar": 21.0,
+              "bars": 8.0,
+              "singer_onsets": 31,
+              "backing_onsets": 45,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "7be3953cae2e3004139d8e698fc2b650e3d616c3d1d497d0f297df9b3d0a2730"
+            },
+            {
+              "label": "Final Chorus",
+              "start_bar": 29.0,
+              "bars": 8.0,
+              "singer_onsets": 33,
+              "backing_onsets": 33,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "cac57a23caea177d73ad9ba5225db9ddb7be8b53f007d655755547f5a5c2d129"
+            },
+            {
+              "label": "Outro",
+              "start_bar": 37.0,
+              "bars": 4.0,
+              "singer_onsets": 0,
+              "backing_onsets": 12,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          ]
+        },
+        {
+          "file": "target\\vocal-song-form-2026-10-24\\full_vocal_song-01\\project-02.json",
+          "sha256": "f5498c9d7bdb843b870b6aecb80f364e9c925ff02bcb6948422065ca657cb363",
+          "bars": 40.0,
+          "sections": [
+            {
+              "label": "Intro",
+              "start_bar": 1.0,
+              "bars": 2.0,
+              "singer_onsets": 0,
+              "backing_onsets": 32,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "label": "Verse 1",
+              "start_bar": 3.0,
+              "bars": 8.0,
+              "singer_onsets": 31,
+              "backing_onsets": 69,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "db83b89e842c6de6d034457ccba10cd3a8f4d1dd741e9bbbf182b2f6cd72f45b"
+            },
+            {
+              "label": "Chorus 1",
+              "start_bar": 11.0,
+              "bars": 8.0,
+              "singer_onsets": 33,
+              "backing_onsets": 69,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "7d9102aac30fdab6b7464bd68cbf496e125dda1fcf5ce3b3421dac54f8598f44"
+            },
+            {
+              "label": "Interlude",
+              "start_bar": 19.0,
+              "bars": 2.0,
+              "singer_onsets": 0,
+              "backing_onsets": 27,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "label": "Verse 2",
+              "start_bar": 21.0,
+              "bars": 8.0,
+              "singer_onsets": 31,
+              "backing_onsets": 45,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "7be3953cae2e3004139d8e698fc2b650e3d616c3d1d497d0f297df9b3d0a2730"
+            },
+            {
+              "label": "Final Chorus",
+              "start_bar": 29.0,
+              "bars": 8.0,
+              "singer_onsets": 33,
+              "backing_onsets": 33,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "cac57a23caea177d73ad9ba5225db9ddb7be8b53f007d655755547f5a5c2d129"
+            },
+            {
+              "label": "Outro",
+              "start_bar": 37.0,
+              "bars": 4.0,
+              "singer_onsets": 0,
+              "backing_onsets": 12,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "one_chorus_only",
+      "transport_pass": true,
+      "elapsed_seconds": 369.6,
+      "tool_errors": 5,
+      "scope_pass_after_initial_turn_and_readback": true,
+      "snapshots": [
+        {
+          "file": "target\\vocal-song-form-2026-10-24\\one_chorus_only-01\\project-01.json",
+          "sha256": "a95705f9a1f8012ee9cf20fc3db8db9bb4a8652aa62c394b5728870a080b56ce",
+          "bars": 16.0,
+          "sections": [
+            {
+              "label": "Aメロ",
+              "start_bar": 1.0,
+              "bars": 8.0,
+              "singer_onsets": 48,
+              "backing_onsets": 48,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "98949028f377fe68f74aea3c0b03ca8dd39da2eec620a1060fc5a1749877b4f2"
+            },
+            {
+              "label": "サビ",
+              "start_bar": 9.0,
+              "bars": 8.0,
+              "singer_onsets": 53,
+              "backing_onsets": 52,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "196d2fb48f044fea0af90631cf34ba58640db8db4881a2e789421db9299fc937"
+            }
+          ]
+        },
+        {
+          "file": "target\\vocal-song-form-2026-10-24\\one_chorus_only-01\\project-02.json",
+          "sha256": "6eab3f1ad7fe263f240d932d43d84f6f775ec8cfa7f6a632a5b5cd42f20138af",
+          "bars": 16.0,
+          "sections": [
+            {
+              "label": "Aメロ",
+              "start_bar": 1.0,
+              "bars": 8.0,
+              "singer_onsets": 48,
+              "backing_onsets": 48,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "98949028f377fe68f74aea3c0b03ca8dd39da2eec620a1060fc5a1749877b4f2"
+            },
+            {
+              "label": "サビ",
+              "start_bar": 9.0,
+              "bars": 8.0,
+              "singer_onsets": 53,
+              "backing_onsets": 52,
+              "unassigned": 0,
+              "looped_singer_onsets": 0,
+              "lyric_sha256": "6c3a08f3fe14942277b92ca73312589a8a675259e558078bcb4c1e32ac396cfa"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "No vocal synthesis or human listening was evaluated.",
+    "Positive structural coverage and different lyrics are not measures of musical quality.",
+    "One Codex model and one trial per case do not establish reliability across models.",
+    "WAV/MIDI delivery was intentionally excluded, so delivery_present=false is expected."
+  ],
+  "frozen_executable": {
+    "auris_studio-e4bbabb890304372.exe": "69cd99686960d7e7363dd0fdd7f031a48b3a51a50a918d1f8202d04d99214176"
+  },
+  "runtime_manifest_sha256": "945ee217e44e25afd90699329991611d7c2e249a1be57e47934be371e1acb406",
+  "local_evidence": "target/vocal-song-form-2026-10-24/suite.json"
+}

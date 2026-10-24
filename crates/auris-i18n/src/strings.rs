@@ -1932,6 +1932,9 @@ new のオプション
     AgentNotConfigured { en: "Name a model to talk to.", ja: "話しかけるモデルを設定してください。" }
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }
+    AgentSystemPrompt { en: "System prompt", ja: "システムプロンプト" }
+    AgentSystemPromptHelp { en: "Replace the agent's shared instructions for all models. Apply to use them from the next request. Enter adds a line break. Blank uses the standard prompt. Tool permissions still apply.", ja: "全モデル共通の指示を編集します。「適用」すると次の依頼から反映されます。Enterで改行、空欄で標準プロンプトを使用します。ツールの権限設定は引き続き適用されます。" }
+    AgentPromptReset { en: "Restore standard prompt", ja: "標準に戻す" }
     AgentProviderLabel { en: "Provider", ja: "プロバイダ" }
     AgentBackendLabel { en: "Backend", ja: "バックエンド" }
     AgentAntigravityPathLabel { en: "Antigravity CLI executable path (optional)", ja: "Antigravity CLI実行ファイルのパス（任意）" }

@@ -34,6 +34,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
             !matches!(
                 tool.name.as_str(),
                 "history"
+                    | "production_record"
                     | "capabilities"
                     | "discover_tools"
                     | "tool_help"
@@ -96,6 +97,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                         bars,
                         focus,
                         compare_to,
+                        aspect,
                     } = command
                     {
                         return crate::saved_listening::run(
@@ -104,6 +106,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                             bars,
                             focus.as_deref(),
                             compare_to.as_deref(),
+                            aspect,
                         );
                     }
                     let before = command.is_mutating().then(|| session.project().clone());
@@ -137,7 +140,7 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                         object.insert("unsaved".into(), session.is_dirty().into());
                         return Ok(value.to_string());
                     }
-                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement") {
+                    if matches!(action.as_str(), "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement" | "candidates" | "phrase_variation") {
                         return crate::present_domain_report(&text);
                     }
                     Ok(text)
@@ -152,6 +155,49 @@ mod tests {
     use super::*;
     use auris_session::prelude::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn saved_candidate_rounds_preserve_files_until_exact_adoption() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Candidates.auris");
+        let mut session = crate::headless().unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Phrase", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        session
+            .replace_notes(clip, vec![Note::new(60, Ticks::ZERO, Ticks::QUARTER)])
+            .unwrap();
+        session.save(&path).unwrap();
+        let revision = session.agent_document_revision().unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let call = |operation| {
+            crate::runtime::call_saved(
+                &crate::ToolGroups::parse("manual").unwrap(),
+                "candidates",
+                json!({"project":path,"operation":operation}),
+            )
+        };
+        let round:Value=serde_json::from_str(&call(json!({"kind":"create","expected_revision":revision,"candidates":[{"purpose":"Answer on the dominant","edit":{"kind":"notes","edits":[{"kind":"patch","clip":clip.0,"update":[{"index":0,"pitch":67}]}]}}]})).unwrap()).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let read: Value = serde_json::from_str(
+            &call(json!({"kind":"read","round_id":round["round_id"],"candidate":1,"clip":clip.0}))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read["notes"][0]["after"]["pitch"], 67);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        call(json!({"kind":"apply","round_id":round["round_id"],"candidate":1,"expected_revision":revision})).unwrap();
+        let after = crate::opened(path.to_str().unwrap()).unwrap();
+        let mut expected = session.project().clone();
+        expected.midi_clip_mut(clip).unwrap().notes[0].pitch = 67;
+        assert_eq!(after.project(), &expected);
+        call(json!({"kind":"apply","round_id":round["round_id"],"candidate":1,"expected_revision":revision})).unwrap();
+        assert_eq!(
+            crate::opened(path.to_str().unwrap()).unwrap().project(),
+            &expected
+        );
+    }
 
     #[test]
     fn saved_accompaniment_preserves_melody_and_selective_regeneration_survives_reopen() {
@@ -178,7 +224,7 @@ mod tests {
             .unwrap()
             .agent_document_revision()
             .unwrap();
-        let args = json!({"project":path,"expected_revision":revision,"protected_clips":[lead.0],"operation":{"kind":"generate","parts":[
+        let args = json!({"project":path,"expected_revision":revision,"protected_clips":[lead.0],"foreground_clips":[lead.0],"operation":{"kind":"generate","parts":[
             {"track":bass.0,"name":"Bass","part":"bass","start_bar":1,"bars":4,"seed":23},
             {"track":pad.0,"name":"Pad","part":"pad","start_bar":1,"bars":4,"seed":42}
         ]}});
@@ -206,7 +252,7 @@ mod tests {
             suggestions["candidates"][0]["harmony"]["chords"],
             "| Imaj7 | Imaj7 | Imaj7 | Imaj7 |"
         );
-        let apply = json!({"project":path,"expected_revision":suggestions["revision"],"protected_clips":suggestions["protected_clips"],"operation":{
+        let apply = json!({"project":path,"expected_revision":suggestions["revision"],"protected_clips":suggestions["protected_clips"],"foreground_clips":suggestions["foreground_clips"],"operation":{
             "kind":"regenerate","clips":[id.0],"harmony":suggestions["candidates"][0]["harmony"]
         }});
         crate::runtime::call_saved(&groups, "accompaniment", apply.clone()).unwrap();
@@ -452,5 +498,60 @@ mod tests {
         .unwrap();
         assert_eq!(performance["settings"]["gate"], 0.5);
         assert_eq!(read()["clips"][0]["notes"], current["clips"][0]["notes"]);
+    }
+    #[test]
+    fn saved_audio_material_processing_reopens_sources_and_persists_provenance() {
+        let directory = tempfile::tempdir().unwrap();
+        let wav = directory.path().join("fixture.wav");
+        let mut session = crate::headless().unwrap();
+        session
+            .render_job()
+            .render_to_wav(
+                &wav,
+                &Default::default(),
+                &auris_session::prelude::OfflineOptions {
+                    end_frames: Some(4800),
+                    include_tail: false,
+                    ..Default::default()
+                },
+                &mut Default::default(),
+            )
+            .unwrap();
+        let project = directory.path().join("Materials.auris");
+        session.save(&project).unwrap();
+        let call = |name, args| {
+            serde_json::from_str::<Value>(
+                &crate::runtime::call_saved(&crate::ToolGroups::default(), name, args).unwrap(),
+            )
+            .unwrap()
+        };
+        let import = call(
+            "import_audio",
+            json!({"project":project,"path":wav,"at_tick":0}),
+        );
+        let before = std::fs::read(&project).unwrap();
+        let inspect = call(
+            "audio_assets",
+            json!({"project":project,"operation":{"kind":"inspect","clip":import["clip"]}}),
+        );
+        assert_eq!(std::fs::read(&project).unwrap(), before);
+        assert_eq!(
+            inspect["source"]["provenance"]["sha256"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
+        let processed = call(
+            "audio_assets",
+            json!({"project":project,"operation":{"kind":"process","clip":import["clip"],"expected_revision":inspect["revision"],"reverse":true}}),
+        );
+        let inspect = call(
+            "audio_assets",
+            json!({"project":project,"operation":{"kind":"inspect","clip":import["clip"]}}),
+        );
+        assert_eq!(inspect["source"]["id"], processed["source"]);
+        assert_ne!(inspect["source"]["id"], import["source"]);
+        assert!(inspect["source"]["provenance"]["parent_sha256"].is_string());
     }
 }

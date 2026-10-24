@@ -9,6 +9,10 @@ use std::sync::atomic::AtomicBool;
 
 /// Owned work that can run without accessing the live document.
 pub enum AgentJob {
+    /// Bounded audio discovery, import or source processing.
+    AudioAssets(Box<crate::session::audio_assets::Job>),
+    /// Private candidate construction or comparison rendering.
+    Candidates(crate::session::candidates::Job),
     /// Bounded backing generation against an owned document snapshot.
     Accompaniment(Box<crate::session::accompaniment::Job>),
     /// Capability-aware preparation of an immutable arrangement candidate.
@@ -23,6 +27,10 @@ pub enum AgentJob {
 
 /// A worker result returned to its originating owner for validation and publication.
 pub enum AgentResult {
+    /// Prepared audio material awaiting its originating document.
+    AudioAssets(Box<crate::session::audio_assets::Prepared>),
+    /// Candidate results awaiting owner validation.
+    Candidates(crate::session::candidates::Prepared),
     /// Generated backing and optional harmony awaiting their original owner.
     Accompaniment(Box<crate::session::accompaniment::Prepared>),
     /// A complete arrangement candidate awaiting its original owner.
@@ -47,6 +55,10 @@ impl AgentJob {
     /// Perform detached work with cooperative cancellation.
     pub fn run(self, cancelled: &AtomicBool) -> Result<AgentResult, String> {
         match self {
+            Self::AudioAssets(job) => job
+                .run(cancelled)
+                .map(|result| AgentResult::AudioAssets(Box::new(result))),
+            Self::Candidates(job) => job.run(cancelled).map(AgentResult::Candidates),
             Self::Accompaniment(job) => job
                 .run(cancelled)
                 .map(|result| AgentResult::Accompaniment(Box::new(result))),
@@ -70,12 +82,24 @@ impl Session {
         settings: Settings,
     ) -> Result<AgentJob, String> {
         match command {
+            Command::AudioAssets { operation } => self
+                .begin_audio_assets(operation)
+                .map(|job| AgentJob::AudioAssets(Box::new(job))),
+            Command::Candidates { operation } => {
+                self.begin_candidates(operation).map(AgentJob::Candidates)
+            }
             Command::Accompaniment {
                 expected_revision,
                 protected_clips,
+                foreground_clips,
                 operation,
             } => self
-                .begin_accompaniment(&expected_revision, &protected_clips, operation)
+                .begin_accompaniment(
+                    &expected_revision,
+                    &protected_clips,
+                    &foreground_clips,
+                    operation,
+                )
                 .map(|job| AgentJob::Accompaniment(Box::new(job))),
             Command::Arrangement {
                 operation:
@@ -128,6 +152,12 @@ impl Session {
             return Err("Agent operation cancelled before publication".into());
         }
         match result {
+            AgentResult::AudioAssets(result) => self
+                .continue_audio_assets(*result, cancelled)
+                .map(AgentStep::Done),
+            AgentResult::Candidates(result) => self
+                .continue_candidates(result, cancelled)
+                .map(AgentStep::Done),
             AgentResult::Accompaniment(result) => self
                 .continue_accompaniment(*result, cancelled)
                 .map(AgentStep::Done),

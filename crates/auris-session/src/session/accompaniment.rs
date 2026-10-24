@@ -1,11 +1,13 @@
 //! Explicit backing generation, preserving foreground and every unselected clip.
 
-use super::{Session, generated::project_phrase};
+use super::{Session, generated::unarranged_project_phrase, lyrics::arrange_backing_around_notes};
 use crate::Edit;
 use crate::live_agent::recipes::{RecipePatch, summary};
 use crate::prelude::{Chart, MusicalKey};
 use auris_core::time::Ticks;
-use auris_core::{ClipId, ClipPreset, ClipRecipe, MidiClip, PluginRegistry, Project, TrackId};
+use auris_core::{
+    ClipId, ClipPreset, ClipRecipe, MidiClip, Note, PluginRegistry, Project, TrackId,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -116,6 +118,7 @@ pub struct Job {
     folder: Option<PathBuf>,
     project: Project,
     protected: Vec<u64>,
+    foreground: Vec<u64>,
     operation: Operation,
 }
 
@@ -124,6 +127,12 @@ pub struct Prepared {
     job: Job,
     clips: Vec<Value>,
     harmony_changed: bool,
+}
+
+impl Prepared {
+    pub(crate) fn into_candidate_project(self) -> Project {
+        self.job.project
+    }
 }
 
 fn check(cancelled: &AtomicBool) -> Result<(), String> {
@@ -142,6 +151,89 @@ fn ids(values: &[u64], label: &str) -> Result<(), String> {
         return Err(format!("{label} requires 1..16 distinct clip IDs"));
     }
     Ok(())
+}
+
+/// Reads score windows and repetitions, leaving performance and source clips untouched.
+fn foreground_notes(
+    project: &Project,
+    clips: &[u64],
+    start: Ticks,
+    end: Ticks,
+) -> Result<Vec<Note>, String> {
+    let mut notes = Vec::new();
+    let mut stored = 0usize;
+    for id in clips {
+        let (track, clip) = project
+            .midi_clip(ClipId(*id))
+            .ok_or("Unknown foreground clip")?;
+        if clip.muted
+            || project.track(track).is_none_or(|track| track.mixer.mute)
+            || clip.start >= end
+            || clip.sounding_end() <= start
+        {
+            continue;
+        }
+        stored += clip.notes.len();
+        if stored > 4096 {
+            return Err(
+                "Foreground sources are limited to 4096 stored notes; split long clips first"
+                    .into(),
+            );
+        }
+        clip.looped_note_instances()
+            .map_err(|error| error.to_string())?;
+        let playable: Vec<_> = clip
+            .playable_notes()
+            .filter(|note| note.velocity > 0.0)
+            .collect();
+        for (offset, span) in auris_core::project::loop_passes(clip.length, clip.loop_end) {
+            let at = clip.start + offset;
+            if at >= end {
+                break;
+            }
+            if at + span <= start {
+                continue;
+            }
+            for note in &playable {
+                let onset = (at + note.start).max(start);
+                let release = (at + note.end().min(span)).min(end);
+                if release <= onset {
+                    continue;
+                }
+                if notes.len() == 4096 {
+                    return Err(
+                        "Expanded foreground exceeds 4096 notes; shorten the request".into(),
+                    );
+                }
+                notes.push(Note {
+                    start: onset - start,
+                    length: release - onset,
+                    ..note.clone()
+                });
+            }
+        }
+    }
+    notes.sort_by_key(|note| (note.start, note.pitch, note.length));
+    notes.dedup_by_key(|note| (note.start, note.pitch, note.length));
+    Ok(notes)
+}
+
+fn write_backing(
+    project: &Project,
+    foreground: &[u64],
+    start: Ticks,
+    length: Ticks,
+    recipe: &ClipRecipe,
+) -> Result<(Vec<Note>, Value), String> {
+    let reference = foreground_notes(project, foreground, start, start + length)?;
+    let mut notes = unarranged_project_phrase(project, start, length, recipe);
+    let before = notes.clone();
+    let status =
+        arrange_backing_around_notes(project, start, length, recipe, &reference, &mut notes);
+    let report = json!({"status":status,"changed":notes != before,
+        "foreground_note_count":reference.len(),"notes_before":before.len(),"notes_after":notes.len(),
+        "basis":"Selected written notes, clip windows and loops; muted sources omitted. Performance transforms, solo routing, bends and sound are not evaluated."});
+    Ok((notes, report))
 }
 
 fn range(project: &Project, start_bar: u32, bars: u32) -> Result<(Ticks, Ticks), String> {
@@ -227,12 +319,17 @@ impl Session {
         &self,
         revision: &str,
         protected: &[u64],
+        foreground: &[u64],
         operation: Operation,
     ) -> Result<Job, String> {
         if self.transaction.is_some() || self.agent_document_revision()? != revision {
             return Err("Document changed or an edit is in progress; inspect_project again".into());
         }
         ids(protected, "protected_clips")?;
+        ids(foreground, "foreground_clips")?;
+        if foreground.iter().any(|id| !protected.contains(id)) {
+            return Err("foreground_clips must be a subset of protected_clips".into());
+        }
         for id in protected {
             let (track, clip) = self
                 .project
@@ -262,6 +359,7 @@ impl Session {
             folder: self.project_folder().map(ToOwned::to_owned),
             project: self.project.clone(),
             protected: protected.to_vec(),
+            foreground: foreground.to_vec(),
             operation,
         })
     }
@@ -299,7 +397,7 @@ impl Session {
         }
         Ok(
             json!({"changed": changed, "revision": self.agent_document_revision()?,
-            "protected_clips": job.protected, "clips": clips, "harmony_changed": harmony_changed,
+            "protected_clips": job.protected, "foreground_clips": job.foreground, "clips": clips, "harmony_changed": harmony_changed,
             "unselected_clips_preserved": true})
             .to_string(),
         )
@@ -315,6 +413,7 @@ impl Job {
             .filter_map(|id| self.project.track_of_clip(ClipId(*id)))
             .collect();
         let mut candidates = Vec::new();
+        let mut adaptations = Vec::new();
         let mut total = 0;
         let mut harmony_changed = false;
         match &self.operation {
@@ -374,7 +473,15 @@ impl Job {
                         );
                     }
                     let mut clip = MidiClip::new(ClipId(0), &part.name, start, end - start);
-                    clip.notes = project_phrase(&self.project, start, end - start, &recipe, None);
+                    let (notes, adaptation) = write_backing(
+                        &self.project,
+                        &self.foreground,
+                        start,
+                        end - start,
+                        &recipe,
+                    )?;
+                    clip.notes = notes;
+                    adaptations.push(adaptation);
                     clip.transforms = auris_compose::clip_performance(preset, recipe.seed);
                     recipe.text_digest = auris_core::notes_digest(&clip.notes);
                     clip.recipe = Some(recipe);
@@ -422,13 +529,15 @@ impl Job {
                     {
                         return Err("Regeneration targets must fit inside the harmony change; split spanning clips first".into());
                     }
-                    clip.notes = project_phrase(
+                    let (notes, adaptation) = write_backing(
                         &self.project,
+                        &self.foreground,
                         clip.start,
                         clip.length,
                         &recipe,
-                        Some(clip.id),
-                    );
+                    )?;
+                    clip.notes = notes;
+                    adaptations.push(adaptation);
                     recipe.text_digest = auris_core::notes_digest(&clip.notes);
                     clip.recipe = Some(recipe);
                     candidates.push((track, clip));
@@ -437,7 +546,7 @@ impl Job {
         }
         let mut count = 0usize;
         let mut reports = Vec::new();
-        for (track, mut clip) in candidates {
+        for ((track, mut clip), adaptation) in candidates.into_iter().zip(adaptations) {
             check(cancelled)?;
             count += clip.notes.len();
             if clip.notes.is_empty() || count > 65_536 {
@@ -452,7 +561,7 @@ impl Job {
             }
             reports.push(json!({"clip": clip.id.0, "track": track.0, "name": clip.name,
                 "start_tick": clip.start.raw(), "length_ticks": clip.length.raw(), "note_count": clip.notes.len(),
-                "recipe": summary(clip.recipe.as_ref().expect("generated recipe"))}));
+                "recipe": summary(clip.recipe.as_ref().expect("generated recipe")), "adaptation":adaptation}));
             let id = clip.id;
             *self
                 .project

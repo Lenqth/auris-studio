@@ -20,6 +20,11 @@ impl ToolHost {
 
     pub(crate) fn catalog() -> Vec<toolbox::live_agent::Definition> {
         let mut catalog = toolbox::live_agent::definitions();
+        // Candidate schemas add about 9 KiB. Keep the experimental surface explicit so
+        // existing 32k local-model conversations retain their inspection headroom.
+        if !std::env::var("AURIS_COMPOSITION_CANDIDATES").is_ok_and(|v| v == "1") {
+            catalog.retain(|tool| !matches!(tool.name.as_str(), "candidates" | "phrase_variation"));
+        }
         if Self::search_available() {
             catalog.push(toolbox::live_agent::Definition {
                 name: toolbox::internet_search::NAME.into(),
@@ -50,6 +55,27 @@ impl ToolHost {
         let _guard = self.bridge.tool_lock().await;
         if !Self::contains(name) {
             return Err(format!("Unknown live tool: {name}"));
+        }
+        if name == toolbox::live_agent::production_record::NAME {
+            let request: toolbox::live_agent::production_record::Args =
+                serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
+            permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
+            permissions::authorize(Some(&self.bridge), "inspect_project", "{}").await?;
+            let inspected = self
+                .bridge
+                .exchange(json!({"event":"edit","command":{"action":"inspect"}}))
+                .await?;
+            if inspected["ok"] != true {
+                return Err(
+                    "Could not reconcile production record with the current document".into(),
+                );
+            }
+            let mut state: Value =
+                serde_json::from_str(inspected["text"].as_str().ok_or("Missing inspection")?)
+                    .map_err(|e| e.to_string())?;
+            self.bridge.inspected_production_document(&mut state)?;
+            let view = self.bridge.production_record(request.operation)?;
+            return Ok(json!({"event":"edit_result","ok":true,"text":view.to_string()}));
         }
         if toolbox::runtime::live_references()
             .iter()
@@ -181,9 +207,31 @@ impl ToolHost {
         if reply["event"] != "edit_result" {
             return Err("The edit response did not match the pending request".into());
         }
+        if reply["ok"] == true && matches!(name, "inspect_project" | "listen") {
+            let mut value: Value =
+                serde_json::from_str(reply["text"].as_str().ok_or("Missing tool response")?)
+                    .map_err(|e| e.to_string())?;
+            if name == "inspect_project" {
+                self.bridge.inspected_production_document(&mut value)?;
+                reply["text"] = value.to_string().into();
+            } else if let Some(revision) = value["revision"].as_u64() {
+                self.bridge.observe_production(
+                    name,
+                    revision,
+                    args["start_bar"].as_u64().zip(args["bars"].as_u64()),
+                    None,
+                    value,
+                )?;
+            }
+        }
         if matches!(
             name,
-            "analyze_lyrics" | "diagnose_song" | "repair_lyrics" | "arrangement"
+            "analyze_lyrics"
+                | "diagnose_song"
+                | "repair_lyrics"
+                | "arrangement"
+                | "candidates"
+                | "phrase_variation"
         ) && reply["ok"] == true
             && let Some(text) = reply["text"].as_str()
         {
@@ -196,6 +244,38 @@ impl ToolHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn production_reads_reinspect_the_document_and_share_permissions() {
+        let (bridge, commands, events) = crate::worker::test_bridge();
+        let host = ToolHost::new(bridge);
+        let call = host.call("production_record", json!({"operation":{"kind":"read"}}));
+        let owner = async {
+            for expected in ["production_record", "edit_project"] {
+                let permission = next_event(&events).await;
+                assert_eq!(permission["tool"], expected);
+                commands
+                    .send(
+                        json!({"event":"permission_result","id":permission["id"],"ok":true})
+                            .to_string(),
+                    )
+                    .unwrap();
+            }
+            assert_eq!(next_event(&events).await["command"]["action"], "inspect");
+            commands.send(json!({"event":"edit_result","ok":true,"text":json!({"revision":"today","document_instance":"instance"}).to_string()}).to_string()).unwrap();
+        };
+        let (result, ()) = tokio::join!(call, owner);
+        let view: Value = serde_json::from_str(result.unwrap()["text"].as_str().unwrap()).unwrap();
+        assert_eq!(view["persistence"], "worker_lifetime");
+        for kind in ["read", "remove"] {
+            let operation = auris_session::agent_policy::Operation::parse(
+                "production_record",
+                &json!({"operation":{"kind":kind,"key":"motif"}}),
+            )
+            .unwrap();
+            assert_eq!(operation.mutating, kind != "read");
+        }
+    }
 
     #[tokio::test]
     async fn performance_tools_use_the_shared_live_permission_and_undo_path() {
@@ -317,7 +397,7 @@ mod tests {
                     assert_eq!(request["event"], "edit");
                     assert_eq!(request["command"]["action"], "listen");
                     assert!(request["command"].get("project").is_none());
-                    commands.send(json!({"event":"edit_result","ok":true,"text":"scripted host response"}).to_string()).unwrap();
+                    commands.send(json!({"event":"edit_result","ok":true,"text":"{\"revision\":1,\"assessment\":null}"}).to_string()).unwrap();
                 }
             };
             let (result, ()) = tokio::join!(call, owner);

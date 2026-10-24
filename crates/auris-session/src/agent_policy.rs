@@ -189,8 +189,11 @@ pub struct Operation {
 
 /// Every operation exposed by the live agent, for rule editing and validation.
 pub const OPERATIONS: &[&str] = &[
+    "production_record",
     "edit_project.suggest_harmony",
     "edit_project.accompaniment",
+    "edit_project.candidates",
+    "edit_project.phrase_variation",
     "edit_project.arrangement",
     "edit_project.analyze_lyrics",
     "edit_project.diagnose_song",
@@ -224,6 +227,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.listen",
     "edit_project.checkpoints",
     "edit_project.import_audio",
+    "edit_project.audio_assets",
     "edit_project.import_midi",
     "edit_project.render",
     "edit_project.preview",
@@ -287,7 +291,9 @@ impl Operation {
                 });
             }
             let mutating = parsed.is_mutating();
-            let confirm = matches!(&parsed, crate::live_agent::Command::Arrangement { operation } if operation.requires_confirmation())
+            let confirm = matches!(&parsed, crate::live_agent::Command::AudioAssets { operation } if operation.requires_confirmation())
+                || matches!(&parsed, crate::live_agent::Command::Arrangement { operation } if operation.requires_confirmation())
+                || matches!(&parsed, crate::live_agent::Command::Candidates { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::Checkpoints { operation, .. } if operation.is_mutating())
                 || matches!(&parsed, crate::live_agent::Command::History { .. } if mutating)
                 || matches!(&parsed, crate::live_agent::Command::EditClip { operation, .. } if operation.requires_confirmation())
@@ -315,7 +321,8 @@ impl Operation {
         } else if !tool.contains('.') && OPERATIONS.contains(&tool) {
             Ok(Self {
                 name: tool.into(),
-                mutating: matches!(tool, "cli_command" | "cli_file_change"),
+                mutating: matches!(tool, "cli_command" | "cli_file_change")
+                    || (tool == "production_record" && args["operation"]["kind"] != "read"),
                 // A native read is free only inside the folder the CLI works in. The worker
                 // decides that from the path the CLI asked for, and says so here; anything
                 // else — another project, a home directory's keys — asks like a network call.
@@ -402,6 +409,39 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn candidate_preparation_is_read_only_but_adoption_requires_edit_permission() {
+        use super::*;
+        for (operation, mutating) in [
+            (
+                serde_json::json!({"kind":"read","round_id":"r","candidate":0}),
+                false,
+            ),
+            (
+                serde_json::json!({"kind":"preview","round_id":"r","range":{"start_bar":1,"bars":1}}),
+                false,
+            ),
+            (
+                serde_json::json!({"kind":"apply","round_id":"r","candidate":1,"expected_revision":"v"}),
+                true,
+            ),
+        ] {
+            let parsed = Operation::parse(
+                "edit_project",
+                &serde_json::json!({"command":{"action":"candidates","operation":operation}}),
+            )
+            .unwrap();
+            assert_eq!(parsed.mutating, mutating);
+            assert_eq!(parsed.confirm, mutating);
+            let decision = Policy {
+                mode: Mode::ReadOnly,
+                ..Default::default()
+            }
+            .decide(&parsed);
+            assert_eq!(matches!(decision, Decision::Deny(_)), mutating);
+        }
+    }
+
+    #[test]
     fn harmony_suggestions_are_available_in_read_only_and_plan_modes() {
         use super::*;
         let operation = Operation::parse(
@@ -430,7 +470,7 @@ mod tests {
         let operation = Operation::parse(
             "edit_project",
             &serde_json::json!({"command":{
-                "action":"accompaniment","expected_revision":"revision","protected_clips":[1],
+                "action":"accompaniment","expected_revision":"revision","protected_clips":[1],"foreground_clips":[1],
                 "operation":{"kind":"regenerate","clips":[2]}
             }}),
         )

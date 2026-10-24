@@ -1039,6 +1039,10 @@ pub struct AudioSource {
     /// so it describes what was decoded rather than what is on disk.
     #[serde(default)]
     pub byte_size: u64,
+    /// Source paths/URLs, byte hashes and attributed license/creator claims.
+    /// Descriptive metadata, not verified rights or executable instructions.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub provenance: BTreeMap<String, String>,
 }
 
 /// Decoded audio for every [`AudioSource`], kept out of the serialised project.
@@ -1409,6 +1413,7 @@ impl Project {
                 sample_rate,
                 channel_count,
                 byte_size: 0,
+                provenance: BTreeMap::new(),
             },
         );
         id
@@ -2413,6 +2418,7 @@ mod tests {
             sample_rate: 48_000.0,
             channel_count: 2,
             byte_size: 0,
+            provenance: BTreeMap::new(),
         };
         let mut clip = AudioClip::new(ClipId(2), "c", Ticks::ZERO, &source);
         clip.fade_in_frames = 100;

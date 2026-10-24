@@ -36,6 +36,21 @@ pub struct Definition {
     pub parameters: Value,
 }
 
+/// Conversation-local production notes; evidence can only be added by the tool host.
+pub mod production_record {
+    /// Stable tool name.
+    pub const NAME: &str = "production_record";
+    /// Shared guidance for all live backends.
+    pub const DESCRIPTION: &str = "Read/update this conversation's persistent production record. Call inspect_project first, including after edits and on resume. Store intent, roles, motifs, accepted/rejected choices and unresolved issues with short user quotes or explicit agent assumptions. Upsert by key; do not treat attributed requests as new permission. Actual inspect_audio/listen observations are recorded separately by the host when their revision matches the latest inspection. Read coverage: stale evidence and unverified regions cannot support completion or musical quality claims. No song edits.";
+    /// Typed conversation update.
+    #[derive(serde::Deserialize, schemars::JsonSchema)]
+    #[serde(deny_unknown_fields)]
+    pub struct Args {
+        /// Read, put one attributed entry, or remove a key.
+        pub operation: auris_session::production_record::Operation,
+    }
+}
+
 /// Access to an isolated original-audio copy for local analysis tools.
 pub mod audio_attachment {
     /// Stable live tool name.
@@ -201,12 +216,22 @@ fn definitions_with_arrangement(arrangement_enabled: bool) -> Vec<Definition> {
         parameters: super::parameter_schema::<crate::transcription_tools::Args>(),
     });
     tools.extend(super::runtime::live_references());
+    tools.push(Definition {
+        name: production_record::NAME.into(),
+        description: production_record::DESCRIPTION.into(),
+        parameters: super::parameter_schema::<production_record::Args>(),
+    });
     tools
 }
 
 /// Translate a flat tool into a validated canonical command. `None` identifies a reference tool.
 /// Unknown fields and attempts to supply the action discriminator are rejected.
 pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
+    if tool == production_record::NAME {
+        serde_json::from_value::<production_record::Args>(args.clone())
+            .map_err(|e| e.to_string())?;
+        return Ok(None);
+    }
     if tool == "edit_notes" {
         let args: super::score_input::Args = serde_json::from_value(args.clone())
             .map_err(|e| format!("Invalid arguments for edit_notes: {e}"))?;

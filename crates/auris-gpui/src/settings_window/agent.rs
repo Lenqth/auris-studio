@@ -4,15 +4,21 @@ use super::*;
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
     selected_connection: auris_agent::ModelConnection,
-    pub(super) fields: [TextField; 6],
-    pub(super) focus: [FocusHandle; 6],
+    pub(super) fields: [TextField; 7],
+    pub(super) focus: [FocusHandle; 7],
     pub(super) active: Option<usize>,
+    pub(super) prompt_viewport:
+        std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
 }
 
 impl AgentSettings {
+    pub(super) const PROMPT_FIELD: usize = 6;
+
     pub(super) fn new(prefs: AgentPreferences, cx: &mut Context<SettingsWindow>) -> Self {
         let selected_connection = auris_agent::ModelConnection::from_preferences(&prefs);
         let mut prefs = prefs;
+        let mut prompt = TextField::new(auris_agent::system_prompt(&prefs));
+        prompt.place_caret(0, false);
         if let Some(endpoint) = &prefs.discovery_endpoint {
             prefs.provider.clone_from(&endpoint.provider);
             prefs.url.clone_from(&endpoint.url);
@@ -27,6 +33,7 @@ impl AgentSettings {
                 TextField::new(prefs.claude_path.clone()),
                 TextField::new(prefs.opencode_path.clone()),
                 TextField::new(prefs.antigravity_path.clone()),
+                prompt,
             ],
             focus: [
                 cx.focus_handle().tab_stop(true),
@@ -35,8 +42,10 @@ impl AgentSettings {
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
+                cx.focus_handle().tab_stop(true),
             ],
             active: None,
+            prompt_viewport: Default::default(),
             prefs,
         }
     }
@@ -60,6 +69,13 @@ impl SettingsWindow {
         self.agent.prefs.claude_path = self.agent.fields[3].content().trim().to_owned();
         self.agent.prefs.opencode_path = self.agent.fields[4].content().trim().to_owned();
         self.agent.prefs.antigravity_path = self.agent.fields[5].content().trim().to_owned();
+        let prompt = self.agent.fields[AgentSettings::PROMPT_FIELD].content();
+        self.agent.prefs.system_prompt =
+            if prompt.trim().is_empty() || prompt == auris_agent::default_system_prompt() {
+                String::new()
+            } else {
+                prompt.to_owned()
+            };
         let draft = self.agent.prefs.clone();
         let selected_connection = self.agent.selected_connection.clone();
         let result = self.app.update(cx, move |app, cx| {
@@ -88,6 +104,7 @@ impl SettingsWindow {
             }
             prefs.context_tokens = draft.context_tokens;
             prefs.output_tokens = draft.output_tokens;
+            prefs.system_prompt = draft.system_prompt;
             app.agent_apply_preferences_with(prefs, save)?;
             cx.notify();
             Ok::<_, E>(
@@ -112,6 +129,44 @@ impl SettingsWindow {
         let Some(index) = self.agent.active else {
             return false;
         };
+        if index == AgentSettings::PROMPT_FIELD {
+            self.agent.prompt_viewport.borrow_mut().follow_caret();
+            let key = event.keystroke.key.as_str();
+            let shift = event.keystroke.modifiers.shift;
+            let secondary = event.keystroke.modifiers.secondary();
+            if self.agent.fields[AgentSettings::PROMPT_FIELD]
+                .marked()
+                .is_some()
+            {
+                return false;
+            }
+            match key {
+                "enter" if secondary => self.apply_agent(cx),
+                "enter" => self.agent.fields[AgentSettings::PROMPT_FIELD].insert("\n"),
+                "up" => self.agent.fields[AgentSettings::PROMPT_FIELD].move_up(shift),
+                "down" => self.agent.fields[AgentSettings::PROMPT_FIELD].move_down(shift),
+                "home" if secondary => {
+                    self.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(0, shift)
+                }
+                "end" if secondary => {
+                    let end = self.agent.fields[AgentSettings::PROMPT_FIELD]
+                        .content()
+                        .len();
+                    self.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(end, shift);
+                }
+                _ => {
+                    let handled = self.agent.fields[AgentSettings::PROMPT_FIELD]
+                        .apply_key_with_clipboard(key, shift, secondary, true, cx)
+                        != KeyEffect::Ignored;
+                    if handled {
+                        cx.notify();
+                    }
+                    return handled;
+                }
+            }
+            cx.notify();
+            return true;
+        }
         if event.keystroke.key == "enter" && self.agent.fields[index].marked().is_none() {
             self.apply_agent(cx);
             return true;
@@ -185,6 +240,69 @@ impl SettingsWindow {
                     cx.notify();
                 }),
             )
+            .into_any_element()
+    }
+
+    fn agent_prompt(&self, cx: &mut Context<Self>) -> AnyElement {
+        let field = &self.agent.fields[AgentSettings::PROMPT_FIELD];
+        let focus = self.agent.focus[AgentSettings::PROMPT_FIELD].clone();
+        let pointer_focus = focus.clone();
+        div()
+            .id("agent-system-prompt")
+            .debug_selector(|| "agent-system-prompt".to_owned())
+            .track_focus(&focus)
+            .tab_index(0)
+            .w_full()
+            .min_w_0()
+            .h_64()
+            .flex_shrink_0()
+            .bg(self.theme.surface_sunken)
+            .border_1()
+            .rounded(Metrics::RADIUS_SM)
+            .border_color(self.theme.border)
+            .focus(|el| el.border_color(self.theme.accent))
+            .cursor_text()
+            .child(crate::ui::text_area::editable_scrolling_area(
+                field.content().to_owned().into(),
+                field.selection(),
+                field.marked(),
+                self.agent.active == Some(AgentSettings::PROMPT_FIELD),
+                focus,
+                cx.entity(),
+                self.theme.clone(),
+                self.agent.prompt_viewport.clone(),
+            ))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                    if this.agent.fields[AgentSettings::PROMPT_FIELD]
+                        .marked()
+                        .is_none()
+                        && let Some(offset) = this.agent.prompt_viewport.borrow().offset_at(
+                            window,
+                            this.agent.fields[AgentSettings::PROMPT_FIELD].content(),
+                            event.position,
+                        )
+                    {
+                        this.agent.fields[AgentSettings::PROMPT_FIELD]
+                            .place_caret(offset, event.modifiers.shift);
+                    }
+                    this.agent.active = Some(AgentSettings::PROMPT_FIELD);
+                    this.editing_search = false;
+                    window.focus(&pointer_focus);
+                    cx.notify();
+                }),
+            )
+            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+                this.agent.prompt_viewport.borrow_mut().scroll_by(
+                    event
+                        .delta
+                        .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
+                        .y,
+                );
+                cx.stop_propagation();
+                cx.notify();
+            }))
             .into_any_element()
     }
 
@@ -281,6 +399,27 @@ impl SettingsWindow {
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
+        rows.push(section_title(self.t(Key::AgentSystemPrompt), &theme));
+        rows.push(note(self.t(Key::AgentSystemPromptHelp), &theme));
+        rows.push(self.agent_prompt(cx));
+        rows.push(
+            button(
+                "agent-prompt-reset",
+                self.t(Key::AgentPromptReset),
+                ButtonStyle::Normal,
+                false,
+                theme.accent,
+                &theme,
+                cx.listener(|this, _, _, cx| {
+                    this.agent.fields[AgentSettings::PROMPT_FIELD] =
+                        TextField::new(auris_agent::default_system_prompt());
+                    this.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(0, false);
+                    this.agent.prompt_viewport.borrow_mut().follow_caret();
+                    cx.notify();
+                }),
+            )
+            .into_any_element(),
+        );
         rows.push(
             button(
                 "agent-apply",
@@ -309,7 +448,7 @@ mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
 
-    fn click_visible_field(selector: &'static str, cx: &mut VisualTestContext) {
+    fn click_visible_control(selector: &'static str, cx: &mut VisualTestContext) {
         let body = cx.debug_bounds("settings-body").unwrap();
         let field = cx.debug_bounds(selector).unwrap();
         // Adding a CLI connection can move the API fields below the initial viewport.
@@ -356,7 +495,7 @@ mod tests {
         cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
-        click_visible_field("agent-antigravity-path", cx);
+        click_visible_control("agent-antigravity-path", cx);
         cx.simulate_input("C:/Tools/agy.exe");
         handle
             .update(cx, |this, _, cx| {
@@ -372,6 +511,123 @@ mod tests {
                 "C:/Tools/agy.exe"
             );
             assert_eq!(this.settings.agent.url, "https://example.invalid/v1");
+        });
+    }
+
+    #[gpui::test]
+    fn long_prompt_scrolls_without_moving_selection_and_clicks_the_scrolled_text(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent.system_prompt = "Keep this musical instruction.\n".repeat(80);
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(800.0), px(1600.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        let bounds = cx.debug_bounds("agent-system-prompt").unwrap();
+        let position = bounds.origin + gpui::point(px(12.0), px(12.0));
+        cx.simulate_click(position, gpui::Modifiers::none());
+        let before = handle
+            .update(cx, |this, _, _| {
+                this.agent.fields[AgentSettings::PROMPT_FIELD].selection()
+            })
+            .unwrap();
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position,
+            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), px(-300.0))),
+            ..Default::default()
+        });
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, _, _| {
+                assert_eq!(
+                    this.agent.fields[AgentSettings::PROMPT_FIELD].selection(),
+                    before
+                )
+            })
+            .unwrap();
+        cx.simulate_click(position, gpui::Modifiers::none());
+        handle
+            .update(cx, |this, _, _| {
+                assert!(
+                    this.agent.fields[AgentSettings::PROMPT_FIELD]
+                        .selection()
+                        .start
+                        > before.start + 100
+                )
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn prompt_editing_applies_multiline_text_and_reset_only_after_apply(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent.system_prompt = "Original instructions".into();
+            this.settings.agent.opencode_path = "C:/Tools/opencode.exe".into();
+            this.settings.agent.antigravity_path = "C:/Tools/agy.exe".into();
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.open_settings(cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(800.0), px(1600.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        crate::harness::click("agent-system-prompt", cx);
+        cx.simulate_keystrokes("secondary-a");
+        cx.simulate_input("二番も作る。");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("Keep the melody.");
+        let expected = "二番も作る。\nKeep the melody.";
+        handle
+            .update(cx, |this, _, cx| {
+                assert_eq!(
+                    this.agent.fields[AgentSettings::PROMPT_FIELD].content(),
+                    expected
+                );
+                this.apply_agent_with(cx, |_| Err("cannot save"));
+                assert_eq!(this.status, "cannot save");
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.system_prompt, "Original instructions")
+        });
+        handle
+            .update(cx, |this, _, cx| {
+                assert_eq!(
+                    this.agent.fields[AgentSettings::PROMPT_FIELD].content(),
+                    expected
+                );
+                this.apply_agent_with(cx, |_| Ok::<(), String>(()));
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.system_prompt, expected);
+            assert_eq!(this.agent_chat.preferences().system_prompt, expected);
+            assert_eq!(this.settings.agent.opencode_path, "C:/Tools/opencode.exe");
+            assert_eq!(this.settings.agent.antigravity_path, "C:/Tools/agy.exe");
+        });
+        crate::harness::click("agent-prompt-reset", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.system_prompt, expected)
+        });
+        handle
+            .update(cx, |this, _, cx| {
+                assert_eq!(
+                    this.agent.fields[AgentSettings::PROMPT_FIELD].content(),
+                    auris_agent::default_system_prompt()
+                );
+                this.apply_agent_with(cx, |_| Ok::<(), String>(()));
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert!(this.settings.agent.system_prompt.is_empty())
         });
     }
 
@@ -441,7 +697,7 @@ mod tests {
         assert!(cx.debug_bounds("agent-backend").is_none());
         crate::harness::click("agent-claude-path", cx);
         cx.simulate_input("C:/Tools/claude.exe");
-        crate::harness::click("agent-url", cx);
+        click_visible_control("agent-url", cx);
         cx.simulate_keystrokes("secondary-a");
         cx.simulate_input("https://next.invalid/v1");
         handle
@@ -481,7 +737,7 @@ mod tests {
         let cx = &mut VisualTestContext::from_window(handle.into(), cx);
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
-        click_visible_field("agent-opencode-path", cx);
+        click_visible_control("agent-opencode-path", cx);
         cx.simulate_input("C:/Tools/opencode.exe");
         handle
             .update(cx, |this, _, cx| {
@@ -541,21 +797,21 @@ mod tests {
                 "{selector} collapsed despite a wide settings body: {field:?} inside {body:?}"
             );
         }
-        crate::harness::click("agent-url", cx);
+        click_visible_control("agent-url", cx);
         cx.update(|_, cx| {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string("http://127.0.0.1:2".into()))
         });
         cx.simulate_keystrokes("secondary-a secondary-v");
-        crate::harness::click("agent-key-env", cx);
+        click_visible_control("agent-key-env", cx);
         cx.simulate_input("OLLAMA_KEY");
-        crate::harness::click("agent-output-tokens", cx);
+        click_visible_control("agent-output-tokens", cx);
         cx.simulate_keystrokes("down enter");
         app.update(cx, |this, _| {
             this.settings.agent.model = "second".into();
             this.settings.agent.policy.mode = auris_session::agent_policy::Mode::Plan;
             this.agent_chat.busy = true;
         });
-        crate::harness::click("agent-apply", cx);
+        click_visible_control("agent-apply", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(this.settings.agent.model, "second");
             assert_eq!(this.settings.agent.url, "http://127.0.0.1:2");
@@ -613,7 +869,7 @@ mod tests {
         let settings = &mut VisualTestContext::from_window(handle.into(), main);
         settings.run_until_parked();
         crate::harness::click("tab-agent", settings);
-        click_visible_field("agent-url", settings);
+        click_visible_control("agent-url", settings);
         settings.run_until_parked();
 
         crate::harness::click("library-search", main);
@@ -654,7 +910,7 @@ mod tests {
         let cx = &mut VisualTestContext::from_window(handle.into(), cx);
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
-        click_visible_field("agent-url", cx);
+        click_visible_control("agent-url", cx);
         handle
             .update(cx, |this, _, _| {
                 let field = &this.agent.fields[0];

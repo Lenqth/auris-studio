@@ -9,6 +9,7 @@ use std::sync::{
 };
 
 static HISTORY_IO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+mod production;
 use tokio::sync::{Mutex, mpsc as async_mpsc, oneshot};
 
 const HISTORY_GENERATION_BYTES: u64 = 32;
@@ -146,6 +147,11 @@ fn advance_history_generation(path: &Path) -> Result<u64, String> {
     let generation_path = path.with_extension("generation");
     auris_session::settings::write_config_bytes(&generation_path, next.to_string().as_bytes())
         .map_err(|error| error.to_string())?;
+    match std::fs::remove_file(path.with_extension("production.json")) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.to_string()),
+    }
     match std::fs::remove_file(path) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -162,6 +168,7 @@ fn clear_history(path: &Path) -> Result<(), String> {
 #[derive(Clone)]
 pub(super) struct Bridge(Arc<Channels>);
 struct Channels {
+    production: std::sync::Mutex<production::State>,
     stopped: Arc<AtomicBool>,
     events: mpsc::Sender<serde_json::Value>,
     commands: Mutex<async_mpsc::UnboundedReceiver<String>>,
@@ -292,6 +299,15 @@ impl Bridge {
         report: &auris_session::audio_inspection::Inspection,
     ) -> Result<String, String> {
         let presentation = toolbox::audio_inspection::present(report)?;
+        self.observe_production(
+            "inspect_audio",
+            report.revision,
+            report.measurements["start_bar"]
+                .as_u64()
+                .zip(report.measurements["bars"].as_u64()),
+            report.measurements["track"].as_u64(),
+            report.measurements.clone(),
+        )?;
         let mut text = presentation.text;
         if self.0.vision.load(Ordering::Relaxed) {
             let image = rig_core::message::UserContent::image_base64(
@@ -472,6 +488,7 @@ impl Worker {
         let (events_out, events) = mpsc::channel();
         let stopped = Arc::new(AtomicBool::new(false));
         let bridge = Bridge(Arc::new(Channels {
+            production: Default::default(),
             stopped: stopped.clone(),
             events: events_out,
             commands: Mutex::new(incoming),
@@ -561,6 +578,7 @@ pub(crate) fn test_bridge() -> (
     let (events, receiver) = mpsc::channel();
     (
         Bridge(Arc::new(Channels {
+            production: Default::default(),
             stopped: Arc::new(AtomicBool::new(false)),
             events,
             commands: Mutex::new(incoming),
@@ -978,6 +996,8 @@ mod tests {
             let (url, requests) = mock_server(vec![show, call, done]);
             let mut preferences = prefs(url);
             preferences.provider = "ollama".into();
+            // Leave room for the catalog and image; no real model runs in this test.
+            preferences.context_tokens = Some(65536);
             let worker = Worker::spawn(preferences, None, false, None).unwrap();
             until(&worker, "ready");
             worker.send(r#"{"say":"Inspect one bar"}"#).unwrap();
@@ -1044,6 +1064,7 @@ mod tests {
         let (events, _) = mpsc::channel();
         let (_, incoming) = async_mpsc::unbounded_channel();
         let bridge = Bridge(Arc::new(Channels {
+            production: Default::default(),
             stopped: Arc::new(AtomicBool::new(false)),
             events,
             commands: Mutex::new(incoming),

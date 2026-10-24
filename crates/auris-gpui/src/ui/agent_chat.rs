@@ -1023,6 +1023,7 @@ pub(crate) struct AgentChat {
     pub(crate) claude_path: String,
     pub(crate) opencode_path: String,
     pub(crate) antigravity_path: String,
+    system_prompt: String,
     /// What the provider last answered the model question with.
     pub(crate) models: Vec<ModelOption>,
     /// Whether that question is in flight.
@@ -1149,6 +1150,7 @@ impl Default for AgentChat {
             claude_path: String::new(),
             opencode_path: String::new(),
             antigravity_path: String::new(),
+            system_prompt: String::new(),
             models: Vec::new(),
             fetching_models: false,
             models_error: None,
@@ -1342,6 +1344,7 @@ impl AgentChat {
         self.claude_path = prefs.claude_path.clone();
         self.opencode_path = prefs.opencode_path.clone();
         self.antigravity_path = prefs.antigravity_path.clone();
+        self.system_prompt.clone_from(&prefs.system_prompt);
         self.chosen_model = prefs.model.trim().to_string();
         self.url_field = TextField::new(prefs.url.clone());
         self.key_env_field = TextField::new(prefs.api_key_env.clone());
@@ -1374,6 +1377,7 @@ impl AgentChat {
             claude_path: self.claude_path.clone(),
             opencode_path: self.opencode_path.clone(),
             antigravity_path: self.antigravity_path.clone(),
+            system_prompt: self.system_prompt.clone(),
             policy: self.policy.clone(),
             auto_compact_percent: self.auto_compact_percent,
             context_tokens: Some(self.context_tokens),
@@ -2442,6 +2446,7 @@ impl AurisApp {
             bars,
             focus,
             compare_to,
+            aspect,
         } = serde_json::from_value(command.clone()).map_err(|error| error.to_string())?
         else {
             return Err("Expected listen".into());
@@ -2455,6 +2460,7 @@ impl AurisApp {
             bars,
             focus.as_deref(),
             compare_to.as_deref(),
+            aspect,
         )?;
         let link = self.agent_chat.link.as_mut().ok_or("The agent stopped")?;
         if link.listening.is_some() {

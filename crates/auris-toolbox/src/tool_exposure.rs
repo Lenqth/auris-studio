@@ -28,7 +28,7 @@ impl ToolGroups {
             || self.0.iter().any(|g| g == "all" || g == tool_group(name))
             || (matches!(name, "analyze_lyrics" | "diagnose_song")
                 && self.0.iter().any(|g| g == "composition"))
-            || (matches!(name, "accompaniment" | "suggest_harmony")
+            || (matches!(name, "accompaniment" | "suggest_harmony" | "candidates")
                 && self.0.iter().any(|g| g == "manual"))
             || tool_group(name) == "common"
     }
@@ -36,11 +36,12 @@ impl ToolGroups {
     pub fn instructions(&self) -> String {
         if self.0.is_empty() || self.0.iter().any(|g| g == "all") {
             return format!(
-                "{INSTRUCTIONS}{}{}{}{}",
+                "{INSTRUCTIONS}{}{}{}{}{}",
                 crate::MELODY_PHRASING_INSTRUCTIONS,
                 crate::ACCOMPANIMENT_INSTRUCTIONS,
                 crate::PERFORMANCE_INSTRUCTIONS,
-                crate::arrangement_instructions()
+                crate::arrangement_instructions(),
+                crate::composition_workflows::VOCAL_SONG_FORM
             );
         }
         let mut text = String::from(
@@ -48,7 +49,7 @@ impl ToolGroups {
         );
         for group in &self.0 {
             text.push_str(match group.as_str() {
-                "manual" => "For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes writes exact tick-based notes. ",
+                "manual" => "For SFX, audio_assets finds local/Commons audio, imports URLs and crops/reverses clips with preserved source metadata; import_audio copies local files. For manual composition, search_instruments selects sound_id; source/library restrict candidates and sound.library indexes libraries. setup_tracks creates tracks/sounds/clips atomically; edit_notes writes exact tick-based notes. ",
                 "mix" => "For mixing, read mixer_graph for stable track/effect nodes and outgoing edges; follow next_offset. Track nodes contain fader controls; inserts still process before the fader. Edit graph connections and inserts through mixer_graph; all output/send/sidechain cycles are rejected. Parallel effects use bus branches. Inspect mixer parameters in native dB/pan units, and measure or listen to the same range before and after edits. After sound changes remeasure loudness; normalize_mix moves source faders toward a requested target. Render inspects the encoded WAV; use verify_render for target, peak and ending checks. ",
                 "transcription" => "For transcription, analyze the source and fetch tool_help before applying recognized notes. ",
                 "vocals" => "For vocals, analyze_lyrics establishes readings and diagnose_song checks shared phrases. Read notes before repair_lyrics, keep the template and keywords fixed, preview at most three alternatives and apply only a pass with the current revision. Recheck related phrases and meaning, then sing and confirm a current take. ",
@@ -64,6 +65,13 @@ impl ToolGroups {
         }
         if self.allows("set_performance") {
             text.push_str(crate::PERFORMANCE_INSTRUCTIONS);
+        }
+        if self
+            .0
+            .iter()
+            .any(|g| matches!(g.as_str(), "manual" | "vocals" | "composition"))
+        {
+            text.push_str(crate::composition_workflows::VOCAL_SONG_FORM);
         }
         if self
             .0
@@ -102,10 +110,13 @@ pub fn tool_group(name: &str) -> &'static str {
         | "list_presets"
         | "generate_phrase"
         | "accompaniment"
+        | "candidates"
         | "suggest_harmony"
         | "accompany" => "composition",
         "arrangement"
+        | "phrase_variation"
         | "create_project"
+        | "audio_assets"
         | "import_audio"
         | "import_midi"
         | "setup_tracks"
@@ -341,6 +352,22 @@ mod tests {
                 .contains(crate::ACCOMPANIMENT_INSTRUCTIONS)
         );
         let mix = ToolGroups::parse("mix").unwrap();
+        for groups in [
+            ToolGroups::default(),
+            manual,
+            composition,
+            ToolGroups::parse("vocals").unwrap(),
+        ] {
+            assert!(
+                groups
+                    .instructions()
+                    .contains(crate::composition_workflows::VOCAL_SONG_FORM)
+            );
+        }
+        assert!(
+            !mix.instructions()
+                .contains(crate::composition_workflows::VOCAL_SONG_FORM)
+        );
         assert!(!mix.allows("accompaniment"));
         assert!(!mix.allows("suggest_harmony"));
         assert!(

@@ -25,6 +25,25 @@
 //!
 //! # Agent conversations
 //!
+//! A conversation also retains a bounded `memory.production.json` beside model memory.
+//! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;
+//! the agent runtime owns persistence under the same generation lock as conversation history.
+//! Reset removes both files, and Save As copies both. Tool observations enter through the host,
+//! independently of model summaries. Inspection reconciles clip IDs and conservatively marks
+//! evidence stale after a revision change (including Undo) or document restart. Coverage tracks section excerpts,
+//! boundaries, endings and loop joins; measurements never establish human preference.
+//! Large record views use immutable report pages while the complete record stays on disk.
+//! An optional workflow selection belongs to this record; model-facing task instructions live
+//! in the toolbox. The compact prompt is experimental and retains the same selected tool catalog.
+//!
+//! Candidate rounds own a baseline and up to three score snapshots. Detached jobs build exact
+//! note/accompaniment alternatives and render them with common protective gain. Owner checks,
+//! content revisions, expiry and cancellation precede publication and adoption. Adopting a
+//! candidate copies the evaluated score as one Undo edit, never regenerates it. Scoped phrase
+//! operations produce ordinary validated note patches while preserving explicit ranges and
+//! protected notes. The live candidate catalog is opt-in so existing local-model context
+//! budgets are not silently enlarged; saved-project tools use the same canonical commands.
+//!
 //! [`crate::conversations::ConversationStore`] manages project-local conversations independently
 //! of the score. Creating, renaming, archiving, deleting or opening a conversation neither changes
 //! the music nor records an Undo step. The desktop owns navigation and focus; the agent library
@@ -162,6 +181,10 @@
 //! The critic has no editing tools. Its observations are untrusted, fallible evidence for
 //! the controller, which chooses a supported local edit, reads back the result and requests
 //! another audition of the same bars. Failed or uncertain reviews must remain explicit.
+//! Diagnosis accepts a descriptive focus. Comparison requires a typed aspect, rejects focus,
+//! and supplies anonymous A/B audio in randomized order. Structured judgments have bounded
+//! timestamped evidence; invalid responses remain distinct from ties and inability to judge.
+//! Neither schema validity nor self-reported confidence establishes perceptual calibration.
 //!
 //! The session retains at most four immutable raw excerpts behind opaque IDs. A comparison
 //! requires identical bars and timing; replacing the document clears the IDs. Both excerpts
@@ -346,6 +369,15 @@ pub mod architecture {
     //! `import_transcription` accepts an inline draft or a bounded local JSON file; file reading
     //! is authorized before I/O, then the exact validated draft crosses the canonical edit/revision
     //! gate. No worker mutates the session. Saved-project MCP offers the same session import command.
+    //! Audio materials use `audio_assets`: bounded local filename search, keyless Commons search,
+    //! source inspection, direct HTTP(S) ingestion and copy-on-write crop/reversal. File I/O,
+    //! decoding, hashing and sample processing run in detached jobs; publication checks owner,
+    //! revision, folder and render rate. Import and processing each create one Undo entry.
+    //! Original assets remain intact. AudioSource provenance stores source paths/URLs, SHA-256
+    //! and attributed creator/license claims with serde defaults for older projects; it is data,
+    //! never verified rights or instructions. Remote search/download pass the network approval
+    //! gate. EQ uses the existing mixer graph on audio-track inserts; no RT processing changes.
+    //!
     //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
     //! residual activity outside their attack/release guards. Weak sustained predictions alone
     //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo

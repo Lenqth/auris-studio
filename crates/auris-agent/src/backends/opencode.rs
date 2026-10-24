@@ -93,14 +93,14 @@ fn working_directory() -> Result<tempfile::TempDir, String> {
     builder.tempdir().map_err(|error| error.to_string())
 }
 
-fn opencode_preamble() -> String {
+fn opencode_preamble(prefs: &auris_session::AgentPreferences) -> String {
     format!(
         "{}\nOpenCode exposes the live tools as auris_live_<tool name>, for example auris_live_inspect_project. Call them directly. Do not use native shell commands or directory scans to discover Auris tools. If the live tools are unavailable, report the connection problem instead.",
-        super::cli_preamble()
+        super::cli_preamble(prefs)
     )
 }
 
-fn configuration(native: bool, major: u32) -> Value {
+fn configuration(prefs: &auris_session::AgentPreferences, native: bool, major: u32) -> Value {
     if major == 2 {
         let mut permissions = vec![json!({"action":"*","resource":"*","effect":"deny"})];
         if native {
@@ -119,7 +119,7 @@ fn configuration(native: bool, major: u32) -> Value {
         return json!({"$schema":"https://opencode.ai/config.json", "update":"disable",
             "share":"disabled", "snapshots":false, "lsp":false, "formatter":false,
             "default_agent":"auris", "permissions":permissions,
-            "agents":{"auris":{"mode":"primary", "system":if native { opencode_preamble() } else { crate::approval_review::INSTRUCTIONS.into() },
+            "agents":{"auris":{"mode":"primary", "system":if native { opencode_preamble(prefs) } else { crate::approval_review::INSTRUCTIONS.into() },
                 "permissions":permissions}}});
     }
     let mut tools = json!({"*":false});
@@ -137,7 +137,7 @@ fn configuration(native: bool, major: u32) -> Value {
     json!({"$schema":"https://opencode.ai/config.json", "autoupdate":false,
         "share":"disabled", "snapshot":false, "lsp":false, "formatter":false,
         "default_agent":"auris", "permission":permission, "tools":tools,
-        "agent":{"auris":{"mode":"primary", "prompt":if native { opencode_preamble() } else { crate::approval_review::INSTRUCTIONS.into() },
+        "agent":{"auris":{"mode":"primary", "prompt":if native { opencode_preamble(prefs) } else { crate::approval_review::INSTRUCTIONS.into() },
             "permission":permission, "tools":tools}}})
 }
 
@@ -153,7 +153,7 @@ fn command(
     let config_home = cwd.join("config");
     std::fs::create_dir_all(&config_home).map_err(|error| error.to_string())?;
     let mut file = tempfile::NamedTempFile::new_in(cwd).map_err(|error| error.to_string())?;
-    let mut config = configuration(native, major);
+    let mut config = configuration(prefs, native, major);
     if major == 2
         && let Some(mcp) = mcp
     {
@@ -179,7 +179,7 @@ fn command(
         .env("OPENCODE_TEST_HOME", cwd)
         .env(
             "OPENCODE_PERMISSION",
-            configuration(native, 1)["permission"].to_string(),
+            configuration(prefs, native, 1)["permission"].to_string(),
         )
         .env("OPENCODE_DISABLE_PROJECT_CONFIG", "true")
         .env("OPENCODE_CONFIG_PROJECT_DISABLE", "true")
@@ -700,6 +700,7 @@ async fn conversation(
         }
         _ => (memory::Memory::default(), None),
     };
+    bridge.bind_production_history(generation.as_ref())?;
     if !preloaded {
         bridge.emit(json!({"event":"history","summary":memory.summary,"turns":memory.turns}));
     }
@@ -854,7 +855,7 @@ mod tests {
         assert_eq!(config["permission"]["auris_live_*"], "allow");
         assert_eq!(config["permission"]["*"], "deny");
         assert_eq!(config["tools"]["*"], false);
-        let review = configuration(false, 1);
+        let review = configuration(&auris_session::AgentPreferences::default(), false, 1);
         assert_eq!(review["permission"], json!({"*":"deny"}));
         assert_eq!(review["tools"], json!({"*":false}));
         #[cfg(unix)]
@@ -883,13 +884,40 @@ mod tests {
     }
 
     #[test]
+    fn custom_system_prompt_does_not_override_review_instructions() {
+        let prefs = auris_session::AgentPreferences {
+            system_prompt: "Keep the motif.\n二番も作る。".into(),
+            ..Default::default()
+        };
+        for major in [1, 2] {
+            let (agents, prompt) = if major == 1 {
+                ("agent", "prompt")
+            } else {
+                ("agents", "system")
+            };
+            let native = configuration(&prefs, true, major);
+            assert!(
+                native[agents]["auris"][prompt]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(&prefs.system_prompt)
+            );
+            let review = configuration(&prefs, false, major);
+            assert_eq!(
+                review[agents]["auris"][prompt],
+                crate::approval_review::INSTRUCTIONS
+            );
+        }
+    }
+
+    #[test]
     fn version_two_uses_current_agent_and_permission_fields() {
         assert_eq!(cli_major("2.1.3\n").unwrap(), 2);
         assert_eq!(cli_major("opencode v2.1.3\n").unwrap(), 2);
         assert_eq!(cli_major("1.19.3").unwrap(), 1);
         assert!(cli_major("3.0.0").is_err());
         assert!(cli_major("not a version").is_err());
-        let config = configuration(true, 2);
+        let config = configuration(&auris_session::AgentPreferences::default(), true, 2);
         assert!(
             config["agents"]["auris"]["system"]
                 .as_str()
@@ -909,7 +937,7 @@ mod tests {
             config["agents"]["auris"]["permissions"],
             config["permissions"]
         );
-        let review = configuration(false, 2);
+        let review = configuration(&auris_session::AgentPreferences::default(), false, 2);
         assert_eq!(
             review["permissions"],
             json!([{ "action":"*","resource":"*","effect":"deny" }])
@@ -1300,6 +1328,8 @@ mod tests {
                     assert_eq!(text.contains("Remember the melody"), index == 0);
                     let pending = memory::Memory::load(&path).unwrap();
                     assert_eq!(pending.turns.last().unwrap().user, if index == 0 { "First display" } else { "Second request" });
+                    bridge.inspected_production_document(&mut json!({"revision":"fixture"})).unwrap();
+                    assert_eq!(bridge.production_record(auris_session::production_record::Operation::Read).unwrap()["persistence"], "conversation");
                     reply(&mut writer, notification(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("Response {index}")}}))).await;
                     reply(&mut writer, json!({"jsonrpc":"2.0","id":prompt["id"],"result":{"stopReason":"end_turn"}})).await;
                 }

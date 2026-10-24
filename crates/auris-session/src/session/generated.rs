@@ -519,7 +519,19 @@ pub(super) fn project_phrase(
     recipe: &ClipRecipe,
     excluded: Option<ClipId>,
 ) -> Vec<Note> {
-    let mut notes = auris_compose::write_phrase(
+    let mut notes = unarranged_project_phrase(project, start, length, recipe);
+    super::lyrics::arrange_generated_backing(project, start, length, recipe, excluded, &mut notes);
+    notes
+}
+
+/// Writes the recipe before choosing its foreground; callers apply one arrangement pass.
+pub(super) fn unarranged_project_phrase(
+    project: &auris_core::Project,
+    start: Ticks,
+    length: Ticks,
+    recipe: &ClipRecipe,
+) -> Vec<Note> {
+    auris_compose::write_phrase(
         &project.harmony,
         start,
         length,
@@ -531,9 +543,7 @@ pub(super) fn project_phrase(
         // renderer hands it the tempo actually in force at playback.
         recipe,
         project.sections.section_at(start),
-    );
-    super::lyrics::arrange_generated_backing(project, start, length, recipe, excluded, &mut notes);
-    notes
+    )
 }
 
 /// A generated wander follows its take's seed while retaining any edited amount or custom seed.

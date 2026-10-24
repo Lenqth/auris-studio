@@ -98,6 +98,7 @@ enum Outcome {
         name: String,
         at: Ticks,
         bytes: u64,
+        provenance: std::collections::BTreeMap<String, String>,
     },
     ImportedMidi(Box<crate::MidiImportResult>, Ticks),
     Audio(Vec<StagedAudio>),
@@ -156,7 +157,9 @@ impl FileJob {
                 rate,
                 render_rate,
             } => {
+                use sha2::Digest;
                 use std::io::{Read, Write};
+                let mut digest = sha2::Sha256::new();
                 let mut input = std::fs::File::open(&path).map_err(|e| e.to_string())?;
                 if !input.metadata().map_err(|e| e.to_string())?.is_file() {
                     return Err("Audio input must be a regular file".into());
@@ -183,6 +186,7 @@ impl FileJob {
                     if bytes > 512 * 1024 * 1024 {
                         return Err("Audio input exceeds 512 MiB".into());
                     }
+                    digest.update(&chunk[..size]);
                     file.write_all(&chunk[..size]).map_err(|e| e.to_string())?;
                 }
                 file.flush().map_err(|e| e.to_string())?;
@@ -197,6 +201,10 @@ impl FileJob {
                     name,
                     at,
                     bytes,
+                    provenance: std::collections::BTreeMap::from([
+                        ("source_path".into(), path.display().to_string()),
+                        ("sha256".into(), hex::encode(digest.finalize())),
+                    ]),
                 }
             }
             Work::Audio {
@@ -516,11 +524,12 @@ impl Session {
                 name,
                 at,
                 bytes,
+                provenance,
             } => {
                 if self.project_folder() != Some(folder.as_path()) {
                     return Err("Document folder/rate changed during audio import".into());
                 }
-                self.adopt_agent_audio(file, prepared, name, at, bytes)
+                self.adopt_agent_audio(file, prepared, name, at, bytes, provenance)
             }
             Outcome::Verified(text) => Ok(text),
             Outcome::Midi(result) => {

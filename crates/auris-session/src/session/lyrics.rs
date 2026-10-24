@@ -185,17 +185,14 @@ pub(super) fn arrange_generated_backing(
     excluded: Option<ClipId>,
     notes: &mut Vec<Note>,
 ) {
-    if recipe.rhythm.is_some()
+    // Keep the automatic writer's fast path: these parts need no foreground scan.
+    if !matches!(recipe.preset, ClipPreset::Chords | ClipPreset::Arp)
+        || recipe.rhythm.is_some()
         || (recipe.preset == ClipPreset::Chords
             && auris_compose::arrangement::chord_subdivision_fill(recipe.density) > 0.0)
     {
         return;
     }
-    let role = match recipe.preset {
-        ClipPreset::Chords => auris_compose::Role::Chords,
-        ClipPreset::Arp => auris_compose::Role::Arp,
-        _ => return,
-    };
     let end = start + length;
     let note_bounds = |clip: &auris_core::MidiClip, note: &Note| {
         let onset = (clip.start + note.start).max(clip.start).max(start);
@@ -249,6 +246,37 @@ pub(super) fn arrange_generated_backing(
             })
         })
         .collect();
+    arrange_backing_around_notes(project, start, length, recipe, &foreground, notes);
+}
+
+/// Applies the same arrangement pass to explicitly selected, clip-relative foreground notes.
+pub(super) fn arrange_backing_around_notes(
+    project: &auris_core::Project,
+    start: Ticks,
+    length: Ticks,
+    recipe: &auris_core::ClipRecipe,
+    foreground: &[Note],
+    notes: &mut Vec<Note>,
+) -> &'static str {
+    if recipe.rhythm.is_some() {
+        return "explicit_rhythm";
+    }
+    if recipe.preset == ClipPreset::Chords
+        && auris_compose::arrangement::chord_subdivision_fill(recipe.density) > 0.0
+    {
+        return "driving_chord_density";
+    }
+    let role = match recipe.preset {
+        ClipPreset::Chords => auris_compose::Role::Chords,
+        ClipPreset::Arp => auris_compose::Role::Arp,
+        _ => return "role_keeps_its_pattern",
+    };
+    if recipe.style == Some(auris_compose::PerformanceStyle::Ambient) {
+        return "sustained_ambient_texture";
+    }
+    if foreground.is_empty() {
+        return "no_foreground_notes_in_range";
+    }
     let meter = project.signatures.signature_at(start);
     let bars = (length.raw() / meter.ticks_per_bar().raw().max(1)).max(0) as usize;
     let phrase_ends: Vec<_> = auris_compose::phrasing::plan_phrases(bars, recipe.style)
@@ -257,7 +285,7 @@ pub(super) fn arrange_generated_backing(
         .collect();
     auris_compose::arrangement::accompany_foreground(
         notes,
-        &foreground,
+        foreground,
         meter,
         role,
         recipe.style,
@@ -285,6 +313,7 @@ pub(super) fn arrange_generated_backing(
                 .map_or(desired, |boundary| boundary - onset)
         },
     );
+    "evaluated"
 }
 
 /// Gives only the newly generated backing parts room around the actual sung notes.

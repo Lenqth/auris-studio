@@ -450,8 +450,9 @@ fn installed_antigravity_stop_revokes_pending_edits() {
 #[tokio::test]
 #[ignore = "requires signed-in Antigravity CLI; verifies consecutive structured turns"]
 async fn installed_antigravity_continues_after_tool_results() {
-    let invocation = Invocation::new(false).unwrap();
-    let mut cli = Cli::spawn(&invocation, &preferences()).unwrap();
+    let prefs = preferences();
+    let invocation = Invocation::new(&prefs, false).unwrap();
+    let mut cli = Cli::spawn(&invocation, &prefs).unwrap();
     let first = cli
         .turn(
             "Request inspect_project exactly once. Do not request any other tools.".into(),

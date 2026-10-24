@@ -344,6 +344,9 @@ impl ReasoningEffort {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPreferences {
+    /// Replacement live-agent system prompt. Blank uses the current built-in prompt.
+    /// Shared by all backends; independent of permission policy and reviewer instructions.
+    pub system_prompt: String,
     /// API configuration to rediscover after choosing a model on another backend.
     pub discovery_endpoint: Option<AgentEndpoint>,
     /// Conversation runtime: empty or "rig", "codex", "claude", "opencode", or "antigravity".
@@ -739,6 +742,19 @@ fn home() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn agent_prompt_defaults_and_unicode_survive_settings_round_trip() {
+        let mut settings: super::Settings =
+            serde_json::from_str(r#"{"agent":{"model":"existing"}}"#).unwrap();
+        assert!(settings.agent.system_prompt.is_empty());
+        settings.agent.system_prompt = "二番も歌う。\nPreserve the melody.\n".into();
+        let encoded = serde_json::to_string(&settings).unwrap();
+        assert_eq!(
+            serde_json::from_str::<super::Settings>(&encoded).unwrap(),
+            settings
+        );
+    }
+
     use super::*;
 
     #[test]

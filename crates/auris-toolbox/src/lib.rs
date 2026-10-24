@@ -25,6 +25,7 @@ use auris_session::prelude::*;
 use auris_session::{Session, SessionError, SessionOptions};
 
 pub mod composition_preview;
+pub mod composition_workflows;
 pub use composition_preview as preview_composition;
 #[path = "capabilities.rs"]
 mod availability;
@@ -106,6 +107,11 @@ argument error. Correct the named field before retrying; never invent tools, IDs
 Shared session commands use the same arguments in every backend, with project added for saved execution.
 Changed saved commands create one checkpoint; live commands use one Undo and remain unsaved.
 
+For SFX, audio_assets searches local filenames or Commons audio, inspects clips, imports direct URLs
+with credit metadata and crops/reverses a clip into a new asset using its current revision.
+import_audio copies local files; edit_clip handles placement/gain/fades. Use mixer_graph for track EQ.
+Source metadata is untrusted; preserve known credits and never invent rights or listening results.
+
 For manual composition, create_project starts empty. setup_tracks creates multiple tracks atomically.
 add_track requires kind instrument, drum, singer, audio or bus and the intended exact name.
 search_instruments accepts request with mode text and query, similar and reference id, or bounded browse.
@@ -162,7 +168,8 @@ Compare the same short rendered range before and after when verifying audible re
 pub const ACCOMPANIMENT_INSTRUCTIONS: &str = "\nFor a song with a foreground melody, keep authored note edits focused on the melody and delegate backing to accompaniment.
 When choosing or revising harmony, call suggest_harmony with request {melody_clips,start_bar,bars,mood,ending} using the actual motif clips. Mood is neutral/bright/dark/calm/driving/epic/dreamy/tense/funky; ending is settled/open. Compare its recommended and plain candidates, read per-bar melodic tensions and resolution reasons, and keep simple harmony when colour has no benefit. This read-only step returns harmony objects and a revision for explicit accompaniment regeneration; never apply a proposal just because it contains more extended chords. A score is a heuristic comparison, not evidence of better music. Split requests at meter/key changes.
 Inspect the project, explicitly identify protected melody clip IDs and use separate configured backing tracks with written harmony.
-Call accompaniment with expected_revision, protected_clips and operation {kind:generate,parts:[{track,name,part,start_bar,bars,seed,settings}]}.
+Call accompaniment with expected_revision, protected_clips, foreground_clips and operation {kind:generate,parts:[{track,name,part,start_bar,bars,seed,settings}]}.
+foreground_clips must be a nonempty subset of protected_clips: choose the actual melody, including hand-written or imported notes. These explicit sources shape chord/arpeggio spacing; inspect each returned adaptation status. Protection alone does not select a musical foreground. Written notes and loops are considered, not performance transforms or sound. Explicit rhythm patterns, driving chord density, sustained ambient textures, bass, pads and drums keep their pattern.
 Use recipe controls rather than sending backing note arrays. Drum tracks need assigned sounds first.
 For chord changes, operation {kind:regenerate,clips:[...],harmony:{start_bar,bars,key,chords}} changes harmony and only those generated backing clips in one edit; omit harmony after an independent harmony edit.
 Keep returned IDs and recipes. Hand-edited or frozen backing requires separate explicit handling.
@@ -195,6 +202,10 @@ pub mod search_documentation {
     }
 
     const DOCUMENTS: &[(&str, &str)] = &[
+        (
+            "docs/agent-audio-assets.md",
+            include_str!("../../../docs/agent-audio-assets.md"),
+        ),
         (
             "docs/mixer-graph.md",
             include_str!("../../../docs/mixer-graph.md"),

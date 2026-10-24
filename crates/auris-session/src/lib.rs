@@ -51,6 +51,7 @@ pub mod audio_review;
 pub mod conversations;
 mod export_inspection;
 pub mod live_agent;
+pub mod production_record;
 pub use export_inspection::{ExportInspection, inspect_export};
 pub mod note_pitch;
 /// Headless composition search and its request/result types.

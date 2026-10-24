@@ -34,6 +34,8 @@ pub mod accompaniment;
 mod accompany;
 mod agent_history;
 pub mod arrangement;
+pub mod audio_assets;
+pub mod candidates;
 mod composition_inspection;
 mod composition_preview;
 pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
@@ -71,7 +73,7 @@ mod mixture;
 mod monitor;
 mod musical_analysis;
 mod note_preview;
-mod notes;
+pub(crate) mod notes;
 mod output_preview;
 mod perform;
 mod physical_sounds;
@@ -613,6 +615,11 @@ struct CachedFont {
 }
 
 impl Session {
+    /// Process-local identity used to invalidate evidence after reopening a document.
+    pub fn document_instance(&self) -> &str {
+        &self.sound_scope
+    }
+
     /// The longest count-in that can be asked for, in bars.
     ///
     /// Four, which is a bar more than anybody counts and two more than anybody should have to sit
