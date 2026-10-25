@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Probe structured audio judgments with identity and obvious impairment controls.
+"""Collect audio observations with identity and obvious impairment controls.
 
 Synthetic controls test gross discrimination and order bias, not musical taste.
 The Rust worker uses the production assessment path and never receives condition labels.
@@ -104,6 +104,12 @@ def controls(output: Path) -> list[dict]:
 def outcome(trial: dict, reply: dict) -> str:
     if "error" in reply:
         return "transport_failed"
+    if isinstance(reply.get("raw_response"), str) and "assessment" not in reply:
+        return (
+            "manual_review_required"
+            if reply["raw_response"].strip()
+            else "invalid_response"
+        )
     if not reply.get("assessment") or reply.get("assessment_error"):
         return "invalid_response"
     verdict = reply["assessment"]["verdict"]

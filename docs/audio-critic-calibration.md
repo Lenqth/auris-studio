@@ -7,12 +7,12 @@ Only the criterion and randomly ordered A/B audio reach the critic; neither proj
 nor the controller's explanation of its edit is supplied. The caller receives the A/B mapping
 after the request. Both WAVs retain a common protective attenuation.
 
-The production response parser validates JSON shape, mode, excerpt labels, up to eight
-observations and evidence times within the supplied duration. Preferences require evidence.
-A diagnostic inability to judge cannot contain an edit suggestion. `assessment_error` reports
-invalid responses separately from `cannot_judge` or `tie`; delivery and raw response remain
-available for debugging. Timestamp validation checks bounds, not whether the described event
-really happened. Model confidence is a self-report, never a calibrated probability.
+Production reviews are short free text. The response is preserved verbatim without extracting
+preferences, confidence or timestamps. Successful delivery does not establish that the model
+recognized the music. Music Flamingo produces independent descriptions for paired excerpts.
+The calibration collector marks these replies `manual_review_required`; a person must inspect
+the descriptions and both orderings. Historical structured reports retain their original
+outcomes, but new prose is never parsed as a verdict.
 
 The development worker uses this exact production path:
 
@@ -29,7 +29,7 @@ The frozen synthetic cohort contains three short tonal phrases and four controls
 identical audio, silence, hard clipping and disordered pitches. Every pair runs in both
 orders, giving 24 judgments. The clipping and pitch variants match the reference's RMS;
 no limiter or independent peak normalization obscures their difference. WAV hashes, worker
-hash, raw replies, validation failures and outcomes are retained.
+hash, raw replies, delivery failures and outcomes are retained.
 
 Identity pairs must not elicit a preference. `cannot_judge`, invalid responses and transport
 failures are separate outcomes, not calibration successes. Compare the two orderings before

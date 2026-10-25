@@ -489,7 +489,7 @@ def test_music_flamingo_pair_uses_isolated_identical_prompts_in_original_order(m
     assert seen[1].audio[0] is request.audio[1]
     assert seen[0].messages == seen[1].messages
     rendered = json.dumps(seen[0].messages)
-    assert "Only one audio excerpt" in rendered
+    assert "Describe only this recording." in rendered
     assert "Focus on the prominence of the lead and bass." in rendered
     assert "secret.wav" not in rendered
     assert "Independent answer" not in rendered

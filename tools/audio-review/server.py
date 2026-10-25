@@ -422,21 +422,15 @@ def independent_requests(request: ReviewRequest) -> list[ReviewRequest]:
             if text.startswith("Audio excerpts in order:\n") and "\n\n" in text:
                 text = text.split("\n\n", 1)[1]
             (system_text if message["role"] == "system" else focus_text).append(text)
-    boundary = (
-        "Only one audio excerpt is supplied for this independent observation. "
-        "Describe audible properties of this excerpt alone. Do not compare recordings, "
-        "infer a change, or describe another excerpt. Use the original request only to "
-        "choose which audible properties to discuss; a comparative question cannot be "
-        "answered from this single excerpt. State uncertainty rather than guessing."
-    )
+    focus = "\n\n".join(focus_text).replace("in each excerpt", "in this excerpt")
     messages = [
-        {"role": "system", "content": "\n\n".join([*system_text, boundary])},
+        *([{"role": "system", "content": "\n\n".join(system_text)}] if system_text else []),
         {
             "role": "user",
             "content": [
                 {
                     "type": "text",
-                    "text": boundary + "\n\nOriginal focus:\n" + "\n\n".join(focus_text),
+                    "text": "Describe only this recording. " + focus,
                 },
                 {"type": "audio"},
             ],

@@ -170,12 +170,11 @@ pub fn review_audio_cancellable(
     let mut request = json!({
         "model":options.model,
         "messages":[
-            {"role":"system","content":"Review the supplied recordings using the requested response format. Base observations on audible evidence and state uncertainty. Recording order carries no quality information. You review audio; you do not edit the project. Do not invent perception when audio is unavailable."},
             {"role":"user","content":content}
         ],
         "stream":false,
         "temperature":0,
-        "max_tokens":2048
+        "max_tokens":384
     });
     if options.ollama_url.is_some() {
         request["reasoning_effort"] = "none".into();
@@ -240,10 +239,12 @@ fn audio_content(audio: &[(&str, &Path)], prompt: &str) -> Result<Vec<Value>, St
         .map(|(index, (label, _))| format!("{}. {label}", index + 1))
         .collect::<Vec<_>>()
         .join("\n");
-    content.insert(
-        0,
-        json!({"type":"text","text":format!("Audio excerpts in order:\n{labels}\n\n{prompt}")}),
-    );
+    let text = if audio.len() == 1 {
+        prompt.to_string()
+    } else {
+        format!("Audio excerpts in order:\n{labels}\n\n{prompt}")
+    };
+    content.insert(0, json!({"type":"text","text":text}));
     Ok(content)
 }
 
@@ -457,7 +458,7 @@ pub(crate) mod tests {
         assert!(requests[1].0.starts_with("POST /v1/chat/completions "));
         assert!(requests[1].1.get("tools").is_none());
         assert_eq!(requests[1].1["reasoning_effort"], "none");
-        let parts = requests[1].1["messages"][1]["content"].as_array().unwrap();
+        let parts = requests[1].1["messages"][0]["content"].as_array().unwrap();
         assert_eq!(
             parts[0]["text"],
             "Audio excerpts in order:\n1. Before\n2. After\n\nCompare the bass balance"

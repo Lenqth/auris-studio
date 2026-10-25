@@ -136,7 +136,7 @@ mod tests {
     }
     fn submitted_wavs(request: &Value) -> Vec<Vec<u8>> {
         assert!(request.get("tools").is_none());
-        request["messages"][1]["content"]
+        request["messages"][0]["content"]
             .as_array()
             .unwrap()
             .iter()

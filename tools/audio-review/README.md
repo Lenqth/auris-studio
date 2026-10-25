@@ -91,8 +91,20 @@ the weights; review the model's terms before downloading or using them.
 
 ```powershell
 uv run --no-sync python server.py --backend music-flamingo --model nvidia/music-flamingo-2601-hf --device cuda --quantization nf4 --revision 6b5be086d52f65a1e204cb0faf70bf54e2741ecd
+```
+
+Keep the server terminal running. In a second PowerShell terminal:
+
+```powershell
+$env:AURIS_AUDIO_URL = "http://127.0.0.1:11435/v1"
 $env:AURIS_AUDIO_MODEL = "nvidia/music-flamingo-2601-hf"
 ```
+
+Start Auris from the shell containing these variables, or persist them as user environment
+variables and restart Auris. Keep the server running while using `listen`.
+
+Auris requests 2–4 sentences of free text, without a JSON schema or required timestamps.
+The returned `review` is advisory prose; no winner or confidence is extracted.
 
 The same HTTP request format and bounds apply. MusicFlamingo supports one audio per text input,
 so two excerpts produce two independent model calls using the same focus instructions. Each

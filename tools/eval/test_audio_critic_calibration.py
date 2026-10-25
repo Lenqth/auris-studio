@@ -25,6 +25,11 @@ def test_invalid_judgments_and_identity_preferences_do_not_count_as_success():
     assert calibration.outcome(trial, {"error": "offline"}) == "transport_failed"
     assert calibration.outcome(trial, {"assessment": None}) == "invalid_response"
     assert (
+        calibration.outcome(trial, {"raw_response": '{"verdict":"prefer_a"}'})
+        == "manual_review_required"
+    )
+    assert calibration.outcome(trial, {"raw_response": " "}) == "invalid_response"
+    assert (
         calibration.outcome(trial, {"assessment": {"verdict": "prefer_a"}})
         == "false_preference"
     )
