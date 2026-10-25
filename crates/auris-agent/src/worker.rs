@@ -168,6 +168,7 @@ fn clear_history(path: &Path) -> Result<(), String> {
 #[derive(Clone)]
 pub(super) struct Bridge(Arc<Channels>);
 struct Channels {
+    recovery_blocked: AtomicBool,
     production: std::sync::Mutex<production::State>,
     stopped: Arc<AtomicBool>,
     events: mpsc::Sender<serde_json::Value>,
@@ -237,6 +238,13 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(crate) fn block_tool_recovery(&self) {
+        self.0.recovery_blocked.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn can_recover_tools(&self) -> bool {
+        !self.0.stopped.load(Ordering::Acquire) && !self.0.recovery_blocked.load(Ordering::Acquire)
+    }
     pub(super) fn reserve_lyric_repair(
         &self,
         request: &auris_session::lyric_harness::RepairRequest,
@@ -393,6 +401,9 @@ impl Bridge {
         let starts_turn = serde_json::from_str::<serde_json::Value>(&message)
             .ok()
             .is_some_and(|wire| wire.get("say").is_some() || wire["compact"] == true);
+        if starts_turn {
+            self.0.recovery_blocked.store(false, Ordering::Release);
+        }
         if starts_turn && let Ok(mut budget) = self.0.lyric_repairs.lock() {
             budget.reset();
         }
@@ -488,6 +499,7 @@ impl Worker {
         let (events_out, events) = mpsc::channel();
         let stopped = Arc::new(AtomicBool::new(false));
         let bridge = Bridge(Arc::new(Channels {
+            recovery_blocked: AtomicBool::new(false),
             production: Default::default(),
             stopped: stopped.clone(),
             events: events_out,
@@ -578,6 +590,7 @@ pub(crate) fn test_bridge() -> (
     let (events, receiver) = mpsc::channel();
     (
         Bridge(Arc::new(Channels {
+            recovery_blocked: AtomicBool::new(false),
             production: Default::default(),
             stopped: Arc::new(AtomicBool::new(false)),
             events,
@@ -1064,6 +1077,7 @@ mod tests {
         let (events, _) = mpsc::channel();
         let (_, incoming) = async_mpsc::unbounded_channel();
         let bridge = Bridge(Arc::new(Channels {
+            recovery_blocked: AtomicBool::new(false),
             production: Default::default(),
             stopped: Arc::new(AtomicBool::new(false)),
             events,

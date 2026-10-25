@@ -458,7 +458,8 @@ async fn conversation(
             "message":{"role":"user","content":content}}),
         )
         .await?;
-        let answer = receive_turn(cli, bridge).await;
+        let completed = complete_turn(cli, bridge, prefs.tool_failure_limit()).await;
+        let answer = completed.answer;
         mcp.set_active(false);
         let display = wire["display"].as_str().unwrap_or(&said);
         match &answer {
@@ -470,7 +471,13 @@ async fn conversation(
         {
             bridge.emit(json!({"event":"notice","message":format!("Conversation history was not saved: {error}")}));
         }
-        bridge.emit(json!({"event":"answer","text":answer?}));
+        match answer {
+            Ok(text) => bridge.emit(json!({"event":"answer","text":text})),
+            Err(message) if completed.terminal_result => {
+                bridge.emit(json!({"event":"error","message":message}));
+            }
+            Err(message) => return Err(message),
+        }
     }
     Ok(())
 }
@@ -532,7 +539,77 @@ fn validate_tools(message: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// A completed CLI result can leave its stream available for another user request.
+struct CompletedTurn {
+    answer: Result<String, String>,
+    terminal_result: bool,
+}
+
+#[derive(Default)]
+struct ToolRecovery {
+    failures: crate::tool_failures::ToolFailures,
+    last_failure: Option<(String, String)>,
+    fresh_failure: bool,
+    terminal_result: bool,
+    continuations: usize,
+}
+
+impl ToolRecovery {
+    fn observe(&mut self, tool: &str, args: &str, ok: bool, auris_tool: bool) {
+        self.last_failure = if !ok && auris_tool {
+            self.failures.record(tool, args, true);
+            self.fresh_failure = true;
+            Some((tool.to_owned(), args.to_owned()))
+        } else {
+            self.failures.record(tool, args, false);
+            None
+        };
+    }
+}
+
+async fn complete_turn(cli: &mut Cli, bridge: &Bridge, limit: usize) -> CompletedTurn {
+    let mut recovery = ToolRecovery::default();
+    loop {
+        recovery.fresh_failure = false;
+        recovery.terminal_result = false;
+        let answer = receive_turn_tracked(cli, bridge, &mut recovery).await;
+        let finish = |answer| CompletedTurn {
+            answer,
+            terminal_result: recovery.terminal_result,
+        };
+        if answer.is_err() || !recovery.fresh_failure || !bridge.can_recover_tools() {
+            return finish(answer);
+        }
+        let Some((tool, args)) = &recovery.last_failure else {
+            return finish(answer);
+        };
+        if recovery.failures.exhausted(tool, args, limit)
+            || recovery.continuations >= limit.saturating_sub(1)
+        {
+            return finish(Err(format!(
+                "Claude Code tool recovery reached the configured limit of {limit}. Earlier edits remain in the document. Send a new instruction to continue."
+            )));
+        }
+        recovery.continuations += 1;
+        bridge.emit(json!({"event":"notice","message":"Claude Code ended immediately after a tool error; asking it to correct the call and continue the unfinished request."}));
+        // Continue the existing CLI transcript. Never replay an edit or manufacture a result.
+        let text = "Auris runtime recovery: the last Auris tool call failed. Continue only the unfinished original user request. Read tool_help and inspect the current document as needed, then correct the arguments or choose a valid alternative. Earlier successful edits remain applied: do not blindly replay them. Tool argument errors do not consume the musical polishing budget. Do not bypass any refusal or expand permissions. If user input or an unavailable resource is required, explain that and finish.";
+        if let Err(error) = cli.send(json!({"type":"user","session_id":"","parent_tool_use_id":null,"client_composed":true,"message":{"role":"user","content":text}})).await {
+            return CompletedTurn { answer: Err(error), terminal_result: false };
+        }
+    }
+}
+
+#[cfg(test)]
 async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> {
+    receive_turn_tracked(cli, bridge, &mut ToolRecovery::default()).await
+}
+
+async fn receive_turn_tracked(
+    cli: &mut Cli,
+    bridge: &Bridge,
+    recovery: &mut ToolRecovery,
+) -> Result<String, String> {
     let mut answer = String::new();
     let mut streamed = false;
     let mut calls = std::collections::HashMap::new();
@@ -604,7 +681,16 @@ async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> 
                                 let id = part["id"]
                                     .as_str()
                                     .ok_or("Claude Code omitted a tool call ID")?;
-                                calls.insert(id.to_owned(), tool.to_owned());
+                                calls.insert(
+                                    id.to_owned(),
+                                    (
+                                        tool.to_owned(),
+                                        part["input"].to_string(),
+                                        part["name"].as_str().is_some_and(|name| {
+                                            name.starts_with("mcp__auris_live__")
+                                        }),
+                                    ),
+                                );
                                 bridge.emit(json!({"event":"phase","phase":"tool"}));
                                 bridge.emit(json!({"event":"call","call_id":id,"tool":tool,"args":part["input"]}));
                             }
@@ -618,7 +704,7 @@ async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> 
                 if let Some(content) = message["message"]["content"].as_array() {
                     for part in content.iter().filter(|part| part["type"] == "tool_result") {
                         let id = part["tool_use_id"].as_str().unwrap_or_default();
-                        if let Some(tool) = calls.remove(id) {
+                        if let Some((tool, args, auris_tool)) = calls.remove(id) {
                             let text = match &part["content"] {
                                 Value::String(text) => text.clone(),
                                 Value::Array(parts) => parts
@@ -628,12 +714,15 @@ async fn receive_turn(cli: &mut Cli, bridge: &Bridge) -> Result<String, String> 
                                     .join("\n"),
                                 _ => String::new(),
                             };
-                            bridge.emit(json!({"event":"result","call_id":id,"tool":tool,"ok":part["is_error"] != true,"text":text}));
+                            let ok = part["is_error"] != true;
+                            recovery.observe(&tool, &args, ok, auris_tool);
+                            bridge.emit(json!({"event":"result","call_id":id,"tool":tool,"ok":ok,"text":text}));
                         }
                     }
                 }
             }
             "result" => {
+                recovery.terminal_result = true;
                 if message["is_error"] == true || message["subtype"] != "success" {
                     return Err(format!(
                         "Claude Code turn failed: {}",
@@ -974,6 +1063,169 @@ mod tests {
             && event["tool"] == "add_track"
             && event["text"] == "Done"
             && event["ok"] == true));
+    }
+
+    async fn emit_tool_result(
+        writer: &mut (impl AsyncWrite + Unpin),
+        id: &str,
+        name: &str,
+        args: Value,
+        ok: bool,
+    ) {
+        reply(writer, json!({"type":"assistant","message":{"content":[{"type":"tool_use","id":id,"name":name,"input":args}]}})).await;
+        reply(writer, json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":id,"is_error":!ok,"content":if ok {"Done"} else {"Invalid arguments"}}]}})).await;
+    }
+
+    #[tokio::test]
+    async fn tool_failures_resume_claude_within_the_budget_but_never_after_a_denial() {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            for (limit, denied, recover) in [(5, false, true), (2, false, false), (5, true, false)] {
+                let (bridge, _commands, events) = crate::worker::test_bridge();
+                if denied { bridge.block_tool_recovery(); }
+                let (client, server) = tokio::io::duplex(65536);
+                let (reader, writer) = tokio::io::split(client);
+                let mut cli = Cli::transport(None, writer, reader);
+                let peer = async {
+                    let (reader, mut writer) = tokio::io::split(server);
+                    let mut lines = BufReader::new(reader).lines();
+                    for id in ["bad-1", "bad-2"] {
+                        emit_tool_result(&mut writer, id, "mcp__auris_live__add_track", json!({"kind":17}), false).await;
+                    }
+                    reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Stopped after errors"})).await;
+                    if recover {
+                        let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                        let text = request["message"]["content"].as_str().unwrap();
+                        assert!(text.contains("do not blindly replay"));
+                        assert!(text.contains("Do not bypass any refusal"));
+                        emit_tool_result(&mut writer, "fixed", "mcp__auris_live__add_track", json!({"name":"Lead","kind":"instrument"}), true).await;
+                        reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Recovered"})).await;
+                    }
+                };
+                let (completed, ()) = tokio::join!(complete_turn(&mut cli, &bridge, limit), peer);
+                assert!(completed.terminal_result);
+                if recover { assert_eq!(completed.answer.unwrap(), "Recovered"); }
+                else if denied { assert_eq!(completed.answer.unwrap(), "Stopped after errors"); }
+                else { assert!(completed.answer.unwrap_err().contains("limit of 2")); }
+                assert_eq!(events.try_iter().filter(|event| event["event"] == "notice").count(), usize::from(recover));
+            }
+        }).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_reply_without_new_failed_tools_and_a_native_command_failure_are_not_repeated() {
+        tokio::time::timeout(Duration::from_secs(10), async {
+        for native in [false, true] {
+            let (bridge, _commands, events) = crate::worker::test_bridge();
+            let (client, server) = tokio::io::duplex(65536);
+            let (reader, writer) = tokio::io::split(client);
+            let mut cli = Cli::transport(None, writer, reader);
+            let peer = async {
+                let (reader, mut writer) = tokio::io::split(server);
+                let mut lines = BufReader::new(reader).lines();
+                emit_tool_result(
+                    &mut writer,
+                    "bad",
+                    if native {
+                        "Bash"
+                    } else {
+                        "mcp__auris_live__add_track"
+                    },
+                    json!({}),
+                    false,
+                )
+                .await;
+                reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Need user input"})).await;
+                if !native {
+                    lines.next_line().await.unwrap().unwrap();
+                    reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Need user input"})).await;
+                }
+            };
+            let (completed, ()) = tokio::join!(complete_turn(&mut cli, &bridge, 5), peer);
+            assert_eq!(completed.answer.unwrap(), "Need user input");
+            assert_eq!(
+                events
+                    .try_iter()
+                    .filter(|event| event["event"] == "notice")
+                    .count(),
+                usize::from(!native)
+            );
+        }
+        }).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn changing_failed_arguments_cannot_extend_automatic_recovery_forever() {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let (bridge, _commands, events) = crate::worker::test_bridge();
+            let (client, server) = tokio::io::duplex(65536);
+            let (reader, writer) = tokio::io::split(client);
+            let mut cli = Cli::transport(None, writer, reader);
+            let peer = async {
+                let (reader, mut writer) = tokio::io::split(server);
+                let mut lines = BufReader::new(reader).lines();
+                for attempt in 0..3 {
+                    if attempt > 0 {
+                        lines.next_line().await.unwrap().unwrap();
+                    }
+                    emit_tool_result(
+                        &mut writer,
+                        &format!("bad-{attempt}"),
+                        "mcp__auris_live__add_track",
+                        json!({"kind":attempt}),
+                        false,
+                    )
+                    .await;
+                    reply(
+                        &mut writer,
+                        json!({"type":"result","subtype":"success",
+                        "is_error":false,"result":"Stopped after an error"}),
+                    )
+                    .await;
+                }
+            };
+            let (completed, ()) = tokio::join!(complete_turn(&mut cli, &bridge, 3), peer);
+            assert!(completed.terminal_result);
+            assert!(completed.answer.unwrap_err().contains("limit of 3"));
+            assert_eq!(
+                events
+                    .try_iter()
+                    .filter(|event| event["event"] == "notice")
+                    .count(),
+                2
+            );
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_cli_turn_error_keeps_the_conversation_available_for_the_next_request() {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let (bridge, commands, events) = crate::worker::test_bridge();
+            let mcp = LiveMcp::start(ToolHost::new(bridge.clone())).await.unwrap();
+            let (client, server) = tokio::io::duplex(65536);
+            let (reader, writer) = tokio::io::split(client);
+            let mut cli = Cli::transport(None, writer, reader);
+            commands.send(json!({"say":"First request"}).to_string()).unwrap();
+            commands.send(json!({"say":"Second request"}).to_string()).unwrap();
+            let peer = async {
+                let (reader, mut writer) = tokio::io::split(server);
+                let mut lines = BufReader::new(reader).lines();
+                let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                reply(&mut writer, json!({"type":"control_response","response":{"subtype":"success","request_id":request["request_id"],"response":{"mcpServers":[{"name":"auris_live","status":"connected"}]}}})).await;
+                lines.next_line().await.unwrap().unwrap();
+                reply(&mut writer, json!({"type":"result","subtype":"error_during_execution","is_error":true,"errors":["recoverable fixture turn error"]})).await;
+                lines.next_line().await.unwrap().unwrap();
+                reply(&mut writer, json!({"type":"result","subtype":"success","is_error":false,"result":"Second request finished"})).await;
+                drop(commands);
+            };
+            let preferences = prefs();
+            let (result, ()) = tokio::join!(conversation(&mut cli, &preferences, &bridge, &mcp, None, false, None), peer);
+            result.unwrap();
+            let events: Vec<_> = events.try_iter().collect();
+            assert!(events.iter().any(|event| event["event"] == "error" && event["message"].as_str().is_some_and(|text| text.contains("fixture turn error"))));
+            assert!(events.iter().any(|event| event["event"] == "answer" && event["text"] == "Second request finished"));
+        }).await.unwrap();
     }
 
     #[tokio::test]

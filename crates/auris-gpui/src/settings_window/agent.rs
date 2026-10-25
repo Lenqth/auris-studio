@@ -104,6 +104,7 @@ impl SettingsWindow {
             }
             prefs.context_tokens = draft.context_tokens;
             prefs.output_tokens = draft.output_tokens;
+            prefs.max_tool_failures = draft.max_tool_failures;
             prefs.system_prompt = draft.system_prompt;
             app.agent_apply_preferences_with(prefs, save)?;
             cx.notify();
@@ -399,6 +400,22 @@ impl SettingsWindow {
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
+        rows.push(section_title(self.t(Key::AgentToolFailureLimit), &theme));
+        rows.push(
+            self.dropdown(
+                "agent-tool-failure-limit",
+                (1..=20usize)
+                    .map(|n| (n, n.to_string(), String::new()))
+                    .collect(),
+                &self.agent.prefs.tool_failure_limit(),
+                |this, value, cx| {
+                    this.agent.prefs.max_tool_failures = Some(value as u8);
+                    cx.notify();
+                },
+                cx,
+            ),
+        );
+        rows.push(note(self.t(Key::AgentToolFailureLimitHelp), &theme));
         rows.push(section_title(self.t(Key::AgentSystemPrompt), &theme));
         rows.push(note(self.t(Key::AgentSystemPromptHelp), &theme));
         rows.push(self.agent_prompt(cx));
@@ -447,6 +464,28 @@ impl SettingsWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn failure_limit_draft_reaches_saved_preferences_and_worker_configuration(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        handle
+            .update(cx, |this, _, cx| {
+                this.agent.prefs.max_tool_failures = Some(8);
+                this.apply_agent_with(cx, |settings| {
+                    assert_eq!(settings.agent.tool_failure_limit(), 8);
+                    Ok::<(), String>(())
+                });
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.max_tool_failures, Some(8));
+            assert_eq!(this.agent_chat.preferences().tool_failure_limit(), 8);
+        });
+    }
 
     fn click_visible_control(selector: &'static str, cx: &mut VisualTestContext) {
         let body = cx.debug_bounds("settings-body").unwrap();

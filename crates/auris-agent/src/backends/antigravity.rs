@@ -408,11 +408,16 @@ struct Call {
     arguments: Value,
 }
 
-async fn tool_turn(cli: &mut Cli, content: Value, bridge: &Bridge) -> Result<String, String> {
+async fn tool_turn(
+    cli: &mut Cli,
+    content: Value,
+    bridge: &Bridge,
+    failure_limit: usize,
+) -> Result<String, String> {
     let host = ToolHost::new(bridge.clone());
     let turn_id = uuid::Uuid::new_v4().simple().to_string();
     let mut prompt = content;
-    let mut failures = std::collections::HashMap::<String, usize>::new();
+    let mut failures = crate::tool_failures::ToolFailures::default();
     let mut previous_results = None;
     let mut unchanged_rounds = 0;
     for round in 0..MAX_ROUNDS {
@@ -438,6 +443,13 @@ async fn tool_turn(cli: &mut Cli, content: Value, bridge: &Bridge) -> Result<Str
         let mut results = Vec::new();
         let mut requests = Vec::new();
         for (index, call) in answer.calls.into_iter().enumerate() {
+            let arguments = call.arguments.to_string();
+            if failures.exhausted(&call.name, &arguments, failure_limit) {
+                return Err(format!(
+                    "{} failed {failure_limit} times with identical arguments. Earlier edits remain in the project. Send a new instruction to continue.",
+                    call.name
+                ));
+            }
             let id = format!("antigravity-{turn_id}-{round}-{index}");
             bridge.emit(json!({"event":"phase","phase":"tool"}));
             bridge
@@ -472,16 +484,12 @@ async fn tool_turn(cli: &mut Cli, content: Value, bridge: &Bridge) -> Result<Str
             bridge
                 .emit(json!({"event":"result","call_id":id,"tool":call.name,"ok":ok,"text":text}));
             results.push(json!({"name":call.name,"ok":ok,"text":text}));
-            if !ok {
-                let count = failures.entry(signature).or_default();
-                *count += 1;
-                if *count >= 2 {
-                    return Err("Antigravity repeated the same failed tool twice. Earlier edits remain in the project".into());
-                }
-            }
+            failures.record(&call.name, &arguments, !ok);
         }
         let completed = (requests, results.clone());
-        unchanged_rounds = if previous_results.as_ref() == Some(&completed) {
+        unchanged_rounds = if results.iter().all(|result| result["ok"] == true)
+            && previous_results.as_ref() == Some(&completed)
+        {
             unchanged_rounds + 1
         } else {
             0
@@ -588,7 +596,7 @@ async fn conversation(
             }
         };
         context.clear();
-        let answer = tool_turn(cli, content, bridge).await;
+        let answer = tool_turn(cli, content, bridge, prefs.tool_failure_limit()).await;
         let display = wire["display"].as_str().unwrap_or(&said);
         match &answer {
             Ok(text) => memory.push(display, text),
@@ -819,7 +827,7 @@ mod tests {
                         }
                     }
                 };
-                let (answer, (), ()) = tokio::join!(tool_turn(&mut cli, "Add a track".into(), &bridge), peer, owner);
+                let (answer, (), ()) = tokio::join!(tool_turn(&mut cli, "Add a track".into(), &bridge, 5), peer, owner);
                 assert_eq!(answer.unwrap(), if allowed {"Added."} else {"Permission denied."});
                 if allowed {
                     assert!(session.project().tracks.iter().any(|track| track.name == "Antigravity lead"));
@@ -856,7 +864,7 @@ mod tests {
                 .await;
                 reply(&mut writer, response).await;
             };
-            let (answer, ()) = tokio::join!(tool_turn(&mut cli, "Test".into(), &bridge), peer);
+            let (answer, ()) = tokio::join!(tool_turn(&mut cli, "Test".into(), &bridge, 5), peer);
             assert!(answer.is_err());
             assert!(
                 events
@@ -900,8 +908,41 @@ mod tests {
                     }
                 }
             };
-            let (answer, (), ()) = tokio::join!(tool_turn(&mut cli, "Inspect once".into(), &bridge), peer, owner);
+            let (answer, (), ()) = tokio::join!(tool_turn(&mut cli, "Inspect once".into(), &bridge, 5), peer, owner);
             assert!(answer.unwrap_err().contains("without making progress"));
+        }).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_results_use_the_configured_budget_instead_of_the_success_stall_guard() {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            for (limit, rounds, recover) in [(5, 4, true), (2, 3, false)] {
+                let (bridge, _commands, _events) = crate::worker::test_bridge();
+                let (client, server) = tokio::io::duplex(128 * 1024);
+                let (reader, writer) = tokio::io::split(client);
+                let mut cli = Cli::transport(None, writer, reader, "auris-fixture".into());
+                let peer = async {
+                    let (reader, mut writer) = tokio::io::split(server);
+                    let mut lines = BufReader::new(reader).lines();
+                    lines.next_line().await.unwrap().unwrap();
+                    reply(&mut writer, json!({"event":"init","init":{"agent":"auris-fixture"}})).await;
+                    for round in 0..rounds {
+                        reply(&mut writer, result(json!({"text":"", "calls":[{"name":"add_track","arguments":{"name":"Invalid","kind":17}}]}))).await;
+                        if recover || round + 1 < rounds {
+                            let wire: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+                            let content = wire["message"]["content"].as_str().unwrap();
+                            let results: Value = serde_json::from_str(content.lines().last().unwrap()).unwrap();
+                            assert_eq!(results["results"][0]["ok"], false);
+                        }
+                    }
+                    if recover {
+                        reply(&mut writer, result(json!({"text":"Recovered", "calls":[]}))).await;
+                    }
+                };
+                let (answer, ()) = tokio::join!(tool_turn(&mut cli, "Try again".into(), &bridge, limit), peer);
+                if recover { assert_eq!(answer.unwrap(), "Recovered"); }
+                else { assert!(answer.unwrap_err().contains("failed 2 times")); }
+            }
         }).await.unwrap();
     }
 

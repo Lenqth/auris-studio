@@ -18,6 +18,23 @@ to the model; Codex's advertised reasoning levels determine its choices. Permiss
 rules open from the approval-mode menu on the left. The circular send control
 becomes Stop during a turn.
 
+Settings > Agent includes **Repeated tool failure limit**, from 1 to 20 (default 5).
+The Auris API and Antigravity loops count failures by tool name and normalized arguments
+within one user turn. A successful call resets that signature's count; corrected arguments
+have a separate budget. After the configured number of failures, another identical call
+stops the turn before execution. Completed edits remain in the document, and a new user
+instruction starts a fresh budget.
+
+Claude Code manages its internal tool loop. If it ends a successful CLI turn immediately
+after an Auris tool error, Auris requests a correction in the existing transcript, bounded
+by the configured failure allowance and at most one fewer continuation requests. It asks
+the agent to inspect the current document and preserve completed edits, rather than replaying
+a write. A new reply without a new failed tool call is not automatically repeated. Permission
+refusals, cancellation, native shell/file failures and transport failures never trigger this
+recovery. An explicit CLI turn error is displayed while keeping a healthy stream available
+for the next user request. Codex and OpenCode manage their own tool loops; all native backends
+receive the configured recovery guidance. Permission decisions remain independent of the limit.
+
 The **Fast** toggle beside reasoning effort requests fast mode for Codex, Claude Code,
 and OpenAI's own API connection. It is saved independently of reasoning effort and is
 disabled while a turn is running. Model and account eligibility still apply, and providers

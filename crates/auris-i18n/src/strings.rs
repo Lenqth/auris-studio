@@ -1932,6 +1932,9 @@ new のオプション
     AgentNotConfigured { en: "Name a model to talk to.", ja: "話しかけるモデルを設定してください。" }
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }
+    TimelineScrollHelp { en: "Drag the bar or use Shift+wheel to scroll horizontally", ja: "バーをドラッグ、またはShift＋ホイールで横スクロール" }
+    AgentToolFailureLimit { en: "Repeated tool failure limit", ja: "同じツール呼び出しの失敗上限" }
+    AgentToolFailureLimitHelp { en: "Failure allowance for the same tool and arguments. Bounds API/Antigravity loops and Claude Code recovery after tool errors. Success resets that call's count. Applies from the next conversation; other CLI runtimes manage their own limits.", ja: "同じツール・引数での失敗上限です。API／Antigravityの実行ループと、Claude Codeがツールエラー後に終了した際の自動継続に使います。成功すると該当する回数をリセットします。次の会話から適用され、他のCLIは独自の制限を使用します。" }
     AgentSystemPrompt { en: "System prompt", ja: "システムプロンプト" }
     AgentSystemPromptHelp { en: "Replace the agent's shared instructions for all models. Apply to use them from the next request. Enter adds a line break. Blank uses the standard prompt. Tool permissions still apply.", ja: "全モデル共通の指示を編集します。「適用」すると次の依頼から反映されます。Enterで改行、空欄で標準プロンプトを使用します。ツールの権限設定は引き続き適用されます。" }
     AgentPromptReset { en: "Restore standard prompt", ja: "標準に戻す" }

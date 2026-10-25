@@ -37,14 +37,46 @@ pub(super) async fn authorize(
         .exchange(serde_json::json!({"event":"permission", "id":id, "tool":tool, "args":args}))
         .await?;
     if response["event"] != "permission_result" || response["id"] != id {
+        bridge.block_tool_recovery();
         return Err("The permission response did not match the pending request.".into());
     }
     if response["ok"] == true {
         Ok(())
     } else {
+        bridge.block_tool_recovery();
         Err(response["reason"]
             .as_str()
             .unwrap_or("The user denied this operation. Do not retry it.")
             .into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_permission_denial_blocks_automatic_recovery_until_a_new_user_turn() {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let (bridge, commands, events) = crate::worker::test_bridge();
+        let denied = authorize(Some(&bridge), "capabilities", "{}");
+        let owner = async {
+            let request = loop {
+                if let Ok(event) = events.try_recv() {
+                    break event;
+                }
+                tokio::task::yield_now().await;
+            };
+            commands.send(serde_json::json!({"event":"permission_result","id":request["id"],"ok":false,"reason":"fixture denial"}).to_string()).unwrap();
+        };
+        let (result, ()) = tokio::join!(denied, owner);
+        assert!(result.is_err());
+        assert!(!bridge.can_recover_tools());
+        commands
+            .send(serde_json::json!({"say":"A new user request"}).to_string())
+            .unwrap();
+        bridge.receive().await.unwrap();
+        assert!(bridge.can_recover_tools());
+        }).await.unwrap();
     }
 }

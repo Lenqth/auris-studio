@@ -344,6 +344,9 @@ impl ReasoningEffort {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPreferences {
+    /// Failed attempts allowed per tool and argument signature in one turn. Absent uses five.
+    /// Auris-managed tool loops clamp hand-edited values to 1 through 20.
+    pub max_tool_failures: Option<u8>,
     /// Replacement live-agent system prompt. Blank uses the current built-in prompt.
     /// Shared by all backends; independent of permission policy and reviewer instructions.
     pub system_prompt: String,
@@ -401,6 +404,10 @@ pub struct AgentEndpoint {
 }
 
 impl AgentPreferences {
+    /// Effective failure budget for one tool and normalized argument signature.
+    pub fn tool_failure_limit(&self) -> usize {
+        usize::from(self.max_tool_failures.unwrap_or(5).clamp(1, 20))
+    }
     /// Whether this connection exposes a native fast service tier.
     pub fn supports_fast_mode(&self) -> bool {
         matches!(self.backend.as_str(), "codex" | "claude")
@@ -417,6 +424,23 @@ impl AgentPreferences {
     /// The model is the one field with no sensible default — everything else falls back.
     pub fn is_configured(&self) -> bool {
         !self.model.trim().is_empty()
+    }
+}
+
+#[cfg(test)]
+mod agent_failure_limit_tests {
+    use super::AgentPreferences;
+
+    #[test]
+    fn old_settings_default_to_five_and_hand_edits_are_bounded() {
+        let mut prefs: AgentPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(prefs.tool_failure_limit(), 5);
+        for (stored, expected) in [(0, 1), (1, 1), (8, 8), (20, 20), (255, 20)] {
+            prefs.max_tool_failures = Some(stored);
+            let restored: AgentPreferences =
+                serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
+            assert_eq!(restored.tool_failure_limit(), expected);
+        }
     }
 }
 
