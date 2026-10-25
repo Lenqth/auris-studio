@@ -63,6 +63,8 @@ Use the advertised catalog and `tool_help`; saved-project MCP and the desktop li
 
 ## Delivery checks
 
+After the composition is established, complete [the arrangement pass](arrangement.md) around the actual vocal line. Check backing in sung passages and gaps, including later verses. Refresh any affected singer takes before final export; arrangement review does not authorize replacing the lyrics or vocal melody.
+
 Verify the rendered mix and vocal stem across the opening, later verses, joins, and final sung phrase. Check missing/truncated singing, vocal audibility, duration, peak/true peak, and loudness using `verify_render` or equivalent measurements. A short successful voice probe does not verify a complete song. Preserve the editable project, lyrics/specification, voice/speaker selection, seed, and saved audio take; report unsung or stale sections explicitly.
 
 Distinguish score inspection, audio measurements, a separate listening critic, and human listening. Neither waveform inspection nor a passing diagnostic proves intelligibility, emotional delivery, or musical quality. When an actual critic is available, use it as fallible evidence; never claim personal listening from its report. Deliver only the requested scope and state any unverified listening judgments.

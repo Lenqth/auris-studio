@@ -16,6 +16,7 @@ Include:
 
 - source project and `.asong` path;
 - seed, tempo, key/mode, duration, and loop boundaries;
+- arrangement changes or deliberate retention, compared section ranges, and any unresolved foreground/transition issues;
 - rendered file paths and format;
 - measurements actually performed (duration, peak/true peak, LUFS, and render status);
 - unresolved musical or integration assumptions.

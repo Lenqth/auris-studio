@@ -4,6 +4,8 @@ This reference records the concrete interfaces the `auris-composition` skill may
 
 ## Headless CLI
 
+For a complete delivery, follow [arrangement.md](arrangement.md) between establishing the composition and final export. It maps section/part revisions and protected MCP backing edits to the arrangement review.
+
 ```text
 auris presets
 auris progressions

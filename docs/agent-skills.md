@@ -4,6 +4,8 @@
 
 `auris-composition` teaches a coding agent when and how to use Auris Studio for original songs with lyrics and game/video music: editable scores, vocal synthesis, loopable cues, themes, transitions, previews, renders, stems, and measurable delivery checks. Its [vocal workflow](../skills/auris-composition/references/vocals.md) covers lyric/melody development, voice selection, CLI/MCP synthesis, and full-song coverage checks. It is distributed separately from the Auris desktop binary and does not install or update that binary.
 
+Complete music deliveries include a [post-composition arrangement pass](../skills/auris-composition/references/arrangement.md): foreground/backing roles, section contrast, voicing and rhythmic space, transitions, and instrument-aware performance. The reference includes primary DTM sources and maps their techniques to Auris CLI/MCP capabilities. Existing authored melodies and lyrics remain protected.
+
 Install it globally for Codex with the `skills` CLI:
 
 ```sh
