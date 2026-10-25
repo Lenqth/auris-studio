@@ -118,6 +118,15 @@ impl Render for AurisApp {
         {
             self.refresh_shared_settings();
         }
+        if self.project_chooser.is_some() {
+            self.main_was_active = window.is_window_active();
+            let title = self.t(Key::ChooseProject);
+            if self.titled != title {
+                window.set_window_title(title);
+                self.titled = title.to_string();
+            }
+            return self.render_project_chooser(window, cx);
+        }
         if cfg!(target_os = "macos") && window.is_window_active() {
             let state = crate::menu::MenuState {
                 can_undo: self.session.can_undo(),
@@ -264,6 +273,7 @@ impl Render for AurisApp {
             .child(status)
             .child(drop_ring)
             .children(overlays)
+            .into_any_element()
     }
 }
 

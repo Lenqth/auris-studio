@@ -40,6 +40,7 @@ pub(crate) mod pitch_performance;
 pub mod plugin_editor;
 pub mod plugin_window;
 mod portrait_image;
+pub(crate) mod project_chooser;
 pub mod prompt;
 pub(crate) mod rhythm_grid;
 pub mod root;

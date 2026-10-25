@@ -89,13 +89,16 @@ fn main() {
             .update(cx, |view, _, cx| {
                 view.download_missing_soundfonts(cx);
                 view.start_auto_updates(cx);
-                view.acquire_audio(cx);
             })
             .ok();
         cx.on_action(|_: &actions::Quit, cx| project_windows::request_quit(cx));
         if let Some(path) = project_argument(std::env::args_os()) {
             window
                 .update(cx, |view, _, cx| view.open_project_at(path, cx))
+                .ok();
+        } else {
+            window
+                .update(cx, |view, window, cx| view.show_project_chooser(window, cx))
                 .ok();
         }
         cx.spawn(async move |cx| {

@@ -40,6 +40,16 @@ macro_rules! strings {
 }
 
 strings! {
+    ChooseProject { en: "Choose a project", ja: "プロジェクトを選択" }
+    ChooseNew { en: "New project", ja: "新規プロジェクト" }
+    ChooseRecent { en: "Recent projects", ja: "最近使った項目" }
+    ChooseEmpty { en: "Empty project", ja: "空のプロジェクト" }
+    ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement.", ja: "音源トラックから、自由に曲を作り始めます。" }
+    ChooseRecentEmpty { en: "No recent projects. Open an existing project to get started.", ja: "最近使ったプロジェクトはありません。既存のプロジェクトを開いて始められます。" }
+    ChooseExisting { en: "Open existing project…", ja: "既存のプロジェクトを開く…" }
+    ChooseCreate { en: "Create", ja: "作成" }
+    ChooseOpen { en: "Open", ja: "開く" }
+    ChooseClose { en: "Close", ja: "閉じる" }
     TrackGrid { en: "Track grid", ja: "トラックグリッド" }
     TrackGridEmpty { en: "Add a track to see its sound here.", ja: "トラックを追加すると、音源の動きや波形をここに表示します。" }
     ToolbarHeading { en: "Top toolbar", ja: "上部ツールバー" }

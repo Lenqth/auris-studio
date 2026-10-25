@@ -1523,6 +1523,7 @@ pub(crate) struct DiskWatchTaskState {
 pub struct AurisApp {
     pub(crate) pending_audition: Option<crate::project_windows::AuditionRequest>,
     pub(crate) opening_project: Option<std::path::PathBuf>,
+    pub(crate) project_chooser: Option<crate::ui::project_chooser::ProjectChooser>,
     pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
     pub(crate) session: Session,
@@ -2123,6 +2124,7 @@ impl AurisApp {
         let mut app = Self {
             pending_audition: None,
             opening_project: None,
+            project_chooser: None,
             project_window: None,
             session,
             theme,

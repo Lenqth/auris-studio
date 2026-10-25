@@ -1078,6 +1078,7 @@ impl AurisApp {
                 match loaded {
                     Ok(Some(result)) => match this.session.continue_open_project(result) {
                         Some(missing) => {
+                            this.project_chooser = None;
                             this.agent_reset_conversation();
                             this.remember_recent(&path);
                             this.resync_selection();

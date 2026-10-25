@@ -66,11 +66,28 @@ pub(crate) fn open(path: Option<PathBuf>, cx: &mut App) {
                     return;
                 }
             }
+            for handle in windows(cx) {
+                let reused = handle.update(cx, |view, window, cx| {
+                    if view.project_chooser.is_some() && view.opening_project.is_none() {
+                        window.activate_window();
+                        view.open_project_at(path.clone(), cx);
+                        true
+                    } else {
+                        false
+                    }
+                });
+                if matches!(reused, Ok(true)) {
+                    return;
+                }
+            }
         }
         match create(cx) {
             Ok(handle) => {
                 if let Some(path) = path {
                     let _ = handle.update(cx, |view, _, cx| view.open_project_at(path, cx));
+                } else {
+                    let _ =
+                        handle.update(cx, |view, window, cx| view.show_project_chooser(window, cx));
                 }
             }
             Err(error) => log::error!("could not open project window: {error}"),
