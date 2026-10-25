@@ -471,7 +471,7 @@ impl AurisApp {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                    this.press_typed_key(key);
+                    this.press_typed_key(key, cx);
                     cx.notify();
                 }),
             )
@@ -485,7 +485,7 @@ impl AurisApp {
                     this.dragging(),
                     this.clicked_key == Some(key),
                 ) {
-                    this.press_typed_key(key);
+                    this.press_typed_key(key, cx);
                     cx.notify();
                 }
             }))
@@ -500,7 +500,10 @@ impl AurisApp {
     /// Whatever the pointer was holding is let go of first. One pointer holds one key, and a
     /// slide that took the next one without putting the last one down would leave a note sounding
     /// with nothing left that knows about it — which is the whole of the bug this guards.
-    fn press_typed_key(&mut self, key: &'static str) {
+    fn press_typed_key(&mut self, key: &'static str, cx: &mut Context<Self>) {
+        if !self.acquire_audio(cx) {
+            return;
+        }
         self.release_typed_key();
         let Some(track) = self.session.audition_track(self.selected_track) else {
             return;

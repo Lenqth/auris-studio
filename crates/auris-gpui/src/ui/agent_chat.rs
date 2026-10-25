@@ -673,7 +673,7 @@ pub(crate) struct ModelOption {
 }
 
 impl ModelOption {
-    fn label(&self) -> String {
+    pub(crate) fn label(&self) -> String {
         let name = self.display_name.as_deref().unwrap_or(&self.name);
         let name = if let Some(suffix) = name.strip_prefix("gpt-") {
             let mut words = suffix.split('-');
@@ -697,7 +697,7 @@ impl ModelOption {
         }
     }
 
-    fn matches(&self, prefs: &AgentPreferences) -> bool {
+    pub(crate) fn matches(&self, prefs: &AgentPreferences) -> bool {
         self.name == prefs.model
             && self
                 .connection
@@ -780,6 +780,41 @@ struct PendingListening {
     operation: auris_session::agent_policy::Operation,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     receiver: Receiver<Result<auris_session::audio_audition::ListeningResult, String>>,
+    approval: Receiver<AudioLoadRequest>,
+}
+
+/// One invocation's load consent. Dropping the last copy cancels the waiting worker.
+#[derive(Debug)]
+pub struct AudioLoadRequest {
+    pub(crate) model: String,
+    pub(crate) response: std::sync::mpsc::Sender<bool>,
+}
+
+impl PartialEq for AudioLoadRequest {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+fn await_audio_load_consent(
+    model: String,
+    requests: &std::sync::mpsc::Sender<AudioLoadRequest>,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<(), String> {
+    let (response, receiver) = std::sync::mpsc::channel();
+    requests
+        .send(AudioLoadRequest { model, response })
+        .map_err(|_| "Audio model loading cancelled".to_string())?;
+    loop {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("Audio model loading cancelled".into());
+        }
+        match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+            Ok(true) => return Ok(()),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            _ => return Err("Audio model loading cancelled by the user; do not retry without a new user request".into()),
+        }
+    }
 }
 
 impl PendingListening {
@@ -2059,6 +2094,7 @@ impl AurisApp {
             .unwrap_or_default();
         serde_json::json!({
             "selected_track": self.selected_track.and_then(|id| project.track(id)).map(|track| &track.name),
+            "song_creation_reference": project.creation_brief,
             "selected_track_id": self.selected_track.map(|id| id.0),
             "selected_clip_id": self.selected_clip.map(|id| id.0),
             "selected_clips": clips, "selected_note_indices": notes,
@@ -2477,10 +2513,15 @@ impl AurisApp {
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let worker_cancel = cancel.clone();
         let (sender, receiver) = std::sync::mpsc::channel();
+        let (approval_sender, approval) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("auris-audio-listening".into())
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let (job, model) = job.prepare_reviewer(&worker_cancel)?;
+                    if let Some(model) = model {
+                        await_audio_load_consent(model, &approval_sender, &worker_cancel)?;
+                    }
                     job.run(&worker_cancel)
                 }))
                 .unwrap_or_else(|_| Err("Audio listening worker stopped unexpectedly".into()));
@@ -2488,6 +2529,7 @@ impl AurisApp {
             })
             .map_err(|error| error.to_string())?;
         link.listening = Some(PendingListening {
+            approval,
             revision: self.session.revision(),
             operation,
             cancel,
@@ -2652,7 +2694,41 @@ impl AurisApp {
         let _ = link.send(&wire.to_string());
     }
 
+    pub(crate) fn approve_audio_model_load(&mut self, request: &AudioLoadRequest) {
+        let allowed = self
+            .agent_chat
+            .link
+            .as_ref()
+            .and_then(|link| link.listening.as_ref())
+            .is_some_and(|pending| {
+                pending.revision == self.session.revision()
+                    && self.agent_chat.bound_project.as_deref() == self.session.path()
+                    && !pending.cancel.load(std::sync::atomic::Ordering::Relaxed)
+                    && !matches!(
+                        self.settings.agent.policy.decide(&pending.operation),
+                        auris_session::agent_policy::Decision::Deny(_)
+                    )
+            });
+        let _ = request.response.send(allowed);
+    }
+
     fn poll_agent_listening(&mut self) {
+        if self
+            .agent_chat
+            .link
+            .as_ref()
+            .is_none_or(|link| link.listening.is_none())
+        {
+            if matches!(
+                self.prompt.as_ref().map(|prompt| &prompt.body),
+                Some(crate::ui::prompt::PromptBody::Ask(
+                    crate::ui::prompt::Question::AudioModelLoad(_)
+                ))
+            ) {
+                self.prompt = None;
+            }
+            return;
+        }
         let Some(link) = self.agent_chat.link.as_mut() else {
             return;
         };
@@ -2664,9 +2740,25 @@ impl AurisApp {
             self.agent_chat.bound_project.as_deref() == self.session.path(),
             &self.settings.agent.policy,
         ) else {
+            if self.prompt.is_none()
+                && let Ok(request) = pending.approval.try_recv()
+            {
+                self.open_prompt(crate::ui::prompt::Prompt::ask(
+                    self.t(auris_i18n::Key::AudioModelLoadTitle),
+                    crate::ui::prompt::Question::AudioModelLoad(std::sync::Arc::new(request)),
+                ));
+            }
             return;
         };
         link.listening = None;
+        if matches!(
+            self.prompt.as_ref().map(|prompt| &prompt.body),
+            Some(crate::ui::prompt::PromptBody::Ask(
+                crate::ui::prompt::Question::AudioModelLoad(_)
+            ))
+        ) {
+            self.prompt = None;
+        }
         let result = result.and_then(|result| self.session.continue_listening(result));
         let wire = serde_json::json!({"event":"edit_result","ok":result.is_ok(),"text":result.unwrap_or_else(|error|error)});
         let _ = link.send(&wire.to_string());
@@ -2929,7 +3021,7 @@ impl AurisApp {
     /// The child read its configuration at spawn, so a change means a new child; dropping the
     /// link is enough, because the next message spawns one.
     pub(crate) fn agent_apply_settings(&mut self) -> Result<(), auris_session::SessionError> {
-        self.agent_apply_settings_with(|settings| settings.save())
+        self.agent_apply_settings_with(self.settings_saver())
     }
 
     fn agent_apply_settings_with<E>(
@@ -3343,13 +3435,8 @@ impl AurisApp {
                                     &theme,
                                     cx.listener(|this, _, _, cx| {
                                         if let Some(path) = this.agent_chat.produced_project.clone()
-                                            && this.confirm_discard(
-                                                crate::ui::prompt::PendingAction::OpenDropped(
-                                                    path.clone(),
-                                                ),
-                                            )
                                         {
-                                            this.open_project_at(path, cx);
+                                            this.open_project_window(path, cx);
                                         }
                                     }),
                                 ))
@@ -3978,7 +4065,7 @@ impl AurisApp {
 
     /// Applies one model choice immediately, just like a pointer selection.
     fn choose_agent_model(&mut self, index: usize) {
-        let result = self.choose_agent_model_with(index, |settings| settings.save());
+        let result = self.choose_agent_model_with(index, self.settings_saver());
         if let Err(error) = result {
             let message = crate::i18n::error_text(&error, self.language());
             self.agent_chat.models_error = Some(message);
@@ -5135,6 +5222,58 @@ impl AurisApp {
 
 #[cfg(test)]
 mod tests {
+    #[gpui::test]
+    fn audio_load_dialog_closes_when_the_agent_has_stopped(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        let (response, receiver) = std::sync::mpsc::channel();
+        app.update(cx, |this, _| {
+            this.open_prompt(crate::ui::prompt::Prompt::ask(
+                "Load audio model?",
+                crate::ui::prompt::Question::AudioModelLoad(std::sync::Arc::new(
+                    super::AudioLoadRequest {
+                        model: "test-audio".into(),
+                        response,
+                    },
+                )),
+            ));
+            this.poll_agent_listening();
+            assert!(this.prompt.is_none());
+        });
+        assert_eq!(
+            receiver.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Disconnected)
+        );
+    }
+
+    #[test]
+    fn local_audio_load_waits_for_consent_and_stops_on_dismissal_or_cancellation() {
+        for answer in [Some(true), Some(false), None] {
+            let (requests, receiver) = std::sync::mpsc::channel();
+            let worker = std::thread::spawn(move || {
+                super::await_audio_load_consent(
+                    "test-audio".into(),
+                    &requests,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+            });
+            let request = receiver.recv().unwrap();
+            assert!(!worker.is_finished());
+            if let Some(answer) = answer {
+                request.response.send(answer).unwrap();
+            }
+            drop(request);
+            assert_eq!(worker.join().unwrap().is_ok(), answer == Some(true));
+        }
+        let (requests, receiver) = std::sync::mpsc::channel();
+        let result = super::await_audio_load_consent(
+            "test-audio".into(),
+            &requests,
+            &std::sync::atomic::AtomicBool::new(true),
+        );
+        assert!(result.is_err());
+        drop(receiver);
+    }
+
     use super::*;
     use auris_session::agent_policy::Mode;
     use auris_session::prelude::{Note, Ticks};
@@ -5198,6 +5337,8 @@ mod tests {
     ) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this,_| {
+            // Permission UI tests can persist rules in the shared test configuration.
+            this.settings.agent.policy = Default::default();
             this.settings.agent.policy.mode = Mode::Edit;
             let track = this.session.add_singer_track("Vocal");
             let clip = this.session.add_midi_clip(track,"Phrase",Ticks::ZERO,Ticks::QUARTER * 4).unwrap();
@@ -5936,6 +6077,7 @@ mod tests {
         )
         .unwrap();
         let pending = PendingListening {
+            approval: std::sync::mpsc::channel().1,
             revision: 7,
             operation,
             cancel: cancel.clone(),

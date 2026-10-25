@@ -40,6 +40,103 @@ macro_rules! strings {
 }
 
 strings! {
+    WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
+    WorkshopHint { en: "Choose a direction, audition three songs, then continue editing your favourite.", ja: "曲の方向性を決め、3つの候補を聴き比べてから編集を始めます。" }
+    WorkshopNext { en: "Next", ja: "次へ" }
+    WorkshopDirection { en: "Direction", ja: "曲の方向性" }
+    WorkshopVocals { en: "Vocals and lyrics", ja: "歌・歌詞" }
+    WorkshopSources { en: "Arrangement and instruments", ja: "編成・音源" }
+    WorkshopCompare { en: "Compare songs", ja: "候補の比較" }
+    WorkshopCompareHint { en: "Audition a candidate, then open it to edit its notes, lyrics and instruments.", ja: "候補を試聴し、気に入った曲を選んで音符・歌詞・音源を編集できます。" }
+    WorkshopNeedSinger { en: "Select at least one singer.", ja: "歌手を1人以上選択してください。" }
+    WorkshopRefreshModels { en: "Refresh models", ja: "モデル一覧を再取得" }
+    WorkshopLoadingModels { en: "Loading models…", ja: "モデル一覧を取得中…" }
+    WorkshopVoiceSetup { en: "Set up voices…", ja: "歌声をセットアップ…" }
+    WorkshopSpecifyLength { en: "Set a length", ja: "長さを指定" }
+    WorkshopInstrumental { en: "Instrumental", ja: "インスト" }
+    WorkshopWithVocals { en: "With vocals", ja: "歌あり" }
+    WorkshopRemoveSinger { en: "Remove", ja: "外す" }
+    WorkshopAddSinger { en: "Add singer…", ja: "歌手を追加…" }
+    WorkshopAlternate { en: "Take turns", ja: "交互に歌う" }
+    WorkshopHarmony { en: "Melody and harmony", ja: "主旋律＋ハーモニー" }
+    WorkshopWriteLyrics { en: "Write lyrics", ja: "自分で入力" }
+    WorkshopMotifLyrics { en: "Generate from a motif", ja: "モチーフから生成" }
+    WorkshopMotif { en: "Motif, scene or words to include", ja: "モチーフ・情景・入れたい言葉" }
+    WorkshopGenerateLyrics { en: "Generate lyrics", ja: "歌詞を生成" }
+    WorkshopLyrics { en: "Lyrics (editable)", ja: "歌詞（編集できます）" }
+    WorkshopWritingLyrics { en: "Writing lyrics…", ja: "歌詞を生成中…" }
+    WorkshopSourceHint { en: "Choose only the parts you want to specify. Automatic parts use the arrangement’s built-in instruments.", ja: "指定したいパートだけ音源を選びます。「お任せ」のパートは曲に合う内蔵音源を使います。" }
+    WorkshopMelody { en: "Melody", ja: "メロディ" }
+    WorkshopChords { en: "Chords", ja: "コード" }
+    WorkshopBass { en: "Bass", ja: "ベース" }
+    WorkshopPad { en: "Pad", ja: "パッド" }
+    WorkshopKick { en: "Kick", ja: "キック" }
+    WorkshopSnare { en: "Snare", ja: "スネア" }
+    WorkshopHat { en: "Hi-hat", ja: "ハイハット" }
+    WorkshopQueued { en: "Waiting to generate", ja: "生成待ち" }
+    WorkshopAutomatic { en: "Automatic", ja: "お任せ" }
+    WorkshopSinging { en: "Synthesizing vocals…", ja: "歌声を合成中…" }
+    WorkshopComposing { en: "Composing…", ja: "作曲中…" }
+    WorkshopGenre { en: "Genre", ja: "ジャンル" }
+    WorkshopPop { en: "Pop", ja: "ポップス" }
+    WorkshopRock { en: "Rock", ja: "ロック" }
+    WorkshopElectronic { en: "Electronic", ja: "エレクトロニック" }
+    WorkshopOrchestral { en: "Orchestral", ja: "オーケストラ" }
+    WorkshopJazz { en: "Jazz", ja: "ジャズ" }
+    WorkshopAmbient { en: "Ambient", ja: "アンビエント" }
+    WorkshopPreparing { en: "Preparing playback…", ja: "再生を準備しています…" }
+    WorkshopMood { en: "Mood", ja: "雰囲気" }
+    WorkshopLength { en: "Approximate length", ja: "おおよその長さ" }
+    WorkshopBrief { en: "Direction", ja: "曲の方向性" }
+    WorkshopBriefHint { en: "For example: walking through a city at night, with a memorable piano melody.", ja: "例：夜の街を歩くような、印象的なピアノのメロディーがある曲" }
+    WorkshopBright { en: "Bright", ja: "明るい" }
+    WorkshopMelancholy { en: "Melancholy", ja: "切ない" }
+    WorkshopCalm { en: "Calm", ja: "落ち着いた" }
+    WorkshopEnergetic { en: "Energetic", ja: "激しい" }
+    WorkshopPlanning { en: "AI is planning three directions…", ja: "AIが3つの方向性を考えています…" }
+    WorkshopRendering { en: "Composing and preparing audio…", ja: "作曲・試聴音声を準備しています…" }
+    WorkshopListen { en: "Listen", ja: "試聴" }
+    WorkshopStop { en: "Stop", ja: "停止" }
+    WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
+    WorkshopBack { en: "Back", ja: "戻る" }
+    WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
+    WorkshopGenerate { en: "Generate 3 candidates", ja: "3つの候補を生成" }
+    SetupGuide { en: "Setup Guide", ja: "セットアップガイド" }
+    SetupWelcome { en: "Welcome to Auris Studio", ja: "Auris Studioへようこそ" }
+    SetupWelcomeHelp { en: "Choose the tools you want to use. You can reopen this guide from Settings or the project chooser.", ja: "使いたい機能を設定しましょう。このガイドは設定画面やプロジェクト選択画面からいつでも開けます。" }
+    SetupOptional { en: "Optional — you can start making music and set this up later.", ja: "すべて任意です。設定は後からでも行えます。" }
+    SetupAudio { en: "Audio", ja: "音声入出力" }
+    SetupAgent { en: "AI Agent", ja: "AIエージェント" }
+    SetupInput { en: "Note & MIDI Input", ja: "ノート・MIDI入力" }
+    SetupSinging { en: "Singing Voices", ja: "歌唱バックエンド" }
+    SetupAppearance { en: "Appearance & Keys", ja: "表示・キー設定" }
+    SetupAudioHelp { en: "Check the output device for your speakers or headphones. If you use a microphone or audio interface, choose its input device too. Start with the default sample rate and buffer size; adjust them if you hear dropouts or need lower latency.", ja: "スピーカーやヘッドホンの出力先を確認します。マイクやオーディオインターフェースを使う場合は入力先も選びましょう。サンプルレートやバッファサイズはまず既定値を使い、音切れや遅延が気になる場合に調整できます。" }
+    SetupAgentHelp { en: "Connect an AI agent to create three song candidates, discuss arrangements and edit a project through conversation. Choose a backend and model in Settings, then use its connection check. A configured model name alone does not confirm that the connection works.", ja: "AIエージェントを接続すると、曲の候補生成や編曲の相談、会話によるプロジェクト編集ができます。設定画面でバックエンドとモデルを選び、接続を確認してください。モデル名の設定だけでは接続成功を意味しません。" }
+    SetupSelectedModel { en: "Selected model", ja: "選択中のモデル" }
+    SetupInputNotes { en: "Piano roll: create a MIDI clip on an instrument track, then draw and edit notes in the piano roll.", ja: "ピアノロール：音源トラックにMIDIクリップを作り、ピアノロールでノートを入力・編集できます。" }
+    SetupInputTyping { en: "Computer keyboard: select an instrument track and enable Musical Typing from the Transport menu to play notes with your keyboard.", ja: "PCキーボード：音源トラックを選び、トランスポートメニューの「ミュージックタイピング」を有効にすると、キーボードで音を鳴らせます。" }
+    SetupInputFiles { en: "MIDI files: choose File → Import MIDI File to bring an existing performance into your project. Keyboard shortcuts can be inspected and changed in Settings.", ja: "MIDIファイル：ファイルメニューの「MIDI ファイルを読み込む…」から既存の演奏を取り込めます。ショートカットは設定画面で確認・変更できます。" }
+    SetupSingingHelp { en: "To make vocal tracks sing, add a singing backend. VOICEVOX is a good place to start: install and run its engine, then register a singing voice in the setup window. DiffSinger and LeapSinger can use compatible voice models. Instrumental projects work without these downloads.", ja: "歌唱トラックを使う場合は歌唱バックエンドを追加します。まずはVOICEVOXのエンジンを導入・起動し、設定画面で歌唱用の声を登録する方法があります。DiffSingerやLeapSingerの対応音声モデルも利用できます。インスト曲は追加のダウンロードなしで制作できます。" }
+    SetupAppearanceHelp { en: "Choose a colour theme, interface language and text size that are comfortable for you. Review the key bindings and change any shortcuts to match your workflow.", ja: "使いやすいカラーテーマ、表示言語、文字サイズを選びましょう。キーバインドも確認し、普段の操作に合わせて変更できます。" }
+    SetupReturnHint { en: "After changing a setting, close its window to return here and continue to the next step.", ja: "設定を変更したら、その画面を閉じてガイドに戻り、次の項目へ進めます。" }
+    SetupOpenAudio { en: "Open audio settings…", ja: "音声入出力を設定…" }
+    SetupOpenAgent { en: "Connect an AI agent…", ja: "AIエージェントを接続…" }
+    SetupOpenAppearance { en: "Choose theme and language…", ja: "テーマ・表示言語を設定…" }
+    SetupOpenKeys { en: "Review key bindings…", ja: "キーバインドを確認…" }
+    SetupLater { en: "Set up later", ja: "後で設定する" }
+    SetupNext { en: "Next", ja: "次へ" }
+    SetupDone { en: "Get started", ja: "制作を始める" }
+    ChooseProject { en: "Choose a project", ja: "プロジェクトを選択" }
+    ChooseNew { en: "New project", ja: "新規プロジェクト" }
+    ChooseRecent { en: "Recent projects", ja: "最近使った項目" }
+    ChooseEmpty { en: "Empty project", ja: "空のプロジェクト" }
+    ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement.", ja: "音源トラックから、自由に曲を作り始めます。" }
+    ChooseRecentEmpty { en: "No recent projects. Open an existing project to get started.", ja: "最近使ったプロジェクトはありません。既存のプロジェクトを開いて始められます。" }
+    ChooseExisting { en: "Open existing project…", ja: "既存のプロジェクトを開く…" }
+    ChooseCreate { en: "Create", ja: "作成" }
+    ChooseOpen { en: "Open", ja: "開く" }
+    ChooseClose { en: "Close", ja: "閉じる" }
     TrackGrid { en: "Track grid", ja: "トラックグリッド" }
     TrackGridEmpty { en: "Add a track to see its sound here.", ja: "トラックを追加すると、音源の動きや波形をここに表示します。" }
     ToolbarHeading { en: "Top toolbar", ja: "上部ツールバー" }
@@ -1515,6 +1612,9 @@ strings! {
     MenuTranscribeMixture { en: "Transcribe Mixture (Noncommercial)…", ja: "混合音源を採譜（非商用）…" }
     MuscriptorWarning { en: "MuScriptor model weights are licensed under CC BY-NC 4.0 for noncommercial use only. Do not use this model for commercial work without separate permission from its rights holders. This optional model does not change Auris Studio's Apache-2.0 license. Acknowledgement does not grant commercial rights. Terms: https://creativecommons.org/licenses/by-nc/4.0/", ja: "MuScriptorのモデルはCC BY-NC 4.0に基づく非商用利用限定です。権利者から別途許諾を得ずに、商用目的の作業にこのモデルを使用しないでください。この任意モデルによってAuris Studio本体のApache-2.0ライセンスが変わることはありません。同意しても商用利用の権利は得られません。利用条件：https://creativecommons.org/licenses/by-nc/4.0/" }
     MuscriptorAgree { en: "Use for Noncommercial Work", ja: "非商用の作業に使用する" }
+    AudioModelLoadTitle { en: "Load audio review model?", ja: "試聴モデルを読み込みますか？" }
+    AudioModelLoadBody { en: "The local model “{model}” is not confirmed to be loaded. Loading it for this review can use substantial memory and CPU/GPU resources and slow down your computer. Cancel to skip this review.", ja: "ローカルモデル「{model}」の読み込み済み状態を確認できません。この試聴のために読み込むと、メモリやCPU・GPUを多く使用し、パソコンの動作が重くなることがあります。キャンセルすると今回の試聴を中止します。" }
+    AudioModelLoadConfirm { en: "Load and Review", ja: "読み込んで試聴する" }
     MuscriptorModel { en: "Select converted MuScriptor Small decoder.onnx", ja: "変換済みMuScriptor Smallのdecoder.onnxを選択" }
     MuscriptorDraft { en: "MuScriptor draft (CC BY-NC 4.0 model). Notes and instrument groups need review. Playback sounds are placeholders; choose patches after import.", ja: "MuScriptorの採譜下書き（モデル：CC BY-NC 4.0）。音符と楽器分類の確認・修正が必要です。取り込み後に各トラックの再生音色を選んでください。" }
     MuscriptorCreateTracks { en: "Add Draft as Instrument Tracks", ja: "下書きを楽器別トラックに追加" }
@@ -1721,6 +1821,8 @@ strings! {
         ja: "ステム書き出しの対象がありません。音を出すトラックを追加してください"
     }
     ErrorRecordingInProgress { en: "stop the recording before changing the audio device", ja: "オーディオデバイスを変更する前に録音を停止してください" }
+    OtherProjectRecording { en: "Another project is recording. Stop its recording before starting audio here.", ja: "別のプロジェクトで録音中です。そちらの録音を停止してから再生・録音を開始してください。" }
+    ProjectAudioSuspended { en: "Audio is now used by another project. Press Play to switch back.", ja: "音声出力を別のプロジェクトに切り替えました。再生ボタンでこのプロジェクトに戻せます。" }
     ErrorNotRecording { en: "no recording is running", ja: "録音していません" }
     ErrorNoVoice {
         en: "choose a voice model for this track first",

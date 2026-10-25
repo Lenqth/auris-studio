@@ -535,6 +535,8 @@ pub enum Answer {
 /// A question the sheet is asking, and what turns on the answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Question {
+    /// Consent to load a local audio model for this one listening request.
+    AudioModelLoad(std::sync::Arc<crate::ui::agent_chat::AudioLoadRequest>),
     /// A verified update can be installed now or when the app later quits.
     RestartForUpdate {
         /// Downloaded release version shown in the question.
@@ -1442,6 +1444,10 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         match (question, answer) {
+            (Question::AudioModelLoad(request), Answer::Confirm) => {
+                self.approve_audio_model_load(&request);
+            }
+            (Question::AudioModelLoad(_), Answer::Deny) => {}
             (Question::RestartForUpdate { .. }, Answer::Confirm) => {
                 self.restart_for_update(window, cx);
             }
@@ -1601,7 +1607,7 @@ impl AurisApp {
             PendingAction::ImportMidiPicked => self.pick_and_import_midi(cx),
             PendingAction::StartRecording => self.toggle_recording(window, cx),
             PendingAction::CloseWindow => window.remove_window(),
-            PendingAction::Quit => crate::termination::quit(cx),
+            PendingAction::Quit => self.approve_quit(cx),
             PendingAction::RestartForUpdate => self.complete_update_restart(cx),
         }
     }
@@ -2136,6 +2142,13 @@ impl AurisApp {
         question: &Question,
     ) -> (SharedString, SharedString, Option<SharedString>) {
         match question {
+            Question::AudioModelLoad(request) => (
+                self.t(Key::AudioModelLoadBody)
+                    .replace("{model}", &request.model)
+                    .into(),
+                self.t(Key::AudioModelLoadConfirm).into(),
+                None,
+            ),
             Question::RestartForUpdate { version } => (
                 self.t(Key::UpdateRestartBody)
                     .replace("{version}", version)
@@ -2234,6 +2247,9 @@ impl AurisApp {
         if let Some(browser) = self.song_library.as_mut() {
             return browser.focused.then_some(&mut browser.search);
         }
+        if let Some(workshop) = self.song_workshop.as_mut() {
+            return workshop.field_mut();
+        }
         // The lyrics box on the song sheet, while one holds the keyboard.
         if let Some(edit) = self.lyrics_edit.as_mut() {
             return Some(&mut edit.field);
@@ -2270,6 +2286,9 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         }
         if let Some(browser) = self.song_library.as_ref() {
             return browser.focused.then_some(&browser.search);
+        }
+        if let Some(workshop) = self.song_workshop.as_ref() {
+            return workshop.field();
         }
         if let Some(edit) = self.lyrics_edit.as_ref() {
             return Some(&edit.field);
@@ -2995,6 +3014,31 @@ mod tests {
 /// here: the sheet's three buttons carry names a test can find them by.
 #[cfg(test)]
 mod window_tests {
+    #[gpui::test]
+    fn audio_load_dialog_escape_cancels_without_sending_consent(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        let (response, receiver) = std::sync::mpsc::channel();
+        app.update(cx, |this, _| {
+            this.open_prompt(super::Prompt::ask(
+                this.t(auris_i18n::Key::AudioModelLoadTitle),
+                super::Question::AudioModelLoad(std::sync::Arc::new(
+                    crate::ui::agent_chat::AudioLoadRequest {
+                        model: "test-audio".into(),
+                        response,
+                    },
+                )),
+            ));
+        });
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("escape");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.prompt.is_none()));
+        assert_eq!(
+            receiver.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Disconnected)
+        );
+    }
+
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 

@@ -181,7 +181,7 @@ impl AurisApp {
 
     /// Persists editor preferences without recording a document edit.
     pub(crate) fn remember_note_snap(&self) {
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save note snap settings: {error}");
         }
     }

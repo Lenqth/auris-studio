@@ -21,6 +21,8 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 /// Connection settings for a separate model that accepts actual audio input.
 #[derive(Clone)]
 pub struct AudioReviewOptions {
+    /// Whether a reviewer endpoint or model was explicitly configured.
+    pub configured: bool,
     /// Discover a reachable audio-input model when the configured endpoint is loopback.
     pub auto_select: bool,
     /// OpenAI-compatible API base URL, including `/v1` when required.
@@ -36,6 +38,7 @@ pub struct AudioReviewOptions {
 impl Default for AudioReviewOptions {
     fn default() -> Self {
         Self {
+            configured: false,
             auto_select: true,
             url: "http://localhost:11434/v1".into(),
             model: "gemma4:e2b".into(),
@@ -57,7 +60,16 @@ impl AudioReviewOptions {
     }
 
     fn from_values(env: &dyn Fn(&str) -> Option<String>) -> Result<Self, String> {
-        let mut options = Self::default();
+        let mut options = Self {
+            configured: [
+                "AURIS_AUDIO_URL",
+                "AURIS_AUDIO_MODEL",
+                "AURIS_AUDIO_OLLAMA_URL",
+            ]
+            .iter()
+            .any(|name| env(name).is_some_and(|value| !value.trim().is_empty())),
+            ..Self::default()
+        };
         if let Some(url) = env("AURIS_AUDIO_URL") {
             options.url = url.trim().trim_end_matches('/').to_string();
             let parsed = url::Url::parse(&options.url).map_err(|error| error.to_string())?;
@@ -106,6 +118,18 @@ impl AudioReviewOptions {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn prepare(
+        &self,
+        cancel: &AtomicBool,
+    ) -> Result<(Self, ReviewerSelection, bool), String> {
+        self.validate()?;
+        let (mut selected, report) = selection::select(self, cancel)?;
+        let confirm = selection::needs_load_confirmation(&selected, cancel);
+        // Keep the approved endpoint/model fixed through rendering and upload.
+        selected.auto_select = false;
+        Ok((selected, report, confirm))
     }
 }
 
@@ -293,7 +317,7 @@ fn post_json(
         .http_status_as_error(false)
         .build()
         .send_json(body)
-        .map_err(|error| format!("audio reviewer request failed: {error}"))?;
+        .map_err(|_| "[audio_critic_connection_failed] The audio critic request could not complete. Check the server and connection, then retry.".to_string())?;
     response_json(response, key)
 }
 
@@ -605,6 +629,11 @@ pub(crate) mod tests {
 
     #[test]
     fn audio_connection_options_use_explicit_environment_values_without_leaking_keys() {
+        assert!(
+            !AudioReviewOptions::from_values(&|_| None)
+                .unwrap()
+                .configured
+        );
         let options = AudioReviewOptions::from_values(&|name| match name {
             "AURIS_AUDIO_URL" => Some("http://localhost:11434/v1/".into()),
             "AURIS_AUDIO_MODEL" => Some("audio-model:9b".into()),
@@ -614,6 +643,7 @@ pub(crate) mod tests {
         })
         .unwrap();
         assert_eq!(options.url, "http://localhost:11434/v1");
+        assert!(options.configured);
         assert_eq!(
             options.ollama_url.as_deref(),
             Some("http://localhost:11434")

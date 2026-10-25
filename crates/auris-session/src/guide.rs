@@ -23,7 +23,34 @@
 //! each crate's own front page explains what that crate is for, and this one explains why the
 //! boundaries between them are where they are.
 //!
+//! # Multiple project windows
+//!
+//! Each desktop project window owns a separate session, undo history, recovery workspace,
+//! agent conversation and background jobs. File-open requests are routed by the application;
+//! an already-open path activates its existing window. Closing one project leaves the others
+//! alive. Application quit collects save decisions from every project before closing any.
+//!
+//! Realtime audio has one owner. Other sessions use [`crate::Session::set_audio_suspended`]
+//! to release hardware while retaining their documents and offline rendering capabilities.
+//! An explicit playback, recording or monitoring command transfers ownership; focus alone
+//! does not. A recording session refuses suspension. Headless sessions never acquire hardware.
+//! The desktop coordinates the windows; device lifecycle remains in the session layer.
+//! Settings editors save differences against their previous snapshots with
+//! [`crate::Settings::save_changes`] so an unrelated setting from another window survives.
+//!
 //! # Agent conversations
+//!
+//! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
+//! directions. The session validates each [`crate::SongIdea`] and an immutable [`crate::SongRequest`].
+//! Explicit sources override arrangement defaults. Authored or separately generated lyrics become
+//! editable vocal notes, divided between selected singers or arranged in diatonic harmony.
+//! Candidate generation owns a headless session on one thread, including plugin lifecycles,
+//! and synthesizes vocals before rendering offline into a [`crate::SongCandidate`].
+//! Each candidate retains its editable document, audition audio and a temporary vocal asset
+//! directory. Adoption copies those assets into the destination project before committing
+//! that exact document as one undoable edit;
+//! it never regenerates the score. The original brief is saved as project metadata for later
+//! agent context. Worker cancellation and progress presentation belong to the frontend.
 //!
 //! A conversation also retains a bounded `memory.production.json` beside model memory.
 //! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;
