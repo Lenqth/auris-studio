@@ -156,7 +156,7 @@ jobs:
           cp -R Dictionary "$app/Contents/Resources/Dictionary"
           ln -s "Auris Studio.app/Contents/Resources/Dictionary" "$stage/Dictionary"
 
-          cp README.md CHANGELOG.md LICENSE "$stage/"
+          cp README.md README.ja.md CHANGELOG.md LICENSE "$stage/"
           cp crates/auris-analysis/LICENSE-BASIC-PITCH crates/auris-analysis/NOTICE-BASIC-PITCH.md crates/auris-analysis/NOTICE-BASIC-PITCH-UPSTREAM "$stage/"
           # The README links into `docs/`, so an archive without it has dead links in the
           # first file anybody opens.
@@ -267,7 +267,7 @@ jobs:
           fi
           # Beside the binaries, which is the first place `auris_session::library` looks.
           cp -R Dictionary "$stage/Dictionary"
-          cp README.md CHANGELOG.md LICENSE "$stage/"
+          cp README.md README.ja.md CHANGELOG.md LICENSE "$stage/"
           cp crates/auris-analysis/LICENSE-BASIC-PITCH crates/auris-analysis/NOTICE-BASIC-PITCH.md crates/auris-analysis/NOTICE-BASIC-PITCH-UPSTREAM "$stage/"
           # The README links into `docs/`, so an archive without it has dead links in the
           # first file anybody opens.
@@ -393,7 +393,7 @@ jobs:
           cp target/release/auris "$stage/"
           # Kanji lyrics use the same dictionary on every platform.
           cp -R Dictionary "$stage/Dictionary"
-          cp README.md CHANGELOG.md LICENSE "$stage/"
+          cp README.md README.ja.md CHANGELOG.md LICENSE "$stage/"
           cp crates/auris-analysis/LICENSE-BASIC-PITCH crates/auris-analysis/NOTICE-BASIC-PITCH.md crates/auris-analysis/NOTICE-BASIC-PITCH-UPSTREAM "$stage/"
           # The README links into `docs/`, so an archive without it has dead links in the
           # first file anybody opens.
