@@ -61,19 +61,29 @@ fn prepared_event_room(parameter_count: usize, max_block_events: usize) -> usize
         .min(MAX_PREPARED_EVENT_ROOM)
 }
 
-/// An allocation-free sink for plugin-generated events Auris cannot route yet.
+/// An allocation-free output sink that publishes global parameter changes to the UI.
 ///
 /// [`Effect`](auris_core::plugin::Effect) and [`Instrument`](auris_core::plugin::Instrument) have
 /// no event-output channel, so retaining these events in an [`EventBuffer`] only made an unused
-/// vector capable of growing on the audio thread. Counting them preserves a useful diagnostic
-/// while accepting them exactly as the previous discard-after-process path did.
-#[derive(Default)]
+/// vector capable of growing on the audio thread. Global parameter values update preallocated
+/// atomics; unhandled events are counted and discarded without retaining an event queue.
 struct DiscardedOutputEvents {
     count: u64,
+    params: Arc<ParamList>,
 }
 
 impl OutputEventBuffer for DiscardedOutputEvents {
-    fn try_push(&mut self, _event: &UnknownEvent) -> Result<(), TryPushError> {
+    fn try_push(&mut self, event: &UnknownEvent) -> Result<(), TryPushError> {
+        if let Some(value) = event.as_event::<ParamValueEvent>()
+            && value.pckn() == Pckn::match_all()
+            && let Some(index) = value
+                .param_id()
+                .and_then(|id| self.params.by_clap_id.get(&id.get()))
+        {
+            self.params
+                .set_value(ParamId(*index as u32), value.value() as f32);
+            return Ok(());
+        }
         self.count = self.count.saturating_add(1);
         Ok(())
     }
@@ -87,10 +97,8 @@ pub(crate) struct Bridge {
     values: Vec<f32>,
     changed: Vec<bool>,
     outgoing: EventBuffer,
-    // CLAP output events are intentionally discarded for now: auris-core's Effect/Instrument
-    // process contract has no event-output channel to route generated notes downstream. This
-    // allocation-free sink still gives plugins a valid output-events target and counts what was
-    // discarded for diagnostics.
+    // Keep display values current without a main-thread query racing the audio processor.
+    // Generated notes have no downstream route and are counted without allocating storage.
     replies: DiscardedOutputEvents,
     input_ports: AudioPorts,
     output_ports: AudioPorts,
@@ -143,17 +151,22 @@ impl Bridge {
         // reasonable block, and one that has counted the arrangement gets the count.
         let count = params.descriptors.len();
         let event_room = prepared_event_room(count, ctx.max_block_events);
-        let values = params.descriptors.iter().map(|p| p.default).collect();
+        let values = (0..count)
+            .map(|index| params.value(ParamId(index as u32)).unwrap_or(0.0))
+            .collect();
         let room = |port: &usize| vec![vec![0.0; frames]; *port];
 
         Self {
             processor: processor.into(),
             descriptor,
-            params,
+            params: Arc::clone(&params),
             values,
             changed: vec![false; count],
             outgoing: EventBuffer::with_capacity(event_room),
-            replies: DiscardedOutputEvents::default(),
+            replies: DiscardedOutputEvents {
+                count: 0,
+                params: Arc::clone(&params),
+            },
             input_ports: AudioPorts::with_capacity(
                 ports.input_channels().max(1),
                 ports.inputs.len().max(1),
@@ -247,6 +260,7 @@ impl Bridge {
             return;
         };
         self.values[id.index()] = descriptor.clamp(value);
+        self.params.set_value(id, self.values[id.index()]);
         // Marking rather than queueing keeps this allocation-free however often it is called:
         // a hundred automation writes in one block still send one event.
         self.changed[id.index()] = true;

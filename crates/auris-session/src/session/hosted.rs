@@ -594,19 +594,22 @@ impl HostedSlot {
 
     /// Asks the plugin what its parameters are now.
     ///
-    /// One pass over the whole list, which for Surge XT is seven hundred and seventy-five calls
-    /// into somebody else's binary — so this is called when a panel is *drawn*, and not on the
-    /// tick. A plugin nobody is looking at is a plugin whose values nobody can be misled by.
+    /// Active processors publish display snapshots without calling into the plugin from a
+    /// paint pass. Inactive instances can still be queried directly, including restored presets.
     fn refresh_values(&mut self) {
         let Some(plugin) = self.live.as_mut().or(self.spare.as_mut()) else {
             return;
         };
         let count = plugin.parameters().len();
-        let mut values = Vec::with_capacity(count);
+        self.values.resize(count, None);
         for index in 0..count {
-            values.push(plugin.value(ParamId(index as u32)));
+            let id = ParamId(index as u32);
+            self.values[index] = if plugin.is_active() {
+                plugin.cached_value(id)
+            } else {
+                plugin.value(id)
+            };
         }
-        self.values = values;
     }
 
     /// Runs the plugin's clocks and puts its window where the slot says it should be.
@@ -635,10 +638,9 @@ impl HostedSlot {
             if requests.dirty || requests.rescan_values || requests.restart {
                 self.source_revision = self.source_revision.wrapping_add(1);
             }
-            // `rescan_values` is deliberately not acted on. The values are read afresh every time
-            // a panel is drawn — see `Session::effect_descriptors` — so being told they changed
-            // asks for something that has already happened. A `restart` has no answer here yet,
-            // and this is where it will go when it does.
+            if requests.rescan_values || requests.dirty {
+                plugin.refresh_value_cache();
+            }
         }
         // Somebody clicked the window's close box, which is the same thing as asking for it to be
         // shut. Reading it as anything else means the button that opens it does nothing next time

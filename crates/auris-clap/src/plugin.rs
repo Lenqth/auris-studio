@@ -1,7 +1,9 @@
 //! The main-thread half of a hosted plugin.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Instant;
 
 use auris_core::param::{ParamDescriptor, ParamId, ParamUnit};
@@ -30,14 +32,33 @@ use crate::window::{ContainerWindow, HostWindow};
 
 /// The plugin's parameters, in the order the plugin lists them.
 ///
-/// Both halves of a hosted plugin need this and neither may change it, so it is shared by
-/// [`Arc`] and never mutated. Replacing the list requires an inactive instance; an active
+/// Both halves share fixed descriptors and ids through [`Arc`]; only the atomic display values
+/// change during processing. Replacing the list requires an inactive instance; an active
 /// rescan first needs the rendering half back, which is what [`PendingRequests::restart`] asks.
 pub(crate) struct ParamList {
     /// The plugin's own id for each parameter, indexed by [`ParamId`].
     pub(crate) clap_ids: Vec<ClapId>,
     /// What the rest of the application sees.
     pub(crate) descriptors: Vec<ParamDescriptor>,
+    /// Lock-free display values shared with the audio processor.
+    pub(crate) values: Vec<AtomicU32>,
+    pub(crate) by_clap_id: BTreeMap<u32, usize>,
+}
+
+impl ParamList {
+    pub(crate) fn value(&self, id: ParamId) -> Option<f32> {
+        self.values
+            .get(id.index())
+            .map(|value| f32::from_bits(value.load(Ordering::Relaxed)))
+    }
+
+    pub(crate) fn set_value(&self, id: ParamId, value: f32) {
+        if value.is_finite()
+            && let Some(slot) = self.values.get(id.index())
+        {
+            slot.store(value.to_bits(), Ordering::Relaxed);
+        }
+    }
 }
 
 /// Requests a plugin has made since this was last read.
@@ -198,9 +219,25 @@ impl ClapPlugin {
             .instance
             .plugin_shared_handle()
             .get_extension::<PluginParams>()?;
-        params
+        let value = params
             .get_value(&self.instance.plugin_handle(), clap_id)
-            .map(|value| value as f32)
+            .map(|value| value as f32)?;
+        self.params.set_value(id, value);
+        Some(value)
+    }
+
+    /// A lock-free snapshot for displaying active parameters without calling into DSP code.
+    /// Updated by host automation, plugin output events and explicit value rescans.
+    pub fn cached_value(&self, id: ParamId) -> Option<f32> {
+        self.params.value(id)
+    }
+
+    /// Refreshes the display snapshot after a plugin requests a value rescan.
+    /// Call on the main thread, outside drawing and never from an audio callback.
+    pub fn refresh_value_cache(&mut self) {
+        for index in 0..self.params.descriptors.len() {
+            self.value(ParamId(index as u32));
+        }
     }
 
     /// Requests the plugin has made since this was last called. Reading clears them.
@@ -576,6 +613,8 @@ impl ClapPlugin {
 
     /// Activates the plugin and wraps the processor with everything the audio thread will need.
     fn start(&mut self, ctx: &PrepareContext) -> Result<Bridge, ClapError> {
+        // Capture restored presets before the audio processor can hold the plugin's locks.
+        self.refresh_value_cache();
         let config = PluginAudioConfiguration {
             sample_rate: ctx.sample_rate,
             min_frames_count: 1,
@@ -859,6 +898,8 @@ fn read_params(instance: &mut PluginInstance<AurisHost>) -> ParamList {
         return ParamList {
             clap_ids: Vec::new(),
             descriptors: Vec::new(),
+            values: Vec::new(),
+            by_clap_id: BTreeMap::new(),
         };
     };
 
@@ -888,6 +929,15 @@ fn read_params(instance: &mut PluginInstance<AurisHost>) -> ParamList {
     }
 
     ParamList {
+        values: descriptors
+            .iter()
+            .map(|p| AtomicU32::new(p.default.to_bits()))
+            .collect(),
+        by_clap_id: clap_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (id.get(), i))
+            .collect(),
         clap_ids,
         descriptors,
     }

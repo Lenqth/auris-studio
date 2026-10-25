@@ -286,3 +286,6 @@ and five fading traces make motion visible without an unbounded history. Correla
 **Reset correlation**; an undefined current value (one or both channels silent) is shown as a
 dash. Negative correlation is a reason to listen in mono, not an automatic assessment of musical
 quality. The visualizer is not a loudness or true-peak meter.
+
+For CLAP playback stalls, parameter-display snapshots and the reproducible concurrent
+playback probe, see [Hosted plugin playback performance](hosted-plugin-performance.md).

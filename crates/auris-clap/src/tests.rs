@@ -652,6 +652,45 @@ fn a_plugin_output_event_burst_is_counted_and_discarded_without_allocating() {
 }
 
 #[test]
+fn active_display_snapshots_follow_automation_and_plugin_events_without_value_queries() {
+    let mut plugin = tone();
+    let wheel_key = format!("clap.{}", crate::testkit::WHEEL_ID);
+    let wheel = plugin
+        .parameters()
+        .iter()
+        .find(|p| p.key.as_ref() == wheel_key)
+        .unwrap()
+        .id;
+    let mut instrument = plugin.activate_instrument(&context()).unwrap();
+    let queries = crate::testkit::tone_value_read_count();
+    instrument.set_param(ParamId(0), 0.25);
+    assert_eq!(plugin.cached_value(ParamId(0)), Some(0.25));
+    let mut out = empty(64);
+    let notes = [NoteEvent::Controller {
+        frame: 0,
+        number: 1,
+        value: 1.0,
+    }];
+    let allocations = count_allocations(|| instrument.process(&notes, &mut out, &playing(64)));
+    assert_eq!(allocations, 0);
+    assert_eq!(plugin.cached_value(wheel), Some(1.0));
+    for _ in 0..1000 {
+        assert_eq!(plugin.cached_value(ParamId(0)), Some(0.25));
+    }
+    assert_eq!(crate::testkit::tone_value_read_count(), queries);
+    plugin.deactivate_instrument(instrument);
+}
+
+#[test]
+fn activating_a_restored_preset_initializes_the_display_snapshot() {
+    let mut plugin = library().instantiate(FIXTURE_ID).unwrap();
+    plugin.load_state(&0.25f32.to_le_bytes()).unwrap();
+    let effect = plugin.activate(&context()).unwrap();
+    assert_eq!(plugin.cached_value(ParamId(0)), Some(0.25));
+    plugin.deactivate(effect);
+}
+
+#[test]
 fn a_note_held_across_a_block_boundary_keeps_sounding() {
     let mut plugin = tone();
     let mut instrument = plugin
