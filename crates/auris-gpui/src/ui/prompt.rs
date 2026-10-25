@@ -2218,9 +2218,6 @@ impl AurisApp {
             return None;
         }
         self.reconcile_section_lyrics();
-        if let Some(workshop) = self.song_workshop.as_mut() {
-            return (!workshop.busy()).then_some(&mut workshop.brief);
-        }
         // Menus sit above every field and accept choices rather than text. Keep both ordinary
         // input and IME updates away from the editor they cover.
         if self.menu.is_some() || self.menu_bar.is_some() {
@@ -2236,6 +2233,9 @@ impl AurisApp {
         }
         if let Some(browser) = self.song_library.as_mut() {
             return browser.focused.then_some(&mut browser.search);
+        }
+        if let Some(workshop) = self.song_workshop.as_mut() {
+            return workshop.field_mut();
         }
         // The lyrics box on the song sheet, while one holds the keyboard.
         if let Some(edit) = self.lyrics_edit.as_mut() {
@@ -2259,9 +2259,6 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     }
 
     fn readable_field(&self) -> Option<&TextField> {
-        if let Some(workshop) = self.song_workshop.as_ref() {
-            return (!workshop.busy()).then_some(&workshop.brief);
-        }
         if self.compose_progress.is_some() {
             return None;
         }
@@ -2276,6 +2273,9 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         }
         if let Some(browser) = self.song_library.as_ref() {
             return browser.focused.then_some(&browser.search);
+        }
+        if let Some(workshop) = self.song_workshop.as_ref() {
+            return workshop.field();
         }
         if let Some(edit) = self.lyrics_edit.as_ref() {
             return Some(&edit.field);

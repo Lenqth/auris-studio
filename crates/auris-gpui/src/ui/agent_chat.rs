@@ -673,7 +673,7 @@ pub(crate) struct ModelOption {
 }
 
 impl ModelOption {
-    fn label(&self) -> String {
+    pub(crate) fn label(&self) -> String {
         let name = self.display_name.as_deref().unwrap_or(&self.name);
         let name = if let Some(suffix) = name.strip_prefix("gpt-") {
             let mut words = suffix.split('-');
@@ -697,7 +697,7 @@ impl ModelOption {
         }
     }
 
-    fn matches(&self, prefs: &AgentPreferences) -> bool {
+    pub(crate) fn matches(&self, prefs: &AgentPreferences) -> bool {
         self.name == prefs.model
             && self
                 .connection
@@ -5158,6 +5158,8 @@ mod tests {
     ) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this,_| {
+            // Permission UI tests can persist rules in the shared test configuration.
+            this.settings.agent.policy = Default::default();
             this.settings.agent.policy.mode = Mode::Edit;
             let track = this.session.add_singer_track("Vocal");
             let clip = this.session.add_midi_clip(track,"Phrase",Ticks::ZERO,Ticks::QUARTER * 4).unwrap();

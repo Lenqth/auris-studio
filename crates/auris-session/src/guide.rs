@@ -41,9 +41,14 @@
 //! # Agent conversations
 //!
 //! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
-//! directions. The session validates each [`crate::SongIdea`], composes with built-in instruments
-//! and renders offline into a [`crate::SongCandidate`]. Each candidate owns both the editable
-//! document and its audition audio. Adoption copies that exact document as one undoable edit;
+//! directions. The session validates each [`crate::SongIdea`] and an immutable [`crate::SongRequest`].
+//! Explicit sources override arrangement defaults. Authored or separately generated lyrics become
+//! editable vocal notes, divided between selected singers or arranged in diatonic harmony.
+//! Candidate generation owns a headless session on one thread, including plugin lifecycles,
+//! and synthesizes vocals before rendering offline into a [`crate::SongCandidate`].
+//! Each candidate retains its editable document, audition audio and a temporary vocal asset
+//! directory. Adoption copies those assets into the destination project before committing
+//! that exact document as one undoable edit;
 //! it never regenerates the score. The original brief is saved as project metadata for later
 //! agent context. Worker cancellation and progress presentation belong to the frontend.
 //!

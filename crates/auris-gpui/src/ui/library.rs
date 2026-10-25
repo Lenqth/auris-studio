@@ -799,6 +799,9 @@ impl AurisApp {
 
     fn library_song_part(&self) -> Option<&PartSpec> {
         let name = &self.song_library.as_ref()?.part;
+        if let Some(s) = &self.song_workshop {
+            return s.parts.iter().find(|p| &p.name == name);
+        }
         self.song_sheet
             .as_ref()?
             .parts

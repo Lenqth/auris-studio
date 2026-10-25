@@ -40,7 +40,9 @@ mod composition_inspection;
 mod composition_preview;
 mod song_candidates;
 pub use composition_preview::{CompositionPreview, CompositionTrackPreview};
-pub use song_candidates::{SongCandidate, SongIdea};
+pub use song_candidates::{
+    SongCandidate, SongIdea, SongRequest, SongSinger, SongSinging, SongSourceChoice,
+};
 mod batch_editing;
 pub use batch_editing::{InstrumentParamChange, InstrumentParamEdit};
 mod setup_tracks;

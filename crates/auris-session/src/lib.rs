@@ -166,7 +166,9 @@ pub use session::{
 };
 pub use session::{MusicalClipAnalysis, RenderedSpectrogramJob, SpectrogramJob};
 pub use session::{PreparedAudioSource, prepare_audio_source};
-pub use session::{SongCandidate, SongIdea};
+pub use session::{
+    SongCandidate, SongIdea, SongRequest, SongSinger, SongSinging, SongSourceChoice,
+};
 pub use session::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
 pub use session::{TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
 pub use session::{TrackConversion, TrackConversionJob};

@@ -41,7 +41,42 @@ macro_rules! strings {
 
 strings! {
     WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
-    WorkshopHint { en: "Describe an instrumental song, audition three directions, then edit your favourite. Built-in instruments only.", ja: "インスト曲の方向性を決め、3つの候補を聴き比べて選びます。内蔵音源を使用します。" }
+    WorkshopHint { en: "Choose a direction, audition three songs, then continue editing your favourite.", ja: "曲の方向性を決め、3つの候補を聴き比べてから編集を始めます。" }
+    WorkshopNext { en: "Next", ja: "次へ" }
+    WorkshopDirection { en: "Direction", ja: "曲の方向性" }
+    WorkshopVocals { en: "Vocals and lyrics", ja: "歌・歌詞" }
+    WorkshopSources { en: "Arrangement and instruments", ja: "編成・音源" }
+    WorkshopCompare { en: "Compare songs", ja: "候補の比較" }
+    WorkshopCompareHint { en: "Audition a candidate, then open it to edit its notes, lyrics and instruments.", ja: "候補を試聴し、気に入った曲を選んで音符・歌詞・音源を編集できます。" }
+    WorkshopNeedSinger { en: "Select at least one singer.", ja: "歌手を1人以上選択してください。" }
+    WorkshopRefreshModels { en: "Refresh models", ja: "モデル一覧を再取得" }
+    WorkshopLoadingModels { en: "Loading models…", ja: "モデル一覧を取得中…" }
+    WorkshopVoiceSetup { en: "Set up voices…", ja: "歌声をセットアップ…" }
+    WorkshopSpecifyLength { en: "Set a length", ja: "長さを指定" }
+    WorkshopInstrumental { en: "Instrumental", ja: "インスト" }
+    WorkshopWithVocals { en: "With vocals", ja: "歌あり" }
+    WorkshopRemoveSinger { en: "Remove", ja: "外す" }
+    WorkshopAddSinger { en: "Add singer…", ja: "歌手を追加…" }
+    WorkshopAlternate { en: "Take turns", ja: "交互に歌う" }
+    WorkshopHarmony { en: "Melody and harmony", ja: "主旋律＋ハーモニー" }
+    WorkshopWriteLyrics { en: "Write lyrics", ja: "自分で入力" }
+    WorkshopMotifLyrics { en: "Generate from a motif", ja: "モチーフから生成" }
+    WorkshopMotif { en: "Motif, scene or words to include", ja: "モチーフ・情景・入れたい言葉" }
+    WorkshopGenerateLyrics { en: "Generate lyrics", ja: "歌詞を生成" }
+    WorkshopLyrics { en: "Lyrics (editable)", ja: "歌詞（編集できます）" }
+    WorkshopWritingLyrics { en: "Writing lyrics…", ja: "歌詞を生成中…" }
+    WorkshopSourceHint { en: "Choose only the parts you want to specify. Automatic parts use the arrangement’s built-in instruments.", ja: "指定したいパートだけ音源を選びます。「お任せ」のパートは曲に合う内蔵音源を使います。" }
+    WorkshopMelody { en: "Melody", ja: "メロディ" }
+    WorkshopChords { en: "Chords", ja: "コード" }
+    WorkshopBass { en: "Bass", ja: "ベース" }
+    WorkshopPad { en: "Pad", ja: "パッド" }
+    WorkshopKick { en: "Kick", ja: "キック" }
+    WorkshopSnare { en: "Snare", ja: "スネア" }
+    WorkshopHat { en: "Hi-hat", ja: "ハイハット" }
+    WorkshopQueued { en: "Waiting to generate", ja: "生成待ち" }
+    WorkshopAutomatic { en: "Automatic", ja: "お任せ" }
+    WorkshopSinging { en: "Synthesizing vocals…", ja: "歌声を合成中…" }
+    WorkshopComposing { en: "Composing…", ja: "作曲中…" }
     WorkshopGenre { en: "Genre", ja: "ジャンル" }
     WorkshopPop { en: "Pop", ja: "ポップス" }
     WorkshopRock { en: "Rock", ja: "ロック" }

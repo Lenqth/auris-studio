@@ -2475,7 +2475,7 @@ impl AurisApp {
     /// The menus had no keyboard path at all: a right-click opened one and only the pointer
     /// could answer it. Escape already closes it, through the same handler that means "never
     /// mind" everywhere else.
-    fn menu_key(
+    pub(crate) fn menu_key(
         &mut self,
         event: &gpui::KeyDownEvent,
         _window: &mut Window,

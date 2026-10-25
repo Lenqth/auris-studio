@@ -133,60 +133,50 @@ impl AurisApp {
                 );
             }
         } else {
-            content = content
-                .child(
+            let mut tiles = div().flex().flex_wrap().gap_6();
+            for (id, key, ai) in [
+                ("chooser-empty", Key::ChooseEmpty, false),
+                ("chooser-ai", Key::WorkshopTitle, true),
+            ] {
+                tiles = tiles.child(
                     button(
-                        "chooser-ai",
-                        self.t(Key::WorkshopTitle),
+                        id,
+                        self.t(key),
                         ButtonStyle::Normal,
                         false,
                         theme.accent,
                         &theme,
-                        cx.listener(|this, _, window, cx| this.open_song_workshop(window, cx)),
-                    )
-                    .h_12()
-                    .text_base(),
-                )
-                .child(
-                    button(
-                        "chooser-empty",
-                        self.t(Key::ChooseEmpty),
-                        ButtonStyle::Normal,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
-                            if event.click_count() == 2 {
+                        cx.listener(move |this, _, window, cx| {
+                            if ai {
+                                this.open_song_workshop(window, cx);
+                            } else {
                                 this.choose_project(window, cx);
                             }
                         }),
                     )
                     .w_64()
-                    .text_base()
                     .max_w_full()
-                    .h_auto()
-                    .py_6()
+                    .h_40()
+                    .text_base()
                     .flex_col()
                     .gap_4()
-                    .border_color(theme.accent)
                     .child(
-                        div()
-                            .w_40()
-                            .flex()
-                            .flex_col()
-                            .gap_2()
-                            .child(div().h_3().w_full().rounded_sm().bg(theme.accent_soft))
-                            .child(div().h_3().w_24().rounded_sm().bg(theme.accent_soft))
-                            .child(div().h_3().w_32().rounded_sm().bg(theme.accent_soft)),
+                        div().text_lg().text_color(theme.accent).child(if ai {
+                            "✦"
+                        } else {
+                            "+"
+                        }),
                     ),
-                )
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(theme.text_muted)
-                        .child(self.t(Key::ChooseEmptyHelp)),
                 );
+            }
+            content = content.child(tiles).child(
+                div()
+                    .text_sm()
+                    .text_color(theme.text_muted)
+                    .child(self.t(Key::ChooseEmptyHelp)),
+            );
         }
+
         let sidebar = div()
             .w_56()
             .flex_shrink_0()
