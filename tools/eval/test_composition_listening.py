@@ -98,6 +98,14 @@ def test_build_preserves_originals_and_hides_condition_labels(tmp_path: Path) ->
     assert "匿名作曲比較リスニング" in page
     assert "主旋律・歌声" in page
     assert "音量一致版を使う" in page
+    assert "pair-index" in page
+    assert "jumpToPair" in page
+    assert "localStorage" in page
+    assert "自動保存" in page
+    assert "評価JSONを表示" in page
+    assert "ratings-json" in page
+    assert "readonly" in page
+    assert "pane.value=text" in page
 
 
 def test_failed_entries_are_retained_without_audio(tmp_path: Path) -> None:
