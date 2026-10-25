@@ -352,10 +352,10 @@ messages! {
         ja: "「{project}」の復旧データを破棄しました"
     }
 
-    /// A project saved, but some of its audio could not be brought into the folder with it.
+    /// A project saved, but some referenced files could not be brought into its folder.
     fn saved_uncollected(path: &str, count: usize) {
-        en: "Saved {path} — {count} audio file(s) stayed outside the folder",
-        ja: "{path} を保存しました — {count} 件の音声ファイルはフォルダの外に残りました"
+        en: "Saved {path} — {count} file(s) could not be copied into the folder",
+        ja: "{path} を保存しました — {count} 件のファイルをフォルダにコピーできませんでした"
     }
 
     /// Confirmation that a project was read.

@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use auris_core::project::CurvePoint;
 use auris_core::time::Ticks;
 use auris_core::{
-    AssetPath, AudioBuffer, ClipId, Note, Project, SoundFontId, SoundFontRef, SourceId,
+    AssetPath, AudioBuffer, ClipId, Note, Project, SoundFontId, SoundFontRef, SourceId, TrackId,
 };
 use auris_io::{
     IoError, SoundFont, SoundFontPreset, byte_size, document_in_folder, font_name,
@@ -160,6 +160,13 @@ pub struct SaveJob {
     collect_assets: bool,
     audio: Vec<(SourceId, Option<PathBuf>)>,
     fonts: Vec<(SoundFontId, Option<PathBuf>)>,
+    voices: Vec<VoiceConnectionCopy>,
+}
+
+struct VoiceConnectionCopy {
+    track: TrackId,
+    from: PathBuf,
+    stored: AssetPath,
 }
 
 /// A durable document snapshot waiting for its short session-thread adoption.
@@ -473,6 +480,54 @@ impl SaveJob {
                         if let Some(font) = self.project.soundfonts.get_mut(&id) {
                             font.path = AssetPath::external(&from);
                         }
+                        uncollected.push(from);
+                    }
+                }
+            }
+            for VoiceConnectionCopy {
+                track,
+                from,
+                stored,
+            } in self.voices
+            {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Ok(None);
+                }
+                let copied = (|| -> Result<_, SessionError> {
+                    // A document reference alone must not copy an arbitrary file. VOICEVOX
+                    // loading validates its manifest without contacting the Engine.
+                    let checked = auris_singer::validate_automatic_voice_entry(&from)?;
+                    auris_singer::VoiceModel::load(&checked, auris_singer::Acceleration::Cpu)?;
+                    let target = stored.resolve(Some(&folder)).ok_or(SessionError::NoPath)?;
+                    let parent = target.parent().ok_or(SessionError::NoPath)?;
+                    let suffix = from
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .and_then(|name| {
+                            name.get(name.len().checked_sub(".voicevox.json".len())?..)
+                        })
+                        .ok_or(auris_singer::SingError::NotAVoice)?;
+                    let name = auris_io::assets::copy_into_with_suffix(&from, parent, suffix)?;
+                    let copied = parent.join(name);
+                    Ok(AssetPath::inside(
+                        copied
+                            .strip_prefix(&folder)
+                            .map_err(|_| SessionError::NoPath)?,
+                    ))
+                })();
+                match copied {
+                    Ok(path) => {
+                        if let Some(voice) = self
+                            .project
+                            .track_mut(track)
+                            .and_then(|track| track.kind.as_singer_mut())
+                            .and_then(|singer| singer.voice.as_mut())
+                        {
+                            voice.path = path;
+                        }
+                    }
+                    Err(error) => {
+                        log::warn!("could not collect {}: {error}", from.display());
                         uncollected.push(from);
                     }
                 }
@@ -923,6 +978,8 @@ impl Session {
     /// project that uses it, and a copy per project would cost gigabytes to save a path;
     /// [`Self::collect_assets`] is how someone archiving a project asks for those too. A font
     /// already *inside* the folder is a file this project owns like any other, and travels.
+    /// Project-local VOICEVOX connections also travel; other local voicebanks keep their
+    /// original absolute entry path so their companion files remain available.
     pub fn save_as(&mut self, chosen: &Path) -> Result<SaveReport, SessionError> {
         let result = self
             .begin_save_as(chosen)?
@@ -982,18 +1039,50 @@ impl Session {
             .filter(|font| font.path.is_inside())
             .map(|font| (font.id, font.path.resolve(self.project_folder())))
             .collect();
+        let mut project = self.project.clone();
+        let mut voices = Vec::new();
+        for track in &mut project.tracks {
+            let Some(voice) = track
+                .kind
+                .as_singer_mut()
+                .and_then(|singer| singer.voice.as_mut())
+            else {
+                continue;
+            };
+            if !voice.path.is_inside() {
+                continue;
+            }
+            let Some(original) = voice.path.resolve(self.project_folder()) else {
+                continue;
+            };
+            if auris_singer::BackendKind::from_path(&original)
+                == Some(auris_singer::BackendKind::Voicevox)
+            {
+                voices.push(VoiceConnectionCopy {
+                    track: track.id,
+                    from: original.clone(),
+                    stored: voice.path.clone(),
+                });
+            } else if auris_io::project_folder(&document) == self.project_folder() {
+                continue;
+            }
+            // Resolve against the old folder before moving. This also leaves a useful
+            // reference behind when copying a connection fails.
+            voice.path = AssetPath::external(original);
+        }
         Ok(SaveJob {
             owner: Arc::clone(&self.registry),
             revision: self.revision,
             original_path: self.path.clone(),
             document,
-            project: self.project.clone(),
+            project,
             saved_project: self.saved_project.clone(),
             had_disk_fingerprint: self.disk_fingerprint.is_some(),
             policy,
             collect_assets: true,
             audio,
             fonts,
+            voices,
         })
     }
 
@@ -1024,6 +1113,7 @@ impl Session {
             collect_assets: false,
             audio: Vec::new(),
             fonts: Vec::new(),
+            voices: Vec::new(),
         })
     }
 
@@ -3142,6 +3232,182 @@ mod tests {
         assert_eq!(
             session.project().soundfonts.values().next().unwrap().path,
             AssetPath::external(&library)
+        );
+    }
+
+    fn write_voicevox_connection(path: &Path) {
+        std::fs::write(
+            path,
+            r#"{"format_version":1,"name":"Test singer","styles":[{"name":"Ritsu","query_style_id":6000,"decode_style_id":3009}]}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn save_as_copies_a_project_local_voicevox_connection_and_reopens_it() {
+        let scratch = Scratch::new("save-as-voicevox");
+        let mut live = session();
+        live.save_as(&scratch.join("First.auris")).unwrap();
+        let original = scratch.join("First/test.voicevox.json");
+        write_voicevox_connection(&original);
+        let track = live.add_singer_track("Vocal");
+        live.set_singer_voice(track, Some(&original)).unwrap();
+        live.set_singer_speaker(track, Some("Ritsu")).unwrap();
+
+        let saved = live.save_as(&scratch.join("Second.auris")).unwrap();
+        assert!(saved.uncollected.is_empty());
+        assert!(original.is_file(), "Save As must leave the original intact");
+        std::fs::remove_file(&original).unwrap();
+        let mut reopened = session();
+        reopened.open(&saved.document).unwrap();
+        assert_eq!(reopened.singer_speakers(track).unwrap(), ["Ritsu"]);
+        let voice = reopened.singer_voice(track).unwrap().unwrap();
+        assert_eq!(voice.path, AssetPath::inside("test.voicevox.json"));
+        assert_eq!(voice.speaker.as_deref(), Some("Ritsu"));
+    }
+
+    #[test]
+    fn save_as_does_not_overwrite_another_voicevox_connection() {
+        let scratch = Scratch::new("save-as-voicevox-collision");
+        let mut live = session();
+        live.save_as(&scratch.join("First.auris")).unwrap();
+        let original = scratch.join("First/test.voicevox.json");
+        write_voicevox_connection(&original);
+        let track = live.add_singer_track("Vocal");
+        live.set_singer_voice(track, Some(&original)).unwrap();
+        std::fs::create_dir_all(scratch.join("Second")).unwrap();
+        let existing = scratch.join("Second/test.voicevox.json");
+        std::fs::write(&existing, b"an unrelated connection").unwrap();
+
+        live.save_as(&scratch.join("Second.auris")).unwrap();
+
+        assert_eq!(
+            std::fs::read(&existing).unwrap(),
+            b"an unrelated connection"
+        );
+        let path = &live.singer_voice(track).unwrap().unwrap().path;
+        assert!(path.is_inside());
+        assert_eq!(
+            std::fs::read(path.resolve(live.project_folder()).unwrap()).unwrap(),
+            std::fs::read(original).unwrap()
+        );
+        assert_eq!(live.singer_speakers(track).unwrap(), ["Ritsu"]);
+    }
+
+    #[test]
+    fn save_as_keeps_nested_shared_connections_relative_and_deduplicated() {
+        let scratch = Scratch::new("save-as-nested-voice");
+        let mut live = session();
+        live.save_as(&scratch.join("First.auris")).unwrap();
+        std::fs::create_dir_all(scratch.join("First/Voices")).unwrap();
+        let original = scratch.join("First/Voices/波音リツ.VOICEVOX.JSON");
+        write_voicevox_connection(&original);
+        let lead = live.add_singer_track("Lead");
+        let harmony = live.add_singer_track("Harmony");
+        live.set_singer_voice(lead, Some(&original)).unwrap();
+        live.set_singer_voice(harmony, Some(&original)).unwrap();
+        let before = live.project().clone();
+        let job = live.begin_save_as(&scratch.join("Second.auris")).unwrap();
+        assert_eq!(
+            live.project(),
+            &before,
+            "capturing a save must not edit the live voice"
+        );
+        let result = job.run(&AtomicBool::new(false)).unwrap().unwrap();
+        live.continue_save(result).unwrap().unwrap();
+
+        let expected = AssetPath::inside("Voices/波音リツ.VOICEVOX.JSON");
+        assert_eq!(live.singer_voice(lead).unwrap().unwrap().path, expected);
+        assert_eq!(live.singer_voice(harmony).unwrap().unwrap().path, expected);
+        assert_eq!(directory_entries(&scratch.join("Second/Voices")).len(), 1);
+        let document = live.path().unwrap().to_path_buf();
+        live.save_as(&document).unwrap();
+        assert_eq!(live.singer_voice(lead).unwrap().unwrap().path, expected);
+    }
+
+    #[test]
+    fn save_as_does_not_collect_an_invalid_connection_reference() {
+        let scratch = Scratch::new("save-as-invalid-voice");
+        let mut live = session();
+        live.save_as(&scratch.join("First.auris")).unwrap();
+        let original = scratch.join("First/test.voicevox.json");
+        write_voicevox_connection(&original);
+        let track = live.add_singer_track("Vocal");
+        live.set_singer_voice(track, Some(&original)).unwrap();
+        std::fs::write(&original, b"not a voice connection").unwrap();
+
+        let saved = live.save_as(&scratch.join("Second.auris")).unwrap();
+
+        assert_eq!(saved.uncollected, [original]);
+        assert!(!scratch.join("Second/test.voicevox.json").exists());
+    }
+
+    #[test]
+    fn save_as_keeps_external_voices_shared() {
+        let scratch = Scratch::new("save-as-external-voice");
+        let original = scratch.join("test.voicevox.json");
+        write_voicevox_connection(&original);
+        let mut live = session();
+        let track = live.add_singer_track("Vocal");
+        live.set_singer_voice(track, Some(&original)).unwrap();
+
+        live.save_as(&scratch.join("Second.auris")).unwrap();
+
+        assert_eq!(
+            live.singer_voice(track).unwrap().unwrap().path,
+            AssetPath::external(original)
+        );
+        assert!(!scratch.join("Second/test.voicevox.json").exists());
+    }
+
+    #[test]
+    fn save_as_reports_a_missing_local_voice_and_preserves_its_original_location() {
+        let scratch = Scratch::new("save-as-missing-voice");
+        let mut live = session();
+        live.save_as(&scratch.join("First.auris")).unwrap();
+        let original = scratch.join("First/test.voicevox.json");
+        write_voicevox_connection(&original);
+        let track = live.add_singer_track("Vocal");
+        live.set_singer_voice(track, Some(&original)).unwrap();
+        std::fs::remove_file(&original).unwrap();
+
+        let saved = live.save_as(&scratch.join("Second.auris")).unwrap();
+
+        assert_eq!(
+            saved.uncollected.as_slice(),
+            std::slice::from_ref(&original)
+        );
+        assert_eq!(
+            live.singer_voice(track).unwrap().unwrap().path,
+            AssetPath::external(original)
+        );
+    }
+
+    #[test]
+    fn save_as_keeps_a_multifile_voicebank_at_its_original_location() {
+        let scratch = Scratch::new("save-as-voicebank");
+        let mut live = session();
+        live.save_as(&scratch.join("First.auris")).unwrap();
+        let track = live.add_singer_track("Vocal");
+        live.project
+            .track_mut(track)
+            .unwrap()
+            .kind
+            .as_singer_mut()
+            .unwrap()
+            .voice = Some(auris_core::SingerVoice {
+            path: AssetPath::inside("Voice/dsconfig.yaml"),
+            name: "Voicebank".into(),
+            consonants: None,
+            levels: None,
+            speaker: None,
+        });
+
+        live.save_as(&scratch.join("Second.auris")).unwrap();
+
+        assert_eq!(
+            live.singer_voice(track).unwrap().unwrap().path,
+            AssetPath::external(scratch.join("First/Voice/dsconfig.yaml"))
         );
     }
 
