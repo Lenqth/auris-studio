@@ -245,7 +245,9 @@ def http_json(endpoint, method, path, body=None, headers=None):
 
 def test_real_http_round_trip_decodes_audio_and_reports_health(endpoint):
     assert http_json(endpoint, "GET", "/healthz")[1]["loaded"] is False
-    assert http_json(endpoint, "GET", "/v1/models")[1]["data"][0]["id"] == server.DEFAULT_MODEL
+    model = http_json(endpoint, "GET", "/v1/models")[1]["data"][0]
+    assert model["id"] == server.DEFAULT_MODEL
+    assert model["capabilities"] == ["audio"]
     status, result = http_json(
         endpoint,
         "POST",

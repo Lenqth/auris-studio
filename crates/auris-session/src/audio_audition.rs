@@ -366,7 +366,7 @@ impl ListeningJob {
             "method":"Anonymous A/B in randomized order; one common protective gain. No editing narrative supplied. Source audio remains immutable."}));
         let text = json!({"audition_id":excerpt.id,"revision":excerpt.revision,"range":excerpt.range,
             "model":review.model,"audio_sent":review.audio_sent,"review":review.raw_response,
-            "review_format":"plain_text",
+            "review_format":"plain_text","reviewer_selection":review.selection,
             "audio":measurements,"compare_to":self.previous.as_ref().map(|entry| &entry.id),"before":before,
             "representation":"actual WAV audio sent to a separate critic; observations are fallible, not controller listening or verified musical improvement",
             "comparison":comparison,
@@ -414,6 +414,7 @@ mod tests {
         );
         (
             AudioReviewOptions {
+                auto_select: false,
                 url: format!("{url}/v1"),
                 model: "scripted-critic".into(),
                 api_key: None,

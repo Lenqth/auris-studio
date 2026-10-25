@@ -13,6 +13,7 @@ use base64::Engine;
 use serde_json::{Value, json};
 
 pub mod assessment;
+mod selection;
 
 const MAX_AUDIO_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
@@ -20,6 +21,8 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 /// Connection settings for a separate model that accepts actual audio input.
 #[derive(Clone)]
 pub struct AudioReviewOptions {
+    /// Discover a reachable audio-input model when the configured endpoint is loopback.
+    pub auto_select: bool,
     /// OpenAI-compatible API base URL, including `/v1` when required.
     pub url: String,
     /// Exact model identifier used by the audio endpoint.
@@ -33,6 +36,7 @@ pub struct AudioReviewOptions {
 impl Default for AudioReviewOptions {
     fn default() -> Self {
         Self {
+            auto_select: true,
             url: "http://localhost:11434/v1".into(),
             model: "gemma4:e2b".into(),
             api_key: None,
@@ -42,7 +46,8 @@ impl Default for AudioReviewOptions {
 }
 
 impl AudioReviewOptions {
-    /// Reads `AURIS_AUDIO_URL`, `AURIS_AUDIO_MODEL` and `AURIS_AUDIO_API_KEY_ENV`.
+    /// Reads `AURIS_AUDIO_URL`, `AURIS_AUDIO_MODEL`, `AURIS_AUDIO_API_KEY_ENV` and
+    /// `AURIS_AUDIO_AUTO_SELECT` (defaults to true for local capability discovery).
     ///
     /// The key setting names an environment variable holding the credential. An Ollama URL
     /// on port 11434 gets capability preflight automatically; `AURIS_AUDIO_OLLAMA_URL` can
@@ -72,6 +77,13 @@ impl AudioReviewOptions {
                     .ok_or_else(|| format!("audio API key variable '{variable}' is not set"))?,
             );
         }
+        if let Some(value) = env("AURIS_AUDIO_AUTO_SELECT") {
+            options.auto_select = match value.trim() {
+                "true" | "1" => true,
+                "false" | "0" => false,
+                _ => return Err("AURIS_AUDIO_AUTO_SELECT must be true or false".into()),
+            };
+        }
         options.validate()?;
         Ok(options)
     }
@@ -97,11 +109,24 @@ impl AudioReviewOptions {
     }
 }
 
+/// Selection metadata; audio support does not establish musical accuracy.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ReviewerSelection {
+    /// Whether local capability discovery was used.
+    pub automatic: bool,
+    /// Whether a different endpoint or model was chosen.
+    pub fallback: bool,
+    /// Model requested before discovery.
+    pub requested_model: String,
+}
+
 /// A successful response to an audio upload, independent of any project edits.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AudioReview {
     /// Configured model that produced the response.
     pub model: String,
+    /// How the endpoint was selected, including whether a fallback was used.
+    pub selection: ReviewerSelection,
     /// The model's observations and suggested local changes.
     pub review: String,
     /// True when WAV bytes were submitted and a nonempty response was returned.
@@ -141,13 +166,17 @@ pub fn review_audio_cancellable(
     check()?;
     options.validate()?;
     let content = audio_content(audio, prompt)?;
+    let (selected, selection) = selection::select(options, cancel)?;
+    let options = &selected;
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(10)))
         .timeout_global(Some(Duration::from_secs(300)))
         .max_redirects(0)
         .build()
         .into();
-    if let Some(root) = &options.ollama_url {
+    if let Some(root) = &options.ollama_url
+        && !selection.automatic
+    {
         check()?;
         let shown = post_json(
             &agent,
@@ -190,6 +219,7 @@ pub fn review_audio_cancellable(
     let review = review_text(&response)?;
     Ok(AudioReview {
         model: options.model.clone(),
+        selection,
         review,
         audio_sent: true,
     })
@@ -264,6 +294,13 @@ fn post_json(
         .build()
         .send_json(body)
         .map_err(|error| format!("audio reviewer request failed: {error}"))?;
+    response_json(response, key)
+}
+
+fn response_json(
+    response: ureq::http::Response<ureq::Body>,
+    key: Option<&str>,
+) -> Result<Value, String> {
     let status = response.status().as_u16();
     if response
         .headers()
@@ -399,7 +436,14 @@ pub(crate) mod tests {
                 let mut body = vec![0; length];
                 reader.read_exact(&mut body).unwrap();
                 drop(reader);
-                seen.push((first, serde_json::from_slice(&body).unwrap()));
+                seen.push((
+                    first,
+                    if body.is_empty() {
+                        Value::Null
+                    } else {
+                        serde_json::from_slice(&body).unwrap()
+                    },
+                ));
                 let body = response.to_string();
                 write!(socket, "HTTP/1.1 {status} Reply\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
             }
@@ -408,7 +452,7 @@ pub(crate) mod tests {
         (url, worker)
     }
 
-    fn wav(sample: i16) -> Vec<u8> {
+    pub(super) fn wav(sample: i16) -> Vec<u8> {
         let mut bytes = b"RIFF".to_vec();
         bytes.extend(38u32.to_le_bytes());
         bytes.extend(b"WAVEfmt ");
@@ -441,6 +485,7 @@ pub(crate) mod tests {
             (200, response("The second excerpt has less prominent bass.")),
         ]);
         let options = AudioReviewOptions {
+            auto_select: false,
             url: format!("{url}/v1"),
             ollama_url: Some(url),
             ..Default::default()
@@ -479,6 +524,7 @@ pub(crate) mod tests {
         std::fs::write(&path, wav(321)).unwrap();
         let (url, worker) = server(vec![(200, json!({"capabilities":["completion","tools"]}))]);
         let options = AudioReviewOptions {
+            auto_select: false,
             url: format!("{url}/v1"),
             ollama_url: Some(url),
             ..Default::default()

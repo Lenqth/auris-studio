@@ -58,7 +58,9 @@ $env:AURIS_AUDIO_MODEL = "Qwen/Qwen2-Audio-7B-Instruct"
 
 Keep the default loopback binding: the service has no authentication. `/healthz` reports
 whether the model has loaded; `/v1/models` lists its configured name. These endpoints do not
-load weights. Stop the process to release its model memory.
+load weights. `/v1/models` advertises audio-input capability for Auris automatic selection.
+If this service is unavailable, Auris can select an installed local Ollama audio model; set
+`AURIS_AUDIO_AUTO_SELECT=false` to require this endpoint. Stop the process to release its model memory.
 After each successful or failed inference, unused GPU allocator cache is released while model
 weights stay loaded. `/healthz` includes current allocated/reserved bytes and lifetime peaks for
 each loaded GPU. These are Torch allocator measurements, not total GPU memory used by all processes.

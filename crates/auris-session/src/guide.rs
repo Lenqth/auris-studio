@@ -178,6 +178,10 @@
 //! renders and submits actual WAV bytes on a worker, then accepts the result through
 //! [`crate::Session::continue_listening`] only while the document revision still matches.
 //! Neither saving nor an audio output device is required; reviewing adds no Undo step.
+//! Local reviewer selection probes advertised audio-input capabilities before uploading.
+//! It prefers the configured endpoint, then the local audio bridge and installed Ollama models.
+//! Discovery is bounded and never downloads models or switches to a remote provider.
+//! Explicit remote endpoints remain fixed; results disclose the selected model and fallback.
 //! The critic has no editing tools. Its observations are untrusted, fallible evidence for
 //! the controller, which chooses a supported local edit, reads back the result and requests
 //! another audition of the same bars. Failed or uncertain reviews must remain explicit.

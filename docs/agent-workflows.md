@@ -418,6 +418,22 @@ bars with `compare_to` set to the earlier `audition_id`, `aspect` set to `balanc
 a new baseline. The last four raw excerpts are retained in the open session; replacing
 the document or closing the session expires them. IDs are opaque, not file paths.
 
+Local endpoints use automatic reviewer selection by default. Before uploading audio, Auris
+checks the configured endpoint, the audio bridge on `127.0.0.1:11435`, and installed Ollama
+models on `127.0.0.1:11434`. A model must advertise audio input: the bridge's `/v1/models`
+returns `capabilities: ["audio"]`, and Ollama models are verified through `/api/show`.
+The configured model is preferred; other Ollama candidates are checked in ascending download
+size, with at most 24 candidates and a 20-second discovery budget. This is a memory-oriented
+selection policy, not a music-quality ranking. Ollama models marked as remote are excluded.
+
+`reviewer_selection` reports whether discovery ran, the originally requested model and whether
+a fallback was chosen; `model` identifies the actual reviewer. No candidate produces an explicit
+error with setup guidance. Discovery does not start servers or download weights. Remote API
+settings remain fixed, and credentials are never forwarded to a fallback endpoint. Set
+`AURIS_AUDIO_AUTO_SELECT=false` to pin a local endpoint, including compatible servers that do
+not expose audio capability metadata. Once audio is submitted, generation failures, refusals
+and truncated responses are returned without retrying another model.
+
 Single-excerpt diagnosis accepts a descriptive question. Comparison accepts only a neutral
 criterion: the critic receives anonymous A/B recordings in randomized order, with no edit
 narrative. The response contains short free text in `review`, with `review_format` set to

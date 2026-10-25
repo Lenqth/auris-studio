@@ -615,6 +615,7 @@ def make_server(host: str, port: int, service: ReviewService) -> ThreadingHTTPSe
                                 "object": "model",
                                 "created": 0,
                                 "owned_by": "local",
+                                "capabilities": ["audio"],
                             }
                         ],
                     },
