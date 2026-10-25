@@ -30,6 +30,8 @@ format rather than a convention: `## <version> — <date>`.
   use short free-text feedback.
 * Keep full original lyrics as singing clip names, and expand the composition skill with vocal
   production and post-composition arrangement workflows.
+* Split long VOICEVOX singing requests into bounded windows with neighbouring context and short
+  crossfades, preserving lyrics, duration, expression and displayed pitch while reducing Engine load.
 
 ### Editing and agent reliability
 
