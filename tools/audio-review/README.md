@@ -61,6 +61,16 @@ whether the model has loaded; `/v1/models` lists its configured name. These endp
 load weights. `/v1/models` advertises audio-input capability for Auris automatic selection.
 If this service is unavailable, Auris can select an installed local Ollama audio model; set
 `AURIS_AUDIO_AUTO_SELECT=false` to require this endpoint. Stop the process to release its model memory.
+Before desktop agent listening, Auris checks `/healthz` (or Ollama `/api/ps`) without loading weights.
+If the selected local model is not confirmed resident, a dialog names it and asks permission to
+load it. Cancel or Escape skips that audition; consent pins the selected endpoint and model for
+that request. A confirmed resident model is reused without a dialog. CLI/MCP invocations are
+explicit requests and do not display a desktop dialog.
+
+Failures distinguish an unconfigured, undiscovered critic (`audio_critic_not_configured`), a
+failed connection/request (`audio_critic_connection_failed`), and a responding server without
+an advertised audio-input model (`audio_critic_no_audio_model`).
+
 After each successful or failed inference, unused GPU allocator cache is released while model
 weights stay loaded. `/healthz` includes current allocated/reserved bytes and lifetime peaks for
 each loaded GPU. These are Torch allocator measurements, not total GPU memory used by all processes.

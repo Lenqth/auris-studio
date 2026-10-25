@@ -2,6 +2,7 @@
 
 use super::{AudioReviewOptions, ReviewerSelection, post_json, response_json};
 use serde_json::{Value, json};
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -21,6 +22,7 @@ fn loopback(url: &str) -> bool {
 struct Discovery<'a> {
     deadline: Instant,
     cancel: &'a AtomicBool,
+    reachable: Cell<bool>,
 }
 
 impl Discovery<'_> {
@@ -52,7 +54,11 @@ impl Discovery<'_> {
             .build()
             .call()
             .map_err(|_| "Audio reviewer metadata is unavailable".to_string())?;
-        response_json(response, key)
+        let result = response_json(response, key);
+        if result.is_ok() {
+            self.reachable.set(true);
+        }
+        result
     }
 
     fn audio_model(&self, options: &AudioReviewOptions, model: &str) -> bool {
@@ -62,13 +68,16 @@ impl Discovery<'_> {
         let Ok(agent) = self.agent() else {
             return false;
         };
-        post_json(
+        let shown = post_json(
             &agent,
             &format!("{root}/api/show"),
             &json!({"model":model}),
             options.api_key.as_deref(),
-        )
-        .is_ok_and(|shown| advertises_audio(&shown) && !is_remote_model(&shown))
+        );
+        if shown.is_ok() {
+            self.reachable.set(true);
+        }
+        shown.is_ok_and(|shown| advertises_audio(&shown) && !is_remote_model(&shown))
     }
 
     fn discover(&self, options: &AudioReviewOptions) -> Option<AudioReviewOptions> {
@@ -173,10 +182,12 @@ fn select_with_defaults(
     let discovery = Discovery {
         deadline: Instant::now() + Duration::from_secs(20),
         cancel,
+        reachable: Cell::new(false),
     };
     let candidates = [
         options.clone(),
         AudioReviewOptions {
+            configured: false,
             url: bridge.into(),
             model: options.model.clone(),
             api_key: None,
@@ -184,6 +195,7 @@ fn select_with_defaults(
             auto_select: false,
         },
         AudioReviewOptions {
+            configured: false,
             url: format!("{ollama}/v1"),
             model: options.model.clone(),
             api_key: None,
@@ -204,7 +216,52 @@ fn select_with_defaults(
         }
     }
     discovery.agent()?;
-    Err("No reachable local model advertises audio input. Start the audio-review server or Ollama with an installed audio-input model. Automatic selection does not download models. For a fixed compatible endpoint without capability metadata, set AURIS_AUDIO_AUTO_SELECT=false.".into())
+    Err(discovery_failure(
+        options.configured,
+        discovery.reachable.get(),
+    ))
+}
+
+fn discovery_failure(configured: bool, reachable: bool) -> String {
+    if reachable {
+        "[audio_critic_no_audio_model] A local server responded, but no installed model advertised audio input. Choose an audio-input model or configure a compatible audio critic endpoint."
+    } else if configured {
+        "[audio_critic_connection_failed] Could not connect to the configured audio critic or find a local fallback. Check that its server is running and its URL is correct."
+    } else {
+        "[audio_critic_not_configured] No audio critic is configured and none was discovered locally. Configure AURIS_AUDIO_URL and AURIS_AUDIO_MODEL, or start a local server with an audio-input model."
+    }.into()
+}
+
+pub(super) fn needs_load_confirmation(options: &AudioReviewOptions, cancel: &AtomicBool) -> bool {
+    if !loopback(&options.url) {
+        return false;
+    }
+    let discovery = Discovery {
+        deadline: Instant::now() + Duration::from_secs(5),
+        cancel,
+        reachable: Cell::new(false),
+    };
+    if let Some(root) = &options.ollama_url {
+        let resident = discovery.get(&format!("{root}/api/ps"), options.api_key.as_deref());
+        !resident.is_ok_and(|value| {
+            value["models"].as_array().is_some_and(|models| {
+                models.iter().any(|entry| {
+                    ["name", "model"].iter().any(|key| {
+                        entry[*key].as_str().is_some_and(|name| {
+                            name == options.model || name == format!("{}:latest", options.model)
+                        })
+                    })
+                })
+            })
+        })
+    } else {
+        let root = options.url.trim_end_matches('/').trim_end_matches("/v1");
+        !discovery
+            .get(&format!("{root}/healthz"), options.api_key.as_deref())
+            .is_ok_and(|value| {
+                value["loaded"] == true && value["model"].as_str() == Some(options.model.as_str())
+            })
+    }
 }
 
 fn same_endpoint(left: &str, right: &str) -> bool {
@@ -225,8 +282,94 @@ mod tests {
     use super::*;
     use crate::audio_review::tests::{response, server, wav};
 
+    #[test]
+    fn missing_configuration_connection_failure_and_missing_capability_are_distinct() {
+        assert!(discovery_failure(false, false).contains("[audio_critic_not_configured]"));
+        assert!(discovery_failure(true, false).contains("[audio_critic_connection_failed]"));
+        assert!(discovery_failure(false, true).contains("[audio_critic_no_audio_model]"));
+        assert!(discovery_failure(true, true).contains("[audio_critic_no_audio_model]"));
+    }
+
+    #[test]
+    fn unavailable_servers_report_whether_a_reviewer_was_configured() {
+        for configured in [false, true] {
+            let (primary, p) = server(vec![(503, json!({}))]);
+            let (local_bridge, b) = server(vec![(503, json!({}))]);
+            let (ollama, o) = server(vec![(503, json!({})), (503, json!({}))]);
+            let options = AudioReviewOptions {
+                configured,
+                ..bridge(&primary)
+            };
+            let error = select_with_defaults(
+                &options,
+                &AtomicBool::new(false),
+                &format!("{local_bridge}/v1"),
+                &ollama,
+            )
+            .err()
+            .unwrap();
+            assert_eq!(error, discovery_failure(configured, false));
+            for worker in [p, b, o] {
+                assert!(
+                    worker
+                        .join()
+                        .unwrap()
+                        .iter()
+                        .all(|(line, _)| !line.contains("chat/completions"))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn load_consent_checks_only_metadata_and_pins_the_selected_model() {
+        for loaded in [false, true] {
+            let (url, worker) = server(vec![
+                (
+                    200,
+                    json!({"data":[{"id":"preferred","capabilities":["audio"]}]}),
+                ),
+                (200, json!({"model":"preferred","loaded":loaded})),
+            ]);
+            let (selected, report, confirm) =
+                bridge(&url).prepare(&AtomicBool::new(false)).unwrap();
+            assert_eq!(confirm, !loaded);
+            assert!(!selected.auto_select);
+            assert_eq!(selected.model, "preferred");
+            assert!(report.automatic);
+            let requests = worker.join().unwrap();
+            assert!(requests.iter().all(|(line, _)| line.starts_with("GET ")));
+        }
+    }
+
+    #[test]
+    fn ollama_residency_and_unknown_status_control_load_consent() {
+        for (status, body, confirm) in [
+            (200, json!({"models":[{"name":"preferred"}]}), false),
+            (200, json!({"models":[{"name":"another-model"}]}), true),
+            (200, json!({"models":[]}), true),
+            (404, json!({}), true),
+        ] {
+            let (url, worker) = server(vec![(status, body)]);
+            let options = AudioReviewOptions {
+                ollama_url: Some(url.clone()),
+                ..bridge(&url)
+            };
+            assert_eq!(
+                needs_load_confirmation(&options, &AtomicBool::new(false)),
+                confirm
+            );
+            assert!(worker.join().unwrap()[0].0.starts_with("GET /api/ps "));
+        }
+        assert!(!needs_load_confirmation(
+            &bridge("https://example.com"),
+            &AtomicBool::new(false)
+        ));
+    }
+
     fn bridge(url: &str) -> AudioReviewOptions {
         AudioReviewOptions {
+            configured: true,
             url: format!("{url}/v1"),
             model: "preferred".into(),
             ollama_url: None,
@@ -317,7 +460,7 @@ mod tests {
             result
                 .err()
                 .unwrap()
-                .contains("No reachable local model advertises audio input")
+                .contains("[audio_critic_no_audio_model]")
         );
         for worker in [p, b, o] {
             assert!(
@@ -351,6 +494,7 @@ mod tests {
         let discovery = Discovery {
             deadline: Instant::now(),
             cancel: &AtomicBool::new(false),
+            reachable: Cell::new(false),
         };
         assert!(discovery.agent().is_err());
         let result = select(&bridge("http://127.0.0.1:9"), &AtomicBool::new(true));
