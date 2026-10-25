@@ -42,6 +42,7 @@ pub mod plugin_window;
 mod portrait_image;
 pub(crate) mod project_chooser;
 pub mod prompt;
+pub(crate) mod provider_logo;
 pub(crate) mod rhythm_grid;
 pub mod root;
 pub(crate) mod score_layer;

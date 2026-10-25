@@ -1,5 +1,8 @@
 //! Connection and generation preferences in the application settings window.
 use super::*;
+use crate::ui::icons::{Icon, icon};
+use crate::ui::provider_logo::provider_logo;
+use crate::ui::widgets::button_with_content;
 
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
@@ -7,6 +10,7 @@ pub(super) struct AgentSettings {
     pub(super) fields: [TextField; 7],
     pub(super) focus: [FocusHandle; 7],
     pub(super) active: Option<usize>,
+    expanded_providers: [bool; 4],
     pub(super) prompt_viewport:
         std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
 }
@@ -45,6 +49,7 @@ impl AgentSettings {
                 cx.focus_handle().tab_stop(true),
             ],
             active: None,
+            expanded_providers: [false; 4],
             prompt_viewport: Default::default(),
             prefs,
         }
@@ -219,7 +224,7 @@ impl SettingsWindow {
             .tab_index(0)
             .w_full()
             .min_w_0()
-            .h(px(30.0))
+            .h_8()
             .bg(self.theme.surface_sunken)
             .border_1()
             .rounded(Metrics::RADIUS_SM)
@@ -309,6 +314,106 @@ impl SettingsWindow {
             .into_any_element()
     }
 
+    fn agent_provider_row(
+        &self,
+        index: usize,
+        name: &'static str,
+        logo: &'static str,
+        label: Key,
+        help: Key,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let theme = &self.theme;
+        let expanded = self.agent.expanded_providers[index - 2];
+        let path = self.agent.fields[index].content().trim();
+        let summary = if path.is_empty() {
+            self.t(Key::AgentPathAutomatic).to_owned()
+        } else {
+            path.to_owned()
+        };
+        let header = div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .w_full()
+            .min_w_0()
+            .child(
+                div()
+                    .size_10()
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(Metrics::RADIUS_MD)
+                    .bg(theme.surface_sunken)
+                    .child(provider_logo(logo, theme.text)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(div().text_sm().text_color(theme.text).child(name))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(theme.text_muted)
+                            .truncate()
+                            .child(summary),
+                    ),
+            )
+            .child(icon(
+                if expanded {
+                    Icon::ChevronDown
+                } else {
+                    Icon::ChevronRight
+                },
+                Metrics::DISCLOSURE_INDICATOR_SIZE,
+                theme.text_muted,
+            ));
+        div()
+            .w_full()
+            .min_w_0()
+            .flex_shrink_0()
+            .border_b_1()
+            .border_color(theme.border_subtle)
+            .child(
+                button_with_content(
+                    ("agent-provider-details", index),
+                    header,
+                    ButtonStyle::Ghost,
+                    crate::ui::widgets::ButtonState::Enabled(crate::ui::widgets::Latch::Off),
+                    theme.accent,
+                    theme,
+                    cx.listener(move |this, _, _, cx| {
+                        this.agent.expanded_providers[index - 2] =
+                            !this.agent.expanded_providers[index - 2];
+                        cx.notify();
+                    }),
+                )
+                .h_auto()
+                .w_full()
+                .min_w_0()
+                .p_3(),
+            )
+            .when(expanded, |view| {
+                view.child(
+                    div()
+                        .px_3()
+                        .pb_4()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(section_title(self.t(label), theme))
+                        .child(self.agent_field(index, cx))
+                        .child(note(self.t(help), theme)),
+                )
+            })
+            .into_any_element()
+    }
+
     pub(super) fn render_agent(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let theme = self.theme.clone();
         let provider = self.agent.prefs.provider.clone();
@@ -334,20 +439,62 @@ impl SettingsWindow {
             },
             cx,
         );
+        let providers = div().flex().flex_col().w_full().min_w_0().children([
+            self.agent_provider_row(
+                2,
+                "Codex",
+                "openai",
+                Key::AgentCodexPathLabel,
+                Key::AgentCodexHelp,
+                cx,
+            ),
+            self.agent_provider_row(
+                3,
+                "Claude Code",
+                "claude",
+                Key::AgentClaudePathLabel,
+                Key::AgentClaudeHelp,
+                cx,
+            ),
+            self.agent_provider_row(
+                4,
+                "OpenCode",
+                "opencode",
+                Key::AgentOpenCodePathLabel,
+                Key::AgentOpenCodeHelp,
+                cx,
+            ),
+            self.agent_provider_row(
+                5,
+                "Antigravity CLI",
+                "antigravity",
+                Key::AgentAntigravityPathLabel,
+                Key::AgentAntigravityHelp,
+                cx,
+            ),
+        ]);
         let mut rows = vec![
+            div()
+                .text_lg()
+                .child(self.t(Key::AgentProviders))
+                .into_any_element(),
             note(self.t(Key::AgentDiscoveryHelp), &theme),
-            section_title(self.t(Key::AgentCodexPathLabel), &theme),
-            self.agent_field(2, cx),
-            note(self.t(Key::AgentCodexHelp), &theme),
-            section_title(self.t(Key::AgentClaudePathLabel), &theme),
-            self.agent_field(3, cx),
-            note(self.t(Key::AgentClaudeHelp), &theme),
-            section_title(self.t(Key::AgentOpenCodePathLabel), &theme),
-            self.agent_field(4, cx),
-            note(self.t(Key::AgentOpenCodeHelp), &theme),
-            section_title(self.t(Key::AgentAntigravityPathLabel), &theme),
-            self.agent_field(5, cx),
-            note(self.t(Key::AgentAntigravityHelp), &theme),
+            providers.into_any_element(),
+            div()
+                .pt_4()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(provider_logo(
+                    if provider == "ollama" {
+                        "ollama"
+                    } else {
+                        "api"
+                    },
+                    theme.text,
+                ))
+                .child(div().text_base().child(self.t(Key::AgentApiConnection)))
+                .into_any_element(),
             section_title(self.t(Key::AgentProviderLabel), &theme),
             provider_control,
             section_title(self.t(Key::AgentUrlLabel), &theme),
@@ -402,7 +549,13 @@ impl SettingsWindow {
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
-        rows.push(section_title(self.t(Key::AgentSystemPrompt), &theme));
+        rows.push(
+            div()
+                .pt_4()
+                .text_base()
+                .child(self.t(Key::AgentSystemPrompt))
+                .into_any_element(),
+        );
         rows.push(note(self.t(Key::AgentSystemPromptHelp), &theme));
         rows.push(self.agent_prompt(cx));
         rows.push(
@@ -427,7 +580,7 @@ impl SettingsWindow {
             button(
                 "agent-apply",
                 self.t(Key::AgentApply),
-                ButtonStyle::Normal,
+                ButtonStyle::Primary,
                 false,
                 theme.accent,
                 &theme,
@@ -440,7 +593,7 @@ impl SettingsWindow {
             .flex_col()
             .w_full()
             .min_w_0()
-            .gap_2()
+            .gap_3()
             .children(rows)
             .into_any_element()
     }
@@ -450,6 +603,36 @@ impl SettingsWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn provider_disclosure_keeps_unsaved_paths_when_closed(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        assert!(cx.debug_bounds("agent-codex-path").is_none());
+        crate::harness::click("agent-provider-details-2", cx);
+        crate::harness::click("agent-codex-path", cx);
+        cx.simulate_input("draft-codex.exe");
+        crate::harness::click("agent-provider-details-2", cx);
+        handle
+            .read_with(cx, |this, _| assert!(!this.agent.expanded_providers[0]))
+            .unwrap();
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        cx.run_until_parked();
+        handle
+            .read_with(cx, |this, _| assert!(this.agent.expanded_providers[0]))
+            .unwrap();
+        handle
+            .update(cx, |this, _, _| {
+                assert_eq!(this.agent.fields[2].content(), "draft-codex.exe");
+            })
+            .unwrap();
+    }
 
     fn click_visible_control(selector: &'static str, cx: &mut VisualTestContext) {
         let body = cx.debug_bounds("settings-body").unwrap();
@@ -498,6 +681,7 @@ mod tests {
         cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
+        crate::harness::click("agent-provider-details-5", cx);
         click_visible_control("agent-antigravity-path", cx);
         cx.simulate_input("C:/Tools/agy.exe");
         handle
@@ -655,6 +839,7 @@ mod tests {
         crate::harness::click("tab-agent", cx);
         assert!(cx.debug_bounds("agent-backend").is_none());
         assert!(cx.debug_bounds("agent-provider").is_some());
+        crate::harness::click("agent-provider-details-2", cx);
         crate::harness::click("agent-codex-path", cx);
         cx.simulate_input("C:\\Tools\\codex.exe");
         handle
@@ -698,6 +883,7 @@ mod tests {
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
         assert!(cx.debug_bounds("agent-backend").is_none());
+        crate::harness::click("agent-provider-details-3", cx);
         crate::harness::click("agent-claude-path", cx);
         cx.simulate_input("C:/Tools/claude.exe");
         click_visible_control("agent-url", cx);
@@ -740,6 +926,7 @@ mod tests {
         let cx = &mut VisualTestContext::from_window(handle.into(), cx);
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
+        crate::harness::click("agent-provider-details-4", cx);
         click_visible_control("agent-opencode-path", cx);
         cx.simulate_input("C:/Tools/opencode.exe");
         handle

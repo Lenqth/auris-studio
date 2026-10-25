@@ -63,6 +63,8 @@ pub enum Icon {
     Window,
     /// The agent: a speech bubble, which is what a conversation is drawn as everywhere.
     Agent,
+    /// AI-assisted creation: a large sparkle and two smaller glints.
+    Sparkles,
 }
 
 /// An element that draws `icon` at `size`, centred in whatever box it is given.
@@ -151,6 +153,20 @@ pub fn paint_icon(window: &mut Window, bounds: Bounds<Pixels>, icon: Icon, color
     };
 
     match icon {
+        Icon::Sparkles => {
+            for (cx, cy, radius) in [(0.47, 0.53, 0.31), (0.78, 0.23, 0.12), (0.78, 0.80, 0.08)] {
+                let mut builder = PathBuilder::fill();
+                builder.move_to(at(cx, cy - radius));
+                builder.curve_to(at(cx + radius, cy), at(cx, cy));
+                builder.curve_to(at(cx, cy + radius), at(cx, cy));
+                builder.curve_to(at(cx - radius, cy), at(cx, cy));
+                builder.curve_to(at(cx, cy - radius), at(cx, cy));
+                builder.close();
+                if let Ok(path) = builder.build() {
+                    window.paint_path(path, color);
+                }
+            }
+        }
         Icon::Play => triangle(
             window,
             at(0.30, 0.20),

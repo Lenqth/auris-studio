@@ -4359,6 +4359,17 @@ impl AurisApp {
             })
             // Running a turn locks the route while keeping its selected name readable.
             .when(!enabled, |this| this.opacity(0.78))
+            .child(crate::ui::provider_logo::provider_logo(
+                crate::ui::provider_logo::provider_id(
+                    &self.agent_chat.backend,
+                    if self.agent_chat.provider_openai {
+                        "openai"
+                    } else {
+                        "ollama"
+                    },
+                ),
+                theme.text,
+            ))
             .child(
                 div()
                     .id("agent-model-current")
@@ -4498,6 +4509,7 @@ impl AurisApp {
                     )
                 },
             );
+        let preferences = self.agent_chat.preferences();
         for (index, name) in names.iter().enumerate() {
             let tooltip = name.clone();
             list = list.child(
@@ -4526,9 +4538,22 @@ impl AurisApp {
                         }),
                     )
                     .child(div().w(px(12.0)).flex_shrink_0().when(
-                        self.agent_chat.models[index].matches(&self.agent_chat.preferences()),
+                        self.agent_chat.models[index].matches(&preferences),
                         |this| this.child(icon(Icon::Check, px(12.0), theme.accent)),
                     ))
+                    .child({
+                        let connection = self.agent_chat.models[index].connection.as_ref();
+                        let (backend, provider) = connection.map_or(
+                            (preferences.backend.as_str(), preferences.provider.as_str()),
+                            |connection| {
+                                (connection.backend.as_str(), connection.provider.as_str())
+                            },
+                        );
+                        div().mx_1().child(crate::ui::provider_logo::provider_logo(
+                            crate::ui::provider_logo::provider_id(backend, provider),
+                            theme.text,
+                        ))
+                    })
                     .child(
                         div()
                             .flex_1()
