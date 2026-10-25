@@ -5,8 +5,9 @@
 //! turn a button inside it into a window drag on Windows.
 
 use gpui::{
-    App, Bounds, ClickEvent, Div, ElementId, IntoElement, PathBuilder, Pixels, SharedString,
-    Stateful, TitlebarOptions, Window, WindowControlArea, canvas, div, point, prelude::*, px,
+    App, Bounds, ClickEvent, CursorStyle, Decorations, Div, ElementId, IntoElement, PathBuilder,
+    Pixels, ResizeEdge, SharedString, Stateful, TitlebarOptions, Window, WindowControlArea,
+    WindowDecorations, WindowOptions, canvas, div, point, prelude::*, px,
 };
 
 use crate::theme::Theme;
@@ -17,13 +18,129 @@ pub const HEIGHT: Pixels = px(40.0);
 const CONTROL_WIDTH: Pixels = px(46.0);
 const TRAFFIC_LIGHT_INSET: Pixels = px(78.0);
 
-/// Keep native window semantics while painting the title-bar background with GPUI.
-pub fn options(title: impl Into<SharedString>) -> TitlebarOptions {
-    TitlebarOptions {
-        title: Some(title.into()),
-        appears_transparent: true,
-        traffic_light_position: Some(point(px(12.0), px(13.0))),
+/// Window defaults for application-drawn chrome on every desktop platform.
+pub fn options(title: impl Into<SharedString>) -> WindowOptions {
+    WindowOptions {
+        titlebar: Some(TitlebarOptions {
+            title: Some(title.into()),
+            appears_transparent: true,
+            traffic_light_position: Some(point(px(12.0), px(13.0))),
+        }),
+        // `appears_transparent` only hides the native title bar on macOS and Windows.
+        // Linux otherwise adds a second, server-drawn title bar above our own.
+        window_decorations: cfg!(target_os = "linux").then_some(WindowDecorations::Client),
+        ..Default::default()
     }
+}
+
+/// Resize targets for Linux windows whose frame is drawn by the application.
+///
+/// Append these last to a relatively positioned window root. Five-pixel edges and larger
+/// corner targets leave the document's layout and window-space gesture coordinates unchanged.
+/// The compositor can decline client decorations; in that case it still owns resizing.
+pub fn resize_handles(window: &Window) -> Vec<Stateful<Div>> {
+    if !cfg!(target_os = "linux") || window.is_fullscreen() || window.is_maximized() {
+        return Vec::new();
+    }
+    let Decorations::Client { tiling } = window.window_decorations() else {
+        return Vec::new();
+    };
+    let size = window.viewport_size();
+    let edge = px(5.0);
+    let corner = px(12.0);
+    // Corners follow edges so their diagonal cursor and resize operation take precedence.
+    [
+        (
+            ResizeEdge::Top,
+            !tiling.top,
+            px(0.0),
+            px(0.0),
+            size.width,
+            edge,
+        ),
+        (
+            ResizeEdge::Bottom,
+            !tiling.bottom,
+            px(0.0),
+            size.height - edge,
+            size.width,
+            edge,
+        ),
+        (
+            ResizeEdge::Left,
+            !tiling.left,
+            px(0.0),
+            px(0.0),
+            edge,
+            size.height,
+        ),
+        (
+            ResizeEdge::Right,
+            !tiling.right,
+            size.width - edge,
+            px(0.0),
+            edge,
+            size.height,
+        ),
+        (
+            ResizeEdge::TopLeft,
+            !(tiling.top || tiling.left),
+            px(0.0),
+            px(0.0),
+            corner,
+            corner,
+        ),
+        (
+            ResizeEdge::TopRight,
+            !(tiling.top || tiling.right),
+            size.width - corner,
+            px(0.0),
+            corner,
+            corner,
+        ),
+        (
+            ResizeEdge::BottomLeft,
+            !(tiling.bottom || tiling.left),
+            px(0.0),
+            size.height - corner,
+            corner,
+            corner,
+        ),
+        (
+            ResizeEdge::BottomRight,
+            !(tiling.bottom || tiling.right),
+            size.width - corner,
+            size.height - corner,
+            corner,
+            corner,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    .filter(|(_, (_, enabled, ..))| *enabled)
+    .map(|(index, (edge, _, x, y, width, height))| {
+        let cursor = match edge {
+            ResizeEdge::Top | ResizeEdge::Bottom => CursorStyle::ResizeUpDown,
+            ResizeEdge::Left | ResizeEdge::Right => CursorStyle::ResizeLeftRight,
+            ResizeEdge::TopLeft | ResizeEdge::BottomRight => CursorStyle::ResizeUpLeftDownRight,
+            ResizeEdge::TopRight | ResizeEdge::BottomLeft => CursorStyle::ResizeUpRightDownLeft,
+        };
+        div()
+            .id(("window-resize", index))
+            .absolute()
+            .left(x)
+            .top(y)
+            .w(width)
+            .h(height)
+            .occlude()
+            .cursor(cursor)
+            .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+                window.start_window_resize(edge);
+            })
+    })
+    .collect()
 }
 
 /// Space occupied by the native macOS traffic lights.
