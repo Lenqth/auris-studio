@@ -2,7 +2,7 @@
 
 ## Auris composition skill
 
-`auris-composition` teaches a coding agent when and how to use Auris Studio for original game and video music: editable scores, loopable cues, themes, transitions, previews, renders, stems, and measurable delivery checks. It is distributed separately from the Auris desktop binary and does not install or update that binary.
+`auris-composition` teaches a coding agent when and how to use Auris Studio for original songs with lyrics and game/video music: editable scores, vocal synthesis, loopable cues, themes, transitions, previews, renders, stems, and measurable delivery checks. Its [vocal workflow](../skills/auris-composition/references/vocals.md) covers lyric/melody development, voice selection, CLI/MCP synthesis, and full-song coverage checks. It is distributed separately from the Auris desktop binary and does not install or update that binary.
 
 Install it globally for Codex with the `skills` CLI:
 
@@ -36,5 +36,7 @@ Install Auris Studio separately from the [release page](https://github.com/uthre
 ```text
 AURIS_MCP_TOOL_GROUPS=composition,manual,mix
 ```
+
+For songs with synthesized vocals, also enable `vocals` (for example, `composition,manual,mix,vocals`). An installed singing voice or a configured, running VOICEVOX Engine is required for the selected backend. The skill does not install voice models or start a missing service automatically.
 
 On Windows, set the variable in the MCP server process configuration rather than only in an unrelated terminal. On macOS/Linux, export it in the environment used to launch `auris-mcp`. Restart the server after changing it. A value of `all` enables every group; use the narrow groups above when the agent only needs music creation and delivery. The server reports a disabled group in its tool result, so the agent should correct configuration rather than inventing an unavailable tool.

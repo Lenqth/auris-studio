@@ -1,0 +1,68 @@
+# Songs with lyrics and synthesized vocals
+
+## Musical decisions
+
+Develop a concrete scene and a change in perspective across verses. Give the chorus a concise central thought and a recognizable verbal and melodic hook. Establish a short identity-bearing phrase early, then develop the requested form before repeatedly polishing one passage. For a full song, include a second verse and later chorus/ending; respect requests for a one-chorus demo, excerpt, lyric-only work, duration limit, or local edit. A bridge is optional. Give later verses new words that advance the story, with deliberate phrasing or backing changes. Repeating the first verse's clip does not create a second verse with different lyrics.
+
+Compose words and melody together. Place important syllables or Japanese mora on meaningful beats and sustained notes, preserve word boundaries, and leave breaths and singable phrase lengths. Do not fill spare notes with filler syllables or force all words onto an identical grid. Check the selected singer's useful range, leaps, dense consonants, long vowels, readings, and actual note assignments. Passing a fit diagnostic does not establish natural pronunciation or expression.
+
+Keep the singer intelligible through accompaniment register, voicing, timing, and space. Prepare section transitions and a real ending unless a loop is requested. Preserve existing words and melody during a local repair. Make targeted corrections supported by evidence; stop after at most two local revision attempts per issue unless more exploration is requested, and report unresolved issues.
+
+## Voice prerequisites
+
+Discover an installed voice before promising sung audio. MCP provides `list_voices`; with CLI, use a supplied voice path or inspect the configured Auris Voices directories. `auris help` is authoritative for the installed CLI; do not invent an `auris list_voices` command. Voice choices include a DiffSinger `dsconfig.yaml`, a `*.leapsinger.json` manifest, or a `*.voicevox.json` connection. Keep the model's supporting files together. Record the selected voice, speaker, and synthesis seed where supported. A seed does not guarantee identical audio from every backend; retain the actual generated take.
+
+A VOICEVOX connection is metadata, not a voicebank. Its configured Engine must be running. Discover singing styles from that Engine's `/singers`: the query style must support `sing` or `singing_teacher`, and the decode style must support `frame_decode`. Do not guess IDs or use a talk-only style. Standard 93.75 fps connections use 24000 or 48000 Hz, not 44100 Hz; this is separate from the project output rate. Do not silently download models, replace binaries, or switch singers when a backend is unavailable. Preserve the score and identify the missing prerequisite.
+
+## CLI: specification to sung mix
+
+For a new song, put lyrics in each sung section of an `.asong`. Use distinct section names for different words, and `melody_from` for intentional melodic reuse; shared phrases must have compatible mora counts. Newlines and sentence punctuation divide lyric phrases. A minimal short demo is:
+
+```toml
+title = "Morning Song"
+style = "pop-band"
+key = "C major"
+tempo = 108
+seed = 42
+chords = "@axis"
+form = ["verse", "chorus"]
+
+[section.verse]
+bars = 4
+lyrics = "あさの ひかりが\nまどを たたくよ"
+
+[section.chorus]
+bars = 4
+lyrics = "きみの こえが\nそらへ とどくよ"
+```
+
+Top-level `singer` and `singer_speaker` can record an existing voice path and speaker in the specification. Without a selected voice, the generated score may use a preview voice; that is not evidence of finished singing. Section lyrics create the singer track beside the accompaniment. Do not model a singer as an ordinary instrument part.
+
+```text
+auris compose song.asong --print
+auris compose song.asong -o Song.auris
+auris info <actual-saved-project.auris>
+auris sing <actual-saved-project.auris> --track <actual-singer-track-name> --voice <existing-voice-path> --seed 42
+auris render <actual-saved-project.auris> -o Song-mix.wav
+auris render <actual-saved-project.auris> --stems Song-stems
+```
+
+Use the saved path printed by `compose` (often `Song/Song.auris`) and the singer name reported by `info`. Omit `--track` only when there is exactly one singer. Add `--speaker <actual-speaker-name>` when needed. `sing` selects the voice, synthesizes a take, and saves the project in place; it is not a standalone mix export and has no `-o` option. Synthesize each requested singer before rendering. Re-synthesize after score, lyrics, or relevant performance changes; an older take cannot verify a new score. Do not run `compose` over an existing authored project to repair one phrase.
+
+`--print` validates specification syntax/settings, not pronunciation or full vocal coverage. The CLI has no equivalent of all the MCP lyric diagnostics. Inspect the saved notes/lyrics read-only or use MCP when available, and check the rendered vocal stem through the last sung phrase. Keep any remaining uncertainty explicit. `frames`/`sing-frames` are not a substitute for this workflow: raw frames lack lyrics, so VOICEVOX cannot synthesize them.
+
+## MCP: discover, author, synthesize, verify
+
+Use the advertised catalog and `tool_help`; saved-project MCP and the desktop live agent differ. If `AURIS_MCP_TOOL_GROUPS` restricts the server, enable `vocals`, plus `composition` for specification generation, `manual` for note edits, and `mix` for mixing as needed. Set groups in the server process environment and restart it after a change.
+
+1. Inspect the project and planned section ranges. Use `production_record` and `edit_harmony` for the plan when available. Discover voices with `list_voices`; select with `set_singer_voice` and inspect real speaker names/capabilities with `inspect_singer`.
+2. For saved-project generation, fetch `spec_reference`, validate with `check_spec`, check lyric fit with `diagnose_song`, then `compose`. For live or targeted edits, create a `singer` track when needed, write the score with advertised clip/note tools, then use `write_lyrics` to fill existing slots. Read notes before changing them and read assigned lyrics back afterward.
+3. Use `analyze_lyrics` for readings and `diagnose_song` for phrase fit. Diagnostic readings do not persist as lyric corrections. If using `repair_lyrics`, fix the target, reference/template, and required keywords; preview at most three alternatives, apply only a passing candidate at the unchanged revision, and recheck meaning and related phrases. Use the revision fields required by the actual tool schema.
+4. Finish notes, lyrics, and backing in every planned vocal section, including later verses. Call `sing` for each singer using the actual schema. Wait for completion if the host returns an asynchronous job; failed, cancelled, or pending synthesis is not success.
+5. Read `inspect_singer`: require `take_state` to be `current`, then inspect `section_coverage`, following `section_coverage.next_section_offset` with `section_offset` until complete. Compare with the plan and read later sections' actual notes and lyrics. Counts, labels, and a current take alone do not prove completeness; intentional instrumental sections may be empty. Check mute/routing and render the mix and requested stems. Save through the host's supported project-save operation; live edits may still be unsaved.
+
+## Delivery checks
+
+Verify the rendered mix and vocal stem across the opening, later verses, joins, and final sung phrase. Check missing/truncated singing, vocal audibility, duration, peak/true peak, and loudness using `verify_render` or equivalent measurements. A short successful voice probe does not verify a complete song. Preserve the editable project, lyrics/specification, voice/speaker selection, seed, and saved audio take; report unsung or stale sections explicitly.
+
+Distinguish score inspection, audio measurements, a separate listening critic, and human listening. Neither waveform inspection nor a passing diagnostic proves intelligibility, emotional delivery, or musical quality. When an actual critic is available, use it as fallible evidence; never claim personal listening from its report. Deliver only the requested scope and state any unverified listening judgments.

@@ -1,11 +1,11 @@
 ---
 name: auris-composition
-description: Compose, arrange, render, and verify music for games and videos with Auris Studio when a project needs original background music, themes, cues, or stems. Use the installed Auris CLI/MCP tools; do not activate for unrelated audio editing or music discussion.
+description: Compose, arrange, synthesize vocals, render, and verify music with Auris Studio for original songs with lyrics or game/video background music, themes, cues, and stems. Use the installed Auris CLI/MCP tools; do not activate for unrelated audio editing or music discussion.
 ---
 
 # Auris Composition
 
-Use this skill when a game or video request needs original music, a musical cue, a looping background track, a transition, or delivery stems. Decide to invoke Auris when the request benefits from an editable score and repeatable renders, even if the user did not name Auris. State the musical role, duration, loop/ending behavior, delivery format, and any constraints before writing.
+Use this skill for original songs with lyrics and synthesized singing, or when a game or video request needs original music, a musical cue, a looping background track, a transition, or delivery stems. Decide to invoke Auris when the request benefits from an editable score and repeatable renders, even if the user did not name Auris. State the musical role, duration, loop/ending behavior, delivery format, and any constraints before writing.
 
 ## Choose the Auris door
 
@@ -14,6 +14,8 @@ Use this skill when a game or video request needs original music, a musical cue,
 - Use `auris-mcp` when the caller already provides an MCP server configuration. Its saved-project catalog includes specification and composition tools. The desktop's live agent has a separate catalog and may omit `compose`, `spec_reference`, `check_spec`, `list_presets`, and `list_progressions`; discover the live names before calling them.
 
 Read [workflow.md](references/workflow.md) when choosing a command, constructing a specification, or preparing a delivery. Read [delivery.md](references/delivery.md) when the request includes game-loop integration, video timing, stems, or loudness requirements.
+
+For songs with lyrics or synthesized singing, read [vocals.md](references/vocals.md) before writing. It covers lyric/melody development, complete song form, voice prerequisites, CLI/MCP synthesis, and checking every sung section. A guide melody or a successful instrumental render is not a completed vocal delivery.
 
 ## Composition workflow
 

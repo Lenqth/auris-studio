@@ -38,6 +38,8 @@ The desktop live agent has a separate, smaller catalog. Start with `discover_too
 
 ## Minimal `.asong` approach
 
+For section lyrics, singer selection, and the required `sing` step before vocal rendering, follow [vocals.md](vocals.md). Instrumental rendering alone does not synthesize a finished vocal take.
+
 Use `spec_reference` for the current syntax. A generated specification should name its title, key/mode, tempo, sections, and parts, and should use a quoted built-in progression or explicit chord chart. Run `check_spec` before `compose`; diagnostics may include instrument availability, capacity, lyric fit, or unsupported source controls.
 
 For a loop, make the musical boundary explicit in the score and render an unambiguous first/last bar. Verify that the end does not contain an uncontrolled tail before claiming seamless looping.
