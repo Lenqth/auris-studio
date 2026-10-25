@@ -558,11 +558,12 @@ pub struct Session {
 pub struct SaveReport {
     /// The document that was written.
     pub document: PathBuf,
-    /// Audio the project refers to that could not be copied into the folder.
+    /// Referenced assets that could not be copied into the folder.
     ///
-    /// The project saved, and it opens on this machine. It is the *folder* that is incomplete:
-    /// carried to another machine, the clips these belong to would be silent. Reported rather
-    /// than logged because a save that says nothing is a save the user believes was complete.
+    /// The document saved, but its folder is incomplete: these references still point to their
+    /// original locations, which may also be missing. Playback or voice synthesis needs those
+    /// files. Reported rather than logged because a save that says nothing is a save the user
+    /// believes was complete.
     pub uncollected: Vec<PathBuf>,
 }
 

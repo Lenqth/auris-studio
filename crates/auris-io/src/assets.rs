@@ -42,6 +42,42 @@ pub fn byte_size(path: &Path) -> u64 {
 /// claimed without replacement, so concurrent callers cannot both overwrite and report the same
 /// destination.
 pub fn copy_into(file: &Path, directory: &Path) -> Result<OsString> {
+    copy_into_numbered(file, directory, numbered)
+}
+
+/// Copies an asset without replacement, keeping a compound filename suffix intact.
+///
+/// For example, a collision for `voice.model.json` with suffix `.model.json` produces
+/// `voice-2.model.json`. The source filename must be UTF-8 and end in `suffix`.
+pub fn copy_into_with_suffix(file: &Path, directory: &Path, suffix: &str) -> Result<OsString> {
+    let stem = file
+        .file_name()
+        .and_then(OsStr::to_str)
+        .and_then(|name| name.strip_suffix(suffix))
+        .filter(|stem| !stem.is_empty() && !suffix.is_empty())
+        .ok_or_else(|| {
+            IoError::from_fs(
+                file,
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "the asset filename must have the requested suffix",
+                ),
+            )
+        })?;
+    copy_into_numbered(file, directory, |name, attempt| {
+        if attempt == 1 {
+            name.to_os_string()
+        } else {
+            format!("{stem}-{attempt}{suffix}").into()
+        }
+    })
+}
+
+fn copy_into_numbered(
+    file: &Path,
+    directory: &Path,
+    numbered: impl Fn(&OsStr, u32) -> OsString,
+) -> Result<OsString> {
     std::fs::create_dir_all(directory).map_err(|error| IoError::from_fs(directory, error))?;
 
     let name = file
@@ -294,6 +330,26 @@ mod tests {
         assert_eq!(
             std::fs::read(project.path().join("kick-2.wav")).unwrap(),
             b"second"
+        );
+    }
+
+    #[test]
+    fn compound_suffix_collisions_keep_the_complete_suffix_and_reuse_identical_copies() {
+        let source = TempDir::new("compound-source");
+        let project = TempDir::new("compound-project");
+        project.write("歌声.model.json", b"first");
+        let other = source.write("歌声.model.json", b"second");
+
+        let name = copy_into_with_suffix(&other, project.path(), ".model.json").unwrap();
+        assert_eq!(name, "歌声-2.model.json");
+        assert_eq!(std::fs::read(project.path().join(name)).unwrap(), b"second");
+        assert_eq!(
+            std::fs::read(project.path().join("歌声.model.json")).unwrap(),
+            b"first"
+        );
+        assert_eq!(
+            copy_into_with_suffix(&other, project.path(), ".model.json").unwrap(),
+            "歌声-2.model.json"
         );
     }
 

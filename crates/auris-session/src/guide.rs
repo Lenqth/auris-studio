@@ -2304,6 +2304,13 @@ pub mod documents {
     //! [`Session::collect_assets`](crate::Session::collect_assets) is how somebody archiving a
     //! project asks for those too.
     //!
+    //! Save As copies project-local VOICEVOX connection files into the new folder and keeps
+    //! their references relative, so the saved project can synthesize after the original is
+    //! removed. External voices remain shared. Other project-local voicebanks retain an
+    //! absolute reference to their original entry, keeping their companion models together.
+    //! A connection that cannot be copied retains its original absolute reference and is
+    //! included in the save report's uncollected assets.
+    //!
     //! # Finding a file that moved anyway
     //!
     //! [`Session::open`](crate::Session::open) resolves in two passes. Everything whose stored
