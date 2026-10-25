@@ -455,6 +455,8 @@ pub enum PianoRollGrid {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Whether the optional desktop setup guide has been dismissed or completed.
+    pub setup_guide_seen: bool,
     /// Audio backend preferences.
     pub audio: AudioPreferences,
     /// Interface language. `None` follows the system.
@@ -534,6 +536,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            setup_guide_seen: false,
             audio: AudioPreferences::default(),
             language: None,
             // Written out rather than derived, because `bool`'s own default is the wrong one here

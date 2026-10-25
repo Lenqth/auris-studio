@@ -1871,6 +1871,7 @@ pub struct AurisApp {
     pub(crate) rhythm_window: Option<WindowHandle<crate::ui::rhythm_grid::RhythmWindow>>,
     /// The external singing-backend setup window, while it is open.
     pub(crate) voice_setup_window: Option<WindowHandle<VoiceSetupWindow>>,
+    pub(crate) setup_guide_window: Option<WindowHandle<crate::setup_guide::SetupGuide>>,
     /// The key the pointer is holding down on the drawn keyboard, if any.
     pub(crate) clicked_key: Option<&'static str>,
 
@@ -1963,6 +1964,7 @@ impl AurisApp {
             let windows: Vec<gpui::AnyWindowHandle> = [
                 this.settings_window.map(Into::into),
                 this.voice_setup_window.map(Into::into),
+                this.setup_guide_window.map(Into::into),
                 this.rhythm_window.map(Into::into),
             ]
             .into_iter()
@@ -2244,6 +2246,7 @@ impl AurisApp {
             titled: String::new(),
             native_menu_snapshot: None,
             voice_setup_window: None,
+            setup_guide_window: None,
             choosing_export: false,
             status_failed: false,
             external_change: None,

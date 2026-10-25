@@ -67,6 +67,31 @@ strings! {
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
     WorkshopGenerate { en: "Generate 3 candidates", ja: "3つの候補を生成" }
+    SetupGuide { en: "Setup Guide", ja: "セットアップガイド" }
+    SetupWelcome { en: "Welcome to Auris Studio", ja: "Auris Studioへようこそ" }
+    SetupWelcomeHelp { en: "Choose the tools you want to use. You can reopen this guide from Settings or the project chooser.", ja: "使いたい機能を設定しましょう。このガイドは設定画面やプロジェクト選択画面からいつでも開けます。" }
+    SetupOptional { en: "Optional — you can start making music and set this up later.", ja: "すべて任意です。設定は後からでも行えます。" }
+    SetupAudio { en: "Audio", ja: "音声入出力" }
+    SetupAgent { en: "AI Agent", ja: "AIエージェント" }
+    SetupInput { en: "Note & MIDI Input", ja: "ノート・MIDI入力" }
+    SetupSinging { en: "Singing Voices", ja: "歌唱バックエンド" }
+    SetupAppearance { en: "Appearance & Keys", ja: "表示・キー設定" }
+    SetupAudioHelp { en: "Check the output device for your speakers or headphones. If you use a microphone or audio interface, choose its input device too. Start with the default sample rate and buffer size; adjust them if you hear dropouts or need lower latency.", ja: "スピーカーやヘッドホンの出力先を確認します。マイクやオーディオインターフェースを使う場合は入力先も選びましょう。サンプルレートやバッファサイズはまず既定値を使い、音切れや遅延が気になる場合に調整できます。" }
+    SetupAgentHelp { en: "Connect an AI agent to create three song candidates, discuss arrangements and edit a project through conversation. Choose a backend and model in Settings, then use its connection check. A configured model name alone does not confirm that the connection works.", ja: "AIエージェントを接続すると、曲の候補生成や編曲の相談、会話によるプロジェクト編集ができます。設定画面でバックエンドとモデルを選び、接続を確認してください。モデル名の設定だけでは接続成功を意味しません。" }
+    SetupSelectedModel { en: "Selected model", ja: "選択中のモデル" }
+    SetupInputNotes { en: "Piano roll: create a MIDI clip on an instrument track, then draw and edit notes in the piano roll.", ja: "ピアノロール：音源トラックにMIDIクリップを作り、ピアノロールでノートを入力・編集できます。" }
+    SetupInputTyping { en: "Computer keyboard: select an instrument track and enable Musical Typing from the Transport menu to play notes with your keyboard.", ja: "PCキーボード：音源トラックを選び、トランスポートメニューの「ミュージックタイピング」を有効にすると、キーボードで音を鳴らせます。" }
+    SetupInputFiles { en: "MIDI files: choose File → Import MIDI File to bring an existing performance into your project. Keyboard shortcuts can be inspected and changed in Settings.", ja: "MIDIファイル：ファイルメニューの「MIDI ファイルを読み込む…」から既存の演奏を取り込めます。ショートカットは設定画面で確認・変更できます。" }
+    SetupSingingHelp { en: "To make vocal tracks sing, add a singing backend. VOICEVOX is a good place to start: install and run its engine, then register a singing voice in the setup window. DiffSinger and LeapSinger can use compatible voice models. Instrumental projects work without these downloads.", ja: "歌唱トラックを使う場合は歌唱バックエンドを追加します。まずはVOICEVOXのエンジンを導入・起動し、設定画面で歌唱用の声を登録する方法があります。DiffSingerやLeapSingerの対応音声モデルも利用できます。インスト曲は追加のダウンロードなしで制作できます。" }
+    SetupAppearanceHelp { en: "Choose a colour theme, interface language and text size that are comfortable for you. Review the key bindings and change any shortcuts to match your workflow.", ja: "使いやすいカラーテーマ、表示言語、文字サイズを選びましょう。キーバインドも確認し、普段の操作に合わせて変更できます。" }
+    SetupReturnHint { en: "After changing a setting, close its window to return here and continue to the next step.", ja: "設定を変更したら、その画面を閉じてガイドに戻り、次の項目へ進めます。" }
+    SetupOpenAudio { en: "Open audio settings…", ja: "音声入出力を設定…" }
+    SetupOpenAgent { en: "Connect an AI agent…", ja: "AIエージェントを接続…" }
+    SetupOpenAppearance { en: "Choose theme and language…", ja: "テーマ・表示言語を設定…" }
+    SetupOpenKeys { en: "Review key bindings…", ja: "キーバインドを確認…" }
+    SetupLater { en: "Set up later", ja: "後で設定する" }
+    SetupNext { en: "Next", ja: "次へ" }
+    SetupDone { en: "Get started", ja: "制作を始める" }
     ChooseProject { en: "Choose a project", ja: "プロジェクトを選択" }
     ChooseNew { en: "New project", ja: "新規プロジェクト" }
     ChooseRecent { en: "Recent projects", ja: "最近使った項目" }

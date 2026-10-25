@@ -506,7 +506,18 @@ impl SettingsWindow {
             .flex_col()
             .gap_2()
             .when(self.matches_section(Section::Appearance), |view| {
-                view.child(appearance_control)
+                view.child(button(
+                    "settings-setup-guide",
+                    self.t(Key::SetupGuide),
+                    ButtonStyle::Normal,
+                    false,
+                    theme.accent,
+                    &theme,
+                    cx.listener(|this, _, _, cx| {
+                        let _ = this.app.update(cx, |app, cx| app.open_setup_guide(cx));
+                    }),
+                ))
+                .child(appearance_control)
             })
             .when(self.matches_section(Section::Language), |view| {
                 view.child(divider(&theme))

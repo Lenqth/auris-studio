@@ -27,6 +27,7 @@ mod logbook;
 mod menu;
 mod project_windows;
 mod settings_window;
+mod setup_guide;
 mod startup_soundfonts;
 mod termination;
 mod theme;
@@ -101,6 +102,9 @@ fn main() {
                 .update(cx, |view, window, cx| view.show_project_chooser(window, cx))
                 .ok();
         }
+        window
+            .update(cx, |view, _, cx| view.offer_initial_setup(cx))
+            .ok();
         cx.spawn(async move |cx| {
             loop {
                 if termination::take_request() {

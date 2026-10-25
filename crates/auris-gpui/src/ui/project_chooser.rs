@@ -243,6 +243,15 @@ impl AurisApp {
             .flex_wrap()
             .items_center()
             .gap_2()
+            .child(button(
+                "chooser-setup",
+                self.t(Key::SetupGuide),
+                ButtonStyle::Normal,
+                false,
+                theme.accent,
+                &theme,
+                cx.listener(|this, _, _, cx| this.open_setup_guide(cx)),
+            ))
             .child(
                 button_enabled(
                     "chooser-browse",
