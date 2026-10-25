@@ -21,6 +21,65 @@ struct Evaluation {
     timeout_seconds: u64,
     fixture: String,
     prompts: Vec<String>,
+    #[serde(default)]
+    prompt_condition: Option<PromptCondition>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PromptCondition {
+    expected_prefix: String,
+    replacement_prefix: String,
+    skill_context: String,
+}
+
+impl PromptCondition {
+    fn apply(&self, current: &str) -> Result<String, &'static str> {
+        // Git checkouts may use CRLF; compare the content rather than checkout encoding.
+        let current = current.replace("\r\n", "\n");
+        let expected = self.expected_prefix.replace("\r\n", "\n");
+        if expected.trim().is_empty() || self.replacement_prefix.trim().is_empty() {
+            return Err("Prompt condition prefixes must be nonempty");
+        }
+        let suffix = current
+            .strip_prefix(&expected)
+            .ok_or("Frozen prompt prefix does not match this evaluation binary")?;
+        let mut prompt = self.replacement_prefix.replace("\r\n", "\n");
+        prompt.push_str(suffix);
+        if !self.skill_context.trim().is_empty() {
+            prompt.push_str("\n\n<composition_skill_context>\n");
+            prompt.push_str(&self.skill_context.replace("\r\n", "\n"));
+            prompt.push_str("\n</composition_skill_context>\n");
+        }
+        Ok(prompt)
+    }
+}
+
+#[test]
+fn prompt_condition_preserves_operational_suffix_and_freezes_skill_context() {
+    let condition = PromptCondition {
+        expected_prefix: "Current composition\n".into(),
+        replacement_prefix: "Baseline composition\n".into(),
+        skill_context: "Frozen skill\r\nReference".into(),
+    };
+    assert_eq!(
+        condition
+            .apply("Current composition\r\nTool and safety contract")
+            .unwrap(),
+        "Baseline composition\nTool and safety contract\n\n<composition_skill_context>\nFrozen skill\nReference\n</composition_skill_context>\n"
+    );
+}
+
+#[test]
+fn prompt_condition_rejects_stale_binary_or_empty_prefix() {
+    let mut condition = PromptCondition {
+        expected_prefix: "Current composition".into(),
+        replacement_prefix: "Baseline composition".into(),
+        skill_context: String::new(),
+    };
+    assert!(condition.apply("Different binary").is_err());
+    condition.expected_prefix.clear();
+    assert!(condition.apply("Current composition").is_err());
 }
 
 fn codex_backend() -> String {
@@ -97,6 +156,18 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
         "codex" | "claude" | "rig"
     ));
     fs::create_dir(&config.output).expect("a fresh evidence folder");
+    let system_prompt = config.prompt_condition.as_ref().map(|condition| {
+        condition
+            .apply(&auris_agent::default_system_prompt())
+            .expect("an explicitly frozen prompt condition matching this binary")
+    });
+    fs::write(
+        config.output.join("system-prompt.txt"),
+        system_prompt
+            .clone()
+            .unwrap_or_else(auris_agent::default_system_prompt),
+    )
+    .unwrap();
     let (app, cx) = crate::harness::open(cx);
     app.update(cx, |this, _| {
         this.session.new_project();
@@ -132,6 +203,7 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
             provider: "ollama".into(),
             context_tokens: Some(config.context_tokens),
             model: config.model.clone(),
+            system_prompt: system_prompt.clone().unwrap_or_default(),
             // Fixture-only trials isolate tool selection from interactive approval timing.
             policy: Policy {
                 mode: Mode::Bypass,

@@ -156,6 +156,46 @@ def test_old_manifest_without_listening_rubric_remains_valid(tmp_path):
     assert "listening_rubric" not in quality.manifest(path)
 
 
+def test_prompt_condition_is_strict_and_frozen(tmp_path):
+    path = tmp_path / "condition.json"
+    value = {
+        "name": "after",
+        "source_commit": "abc123",
+        "expected_prefix": "legacy prompt",
+        "replacement_prefix": "current prompt",
+        "skill_context": "melody guidance",
+    }
+    quality.write_json(path, value)
+    condition, payload, checksum = quality.prompt_condition(path)
+    assert condition == value
+    assert payload == path.read_bytes()
+    assert checksum == quality.digest(path)
+
+
+@pytest.mark.parametrize(
+    "change,match",
+    [
+        ({"unknown": "value"}, "exactly"),
+        ({"expected_prefix": ""}, "nonempty"),
+        ({"replacement_prefix": ""}, "nonempty"),
+        ({"skill_context": 3}, "strings"),
+    ],
+)
+def test_prompt_condition_rejects_invalid_values(tmp_path, change, match):
+    path = tmp_path / "condition.json"
+    value = {
+        "name": "after",
+        "source_commit": "abc123",
+        "expected_prefix": "legacy prompt",
+        "replacement_prefix": "current prompt",
+        "skill_context": "",
+    }
+    value.update(change)
+    quality.write_json(path, value)
+    with pytest.raises(ValueError, match=match):
+        quality.prompt_condition(path)
+
+
 @pytest.mark.parametrize(
     "rubric",
     [

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "conditions": "伴奏と器楽には内蔵音源を使って。外部の音声批評とインターネット検索は使わないで。ダウンロードやシェル操作は不要。乱数seedを固定し、指定したテンポ・拍子・調・小節数を守って。今回のパネル試験では歌声合成を行わず、歌ものは歌詞・旋律・歌唱トラックを最後まで完成させて。後で同じVOICEVOX音源とseedを使って両条件を別途合成する。プロジェクトは未保存のまま残して。 乱数seedは20261025。BPMは四分音符基準。主旋律のトラック名は器楽曲ではLead、歌ものの歌唱トラックではVocal。歌ものは指定したAメロとサビを一度ずつ歌う短いワンコーラスのデモで、イントロ・間奏・終わりは器楽。",
+  "axes": [
+    "request_fit",
+    "melody",
+    "form",
+    "ensemble",
+    "sound"
+  ],
+  "listening_rubric": {
+    "request_fit": [
+      "依頼されたジャンル、役割、テンポ、調、拍子、編成を満たしているか。余分な複雑さは加点しない。",
+      "主旋律・歌詞・歌唱トラックを含む依頼範囲を最後まで完成させているか。"
+    ],
+    "melody": [
+      "主旋律のリズムまたは輪郭を一度聴いて覚えられるか。狭い音域や同音反復が役割に合う場合は減点しない。",
+      "旋律の自然さ、フレーズの向き、着地、音価を評価する。意図した緊張音を単純に誤りとしない。",
+      "歌ものでは、語のアクセント、息継ぎ、長い音の解放、子音の詰まりを評価する。旋律だけでは判断できない場合はcannot_judgeにする。"
+    ],
+    "form": [
+      "イントロ、Aメロ、サビ、間奏、終わりの接続が自然で、指定24小節を満たすか。",
+      "反復に識別できる核があり、後半に必要な変化があるか。ループ指定がない曲は終止と余韻を評価する。"
+    ],
+    "ensemble": [
+      "主旋律／歌声が伴奏の音域・リズム・残響に埋もれず、各パートが役割を持つか。",
+      "ベース、和声、リズム、間奏が主旋律を支え、無意味な同時発音や過密さを避けているか。"
+    ],
+    "sound": [
+      "選ばれた音色の発音・持続・解放が旋律と編成の役割に合うか。",
+      "エフェクトや空間が奥行き・色・応答を作り、次のフレーズや終端を覆っていないか。音量差は別に考える。"
+    ]
+  },
+  "delivery_prompt": "曲全体を読み返して必要な局所修正を済ませて。指定24小節ちょうどの24bit WAVを「{output}/result.wav」、現在の譜面をMIDI「{output}/result.mid」に書き出して。実ファイルの長さ、無音、音割れ、終端を確認し、歌ものでは歌詞・旋律・歌唱トラックの最後までの割り当てを確認して。歌声合成はこの試験では行わず、試聴用の歌声は後で同じVOICEVOX音源とseedから作る。外部の音声批評は呼ばず、譜面確認・測定・未確認の試聴を区別して簡潔に報告して。",
+  "comparison_protocol": {
+    "conditions": [
+      "before",
+      "after"
+    ],
+    "repetitions": 2,
+    "purpose": "Exploratory paired listening; independent generations with the same model, backend, manifest and delivery instructions. Do not report statistical improvement from four trials per case.",
+    "postprocess_vocals": "Use the same installed VOICEVOX singer, speaker, sample rate, seed and mix/render procedure on the saved before/after score. Keep source projects, unprocessed renders and preparation audits.",
+    "required_views": [
+      "full_mix",
+      "foreground_or_vocal",
+      "backing_or_instrumental_stem"
+    ],
+    "first_pass": "Listen to each full mix without reading the condition key. Mark naturalness, memorability, breathing/prosody and arrangement evidence with timestamps or bars. Then inspect foreground and backing views. Tie and cannot_judge are distinct."
+  },
+  "cases": [
+    {
+      "id": "pop_band_instrumental",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "朝の街へ歩き出す感じの24小節ポップバンド器楽曲を作って。112 BPM、4/4、ハ長調。構成はイントロ2小節、Aメロ8小節、サビ8小節、間奏2小節、終わり4小節。主役はピアノの主旋律、ベース、控えめなドラム、薄いパッド。Aメロの主題がサビで少し開き、間奏から自然に最後へ向かう曲にして。\n比較用の編成とトラック名を固定する：Lead=auris.physical.piano、Bass=auris.physical.bass、Drums=auris.synth.drumkit、Pad=auris.synth.fm2。追加楽器は使わず、音色設定と内蔵エフェクトは曲に合わせて調整して。"
+      ]
+    },
+    {
+      "id": "pop_band_vocal",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "朝の街へ歩き出す決心を描く24小節の日本語ポップ歌ものを作って。112 BPM、4/4、ハ長調。構成はイントロ2小節、Aメロ8小節、サビ8小節、間奏2小節、終わり4小節。主役は歌、ピアノ、ベース、控えめなドラム。歌詞は次の文面を自然なフレーズに分け、意味を変えずに使って。Aメロ：『窓に残る雨のあと／靴音が街を起こす／昨日までの迷いを／小さくたたんで歩く』。サビ：『光のほうへ行こう／まだ知らない朝へ／君に届く声で／今日を始めてみよう』。歌詞・旋律・歌唱トラックを最後まで作り、歌声合成は行わないで。\n比較用の編成とトラック名を固定する：Vocal=歌唱トラック、Piano=auris.physical.piano、Bass=auris.physical.bass、Drums=auris.synth.drumkit。追加楽器は使わず、音色設定と内蔵エフェクトは曲に合わせて調整して。"
+      ]
+    },
+    {
+      "id": "folk_six_eight_instrumental",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "夕暮れの山道を進む24小節のアコースティック／フォーク風器楽曲を作って。96 BPM、6/8、ト長調。構成はイントロ2小節、Aメロ8小節、サビ8小節、間奏2小節、終わり4小節。主役は木管またはアコースティックギターの旋律、ピアノ、低い弦、柔らかな打楽器。6/8の揺れを保ち、短い主題を反復しながら、最後は静かに解放して。\n比較用の編成とトラック名を固定する：Lead=auris.physical.tin_whistle、Piano=auris.physical.piano、Strings=auris.physical.violin、Drums=auris.synth.drumkit。追加楽器は使わず、音色設定と内蔵エフェクトは曲に合わせて調整して。"
+      ]
+    },
+    {
+      "id": "folk_six_eight_vocal",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": [
+        "夕暮れの山道で旅の仲間を思う24小節の日本語フォーク歌ものを作って。96 BPM、6/8、ト長調。構成はイントロ2小節、Aメロ8小節、サビ8小節、間奏2小節、終わり4小節。主役は歌、アコースティックギター、ピアノ、低い弦、柔らかな打楽器。歌詞は次の文面を自然なフレーズに分け、意味を変えずに使って。Aメロ：『山の端に灯りがともる／遠い道を風がなでる／離れていても聞こえる／君の笑う声を思う』。サビ：『同じ空を見上げて／歩いてゆけるから／夜が明けるその前に／また会えると歌おう』。歌詞・旋律・歌唱トラックを最後まで作り、歌声合成は行わないで。\n比較用の編成とトラック名を固定する：Vocal=歌唱トラック、Guitar=auris.physical.guitar、Piano=auris.physical.piano、Strings=auris.physical.violin、Drums=auris.synth.drumkit。追加楽器は使わず、音色設定と内蔵エフェクトは曲に合わせて調整して。"
+      ]
+    },
+    {
+      "id": "synthpop_loop_instrumental",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": [
+        "夜のメニュー画面に合う24小節の控えめなシンセポップ器楽曲を作って。120 BPM、4/4、ホ短調。構成はイントロ2小節、Aメロ8小節、サビ8小節、間奏2小節、終わり4小節。狭い音域の短いシンセフック、サブベース、軽いドラム、薄いパッドだけを使い、反復しても邪魔にならないようにして。終わりはループではなく短く閉じて。\n比較用の編成とトラック名を固定する：Lead=auris.synth.chiptune、Bass=auris.synth.chiptune、Drums=auris.synth.drumkit、Pad=auris.synth.fm2。追加楽器は使わず、音色設定と内蔵エフェクトは曲に合わせて調整して。"
+      ]
+    },
+    {
+      "id": "synthpop_loop_vocal",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": [
+        "夜の画面を閉じて明日へ進む24小節の日本語シンセポップ歌ものを作って。120 BPM、4/4、ホ短調。構成はイントロ2小節、Aメロ8小節、サビ8小節、間奏2小節、終わり4小節。主役は歌と狭い音域のシンセフック、サブベース、軽いドラム、薄いパッド。歌詞は次の文面を自然なフレーズに分け、意味を変えずに使って。Aメロ：『青い画面を閉じたら／静かな部屋に戻る／うまく言えない気持ちも／明日の荷物にしまう』。サビ：『まだ眠らないで／小さな灯りを持って／遠回りの夜も／明日のほうへ続く』。歌詞・旋律・歌唱トラックを最後まで作り、歌声合成は行わないで。\n比較用の編成とトラック名を固定する：Vocal=歌唱トラック、Hook=auris.synth.chiptune、Bass=auris.synth.chiptune、Drums=auris.synth.drumkit、Pad=auris.synth.fm2。追加楽器は使わず、音色設定と内蔵エフェクトは曲に合わせて調整して。"
+      ]
+    }
+  ]
+}

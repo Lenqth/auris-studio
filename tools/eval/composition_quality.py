@@ -44,6 +44,32 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+PROMPT_CONDITION_KEYS = {
+    "name",
+    "source_commit",
+    "expected_prefix",
+    "replacement_prefix",
+    "skill_context",
+}
+
+
+def prompt_condition(path: Path) -> tuple[dict[str, str], bytes, str]:
+    """Validate and freeze an optional before/after prompt condition file."""
+    payload = path.read_bytes()
+    value = json.loads(payload)
+    if not isinstance(value, dict) or set(value) != PROMPT_CONDITION_KEYS:
+        raise ValueError(
+            "Prompt condition must contain exactly: "
+            + ", ".join(sorted(PROMPT_CONDITION_KEYS))
+        )
+    if not all(isinstance(item, str) for item in value.values()):
+        raise ValueError("Prompt condition values must all be strings")
+    for key in ("expected_prefix", "replacement_prefix"):
+        if not value[key]:
+            raise ValueError(f"Prompt condition {key} must be nonempty")
+    return value, payload, hashlib.sha256(payload).hexdigest()
+
+
 def manifest(path: Path) -> dict:
     value = read_json(path)
     if value.get("schema_version") != 1 or value.get("axes") != AXES:
@@ -100,6 +126,13 @@ def frozen_source(
 
 def run(args) -> None:
     suite = manifest(args.manifest)
+    condition = None
+    condition_payload = None
+    condition_sha256 = None
+    if args.prompt_condition is not None:
+        condition, condition_payload, condition_sha256 = prompt_condition(
+            args.prompt_condition.resolve(strict=True)
+        )
     if not 1 <= args.repetitions <= 20 or not 1 <= args.timeout <= 3600:
         raise ValueError("Use 1..20 repetitions and 1..3600 seconds per turn")
     if not 8192 <= args.context_tokens <= 262144:
@@ -168,6 +201,10 @@ def run(args) -> None:
         "quality_status": "unscored; transport and structural measurements are not musical preference",
         "trials": [],
     }
+    if condition is not None:
+        provenance["prompt_condition"] = condition
+        provenance["prompt_condition_sha256"] = condition_sha256
+        (output / "prompt-condition.json").write_bytes(condition_payload)
     if getattr(args, "source_suite", None):
         provenance.update(
             frozen_source(
@@ -192,6 +229,11 @@ def run(args) -> None:
                 ],
                 "output": str(destination),
             }
+            if condition is not None:
+                config["prompt_condition"] = {
+                    key: condition[key]
+                    for key in ("expected_prefix", "replacement_prefix", "skill_context")
+                }
             config_path = output / f"{trial_id}.config.json"
             if provenance["backend"] != "codex":
                 config["backend"] = provenance["backend"]
@@ -399,6 +441,11 @@ def main() -> None:
         "--source-suite",
         type=Path,
         help="Previous suite binding an identical frozen runtime to its original source",
+    )
+    runner.add_argument(
+        "--prompt-condition",
+        type=Path,
+        help="JSON file freezing the before/after prompt condition and its provenance",
     )
     runner.add_argument(
         "--split", choices=["development", "holdout"], default="development"
