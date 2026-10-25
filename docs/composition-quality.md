@@ -86,6 +86,62 @@ uv run --with pytest pytest tools/eval/test_composition_quality.py
 uv run --with ruff ruff check tools/eval/composition_quality.py tools/eval/test_composition_quality.py
 ```
 
+## Frozen instruction comparisons and sung auditions
+
+Use `run --prompt-condition <condition.json>` to compare instruction packages with
+the same executable. The condition file has exactly five string fields: `name`,
+`source_commit`, `expected_prefix`, `replacement_prefix`, and `skill_context`.
+The test host requires the expected prefix to match its default prompt, replaces
+only that prefix, preserves the operational suffix, and appends the explicit
+skill context. It normalizes CRLF when matching. The runner freezes and hashes
+the condition file, and each trial saves the resulting `system-prompt.txt`.
+An empty or mismatched prefix is an error. This compares a complete instruction
+package; it does not isolate individual rules or fix the LLM's random seed.
+
+The separate `melody-listening-v1.json` manifest contains three genres with
+instrumental and vocal cases. Its [protocol](melody-listening-protocol.ja.md)
+defines the controls and listening questions. Keep the executable, voice
+configuration, controller settings, case prompts and all attempts fixed.
+`--context-tokens` is not an effective Codex CLI context-window override.
+
+Prepare each completed trial's final snapshot using the common voice and CLI:
+
+```powershell
+uv run tools/eval/composition_listening_assets.py --source-dir <trial-folder> --output <fresh-asset-folder> --auris <frozen-auris-executable> --voice <existing-voice-config> --speaker "ずんだもん / ノーマル" --seed 0
+```
+
+The helper creates an isolated editable project, synthesizes a real take when
+the foreground is a singer, verifies score/lyric preservation, and exports mix,
+foreground and backing auditions. Float renders are retained before a fixed
+protective gain and 24-bit encoding. `audit.json` records voice/backend/binary
+provenance, measured files, take checks and failures. These separate renders
+pass through the master processing; they are reference auditions, not guaranteed
+additive stems. Preparation does not change the original trial snapshots.
+
+Audio preparation can also succeed from a timed-out trial's last snapshot. This
+does not complete the source trial or restore its delivery status. Count
+successful generation/delivery, available audition audio, and valid paired
+comparisons separately. Preserve such audio as a labeled reference alongside
+the original failure; do not promote it into the completed comparison set.
+
+For anonymous, level-matched listening, provide a JSON object with `pairs`.
+Each entry has a stable `id`, optional `metadata` (`genre`, `vocal_mode`, `tempo`,
+`meter`), and `conditions.before` / `conditions.after`, each mapping `mix`,
+`foreground` and `backing` to WAV paths. Then run:
+
+```powershell
+uv run tools/eval/composition_listening.py <pairs.json> <fresh-listening-folder> --seed 20261025
+```
+
+The builder preserves pre-match copies, chooses one feasible loudness target per
+pair and view, applies constant gain only, and checks encoded loudness/true peak.
+It writes `listening.html`, a public manifest and a separate private identity key
+with file hashes and measurements. The Japanese page offers four independent
+ratings, delayed-recall notes, a pair index, browser-local persistence and JSON
+export/display. Keep `tie`, `cannot_judge` and unanswered fields distinct. Missing
+audio remains visible as an incomplete pair; do not replace failed compositions
+with a preferred rerun or infer musical improvement from the numeric checks.
+
 ## 2026-10-24 implementation pilot
 
 The [retained numerical report](../tools/eval/references/composition-quality-pilot-2026-10-24.json)

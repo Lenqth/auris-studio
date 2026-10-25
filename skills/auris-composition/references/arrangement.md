@@ -69,6 +69,8 @@ For a small mix change, audition the affected range and its dependent routing fi
 
 Inspect the opening, contrasting section, later repeat, transitions, and ending/loop return. Compare the same ranges before and after, at comparable playback loudness where available. Preserve the baseline and adopt changes for the stated musical purpose, not because there are more notes, effects, or a larger waveform. A no-change decision needs specific evidence, not just a successful tool call.
 
+Keep component preferences separate when a listener favors one candidate's melody or vocal and another candidate's backing. Do not convert that into an overall winner or infer unreported naturalness, memorability, or breathing ratings. If a combined candidate is requested, retain the favored foreground and check the backing against its actual harmony, phrasing, register, and timing before adoption; independently preferred parts are not automatically compatible.
+
 Fix the most consequential issues first; after at most two local attempts per issue, report unresolved limitations unless further exploration is requested. Finish with the full render and measurements in [delivery.md](delivery.md). Record what was changed or deliberately retained, which passages were checked, and what remains uncertain. Without actual listening, describe note/structure checks and audio measurements accurately; do not claim that clarity, expression, or seamless looping has been heard.
 
 The linked primary sources were consulted on 2026-10-25. The workflow and Auris mappings above are an adaptation, not instructions to install the sources' products or universal genre rules.

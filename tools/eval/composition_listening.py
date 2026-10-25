@@ -327,7 +327,7 @@ def _page(manifest: dict) -> str:
         json.dumps(manifest, sort_keys=True).encode()
     ).hexdigest()[:16]
     return f"""<!doctype html><meta charset="utf-8"><title>匿名作曲比較リスニング</title>
-<style>body{{font:16px system-ui;max-width:1000px;margin:32px auto}}section{{border-top:1px solid #aaa;padding:20px 0}}audio{{width:min(700px,100%)}}label{{display:block;margin:8px 0}}textarea{{width:95%;min-height:70px}}.hint{{color:#555}}button{{margin:8px 4px 8px 0}}</style>
+<style>[hidden]{{display:none!important}}body{{font:16px system-ui;max-width:1000px;margin:32px auto}}section{{border-top:1px solid #aaa;padding:20px 0}}audio{{width:min(700px,100%)}}label{{display:block;margin:8px 0}}textarea{{width:95%;min-height:70px}}.hint{{color:#555}}button{{margin:8px 4px 8px 0}}</style>
 <h1>匿名作曲比較リスニング</h1>
 <p class="hint">最初はA/Bを切り替えず、1回だけ聴いてください。30秒ほど待って、覚えている主旋律の輪郭やモチーフを書いてから、A/Bを再生します。A/Bが強化前・強化後のどちらかは表示しません。音量一致版はゲインだけを使い、コンプレッサーやリミッターは使いません。入力はこのブラウザーに自動保存されます。最後に「評価をダウンロード」も押してください。</p>
 <button onclick="setAll('matched')">音量一致版を使う</button><button onclick="setAll('original')">ペア音量合わせ前を使う</button><button onclick="save()">評価をダウンロード</button><button onclick="showJson()">評価JSONを表示</button>
