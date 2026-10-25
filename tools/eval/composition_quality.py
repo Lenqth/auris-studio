@@ -48,6 +48,18 @@ def manifest(path: Path) -> dict:
     value = read_json(path)
     if value.get("schema_version") != 1 or value.get("axes") != AXES:
         raise ValueError("Unsupported manifest or evaluation axes")
+    rubric = value.get("listening_rubric")
+    if rubric is not None:
+        if not isinstance(rubric, dict) or set(rubric) - set(AXES):
+            raise ValueError("Listening rubric keys must be evaluation axes")
+        for axis, questions in rubric.items():
+            if not isinstance(questions, list) or not questions or not all(
+                isinstance(question, str) and question.strip()
+                for question in questions
+            ):
+                raise ValueError(
+                    f"Listening rubric for {axis} needs nonempty string questions"
+                )
     cases = value["cases"]
     ids = [case["id"] for case in cases]
     if len(ids) != len(set(ids)):
@@ -308,6 +320,8 @@ def pairs(before: Path, after: Path, seed: int) -> list[dict]:
 def blind(args) -> None:
     comparisons = pairs(args.before, args.after, args.seed)
     args.output.mkdir(parents=True, exist_ok=False)
+    suite = read_json(args.before / "suite.json")
+    rubric = suite["manifest"].get("listening_rubric", {})
     sections = []
     failed = sum(pair["status"] != "ready" for pair in comparisons)
     for index, pair in enumerate(comparisons, 1):
@@ -320,11 +334,21 @@ def blind(args) -> None:
             shutil.copy2(source["path"], args.output / filename)
             players.append(f'<p>{label} <audio controls src="{filename}"></audio></p>')
         questions = "".join(
-            f'<label>{axis} <select data-axis="{axis}"><option value="">Unrated</option>'
+            f'<label><span class="axis">{html.escape(axis)}</span>'
+            + (
+                "<ul>"
+                + "".join(
+                    f"<li>{html.escape(question)}</li>"
+                    for question in rubric.get(axis, [])
+                )
+                + "</ul>"
+                if rubric.get(axis)
+                else ""
+            )
+            + f' <select data-axis="{html.escape(axis, quote=True)}"><option value="">Unrated</option>'
             "<option>A</option><option>B</option><option>tie</option><option>cannot_judge</option></select></label> "
             for axis in AXES
         )
-        suite = read_json(args.before / "suite.json")
         case = next(
             c
             for c in suite["manifest"]["cases"]

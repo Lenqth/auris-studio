@@ -2,6 +2,10 @@
 
 [日本語](composition-quality.ja.md)
 
+For phrase design, reference-MIDI limitations and arrangement-specific listening
+questions, use the separate [melody domain trials](melody-domain-evaluation.md).
+Keep their versioned cohort separate from the original quality trials below.
+
 `tools/eval/composition_quality.py` runs the real agent-panel host in an isolated,
 unsaved fixture. The versioned manifest contains eight development tasks and four
 held-out tasks. Freeze it before collecting a baseline; do not tune against holdout

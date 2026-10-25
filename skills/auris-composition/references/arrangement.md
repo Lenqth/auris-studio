@@ -10,6 +10,8 @@ For each proposed change, name its purpose and range: for example, leave space f
 
 ## Choose techniques that solve the actual problem
 
+Read [arrangement-design.md](arrangement-design.md) when selecting an ensemble, writing bass/inner voices or an interlude, or deciding what an effect should contribute. Use [melody-design.md](melody-design.md) for an authorized foreground rewrite; the arrangement pass itself preserves the authored lead.
+
 ### Section contrast and subtraction
 
 Where a section is crowded or flat, try removing or delaying a supporting entrance before adding another layer. A restrained verse can make a fuller refrain meaningful. Contrast can come from register, articulation, duration, rhythmic activity, or a change of lead instrument; raising the fader alone need not supply it. Retain an intentional sparse or static texture when that serves the cue. Ableton's [subtractive arrangement method](https://makingmusic.ableton.com/arranging-as-a-subtractive-process) motivates this option; do not copy its exploratory timeline expansion into a duration-constrained or already authored project.

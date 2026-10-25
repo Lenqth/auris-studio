@@ -15,6 +15,8 @@ Use this skill for original songs with lyrics and synthesized singing, or when a
 
 Read [workflow.md](references/workflow.md) when choosing a command, constructing a specification, or preparing a delivery. Read [delivery.md](references/delivery.md) when the request includes game-loop integration, video timing, stems, or loudness requirements.
 
+When writing or revising a foreground melody, read [melody-design.md](references/melody-design.md). It connects motif rhythm, phrase destinations, harmonic tension, register, prosody and endings to concrete note decisions. Establish a short identity-bearing phrase and its intended landing before expanding the form; a scale or chord-tone list alone is not a melodic plan. Use the guide's alternatives according to the musical role, without enforcing interval, rest or repetition quotas.
+
 For a complete musical delivery, follow [arrangement.md](references/arrangement.md) after establishing the composition and before the final render. Perform a deliberate arrangement pass even when `compose` has already generated backing and a mix. For a sketch, lyric-only request, or local edit, keep this pass within the requested scope.
 
 For songs with lyrics or synthesized singing, read [vocals.md](references/vocals.md) before writing. It covers lyric/melody development, complete song form, voice prerequisites, CLI/MCP synthesis, and checking every sung section. A guide melody or a successful instrumental render is not a completed vocal delivery.
