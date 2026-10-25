@@ -34,6 +34,10 @@ The saved-project server exposes specification and composition tools:
 
 `compose` and `accompany` carry their own input contracts and do not take a clip revision field. `setup_tracks` uses its request ID/fingerprint contract. For operations that explicitly require an `expected_revision` or current revision, obtain it from the relevant inspection/read call and pass it unchanged. Read the affected project or clip again after writing. Use `tool_help` instead of guessing schemas; argument errors are feedback, not permission to retry unrelated calls.
 
+When scripting MCP, inspect every tool result's `isError` and returned content; a successful subprocess exit alone does not establish tool success. Decode JSON text content before inspecting fields. For a `report_id`, follow the returned `report_path` and `next_offset` with `read_report` in the same server process; do not assume every report contains `/issues` or `/sections`. Reports expire on restart or eviction. If one expires, regenerate the read-only report, not the edit that produced it. Respect each tool's batch/page limits and finish reading all relevant notes before writing.
+
+On Windows, use UTF-8 for script input/output and JSON containing Japanese titles or lyrics (for Python, `-X utf8` or explicit UTF-8 streams). A console encoding failure after a tool call can occur after the operation succeeded; inspect the saved result/project before retrying a mutation.
+
 ## Live agent sequence
 
 The desktop live agent has a separate, smaller catalog. Start with `discover_tools` and fetch `tool_help` for the returned candidates; do not assume that saved-only names such as `compose`, `spec_reference`, `check_spec`, `list_presets`, or `list_progressions` are available. Inspect the open document, read the target clip, then use the advertised live note/phrase/harmony tools and read back the result. Apply revision checks only to operations whose schema declares them.

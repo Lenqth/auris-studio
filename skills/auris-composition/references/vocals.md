@@ -14,9 +14,11 @@ Discover an installed voice before promising sung audio. MCP provides `list_voic
 
 A VOICEVOX connection is metadata, not a voicebank. Its configured Engine must be running. Discover singing styles from that Engine's `/singers`: the query style must support `sing` or `singing_teacher`, and the decode style must support `frame_decode`. Do not guess IDs or use a talk-only style. Standard 93.75 fps connections use 24000 or 48000 Hz, not 44100 Hz; this is separate from the project output rate. Do not silently download models, replace binaries, or switch singers when a backend is unavailable. Preserve the score and identify the missing prerequisite.
 
+A single short health-check timeout does not prove that the Engine is unavailable. If the configured process is running, retry the read-only version/style discovery once with a longer bounded timeout (for example, 15 seconds). If it still fails, report the endpoint/error; do not automatically restart the Engine or rewrite its connection. Keep this separate from a synthesis request, which may take longer and must not be duplicated while pending.
+
 ## CLI: specification to sung mix
 
-For a new song, put lyrics in each sung section of an `.asong`. Use distinct section names for different words, and `melody_from` for intentional melodic reuse; shared phrases must have compatible mora counts. Newlines and sentence punctuation divide lyric phrases. A minimal short demo is:
+For a new song, put lyrics in each sung section of an `.asong`. Use distinct section names for different words, and `melody_from` for intentional melodic reuse. Shared sections must match phrase counts, mora counts per phrase, and closure positions (Japanese sokuon, small `っ`); equal total counts alone are insufficient. Newlines and sentence punctuation divide lyric phrases. A minimal short demo is:
 
 ```toml
 title = "Morning Song"
@@ -37,6 +39,8 @@ lyrics = "きみの こえが\nそらへ とどくよ"
 ```
 
 Top-level `singer` and `singer_speaker` can record an existing voice path and speaker in the specification. Without a selected voice, the generated score may use a preview voice; that is not evidence of finished singing. Section lyrics create the singer track beside the accompaniment. Do not model a singer as an ordinary instrument part.
+
+Diagnose the original and reused sections together before composing. For `closure_position_mismatch`, inspect the affected phrase's actual reading and closure indices; revise new lyrics while preserving their meaning, or choose an independent melody when reuse is unnecessary. Do not remove all sokuon or impose one mora count on every song. Keep readable display lyrics beside the synthesis reading when they differ, and verify that both still express the same words.
 
 ```text
 auris compose song.asong --print
@@ -66,5 +70,11 @@ Use the advertised catalog and `tool_help`; saved-project MCP and the desktop li
 After the composition is established, complete [the arrangement pass](arrangement.md) around the actual vocal line. Check backing in sung passages and gaps, including later verses. Refresh any affected singer takes before final export; arrangement review does not authorize replacing the lyrics or vocal melody.
 
 Verify the rendered mix and vocal stem across the opening, later verses, joins, and final sung phrase. Check missing/truncated singing, vocal audibility, duration, peak/true peak, and loudness using `verify_render` or equivalent measurements. A short successful voice probe does not verify a complete song. Preserve the editable project, lyrics/specification, voice/speaker selection, seed, and saved audio take; report unsung or stale sections explicitly.
+
+### Balance and verify the synthesized take
+
+Automatic mixing may have balanced a preview voice whose level differs substantially from the synthesized take. Render with the actual voice, inspect vocal and backing levels over matching sung passages, and revisit the vocal fader, backing, and master headroom. Use listening when available; stem RMS/LUFS differences are supporting evidence, not a universal vocal-to-backing target. Do not reuse a fixed gain reduction from another song or normalize a dominating vocal away with only a master adjustment. Save mix changes in the project and re-render affected deliverables so the editable project and final WAV agree.
+
+Use actual section/tempo boundaries to measure each planned sung section and the final phrase separately. At changing tempos, derive seconds from the tempo map rather than a single ticks-per-second constant. Inspect the lyric-bearing notes, phonemes, continuation markers, and intentional rests together; one initial lyric string plus continuation notes need not mean missing lyrics. Nonzero section energy only rules out total silence, not missing syllables. Follow coverage/report pagination, verify take freshness after final edits, and measure the ending tail as well as the main song. Keep these three conclusions separate: score assignments, synthesized audio coverage, and perceptual quality.
 
 Distinguish score inspection, audio measurements, a separate listening critic, and human listening. Neither waveform inspection nor a passing diagnostic proves intelligibility, emotional delivery, or musical quality. When an actual critic is available, use it as fallible evidence; never claim personal listening from its report. Deliver only the requested scope and state any unverified listening judgments.
