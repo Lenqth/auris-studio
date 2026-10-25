@@ -1524,6 +1524,7 @@ pub struct AurisApp {
     pub(crate) pending_audition: Option<crate::project_windows::AuditionRequest>,
     pub(crate) opening_project: Option<std::path::PathBuf>,
     pub(crate) project_chooser: Option<crate::ui::project_chooser::ProjectChooser>,
+    pub(crate) song_workshop: Option<crate::ui::song_workshop::SongWorkshop>,
     pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
     pub(crate) session: Session,
@@ -2063,6 +2064,7 @@ impl AurisApp {
                 if this
                     .update(cx, |this, cx| {
                         this.poll_pending_audition(cx);
+                        this.poll_song_workshop(cx);
                         this.session.poll();
                         this.poll_song_search();
                         // Here rather than while drawing, and here rather than in `poll`: the
@@ -2125,6 +2127,7 @@ impl AurisApp {
             pending_audition: None,
             opening_project: None,
             project_chooser: None,
+            song_workshop: None,
             project_window: None,
             session,
             theme,

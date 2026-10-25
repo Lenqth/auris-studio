@@ -120,7 +120,11 @@ impl Render for AurisApp {
         }
         if self.project_chooser.is_some() {
             self.main_was_active = window.is_window_active();
-            let title = self.t(Key::ChooseProject);
+            let title = self.t(if self.song_workshop.is_some() {
+                Key::WorkshopTitle
+            } else {
+                Key::ChooseProject
+            });
             if self.titled != title {
                 window.set_window_title(title);
                 self.titled = title.to_string();

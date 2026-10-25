@@ -63,6 +63,9 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if self.song_workshop.is_some() {
+            return self.render_song_workshop(window, cx);
+        }
         let theme = self.theme.clone();
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
         let recent = chooser.recent;
@@ -131,6 +134,19 @@ impl AurisApp {
             }
         } else {
             content = content
+                .child(
+                    button(
+                        "chooser-ai",
+                        self.t(Key::WorkshopTitle),
+                        ButtonStyle::Normal,
+                        false,
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, window, cx| this.open_song_workshop(window, cx)),
+                    )
+                    .h_12()
+                    .text_base(),
+                )
                 .child(
                     button(
                         "chooser-empty",

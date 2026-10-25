@@ -2218,6 +2218,9 @@ impl AurisApp {
             return None;
         }
         self.reconcile_section_lyrics();
+        if let Some(workshop) = self.song_workshop.as_mut() {
+            return (!workshop.busy()).then_some(&mut workshop.brief);
+        }
         // Menus sit above every field and accept choices rather than text. Keep both ordinary
         // input and IME updates away from the editor they cover.
         if self.menu.is_some() || self.menu_bar.is_some() {
@@ -2256,6 +2259,9 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     }
 
     fn readable_field(&self) -> Option<&TextField> {
+        if let Some(workshop) = self.song_workshop.as_ref() {
+            return (!workshop.busy()).then_some(&workshop.brief);
+        }
         if self.compose_progress.is_some() {
             return None;
         }

@@ -40,6 +40,33 @@ macro_rules! strings {
 }
 
 strings! {
+    WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
+    WorkshopHint { en: "Describe an instrumental song, audition three directions, then edit your favourite. Built-in instruments only.", ja: "インスト曲の方向性を決め、3つの候補を聴き比べて選びます。内蔵音源を使用します。" }
+    WorkshopGenre { en: "Genre", ja: "ジャンル" }
+    WorkshopPop { en: "Pop", ja: "ポップス" }
+    WorkshopRock { en: "Rock", ja: "ロック" }
+    WorkshopElectronic { en: "Electronic", ja: "エレクトロニック" }
+    WorkshopOrchestral { en: "Orchestral", ja: "オーケストラ" }
+    WorkshopJazz { en: "Jazz", ja: "ジャズ" }
+    WorkshopAmbient { en: "Ambient", ja: "アンビエント" }
+    WorkshopPreparing { en: "Preparing playback…", ja: "再生を準備しています…" }
+    WorkshopMood { en: "Mood", ja: "雰囲気" }
+    WorkshopLength { en: "Approximate length", ja: "おおよその長さ" }
+    WorkshopBrief { en: "Direction", ja: "曲の方向性" }
+    WorkshopBriefHint { en: "For example: walking through a city at night, with a memorable piano melody.", ja: "例：夜の街を歩くような、印象的なピアノのメロディーがある曲" }
+    WorkshopBright { en: "Bright", ja: "明るい" }
+    WorkshopMelancholy { en: "Melancholy", ja: "切ない" }
+    WorkshopCalm { en: "Calm", ja: "落ち着いた" }
+    WorkshopEnergetic { en: "Energetic", ja: "激しい" }
+    WorkshopPlanning { en: "AI is planning three directions…", ja: "AIが3つの方向性を考えています…" }
+    WorkshopRendering { en: "Composing and preparing audio…", ja: "作曲・試聴音声を準備しています…" }
+    WorkshopListen { en: "Listen", ja: "試聴" }
+    WorkshopStop { en: "Stop", ja: "停止" }
+    WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
+    WorkshopBack { en: "Back", ja: "戻る" }
+    WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
+    WorkshopGenerate { en: "Generate 3 candidates", ja: "3つの候補を生成" }
     ChooseProject { en: "Choose a project", ja: "プロジェクトを選択" }
     ChooseNew { en: "New project", ja: "新規プロジェクト" }
     ChooseRecent { en: "Recent projects", ja: "最近使った項目" }

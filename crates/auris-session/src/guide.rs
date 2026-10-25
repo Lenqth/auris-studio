@@ -40,6 +40,13 @@
 //!
 //! # Agent conversations
 //!
+//! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
+//! directions. The session validates each [`crate::SongIdea`], composes with built-in instruments
+//! and renders offline into a [`crate::SongCandidate`]. Each candidate owns both the editable
+//! document and its audition audio. Adoption copies that exact document as one undoable edit;
+//! it never regenerates the score. The original brief is saved as project metadata for later
+//! agent context. Worker cancellation and progress presentation belong to the frontend.
+//!
 //! A conversation also retains a bounded `memory.production.json` beside model memory.
 //! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;
 //! the agent runtime owns persistence under the same generation lock as conversation history.

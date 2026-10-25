@@ -68,7 +68,10 @@ pub(crate) fn open(path: Option<PathBuf>, cx: &mut App) {
             }
             for handle in windows(cx) {
                 let reused = handle.update(cx, |view, window, cx| {
-                    if view.project_chooser.is_some() && view.opening_project.is_none() {
+                    if view.project_chooser.is_some()
+                        && view.song_workshop.is_none()
+                        && view.opening_project.is_none()
+                    {
                         window.activate_window();
                         view.open_project_at(path.clone(), cx);
                         true

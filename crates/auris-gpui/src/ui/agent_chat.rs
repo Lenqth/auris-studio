@@ -2051,6 +2051,7 @@ impl AurisApp {
             .unwrap_or_default();
         serde_json::json!({
             "selected_track": self.selected_track.and_then(|id| project.track(id)).map(|track| &track.name),
+            "song_creation_reference": project.creation_brief,
             "selected_track_id": self.selected_track.map(|id| id.0),
             "selected_clip_id": self.selected_clip.map(|id| id.0),
             "selected_clips": clips, "selected_note_indices": notes,
