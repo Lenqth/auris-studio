@@ -3055,9 +3055,16 @@ impl AurisApp {
                     self.accept_agent_completion(&completions[selected].fill);
                     return true;
                 }
-                "enter" if completions[selected].fill != self.agent_chat.input.content() => {
+                "enter"
+                    if !event.keystroke.modifiers.shift
+                        && completions[selected].fill != self.agent_chat.input.content() =>
+                {
                     self.accept_agent_completion(&completions[selected].fill);
-                    return true;
+                    // A trailing space asks for an argument; a complete candidate can use
+                    // the same submission path as an already fully typed command.
+                    if completions[selected].fill.ends_with(' ') {
+                        return true;
+                    }
                 }
                 _ => {}
             }
@@ -5348,6 +5355,93 @@ mod tests {
             assert!(this.agent_chat.controls.rules_open);
             assert_eq!(this.agent_chat.pending_reload, Some(pending));
             assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn enter_submits_a_completed_slash_candidate(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.settings.agent.model.clear();
+            this.agent_chat.controls.rules_open = false;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/perm");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.controls.rules_open);
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn enter_completes_the_slash_command_before_requesting_its_argument(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/mod");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/mode ");
+        });
+        cx.simulate_input("p");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.policy.mode, Mode::Plan);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn tab_completes_a_slash_candidate_without_executing_it(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.controls.rules_open = false;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/perm");
+        cx.simulate_keystrokes("tab");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/permissions");
+            assert!(!this.agent_chat.controls.rules_open);
+        });
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.controls.rules_open);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn shift_enter_preserves_slash_text_and_inserts_a_newline(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/perm");
+        cx.simulate_keystrokes("shift-enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/perm\n");
         });
     }
 
