@@ -1,5 +1,6 @@
 //! Provider preflight, context budgeting and failed-call loop detection.
 use super::*;
+use crate::tool_failures::signature;
 use rig::agent::{
     CompletionCallAction, CompletionCallEvent, DispatchAction, DispatchEvent,
     InvalidToolCallAction, InvalidToolCallContext, ModelTurnAction, ModelTurnFinished,
@@ -71,7 +72,7 @@ fn validate_model(shown: &serde_json::Value, context: u32) -> Result<(), String>
 
 #[derive(Default)]
 struct State {
-    failures: BTreeMap<(String, String), usize>,
+    failures: crate::tool_failures::ToolFailures,
     invalid_calls: BTreeMap<(String, String), usize>,
     active_tools: usize,
     pending_request: Option<Vec<Message>>,
@@ -99,17 +100,14 @@ impl State {
 }
 
 fn record_tool_outcome(state: &mut State, key: (String, String), failed: bool) {
-    if failed {
-        *state.failures.entry(key).or_default() += 1;
-    } else {
-        state.failures.remove(&key);
-    }
+    state.failures.record(&key.0, &key.1, failed);
     state.active_tools = state.active_tools.saturating_sub(1);
 }
 
 /// Per-user-turn guard; the caller creates a new guard for each model/tool configuration.
 /// Successful calls reset that signature's failure count.
 pub(super) struct Guard {
+    pub(super) failure_limit: usize,
     context: Option<u32>,
     output_tokens: usize,
     schema_tokens: usize,
@@ -120,16 +118,6 @@ pub(super) struct Guard {
 
 /// A tool can render for longer than a model timeout. Only provider inactivity is bounded.
 pub(super) type Activity = Arc<Mutex<(Instant, usize)>>;
-
-fn signature(tool: &str, args: &str) -> (String, String) {
-    let normalized = serde_json::from_str::<serde_json::Value>(args)
-        .map(|mut v| {
-            v.sort_all_objects();
-            v.to_string()
-        })
-        .unwrap_or_else(|_| args.into());
-    (tool.into(), normalized)
-}
 
 /// Conservative minimum estimate for non-text payloads.
 pub(super) const OUTPUT_RESERVE: usize = 4096;
@@ -303,6 +291,7 @@ impl Guard {
             .map_err(|e| e.to_string())?;
         let serialized = serde_json::to_string(&definitions).map_err(|e| e.to_string())?;
         Ok(Self {
+            failure_limit: auris_session::AgentPreferences::default().tool_failure_limit(),
             context,
             bridge: None,
             output_tokens: output_tokens as usize,
@@ -464,9 +453,10 @@ impl AgentHook for Guard {
             ))
             .or_default();
         *attempts += 1;
-        if *attempts > 2 {
+        if *attempts > self.failure_limit {
+            let limit = self.failure_limit;
             return Some(InvalidToolCallAction::stop(format!(
-                "{} failed twice as an unavailable tool; stopping the repeated call. Earlier edits remain in the open document and may be unsaved.",
+                "{} failed {limit} times as an unavailable tool; stopping the repeated call. Earlier edits remain in the open document and may be unsaved. Send a new instruction to continue.",
                 event.tool_name
             )));
         }
@@ -483,15 +473,10 @@ impl AgentHook for Guard {
             return DispatchAction::proceed();
         };
         let mut state = self.state.lock().unwrap();
-        if state
-            .failures
-            .get(&signature(name, args))
-            .copied()
-            .unwrap_or(0)
-            >= 2
-        {
+        if state.failures.exhausted(name, args, self.failure_limit) {
+            let limit = self.failure_limit;
             return DispatchAction::stop(format!(
-                "{name} failed twice with identical arguments; stopping the repeated call. Correct the arguments or choose another approach. Earlier edits remain in the open document and may be unsaved."
+                "{name} failed {limit} times with identical arguments; stopping the repeated call. Correct the arguments or choose another approach. Earlier edits remain in the open document and may be unsaved. Send a new instruction to continue."
             ));
         }
         state.active_tools += 1;
@@ -607,6 +592,7 @@ mod tests {
         };
         state.observe_context(22_000);
         let guard = Guard {
+            failure_limit: 5,
             bridge: None,
             output_tokens: OUTPUT_RESERVE,
             context: Some(32768),
@@ -725,7 +711,7 @@ mod tests {
         };
         record_tool_outcome(&mut state, key.clone(), true);
         assert_eq!(state.active_tools, 0);
-        assert_eq!(state.failures.get(&key), Some(&1));
+        assert!(state.failures.exhausted(&key.0, &key.1, 1));
     }
 
     #[test]
@@ -740,6 +726,7 @@ mod tests {
             Message::assistant("開きました"),
         ];
         let guard = Guard {
+            failure_limit: 5,
             bridge: None,
             output_tokens: OUTPUT_RESERVE,
             context: Some((4096 + history_tokens(&prompt, &newest)) as u32),
@@ -789,6 +776,7 @@ mod tests {
         ];
         let original = history.clone();
         let guard = Guard {
+            failure_limit: 5,
             bridge: None,
             output_tokens: OUTPUT_RESERVE,
             context: Some(1),

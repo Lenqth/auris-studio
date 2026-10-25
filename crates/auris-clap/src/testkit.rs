@@ -55,15 +55,24 @@ use clack_extensions::params::{
 };
 use clack_extensions::state::{PluginState, PluginStateImpl};
 use clack_extensions::timer::{HostTimer, PluginTimer, PluginTimerImpl, TimerId};
-use clack_plugin::events::Match;
 use clack_plugin::events::event_types::{
     MidiEvent, NoteChokeEvent, NoteExpressionEvent, NoteExpressionType, NoteOffEvent, NoteOnEvent,
     ParamValueEvent,
 };
+use clack_plugin::events::{Match, Pckn};
 use clack_plugin::prelude::*;
 use clack_plugin::stream::{InputStream, OutputStream};
 
 use crate::library::ClapLibrary;
+
+thread_local! {
+    static TONE_VALUE_READS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Number of direct tone-fixture value queries made on this thread.
+pub fn tone_value_read_count() -> u32 {
+    TONE_VALUE_READS.with(std::cell::Cell::get)
+}
 
 /// The fixture's CLAP id.
 pub const FIXTURE_ID: &str = "studio.auris.test.gain";
@@ -809,6 +818,12 @@ impl<'a> PluginAudioProcessor<'a, ToneShared, ToneMainThread<'a>> for ToneProces
                         1 => {
                             let amount = data[2] as f32 / 127.0;
                             self.shared.wheel.store(amount.to_bits(), Ordering::Relaxed);
+                            let _ = events.output.try_push(ParamValueEvent::new(
+                                0,
+                                ClapId::new(WHEEL_ID),
+                                Pckn::match_all(),
+                                f64::from(amount),
+                            ));
                         }
                         OUTPUT_BURST_CONTROLLER => emit_output_burst = true,
                         _ => {}
@@ -973,6 +988,7 @@ impl PluginMainThreadParams for ToneMainThread<'_> {
 
     fn get_value(&self, param_id: ClapId) -> Option<f64> {
         let read = |cell: &AtomicU32| f32::from_bits(cell.load(Ordering::Relaxed)) as f64;
+        TONE_VALUE_READS.with(|reads| reads.set(reads.get().saturating_add(1)));
         match param_id.get() {
             LEVEL_ID => Some(read(&self.shared.level)),
             BEND_ID => Some(read(&self.shared.bend)),

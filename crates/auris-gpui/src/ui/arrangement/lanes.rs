@@ -307,6 +307,11 @@ impl AurisApp {
                     cx,
                 ),
             )
+            .child(
+                div()
+                    .pr(self.scrollbar_width(ScrollPanel::Lanes))
+                    .child(self.time_scrollbar(ScrollPanel::ArrangementTime, cx)),
+            )
     }
 
     /// Removes open rows whose parameter disappeared with a plugin or track edit.

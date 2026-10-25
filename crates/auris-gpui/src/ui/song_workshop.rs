@@ -745,10 +745,10 @@ mod tests {
         });
         crate::harness::paint(&app, cx);
         crate::harness::click("workshop-field-1", cx);
-        cx.simulate_keystrokes("ctrl-a");
+        cx.simulate_keystrokes("secondary-a");
         cx.simulate_input("和風ジャズ");
         crate::harness::click("workshop-field-2", cx);
-        cx.simulate_keystrokes("ctrl-a");
+        cx.simulate_keystrokes("secondary-a");
         cx.simulate_input("静かな夜");
         app.update(cx, |this, _| {
             let s = this.song_workshop.as_mut().unwrap();

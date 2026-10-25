@@ -1080,6 +1080,11 @@ impl AurisApp {
                             )),
                     ),
             )
+            .child(
+                div()
+                    .pl(Metrics::KEYBOARD_WIDTH)
+                    .child(self.time_scrollbar(crate::ui::scrollbars::ScrollPanel::EditorTime, cx)),
+            )
             // The strips scroll among themselves once they would take more than half the panel.
             // A lane is seventy pixels and there are a hundred and twenty-nine of them to open:
             // without this, opening a fifth one squeezes the notes it is supposed to be shaping

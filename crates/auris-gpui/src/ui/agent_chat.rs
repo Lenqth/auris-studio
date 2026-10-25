@@ -1035,6 +1035,7 @@ pub(crate) struct AgentChat {
     /// Requested Ollama context, independent of the model's architectural maximum.
     pub(crate) context_tokens: u32,
     pub(crate) output_tokens: u32,
+    max_tool_failures: Option<u8>,
     /// Legacy Ollama thinking override.
     pub(crate) thinking: Option<bool>,
     /// Provider-native reasoning effort.
@@ -1173,6 +1174,7 @@ impl Default for AgentChat {
             auto_compact_percent: None,
             context_tokens: 32768,
             output_tokens: 4096,
+            max_tool_failures: None,
             thinking: None,
             effort: ReasoningEffort::Default,
             fast_mode: false,
@@ -1372,6 +1374,7 @@ impl AgentChat {
         self.auto_compact_percent = prefs.auto_compact_percent;
         self.context_tokens = prefs.context_tokens.unwrap_or(32768);
         self.output_tokens = prefs.output_tokens.unwrap_or(4096);
+        self.max_tool_failures = prefs.max_tool_failures;
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
         self.fast_mode = prefs.fast_mode;
@@ -1420,6 +1423,7 @@ impl AgentChat {
             auto_compact_percent: self.auto_compact_percent,
             context_tokens: Some(self.context_tokens),
             output_tokens: Some(self.output_tokens),
+            max_tool_failures: self.max_tool_failures,
             thinking: self.thinking,
             effort: self.effort,
             fast_mode: self.fast_mode,

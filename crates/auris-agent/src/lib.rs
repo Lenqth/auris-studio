@@ -7,6 +7,7 @@
 
 mod discovery;
 mod lyric_repair;
+mod tool_failures;
 pub use discovery::{ModelConnection, discover_models_background};
 mod attachments;
 pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
@@ -67,6 +68,8 @@ struct Options {
     key: Option<String>,
     /// The model-call budget for one prompt, counting every turn of the tool loop.
     max_turns: usize,
+    /// Failed executions allowed for each tool and argument signature.
+    tool_failure_limit: usize,
     /// The one-shot prompt; a conversation is opened instead when there is none.
     prompt: Option<String>,
     /// Audio files to send with the one-shot prompt, in the order given.
@@ -267,6 +270,7 @@ fn parse_args(
         model,
         key,
         max_turns,
+        tool_failure_limit: prefs.tool_failure_limit(),
         prompt,
         attachments,
         json,
@@ -1035,18 +1039,36 @@ impl AgentHook for Reporter {
     }
 }
 
-/// One prompt through the loop: ask, narrate, answer — and hand back the transcript so a
-/// conversation can keep it.
+/// Independent model, context and tool-failure budgets for one user turn.
+#[derive(Clone, Copy)]
+struct TurnLimits {
+    max_turns: usize,
+    context_tokens: Option<u32>,
+    output_tokens: u32,
+    tool_failures: usize,
+}
+
+impl From<&Options> for TurnLimits {
+    fn from(options: &Options) -> Self {
+        Self {
+            max_turns: options.max_turns,
+            context_tokens: options.context_limit(),
+            output_tokens: options.output_tokens,
+            tool_failures: options.tool_failure_limit,
+        }
+    }
+}
+
+/// Runs one prompt and returns the transcript for the next conversation turn.
 async fn converse_with_bridge(
     agent: &Agent,
     prompt: Message,
     mut history: Vec<Message>,
-    max_turns: usize,
+    limits: TurnLimits,
     bridge: Option<Bridge>,
-    context_tokens: Option<u32>,
-    output_tokens: u32,
 ) -> Result<(String, Vec<Message>, rig::completion::Usage, u64), String> {
-    let mut guard = runtime::Guard::new(agent, context_tokens, output_tokens).await?;
+    let mut guard = runtime::Guard::new(agent, limits.context_tokens, limits.output_tokens).await?;
+    guard.failure_limit = limits.tool_failures;
     let _visual_turn = worker::VisualTurn::new(bridge.clone());
     guard.bridge = bridge.clone();
     let omitted = guard.fit_history(&prompt, &mut history);
@@ -1064,8 +1086,10 @@ async fn converse_with_bridge(
     let request = agent
         .prompt(prompt)
         .history(history.clone())
-        .max_turns(max_turns)
-        .max_invalid_tool_call_retries(2)
+        .max_turns(limits.max_turns)
+        // Rig counts these retries across all signatures. The hook owns the per-call
+        // failure limit; keep Rig's aggregate budget aligned with the turn budget.
+        .max_invalid_tool_call_retries(limits.max_turns)
         .add_hook(guard);
     let request = request.add_hook(Reporter { bridge });
     let mut stream = request.stream();
@@ -1274,10 +1298,8 @@ async fn json_conversation(
             agent,
             message,
             history.clone(),
-            options.max_turns,
+            options.into(),
             Some(bridge.clone()),
-            options.context_limit(),
-            options.output_tokens,
         )
         .await
         {
@@ -1333,7 +1355,19 @@ async fn converse(
     _json: bool,
     context: Option<u32>,
 ) -> Result<(String, Vec<Message>, rig::completion::Usage, u64), String> {
-    converse_with_bridge(agent, prompt, history, max_turns, None, context, 4096).await
+    converse_with_bridge(
+        agent,
+        prompt,
+        history,
+        TurnLimits {
+            max_turns,
+            context_tokens: context,
+            output_tokens: 4096,
+            tool_failures: auris_session::AgentPreferences::default().tool_failure_limit(),
+        },
+        None,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -1885,10 +1919,11 @@ mod tests {
             &agent,
             Message::user("hello"),
             Vec::new(),
-            2,
+            TurnLimits {
+                max_turns: 2,
+                ..(&options).into()
+            },
             None,
-            options.context_limit(),
-            options.output_tokens,
         )
         .await
         .unwrap();
@@ -1910,10 +1945,11 @@ mod tests {
             &agent,
             Message::user("hello"),
             Vec::new(),
-            2,
+            TurnLimits {
+                max_turns: 2,
+                ..(&options).into()
+            },
             None,
-            options.context_limit(),
-            options.output_tokens,
         )
         .await
         .unwrap();
@@ -1947,10 +1983,11 @@ mod tests {
                 &agent,
                 Message::user("List the instruments"),
                 Vec::new(),
-                2,
+                TurnLimits {
+                    max_turns: 2,
+                    ..(&options).into()
+                },
                 None,
-                options.context_limit(),
-                options.output_tokens,
             )
             .await
             .unwrap_err();
@@ -2014,9 +2051,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn repeated_invalid_calls_stop_before_a_third_execution() {
+    async fn repeated_invalid_calls_allow_five_failures_before_stopping() {
         let call = r#"{"role":"assistant","tool_calls":[{"id":"bad","type":"function","function":{"name":"mixer_graph","arguments":"{}"}}]}"#;
-        let (url, seen) = mock_server(vec![completion(call, "tool_calls"); 3]);
+        let (url, seen) = mock_server(vec![completion(call, "tool_calls"); 6]);
         let Command::Run(options) = parse(
             &format!("--provider openai --model mock --url {url}"),
             &no_env,
@@ -2035,11 +2072,92 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(error.contains("failed twice"), "{error}");
+        assert!(error.contains("failed 5 times"), "{error}");
         let requests = seen.lock().unwrap();
-        assert_eq!(requests.len(), 3);
+        assert_eq!(requests.len(), 6);
         assert!(requests[1].contains("missing field"));
         assert!(requests[1].contains("Check the tool schema"));
+    }
+
+    #[tokio::test]
+    async fn configured_failure_budget_allows_recovery_after_multiple_errors() {
+        let bad = r#"{"role":"assistant","tool_calls":[{"id":"bad","type":"function","function":{"name":"mixer_graph","arguments":"{}"}}]}"#;
+        let corrected = r#"{"role":"assistant","tool_calls":[{"id":"good","type":"function","function":{"name":"capabilities","arguments":"{}"}}]}"#;
+        for (limit, failures, succeeds) in [(5, 4, true), (2, 3, false)] {
+            let mut responses = vec![completion(bad, "tool_calls"); failures];
+            responses.push(completion(corrected, "tool_calls"));
+            responses.push(completion(
+                r#"{"role":"assistant","content":"Recovered"}"#,
+                "stop",
+            ));
+            let (url, seen) = mock_server(responses);
+            let prefs = auris_session::AgentPreferences {
+                model: "mock".into(),
+                provider: "openai".into(),
+                url,
+                max_tool_failures: Some(limit),
+                ..Default::default()
+            };
+            let Command::Run(options) = parse_args(&[], &no_env, &prefs).unwrap() else {
+                panic!()
+            };
+            let agent = build_agent(&options).unwrap();
+            let answer = converse_with_bridge(
+                &agent,
+                Message::user("Try again"),
+                Vec::new(),
+                (&options).into(),
+                None,
+            )
+            .await;
+            if succeeds {
+                assert_eq!(answer.unwrap().0, "Recovered");
+                assert_eq!(seen.lock().unwrap().len(), failures + 2);
+            } else {
+                assert!(answer.unwrap_err().contains("failed 2 times"));
+                assert_eq!(seen.lock().unwrap().len(), 3);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn different_unavailable_tools_do_not_share_a_failure_budget() {
+        let mut responses = Vec::new();
+        for index in 0..4 {
+            let call = serde_json::json!({"role":"assistant", "tool_calls":[{
+                "id":format!("bad-{index}"), "type":"function",
+                "function":{"name":format!("missing_{index}"),"arguments":"{}"}
+            }]})
+            .to_string();
+            responses.push(completion(&call, "tool_calls"));
+        }
+        responses.push(completion(
+            r#"{"role":"assistant","content":"Recovered"}"#,
+            "stop",
+        ));
+        let (url, seen) = mock_server(responses);
+        let prefs = auris_session::AgentPreferences {
+            model: "mock".into(),
+            provider: "openai".into(),
+            url,
+            max_tool_failures: Some(1),
+            ..Default::default()
+        };
+        let Command::Run(options) = parse_args(&[], &no_env, &prefs).unwrap() else {
+            panic!()
+        };
+        let agent = build_agent(&options).unwrap();
+        let result = converse_with_bridge(
+            &agent,
+            Message::user("Use a valid tool"),
+            Vec::new(),
+            (&options).into(),
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.0, "Recovered");
+        assert_eq!(seen.lock().unwrap().len(), 5);
     }
 
     #[tokio::test]
@@ -2090,7 +2208,7 @@ mod tests {
                 }]
             })
             .to_string();
-            let (url, seen) = mock_server(vec![completion(&call, "tool_calls"); 3]);
+            let (url, seen) = mock_server(vec![completion(&call, "tool_calls"); 6]);
             let Command::Run(options) = parse(
                 &format!("--provider openai --model mock --url {url}"),
                 &no_env,
@@ -2109,9 +2227,9 @@ mod tests {
             )
             .await
             .unwrap_err();
-            assert!(error.contains("failed twice"), "{error}");
+            assert!(error.contains("failed 5 times"), "{error}");
             let requests = seen.lock().unwrap();
-            assert_eq!(requests.len(), 3);
+            assert_eq!(requests.len(), 6);
             if tool == "mixer_graph" {
                 assert!(requests[1].contains("unknown field"));
                 assert!(requests[1].contains("project"));
@@ -2148,6 +2266,7 @@ mod tests {
             model: "mock".to_string(),
             key: Some("test-key".to_string()),
             max_turns: 5,
+            tool_failure_limit: 5,
             prompt: None,
             attachments: Vec::new(),
             json: false,
@@ -2214,6 +2333,7 @@ mod tests {
             model: "mock".to_string(),
             key: Some("test-key".to_string()),
             max_turns: 5,
+            tool_failure_limit: 5,
             prompt: None,
             attachments: Vec::new(),
             json: false,
