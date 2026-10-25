@@ -7,6 +7,43 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.12.0 — 2026-10-25
+
+### Projects and getting started
+
+* **Open multiple projects in separate windows.** Each window keeps its own document and
+  conversation; realtime audio belongs to one project at a time.
+* Choose a new or recent project at startup, and use the first-run guide to configure audio,
+  agents, recording input, singing voices and appearance.
+* Browse agent settings in collapsible provider sections with logos, identify providers in
+  model selection, and use larger startup icons with consistently sized action buttons.
+* **Preserve singer voices when saving a project copy.** Save As keeps voice-model references
+  usable in the new folder instead of leaving singing clips unable to synthesize.
+
+### AI song production and listening
+
+* **Develop song ideas in the AI song workshop.** Generate candidates, audition them before
+  adoption, and refine editable drafts with vocals and chosen sound sources. The original
+  request remains available as a reference for later edits.
+* Automatically choose a reachable local audio reviewer, request confirmation before loading
+  a model, and distinguish connection, model and configuration failures. Music Flamingo reviews
+  use short free-text feedback.
+* Keep full original lyrics as singing clip names, and expand the composition skill with vocal
+  production and post-composition arrangement workflows.
+
+### Editing and agent reliability
+
+* Navigate the arrangement, piano roll and drum editor with horizontal scrollbars using an
+  ordinary mouse.
+* Configure tool-failure limits, and allow Claude to recover from failed tool calls within
+  that budget. Supported agent backends also expose their native fast-mode controls.
+* Fix Enter submission of agent slash commands, and keep active CLAP parameter displays from
+  waiting on the plugin's audio-processing lock.
+* Add Japanese README and documentation, with instructions for installing the composition skill.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.11.1.
+Windows v0.10.0 and v0.11.0 still require one manual upgrade using the Windows installer.
+
 ## 0.11.1 — 2026-10-25
 
 ### Automatic updates
