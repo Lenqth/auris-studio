@@ -502,6 +502,11 @@ impl Session {
     /// Idempotent, because both things that want a device — a take and a monitor — may want it at
     /// once and neither knows about the other.
     pub(super) fn open_input(&mut self) -> Result<(), SessionError> {
+        if self.audio_suspended {
+            return Err(SessionError::AudioRestart(
+                "Realtime audio belongs to another project".into(),
+            ));
+        }
         if self.input.is_some() {
             return Ok(());
         }

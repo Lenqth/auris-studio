@@ -116,6 +116,13 @@ pub fn composed_gain_db(part_gain_db: f32, sound: Option<auris_compose::gm::Soun
 }
 
 impl Session {
+    /// Preflights an external candidate instrument on the destination session thread.
+    pub(super) fn validate_candidate_source(
+        &mut self,
+        source: &auris_compose::spec::PartSource,
+    ) -> Result<(), SessionError> {
+        self.prepare_composed_source(Some(source)).map(|_| ())
+    }
     /// Replaces the document with a composed piece.
     ///
     /// One edit, not several hundred: building the project directly and swapping it in means the

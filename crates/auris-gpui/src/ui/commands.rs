@@ -1019,7 +1019,9 @@ impl AurisApp {
     /// the undo history, so the document on screen has to be dealt with before the picker opens
     /// rather than after a file has been chosen.
     pub(crate) fn open_project(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if self.confirm_discard(crate::ui::prompt::PendingAction::OpenProject) {
+        if crate::project_windows::installed(cx)
+            || self.confirm_discard(crate::ui::prompt::PendingAction::OpenProject)
+        {
             self.pick_and_open_project(cx);
         }
     }
@@ -1038,7 +1040,7 @@ impl AurisApp {
                 .await;
             let Some(handle) = handle else { return };
             let _ = this.update(cx, |this, cx| {
-                this.open_project_at(handle.path().to_path_buf(), cx);
+                this.open_project_window(handle.path().to_path_buf(), cx);
                 cx.notify();
             });
         })
@@ -1061,6 +1063,7 @@ impl AurisApp {
         else {
             return;
         };
+        self.opening_project = Some(std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone()));
         cx.notify();
         cx.spawn(async move |this, cx| {
             let loaded = cx
@@ -1071,9 +1074,11 @@ impl AurisApp {
                 if !this.finish_background_command(id) {
                     return;
                 }
+                this.opening_project = None;
                 match loaded {
                     Ok(Some(result)) => match this.session.continue_open_project(result) {
                         Some(missing) => {
+                            this.project_chooser = None;
                             this.agent_reset_conversation();
                             this.remember_recent(&path);
                             this.resync_selection();
@@ -1753,7 +1758,7 @@ impl AurisApp {
     /// Writes the voice folders out and makes the shelf look again.
     fn save_voice_paths(&mut self) {
         self.voices = None;
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3107,10 +3112,7 @@ impl AurisApp {
     ) {
         match drop_action(&paths) {
             DropAction::Open(path) => {
-                if self.confirm_discard(crate::ui::prompt::PendingAction::OpenDropped(path.clone()))
-                {
-                    self.open_project_at(path, cx);
-                }
+                self.open_project_window(path, cx);
             }
             DropAction::OpenMidi(path) => {
                 if self.confirm_discard(crate::ui::prompt::PendingAction::ImportMidi(path.clone()))
@@ -3235,7 +3237,7 @@ impl AurisApp {
     /// for. It is one small file and this happens twice an hour at most.
     pub(crate) fn remember_recent(&mut self, path: &std::path::Path) {
         self.settings.remember_recent(path);
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3243,7 +3245,7 @@ impl AurisApp {
     /// Forgets every project in the recent list.
     pub(crate) fn forget_recent(&mut self) {
         self.settings.recent.clear();
-        if let Err(error) = self.settings.save() {
+        if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
     }
@@ -3269,7 +3271,7 @@ impl AurisApp {
             let _ = this.update(cx, |this, cx| {
                 if !this.settings.plugin_paths.contains(&path) {
                     this.settings.plugin_paths.push(path);
-                    if let Err(error) = this.settings.save() {
+                    if let Err(error) = this.save_settings() {
                         this.settings.plugin_paths.pop();
                         this.set_failed_status(this.failure(Key::BrowserAddPluginFolder, &error));
                     } else {
@@ -3288,7 +3290,8 @@ impl AurisApp {
     /// is a browser listing, not a registry. What it does mean is that the file has to be found
     /// again before it can be added to anything new.
     pub(crate) fn forget_plugin_path(&mut self, path: &Path) -> Result<bool, SessionError> {
-        let removed = remove_plugin_path_and_save(&mut self.settings, path, Settings::save)?;
+        let save = self.settings_saver();
+        let removed = remove_plugin_path_and_save(&mut self.settings, path, save)?;
         if removed {
             self.invalidate_plugin_files();
         }

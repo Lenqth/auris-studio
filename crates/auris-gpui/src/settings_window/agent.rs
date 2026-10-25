@@ -53,7 +53,10 @@ impl AgentSettings {
 
 impl SettingsWindow {
     fn apply_agent(&mut self, cx: &mut Context<Self>) {
-        self.apply_agent_with(cx, |settings| settings.save());
+        let Ok(save) = self.app.update(cx, |app, _| app.settings_saver()) else {
+            return;
+        };
+        self.apply_agent_with(cx, save);
     }
 
     fn apply_agent_with<E>(

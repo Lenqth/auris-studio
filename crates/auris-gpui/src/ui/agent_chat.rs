@@ -673,7 +673,7 @@ pub(crate) struct ModelOption {
 }
 
 impl ModelOption {
-    fn label(&self) -> String {
+    pub(crate) fn label(&self) -> String {
         let name = self.display_name.as_deref().unwrap_or(&self.name);
         let name = if let Some(suffix) = name.strip_prefix("gpt-") {
             let mut words = suffix.split('-');
@@ -697,7 +697,7 @@ impl ModelOption {
         }
     }
 
-    fn matches(&self, prefs: &AgentPreferences) -> bool {
+    pub(crate) fn matches(&self, prefs: &AgentPreferences) -> bool {
         self.name == prefs.model
             && self
                 .connection
@@ -2055,6 +2055,7 @@ impl AurisApp {
             .unwrap_or_default();
         serde_json::json!({
             "selected_track": self.selected_track.and_then(|id| project.track(id)).map(|track| &track.name),
+            "song_creation_reference": project.creation_brief,
             "selected_track_id": self.selected_track.map(|id| id.0),
             "selected_clip_id": self.selected_clip.map(|id| id.0),
             "selected_clips": clips, "selected_note_indices": notes,
@@ -2925,7 +2926,7 @@ impl AurisApp {
     /// The child read its configuration at spawn, so a change means a new child; dropping the
     /// link is enough, because the next message spawns one.
     pub(crate) fn agent_apply_settings(&mut self) -> Result<(), auris_session::SessionError> {
-        self.agent_apply_settings_with(|settings| settings.save())
+        self.agent_apply_settings_with(self.settings_saver())
     }
 
     fn agent_apply_settings_with<E>(
@@ -3339,13 +3340,8 @@ impl AurisApp {
                                     &theme,
                                     cx.listener(|this, _, _, cx| {
                                         if let Some(path) = this.agent_chat.produced_project.clone()
-                                            && this.confirm_discard(
-                                                crate::ui::prompt::PendingAction::OpenDropped(
-                                                    path.clone(),
-                                                ),
-                                            )
                                         {
-                                            this.open_project_at(path, cx);
+                                            this.open_project_window(path, cx);
                                         }
                                     }),
                                 ))
@@ -3974,7 +3970,7 @@ impl AurisApp {
 
     /// Applies one model choice immediately, just like a pointer selection.
     fn choose_agent_model(&mut self, index: usize) {
-        let result = self.choose_agent_model_with(index, |settings| settings.save());
+        let result = self.choose_agent_model_with(index, self.settings_saver());
         if let Err(error) = result {
             let message = crate::i18n::error_text(&error, self.language());
             self.agent_chat.models_error = Some(message);
@@ -5194,6 +5190,8 @@ mod tests {
     ) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this,_| {
+            // Permission UI tests can persist rules in the shared test configuration.
+            this.settings.agent.policy = Default::default();
             this.settings.agent.policy.mode = Mode::Edit;
             let track = this.session.add_singer_track("Vocal");
             let clip = this.session.add_midi_clip(track,"Phrase",Ticks::ZERO,Ticks::QUARTER * 4).unwrap();

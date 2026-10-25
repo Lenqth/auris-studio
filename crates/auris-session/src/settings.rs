@@ -469,6 +469,8 @@ pub enum PianoRollGrid {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Whether the optional desktop setup guide has been dismissed or completed.
+    pub setup_guide_seen: bool,
     /// Audio backend preferences.
     pub audio: AudioPreferences,
     /// Interface language. `None` follows the system.
@@ -548,6 +550,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            setup_guide_seen: false,
             audio: AudioPreferences::default(),
             language: None,
             // Written out rather than derived, because `bool`'s own default is the wrong one here
@@ -682,6 +685,8 @@ impl Settings {
     }
 
     /// Writes the settings, creating the configuration directory if needed.
+    ///
+    /// Editors holding independent snapshots should use [`Self::save_changes`] instead.
     pub fn save(&self) -> Result<(), SessionError> {
         let path = Self::path();
         if let Some(parent) = path.parent() {
@@ -702,6 +707,66 @@ impl Settings {
         }
         write_config_bytes(&path, text.as_bytes())
             .map_err(|source| SessionError::SettingsWrite { path, source })
+    }
+
+    /// Saves only changes relative to an editor's previous snapshot.
+    ///
+    /// Unchanged fields retain the latest on-disk value, including individual fields inside
+    /// preference groups. Calls must be serialized by the application's UI thread.
+    pub fn save_changes(&self, previous: &Self) -> Result<(), SessionError> {
+        let latest = Self::load_for_update().map_err(|message| SessionError::SettingsWrite {
+            path: Self::path(),
+            source: std::io::Error::new(std::io::ErrorKind::InvalidData, message),
+        })?;
+        let current = serde_json::to_value(self).map_err(auris_io::IoError::from)?;
+        let previous = serde_json::to_value(previous).map_err(auris_io::IoError::from)?;
+        let mut merged = serde_json::to_value(latest).map_err(auris_io::IoError::from)?;
+        merge_settings_changes(&mut merged, &previous, &current);
+        let merged: Self = serde_json::from_value(merged).map_err(auris_io::IoError::from)?;
+        merged.save()
+    }
+}
+
+fn merge_settings_changes(
+    latest: &mut serde_json::Value,
+    previous: &serde_json::Value,
+    current: &serde_json::Value,
+) {
+    if previous == current {
+        return;
+    }
+    if let (Some(latest), Some(previous), Some(current)) = (
+        latest.as_object_mut(),
+        previous.as_object(),
+        current.as_object(),
+    ) {
+        for (key, value) in current {
+            if key == "recent"
+                && previous[key] != *value
+                && let (Some(added), Some(kept)) = (
+                    value.as_array(),
+                    latest.get(key).and_then(serde_json::Value::as_array),
+                )
+                && !added.is_empty()
+            {
+                let mut recent = added.clone();
+                for entry in kept {
+                    if !recent.contains(entry) {
+                        recent.push(entry.clone());
+                    }
+                }
+                recent.truncate(Settings::RECENT);
+                latest.insert(key.clone(), serde_json::Value::Array(recent));
+                continue;
+            }
+            merge_settings_changes(
+                latest.entry(key.clone()).or_insert(serde_json::Value::Null),
+                &previous[key],
+                value,
+            );
+        }
+    } else {
+        *latest = current.clone();
     }
 }
 
@@ -756,6 +821,23 @@ fn home() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn concurrent_settings_edits_preserve_other_windows_changes() {
+        let previous = serde_json::json!({"audio":{"device":"A","block_frames":256},"language":"en", "recent":[]});
+        let current = serde_json::json!({"audio":{"device":"A","block_frames":512},"language":"en", "recent":["B.auris"]});
+        let mut latest = serde_json::json!({"audio":{"device":"B","block_frames":256},"language":"ja", "recent":["A.auris"]});
+        super::merge_settings_changes(&mut latest, &previous, &current);
+        assert_eq!(
+            latest,
+            serde_json::json!({"audio":{"device":"B","block_frames":512},"language":"ja", "recent":["B.auris","A.auris"]})
+        );
+        let mut cleared = current.clone();
+        cleared["recent"] = serde_json::json!([]);
+        super::merge_settings_changes(&mut latest, &current, &cleared);
+        assert_eq!(latest["recent"], serde_json::json!([]));
+        assert_eq!(latest["audio"]["device"], "B");
+    }
+
     #[test]
     fn agent_prompt_defaults_and_unicode_survive_settings_round_trip() {
         let mut settings: super::Settings =

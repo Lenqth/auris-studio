@@ -1364,7 +1364,7 @@ impl VoiceSetupWindow {
                         && !app.settings.voice_paths.contains(&root)
                     {
                         app.settings.voice_paths.push(root);
-                        if let Err(error) = app.settings.save() {
+                        if let Err(error) = app.save_settings() {
                             log::warn!("could not save the voice folder: {error}");
                         }
                     }

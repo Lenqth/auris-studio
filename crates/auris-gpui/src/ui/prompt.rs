@@ -1601,7 +1601,7 @@ impl AurisApp {
             PendingAction::ImportMidiPicked => self.pick_and_import_midi(cx),
             PendingAction::StartRecording => self.toggle_recording(window, cx),
             PendingAction::CloseWindow => window.remove_window(),
-            PendingAction::Quit => crate::termination::quit(cx),
+            PendingAction::Quit => self.approve_quit(cx),
             PendingAction::RestartForUpdate => self.complete_update_restart(cx),
         }
     }
@@ -2234,6 +2234,9 @@ impl AurisApp {
         if let Some(browser) = self.song_library.as_mut() {
             return browser.focused.then_some(&mut browser.search);
         }
+        if let Some(workshop) = self.song_workshop.as_mut() {
+            return workshop.field_mut();
+        }
         // The lyrics box on the song sheet, while one holds the keyboard.
         if let Some(edit) = self.lyrics_edit.as_mut() {
             return Some(&mut edit.field);
@@ -2270,6 +2273,9 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         }
         if let Some(browser) = self.song_library.as_ref() {
             return browser.focused.then_some(&browser.search);
+        }
+        if let Some(workshop) = self.song_workshop.as_ref() {
+            return workshop.field();
         }
         if let Some(edit) = self.lyrics_edit.as_ref() {
             return Some(&edit.field);

@@ -76,7 +76,7 @@ impl AurisApp {
             ..Default::default()
         };
     }
-    fn release_physical_preview(&mut self) {
+    pub(crate) fn release_physical_preview(&mut self) {
         if self.physical_view.playing {
             if let Some((track, _)) = self.physical_view.source.as_ref() {
                 self.session.note_off(*track, self.physical_view.pitch);
@@ -122,10 +122,12 @@ impl AurisApp {
             self.poll_physical_view();
         }
     }
-    fn toggle_physical_preview(&mut self) {
+    fn toggle_physical_preview(&mut self, cx: &mut Context<Self>) {
         if self.physical_view.playing {
             self.release_physical_preview();
-        } else if let Some((track, _)) = &self.physical_view.source {
+        } else if self.acquire_audio(cx)
+            && let Some((track, _)) = &self.physical_view.source
+        {
             self.session.note_on(*track, self.physical_view.pitch, 0.75);
             if self.physical_view.drum_preview {
                 // A drum preview is a strike, so the same button can immediately strike again.
@@ -135,7 +137,7 @@ impl AurisApp {
             }
         }
     }
-    fn transpose_physical_preview(&mut self, delta: i16) {
+    fn transpose_physical_preview(&mut self, delta: i16, cx: &mut Context<Self>) {
         let playing = self.physical_view.playing;
         self.release_physical_preview();
         self.physical_view.pitch = if self.physical_view.drum_preview {
@@ -144,7 +146,7 @@ impl AurisApp {
             (i16::from(self.physical_view.pitch) + delta).clamp(24, 96) as u8
         };
         if playing {
-            self.toggle_physical_preview();
+            self.toggle_physical_preview(cx);
         }
     }
     pub(crate) fn physical_model_display(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -306,7 +308,7 @@ impl AurisApp {
                             theme.accent,
                             &theme,
                             cx.listener(|this, _, _, cx| {
-                                this.transpose_physical_preview(-12);
+                                this.transpose_physical_preview(-12, cx);
                                 cx.notify();
                             }),
                         ))
@@ -318,7 +320,7 @@ impl AurisApp {
                             theme.accent,
                             &theme,
                             cx.listener(|this, _, _, cx| {
-                                this.toggle_physical_preview();
+                                this.toggle_physical_preview(cx);
                                 cx.notify();
                             }),
                         ))
@@ -334,7 +336,7 @@ impl AurisApp {
                             theme.accent,
                             &theme,
                             cx.listener(|this, _, _, cx| {
-                                this.transpose_physical_preview(12);
+                                this.transpose_physical_preview(12, cx);
                                 cx.notify();
                             }),
                         )),
@@ -1082,7 +1084,7 @@ mod tests {
                 .unwrap();
             app.open_plugin_window(PluginSubject::Instrument(physical));
             app.poll_physical_view();
-            app.toggle_physical_preview();
+            app.toggle_physical_preview(cx);
             assert!(app.physical_view.playing);
             app.physical_view.effects_disabled = true;
             app.physical_view.accept_frame(MotionFrame {

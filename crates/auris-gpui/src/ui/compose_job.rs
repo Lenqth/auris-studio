@@ -255,7 +255,7 @@ impl AurisApp {
             Some(lufs) => format!("{written} · {}", messages::mixed_to(language, lufs)),
             None => written,
         });
-        if play_after {
+        if play_after && self.acquire_audio(cx) {
             self.session.seek(Ticks::ZERO);
             self.session.play();
         }
