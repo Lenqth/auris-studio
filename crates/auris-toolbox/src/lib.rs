@@ -98,7 +98,7 @@ pub struct ProjectArgs {
 pub const INSTRUCTIONS: &str = "Control Auris Studio saved projects. Respond in the user's language.
 Use project_id from open_project/create_project or an absolute project path. Dependent edits run sequentially.
 Call inspect_project for stable numeric addresses: tracks[].track identifies a track, tracks[].clips[].clip identifies a clip. Copy the returned clip for read_notes and edit_notes; a track ID cannot address its clips. read_notes returns exact clip-relative integer
-start_tick/length_ticks, full velocity and a content revision. edit_notes accepts expected_revision plus
+start_tick/length_ticks, full velocity, original storage index and stable timeline_index (sort by timeline_index for time order; ties use storage index), plus a content revision. Pages retain storage order so edit indices stay valid. edit_notes accepts expected_revision plus
 one or several edits with kind patch (add/remove/update) or replace (complete notes). Original indices
 are zero-based storage indices. Read again after edits. Use input {kind:inline,edits:[...]} for typed note objects or input {kind:file,source_path:absolute_local_path} for a large local JSON array. expected_revision is always top-level. Velocity is normalized 0..1, never MIDI 0..127. Batch read_notes with up to eight returned clip addresses under one shared revision.
 

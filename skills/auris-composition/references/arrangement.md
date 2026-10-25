@@ -8,6 +8,8 @@ Save a baseline project/specification and a short preview when available. Inspec
 
 For each proposed change, name its purpose and range: for example, leave space for verse lyrics, make the refrain open up, or prepare the loop return. Keep recognizable hooks, authored melody/lyrics, and intentional harmonic tensions. Reharmonization or replacing the main theme is a separate creative choice, not an automatic consequence of arranging.
 
+Separate weight, subdivision, attack grid, roughness and density instead of deriving all five from a genre name. If the user asks for simple on-beat backing, do not substitute a stereotypical off-beat bass pattern or quantize the singer and solo with the drums. Keep the user's latest hand edits as the protected baseline. Add complementary roles only in sections that need them: for example a sub, midrange bass articulation, octave support or later harmony can provide thickness without continuously stacking every layer. Compare at similar loudness; greater LUFS or band energy does not prove a better arrangement.
+
 ## Choose techniques that solve the actual problem
 
 Read [arrangement-design.md](arrangement-design.md) when selecting an ensemble, writing bass/inner voices or an interlude, or deciding what an effect should contribute. Use [melody-design.md](melody-design.md) for an authorized foreground rewrite; the arrangement pass itself preserves the authored lead.
@@ -60,6 +62,8 @@ Inspect `discover_tools`/`tool_help` for the actual host and obtain current IDs/
 - Use advertised note and clip tools for authored voicings, rests, fills, and counterlines. Discover `arrangement` operations before using them; the tool name does not mean it automatically completes this musical pass. Keep unrelated tracks and protected material unchanged.
 - Read `inspect_performance` before `set_performance`. Change only intended settings, read back effective results and unsupported/bypassed reasons, then render the affected phrase. Use actual parameter metadata for instrument controls and automation; do not translate a tutorial's MIDI controls by name alone.
 - Balance levels, panning, and sends after the parts work together. Discover `mixer_graph`, `automation`, or other advertised mixing tools as needed. Avoid using normalization, widening, or effects as a substitute for resolving conflicting parts. For vocals, follow [vocals.md](vocals.md); refresh synthesis when score/performance changes make a take stale.
+
+For a small mix change, audition the affected range and its dependent routing first. A kick change can affect a sidechain destination; shared nonlinear processing can invalidate an apparently untouched bus. Do not re-synthesize an unchanged singer merely because a fader moved. Keep the final full-song verification even when intermediate checks use short ranges.
 
 ## Review before delivery
 

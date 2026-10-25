@@ -382,30 +382,32 @@ fn response_json(
             }
         ));
     }
-    parsed.map_err(|error| format!("invalid audio reviewer response: {error}"))
+    parsed.map_err(|error| {
+        format!("[audio_critic_invalid_response] invalid audio reviewer response: {error}")
+    })
 }
 
 fn review_text(response: &Value) -> Result<String, String> {
     let choice = response
         .pointer("/choices/0")
-        .ok_or("audio reviewer returned no choice")?;
+        .ok_or("[audio_critic_invalid_response] audio reviewer returned no choice")?;
     if let Some(reason) = choice.get("finish_reason").and_then(Value::as_str)
         && reason != "stop"
     {
         return Err(match reason {
-            "length" => "audio reviewer reached its output-token limit before finishing; no complete listening result is available. Retry with a shorter focus or a request for a briefer review, or increase the audio server's output-token limit.".into(),
-            _ => "audio reviewer did not complete its review; no listening result is available".into(),
+            "length" => "[audio_critic_invalid_response] audio reviewer reached its output-token limit before finishing; no complete listening result is available. Retry with a shorter focus or a request for a briefer review, or increase the audio server's output-token limit.".into(),
+            _ => "[audio_critic_invalid_response] audio reviewer did not complete its review; no listening result is available".into(),
         });
     }
     let message = choice
         .get("message")
-        .ok_or("audio reviewer returned no message")?;
+        .ok_or("[audio_critic_invalid_response] audio reviewer returned no message")?;
     if message
         .get("refusal")
         .and_then(Value::as_str)
         .is_some_and(|value| !value.trim().is_empty())
     {
-        return Err("audio reviewer refused the request".into());
+        return Err("[audio_critic_invalid_response] audio reviewer refused the request".into());
     }
     let review = match message.get("content") {
         Some(Value::String(text)) => text.clone(),
@@ -419,7 +421,7 @@ fn review_text(response: &Value) -> Result<String, String> {
     };
     if review.trim().is_empty() {
         return Err(
-            "audio reviewer returned no review; reasoning text alone is not a listening result"
+            "[audio_critic_invalid_response] audio reviewer returned no review; reasoning text alone is not a listening result"
                 .into(),
         );
     }

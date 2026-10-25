@@ -123,6 +123,13 @@ confirms or intentionally resists the expectation. Do not “humanize” a line 
 randomly moving every onset: vary a phrase-level gate, velocity, or one selected
 anticipation and compare it with the grid version.
 
+An on-beat entrance can supply the intended drive; a pickup or delayed entry is
+not inherently more natural or expressive. When a listener values the existing
+rhythmic feel, keep that entrance and the word group's attack pattern as the
+baseline. Repair a crowded phrase locally before delaying every line or enlarging
+every gap. Breathability, intelligibility and groove are separate listening
+questions; improving one is not evidence that the others improved.
+
 For lyrics, map stressed words or important Japanese mora to a meaningful beat,
 long vowel, or melodic arrival. Leave consonant-heavy material enough attack
 time and place breaths at phrase boundaries or deliberate internal rests. Test
