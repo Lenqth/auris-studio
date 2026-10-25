@@ -413,7 +413,14 @@ pub fn render_score_with_origins(
 /// Resolve saved pronunciation without replacing an unreadable word by a placeholder vowel.
 fn score_lyric(lyric: &str, phonemes: &[String]) -> String {
     let lyric = lyric.trim();
-    if lyric == "+" || lyric.is_empty() || (lyric != "ー" && crate::kana_phonemes(lyric).is_none())
+    // A phrase's original spelling may live on its first single-mora note.
+    // Keep ordinary kana score labels, including their script, unchanged.
+    let phrase_on_one_mora = crate::split_kana_lyric(lyric).is_some_and(|moras| moras.len() > 1)
+        && crate::phoneme_moras(phonemes).len() == 1;
+    if lyric == "+"
+        || lyric.is_empty()
+        || phrase_on_one_mora
+        || (lyric != "ー" && crate::kana_phonemes(lyric).is_none())
     {
         crate::kana::phonemes_to_kana(phonemes).unwrap_or_else(|| match lyric {
             "" | "+" => "ア".to_string(),
@@ -756,6 +763,31 @@ mod tests {
         );
         assert_eq!(track.clips[0].notes[0].lyric, "光");
         assert_eq!(track.clips[0].notes[1].lyric, "+");
+    }
+
+    #[test]
+    fn a_full_written_phrase_does_not_repeat_on_its_first_note() {
+        for surface in ["さくら さいた", "サクラ", "桜、咲いた！"] {
+            let mut first = sung(60, 0.0, 1.0, &["s", "a"]);
+            first.lyric = surface.into();
+            let mut second = sung(62, 1.0, 1.0, &["k", "ɯ"]);
+            second.lyric = "+".into();
+            let track = track(vec![first, second]);
+            let score = render_score(&track, &map());
+            let lyrics: Vec<_> = score
+                .notes
+                .iter()
+                .filter(|note| note.key.is_some())
+                .map(|note| note.lyric.as_str())
+                .collect();
+            assert_eq!(lyrics, ["さ", "く"]);
+            assert_eq!(track.clips[0].notes[0].lyric, surface);
+        }
+        // An intentionally multi-mora note still sings its full saved pronunciation.
+        assert_eq!(
+            score_lyric("さくら", &crate::kana_phonemes("さくら").unwrap()),
+            "さくら"
+        );
     }
 
     #[test]

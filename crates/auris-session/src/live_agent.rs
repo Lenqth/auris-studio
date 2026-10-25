@@ -327,7 +327,7 @@ pub enum Command {
         /// Exact speaker name; omit for the voice's default. Unknown names are refused with available names.
         speaker: Option<String>,
     },
-    /// Write lyrics across a singer clip's notes in time order. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Later unfilled notes keep their words. Returns filled count and available notes; one transaction. Use read_notes to verify before sing.
+    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Insufficient note slots are refused without editing; later unfilled notes keep their words. Returns filled count, available notes and full clip name; one transaction. Use read_notes to verify before sing.
     WriteLyrics {
         /// Stable singer clip ID.
         clip: u64,
@@ -813,7 +813,7 @@ impl Session {
                     .write_lyrics(ClipId(clip), indices, &text)
                     .map_err(error)?;
                 Ok(
-                    serde_json::json!({"filled":filled,"available":indices.len(),"unsaved":true})
+                    serde_json::json!({"filled":filled,"available":indices.len(),"clip_name":self.midi_clip(ClipId(clip)).map(|clip| &clip.name),"unsaved":true})
                         .to_string(),
                 )
             }

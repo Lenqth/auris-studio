@@ -497,6 +497,22 @@ impl Session {
                     });
                     sung += 1;
                 }
+                let original = spec.sections[&span.label].lyrics.trim();
+                let written: String = target
+                    .notes
+                    .iter()
+                    .map(|note| note.lyric.as_str())
+                    .collect();
+                if written != original {
+                    for (index, note) in target.notes.iter_mut().enumerate() {
+                        note.lyric = if index == 0 {
+                            original.to_owned()
+                        } else {
+                            super::singer::LYRIC_CONTINUATION.to_owned()
+                        };
+                    }
+                }
+                target.name = original.to_owned();
             }
             clips += 1;
         }
@@ -1063,9 +1079,9 @@ mod tests {
                 .unwrap()
                 .clips[0];
             let moras = auris_vocal::split_kana_lyric(words).unwrap();
+            assert_eq!(clip.name, words);
             assert_eq!(clip.notes.len(), moras.len());
-            for (note, (text, phonemes)) in clip.notes.iter().zip(moras) {
-                assert_eq!(note.lyric, text);
+            for (note, (_, phonemes)) in clip.notes.iter().zip(moras) {
                 assert_eq!(note.phonemes, phonemes);
                 assert!(note.start >= Ticks::ZERO && note.end() <= clip.length);
                 if phonemes == ["ʔ"] {
@@ -1212,9 +1228,9 @@ mod tests {
         let clips = &vocal.kind.as_singer().unwrap().clips;
         assert_eq!(clips.len(), 3);
         for repeated in &clips[1..] {
+            assert_ne!(repeated.name, clips[0].name);
             assert_eq!(repeated.notes.len(), clips[0].notes.len());
             for (original, note) in clips[0].notes.iter().zip(&repeated.notes) {
-                assert_ne!(original.lyric, note.lyric);
                 assert!(!note.phonemes.is_empty());
                 let mut musical = note.clone();
                 musical.lyric = original.lyric.clone();
@@ -1453,7 +1469,8 @@ mod tests {
             "one clip per playing of the lyrical section"
         );
         assert_eq!(clips[0].notes.len(), 6);
-        assert_eq!(clips[0].notes[0].lyric, "さ");
+        assert_eq!(clips[0].name, "さくら さいた");
+        assert_eq!(clips[0].notes[0].lyric, "さくら さいた");
         assert!(clips[0].notes.iter().all(|note| !note.phonemes.is_empty()));
         assert!(clips[0].notes[0].scoop.is_some(), "the phrase scoops in");
         assert!(

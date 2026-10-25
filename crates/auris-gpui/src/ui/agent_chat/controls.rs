@@ -320,6 +320,29 @@ impl AurisApp {
         self.focus_agent_field(AgentField::Chat);
     }
 
+    pub(super) fn agent_fast_mode(&mut self) {
+        if let Err(error) = self.agent_fast_mode_with(|settings| settings.save()) {
+            self.agent_chat
+                .push_entry(ChatEntry::Error(error.to_string()));
+        }
+        self.focus_agent_field(AgentField::Chat);
+    }
+
+    pub(super) fn agent_fast_mode_with<E>(
+        &mut self,
+        save: impl FnOnce(&auris_session::Settings) -> Result<(), E>,
+    ) -> Result<(), E> {
+        if self.agent_operation_busy() || !self.agent_chat.preferences().supports_fast_mode() {
+            return Ok(());
+        }
+        self.agent_chat.fast_mode = !self.agent_chat.fast_mode;
+        if let Err(error) = self.agent_write_through_with(save) {
+            self.agent_chat.fast_mode = !self.agent_chat.fast_mode;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     fn permission_result(&mut self, id: u64, ok: bool, reason: &str) {
         let wire =
             serde_json::json!({"event":"permission_result", "id":id, "ok":ok, "reason":reason});

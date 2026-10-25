@@ -1004,6 +1004,7 @@ pub(crate) struct AgentChat {
     pub(crate) thinking: Option<bool>,
     /// Provider-native reasoning effort.
     pub(crate) effort: ReasoningEffort,
+    pub(crate) fast_mode: bool,
     /// The transcript, oldest first.
     pub(crate) entries: Vec<ChatEntry>,
     /// The message being written.
@@ -1139,6 +1140,7 @@ impl Default for AgentChat {
             output_tokens: 4096,
             thinking: None,
             effort: ReasoningEffort::Default,
+            fast_mode: false,
             entries: Vec::new(),
             input: TextField::new(String::new()),
             chosen_model: String::new(),
@@ -1337,6 +1339,7 @@ impl AgentChat {
         self.output_tokens = prefs.output_tokens.unwrap_or(4096);
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
+        self.fast_mode = prefs.fast_mode;
         self.provider_openai = prefs.provider.trim() == "openai";
         self.discovery_endpoint = prefs.discovery_endpoint.clone();
         self.backend = prefs.backend.clone();
@@ -1384,6 +1387,7 @@ impl AgentChat {
             output_tokens: Some(self.output_tokens),
             thinking: self.thinking,
             effort: self.effort,
+            fast_mode: self.fast_mode,
             provider: match self.provider_openai {
                 true => "openai".to_string(),
                 false => "ollama".to_string(),
@@ -3051,9 +3055,16 @@ impl AurisApp {
                     self.accept_agent_completion(&completions[selected].fill);
                     return true;
                 }
-                "enter" if completions[selected].fill != self.agent_chat.input.content() => {
+                "enter"
+                    if !event.keystroke.modifiers.shift
+                        && completions[selected].fill != self.agent_chat.input.content() =>
+                {
                     self.accept_agent_completion(&completions[selected].fill);
-                    return true;
+                    // A trailing space asks for an argument; a complete candidate can use
+                    // the same submission path as an already fully typed command.
+                    if completions[selected].fill.ends_with(' ') {
+                        return true;
+                    }
                 }
                 _ => {}
             }
@@ -4158,6 +4169,27 @@ impl AurisApp {
                         cx,
                     )),
             )
+            .when(self.agent_chat.preferences().supports_fast_mode(), |row| {
+                row.child(
+                    button_enabled(
+                        "agent-fast-mode",
+                        self.t(Key::AgentFastMode).to_owned(),
+                        ButtonStyle::Ghost,
+                        ButtonState::available(self.agent_chat.fast_mode, enabled),
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.agent_fast_mode();
+                            cx.notify();
+                        }),
+                    )
+                    .tooltip(crate::ui::tooltip::keyed_tip(
+                        self.t(Key::AgentFastModeHelp).to_owned(),
+                        "",
+                        &theme,
+                    )),
+                )
+            })
             .when(self.agent_chat.model_menu && enabled, |this| {
                 let names = self
                     .agent_chat
@@ -5323,6 +5355,93 @@ mod tests {
             assert!(this.agent_chat.controls.rules_open);
             assert_eq!(this.agent_chat.pending_reload, Some(pending));
             assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn enter_submits_a_completed_slash_candidate(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.settings.agent.model.clear();
+            this.agent_chat.controls.rules_open = false;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/perm");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.controls.rules_open);
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn enter_completes_the_slash_command_before_requesting_its_argument(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/mod");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/mode ");
+        });
+        cx.simulate_input("p");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.policy.mode, Mode::Plan);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn tab_completes_a_slash_candidate_without_executing_it(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.controls.rules_open = false;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/perm");
+        cx.simulate_keystrokes("tab");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/permissions");
+            assert!(!this.agent_chat.controls.rules_open);
+        });
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert!(this.agent_chat.controls.rules_open);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn shift_enter_preserves_slash_text_and_inserts_a_newline(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/perm");
+        cx.simulate_keystrokes("shift-enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/perm\n");
         });
     }
 
@@ -7059,6 +7178,64 @@ mod tests {
         crate::harness::paint(&app, cx);
         let menu = cx.debug_bounds("agent-effort-option-popup").unwrap();
         assert!(menu.bottom() <= effort.top());
+    }
+
+    #[gpui::test]
+    fn fast_mode_visibility_and_preferences_follow_the_connection(cx: &mut gpui::TestAppContext) {
+        for (backend, supported) in [
+            ("codex", true),
+            ("claude", true),
+            ("opencode", false),
+            ("antigravity", false),
+            ("rig", false),
+        ] {
+            // GPUI 0.2 retains debug bounds for removed elements; use a fresh window per route.
+            let (app, cx) = crate::harness::open(cx);
+            app.update(cx, |this, _| {
+                this.panels.show(crate::dock::Panel::Agent);
+                this.settings.agent = AgentPreferences {
+                    backend: backend.into(),
+                    model: "test".into(),
+                    fast_mode: true,
+                    effort: ReasoningEffort::High,
+                    ..Default::default()
+                };
+                this.agent_chat
+                    .load_preferences(&this.settings.agent.clone());
+                this.agent_chat.models_loaded = true;
+                this.agent_chat.busy = true;
+                assert!(this.agent_chat.preferences().fast_mode);
+                assert_eq!(this.agent_chat.preferences().effort, ReasoningEffort::High);
+            });
+            crate::harness::paint(&app, cx);
+            assert_eq!(cx.debug_bounds("agent-fast-mode").is_some(), supported);
+            if supported {
+                crate::harness::click("agent-fast-mode", cx);
+                app.read_with(cx, |this, _| assert!(this.agent_chat.fast_mode));
+            }
+        }
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent = AgentPreferences {
+                backend: "codex".into(),
+                model: "test".into(),
+                effort: ReasoningEffort::High,
+                ..Default::default()
+            };
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.busy = false;
+            this.agent_fast_mode_with(|settings| {
+                assert!(settings.agent.fast_mode);
+                assert_eq!(settings.agent.effort, ReasoningEffort::High);
+                Ok::<(), &str>(())
+            })
+            .unwrap();
+            assert!(this.settings.agent.fast_mode);
+            assert!(this.agent_fast_mode_with(|_| Err("write failed")).is_err());
+            assert!(this.agent_chat.fast_mode);
+            assert!(this.settings.agent.fast_mode);
+        });
     }
 
     #[gpui::test]

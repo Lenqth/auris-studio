@@ -374,6 +374,9 @@ pub struct AgentPreferences {
     pub thinking: Option<bool>,
     /// Requested reasoning effort. `Default` keeps the provider or model default.
     pub effort: ReasoningEffort,
+    /// Request the backend's faster service tier independently of reasoning effort.
+    /// Availability and additional usage charges are determined by the provider.
+    pub fast_mode: bool,
     /// The API dialect: "ollama", or "openai" for any OpenAI-compatible endpoint. Empty means
     /// ollama.
     pub provider: String,
@@ -398,6 +401,17 @@ pub struct AgentEndpoint {
 }
 
 impl AgentPreferences {
+    /// Whether this connection exposes a native fast service tier.
+    pub fn supports_fast_mode(&self) -> bool {
+        matches!(self.backend.as_str(), "codex" | "claude")
+            || (matches!(self.backend.as_str(), "" | "rig")
+                && self.provider == "openai"
+                && (self.url.trim().is_empty()
+                    || url::Url::parse(self.url.trim()).is_ok_and(|url| {
+                        url.scheme() == "https" && url.host_str() == Some("api.openai.com")
+                    })))
+    }
+
     /// Whether enough is set for the agent to place a call at all.
     ///
     /// The model is the one field with no sensible default — everything else falls back.
@@ -883,6 +897,34 @@ mod tests {
         let settings = Settings::default();
         let text = serde_json::to_string(&settings).unwrap();
         assert_eq!(serde_json::from_str::<Settings>(&text).unwrap(), settings);
+    }
+
+    #[test]
+    fn fast_mode_defaults_off_and_is_available_only_for_native_connections() {
+        let old: AgentPreferences = serde_json::from_str(r#"{"model":"test"}"#).unwrap();
+        assert!(!old.fast_mode);
+        for (backend, provider, url, supported) in [
+            ("codex", "", "", true),
+            ("claude", "", "", true),
+            ("rig", "openai", "", true),
+            ("", "openai", "https://api.openai.com/v1", true),
+            ("rig", "openai", "https://example.com/v1", false),
+            ("rig", "ollama", "", false),
+            ("opencode", "", "", false),
+            ("antigravity", "", "", false),
+        ] {
+            let prefs = AgentPreferences {
+                backend: backend.into(),
+                provider: provider.into(),
+                url: url.into(),
+                fast_mode: true,
+                ..Default::default()
+            };
+            assert_eq!(prefs.supports_fast_mode(), supported);
+            let saved: AgentPreferences =
+                serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
+            assert_eq!(saved, prefs);
+        }
     }
 
     #[test]

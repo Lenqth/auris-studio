@@ -2113,6 +2113,8 @@ new のオプション
     AgentDropFiles { en: "Drop images, text or audio here", ja: "画像・テキスト・音声をここにドロップ" }
     AgentComposerPlaceholder { en: "Ask about this song, or drop reference files…", ja: "この曲について相談、または参考ファイルをドロップ…" }
     AgentEffortDefaultShort { en: "Auto", ja: "既定" }
+    AgentFastMode { en: "Fast", ja: "高速" }
+    AgentFastModeHelp { en: "Request fast mode for supported models. Additional usage charges may apply; reasoning effort stays unchanged.", ja: "対応モデルに高速モードを要求します。追加料金・使用量が発生する場合があります。推論量は変わりません。" }
     AgentEffortMinimalShort { en: "Min", ja: "最小" }
     AgentEffortMediumShort { en: "Med", ja: "中" }
     AgentEffortXhighShort { en: "XHigh", ja: "極高" }
