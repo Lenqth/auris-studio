@@ -89,6 +89,22 @@ same score are two takes. A fair comparison therefore synthesises the same query
 `frame_synthesis` is deterministic. Some confusions also occur without Auris: ぱ行 is heard as ば行
 in most takes sung directly through the Engine.
 
+## Long clips
+
+VOICEVOX prediction and decoding requests are limited to twenty seconds, including
+context and boundary rests. Longer clips are synthesized sequentially, preferring
+rests and note boundaries for cuts. Each window includes up to one second of real
+neighbouring music on either side. Sustained notes resume on their final sound when
+the window begins inside them; a short crossfade joins decoded windows. Lyrics are
+normalized before slicing, so multi-mora words and prolonged vowels retain their
+meaning across cuts. Saved notes, total duration, expression controls and the displayed
+pitch timeline keep their original positions. Cancellation is checked between prediction
+and decoding stages and before each window.
+
+The optional live regression
+`a_running_voicevox_engine_sings_a_long_score_in_bounded_windows` exercises a score
+longer than two minutes with a sustained syllable, multi-mora lyrics and pauses.
+
 ## Reproduction
 
 With the Engine running, set `AURIS_VOICEVOX_TEST_URL` to its URL and run:

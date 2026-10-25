@@ -2,7 +2,7 @@
 //!
 //! The session supplies frames and a lyric-bearing score through [`SingingBackend`].
 //! Inference runs off the realtime audio thread and returns audio for a saved take.
-//! ONNX backends split long songs into bounded chunks; saved takes preserve the performance.
+//! Backends split long songs into bounded chunks; saved takes preserve the performance.
 
 #![warn(missing_docs)]
 

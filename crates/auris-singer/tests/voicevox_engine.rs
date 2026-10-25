@@ -8,6 +8,74 @@ use auris_singer::{Acceleration, BackendKind, VoiceModel};
 use auris_vocal::{SingerFrames, SingerNote, SingerScore, render_expression_frames, render_score};
 
 #[test]
+fn a_running_voicevox_engine_sings_a_long_score_in_bounded_windows() {
+    let Ok(url) = std::env::var("AURIS_VOICEVOX_TEST_URL") else {
+        return;
+    };
+    let path = connection_path();
+    std::fs::write(
+        &path,
+        serde_json::json!({
+            "format_version": 1,
+            "url": url,
+            "styles": [{"name":"Normal", "query_style_id":6000, "decode_style_id":3002}],
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut model = VoiceModel::load(&path, Acceleration::Cpu).unwrap();
+    // More than two minutes, including a held syllable longer than one request,
+    // a multi-mora word, a prolonged vowel, short consonant gaps and a phrase pause.
+    let events = [
+        (2100, "カ"),
+        (100, "コーヒー"),
+        (150, "ー"),
+        (2, ""),
+        (100, "タ"),
+        (150, ""),
+        (1500, "ラ"),
+    ]
+    .repeat(3);
+    let score = SingerScore {
+        notes: events
+            .iter()
+            .map(|(length, lyric)| SingerNote {
+                key: (!lyric.is_empty()).then_some(60),
+                frame_length: *length,
+                lyric: (*lyric).into(),
+            })
+            .collect(),
+    };
+    let count = events.iter().map(|(length, _)| *length as usize).sum();
+    let frames = SingerFrames {
+        hop_seconds: model.info().hop_seconds(),
+        inventory: vec!["<sil>".into(), "a".into()],
+        phonemes: vec![1; count],
+        f0_hz: vec![261.625_55; count],
+        energy: vec![0.8; count],
+    };
+    let original = score.clone();
+    let mut steps = Vec::new();
+    let render = model
+        .sing_render_with(&frames, &score, 0, 0, |done, total| {
+            eprintln!("VOICEVOX long-score progress: {done}/{total}");
+            steps.push((done, total));
+            true
+        })
+        .unwrap();
+    assert_eq!(
+        render.samples.len(),
+        count * model.info().hop_length as usize
+    );
+    assert_eq!(render.backend_pitch.unwrap().hz.len(), count);
+    assert!(render.samples.iter().all(|sample| sample.is_finite()));
+    assert!(render.samples.iter().any(|sample| sample.abs() > 0.001));
+    assert!(steps.last().unwrap().1 >= 6);
+    assert_eq!(score, original);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn a_running_voicevox_engine_sings_a_score() {
     let Ok(url) = std::env::var("AURIS_VOICEVOX_TEST_URL") else {
         eprintln!("set AURIS_VOICEVOX_TEST_URL to run the VOICEVOX Engine smoke test");

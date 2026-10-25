@@ -1,5 +1,7 @@
 //! VOICEVOX Engine's score-query and frame-synthesis HTTP pipeline.
 
+mod chunks;
+
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 use std::net::IpAddr;
@@ -949,8 +951,7 @@ impl SingingBackend for VoicevoxBackend {
             backend: NAME,
             reason: "a lyric-bearing note score is required; raw frame files cannot be sung".into(),
         })?;
-        let style = self
-            .config
+        self.config
             .styles
             .get(speaker as usize)
             .ok_or(SingError::NoSuchSpeaker {
@@ -974,11 +975,85 @@ impl SingingBackend for VoicevoxBackend {
             return Ok(crate::SingingRender::default());
         }
         let hop = self.info.hop_length as usize;
-        checked_sample_count(frames.len(), hop, "VOICEVOX rendered audio")?;
+        let count = checked_sample_count(frames.len(), hop, "VOICEVOX rendered audio")?;
+        let plan = chunks::ChunkPlan::new(score, frames.len(), self.config.frame_rate);
+        if plan.cores.len() == 1 {
+            return self.sing_chunk(frames, score, speaker, seed, progress);
+        }
+        let total = plan.cores.len() * 2;
+        if !progress(0, total) {
+            return Err(SingError::Cancelled);
+        }
+        // Normalize on the complete score so mora splitting, prolonged vowels and
+        // lyric-error indices cannot depend on where an inference window starts.
+        let normalized = padded_score(score, plan.context as u32)?;
+        let mut samples = crate::limits::try_zeroed_f32(count, "VOICEVOX rendered audio")?;
+        let mut pitch = Vec::new();
+        pitch
+            .try_reserve_exact(frames.len())
+            .map_err(|_| SingError::Allocation {
+                resource: "VOICEVOX displayed pitch",
+            })?;
+        for (index, core) in plan.cores.iter().enumerate() {
+            let window = plan.window(core, frames.len());
+            let local_score = chunks::slice_score(
+                &normalized,
+                window.start + plan.context..window.end + plan.context,
+            );
+            let local_frames = chunks::slice_frames(frames, window.clone());
+            let render = self.sing_chunk(
+                &local_frames,
+                &local_score,
+                speaker,
+                seed,
+                &mut |done, _| progress(2 * index + done, total),
+            )?;
+            let local_start = core.start - window.start;
+            let keep_end = (core.end + plan.crossfade).min(frames.len());
+            let incoming = &render.samples[local_start * hop..(keep_end - window.start) * hop];
+            let overlap = if index == 0 { 0 } else { plan.crossfade * hop };
+            chunks::stitch_audio(
+                &mut samples[core.start * hop..keep_end * hop],
+                incoming,
+                overlap,
+            );
+            let local_pitch = render.backend_pitch.ok_or_else(|| {
+                SingError::Inference("VOICEVOX chunk did not return its pitch".into())
+            })?;
+            pitch.extend_from_slice(&local_pitch.hz[local_start..local_start + core.len()]);
+        }
+        Ok(crate::SingingRender {
+            samples,
+            backend_pitch: Some(auris_core::SingerPitch {
+                hop_seconds: frames.hop_seconds,
+                hz: pitch,
+            }),
+        })
+    }
+}
+
+impl VoicevoxBackend {
+    fn sing_chunk(
+        &mut self,
+        frames: &SingerFrames,
+        score: &SingerScore,
+        speaker: u32,
+        seed: u64,
+        progress: &mut dyn FnMut(usize, usize) -> bool,
+    ) -> Result<crate::SingingRender, SingError> {
+        let decode_style = self
+            .config
+            .styles
+            .get(speaker as usize)
+            .ok_or(SingError::NoSuchSpeaker {
+                speaker,
+                count: self.info.n_speakers,
+            })?
+            .decode_style_id;
+        let hop = self.info.hop_length as usize;
         if !progress(0, 2) {
             return Err(SingError::Cancelled);
         }
-        let decode_style = style.decode_style_id;
         let prepared = self.prepare_curves(frames, score, speaker, seed)?;
         let padding = prepared.leading_frames;
         let query_frames = prepared.pitch_hz.len();
@@ -1346,6 +1421,117 @@ mod tests {
         serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap()
     }
 
+    #[test]
+    fn long_scores_bound_every_request_and_preserve_audio_pitch_and_controls() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let mut lengths = Vec::new();
+            loop {
+                let (mut stream, _) = listener.accept().unwrap();
+                let request = read_request(&mut stream);
+                let body = request_body(&request);
+                let query_request = request.starts_with("POST /sing_frame_audio_query?");
+                let count = if query_request {
+                    body["notes"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|note| note["frame_length"].as_u64().unwrap() as usize)
+                        .sum()
+                } else {
+                    body["f0"].as_array().unwrap().len()
+                };
+                // Refuse the same oversized input that would endanger a real Engine.
+                if count > 1_875 {
+                    write!(stream, "HTTP/1.1 413 Payload Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                    break;
+                }
+                lengths.push(count);
+                if query_request {
+                    let query = json!({
+                        "f0": vec![440.0; count],
+                        "volume": vec![1.0; count],
+                        "phonemes": [{"phoneme": "a", "frame_length": count}],
+                    });
+                    answer(
+                        &mut stream,
+                        "application/json",
+                        &serde_json::to_vec(&query).unwrap(),
+                    );
+                } else {
+                    assert!(request.starts_with("POST /frame_synthesis?speaker=3001"));
+                    assert_eq!(body["volume"], json!(vec![1.0; count]));
+                    answer(&mut stream, "audio/wav", &wav(&vec![16_384; count * 256]));
+                    if body["f0"].as_array().unwrap().last().unwrap() == 880.0 {
+                        break;
+                    }
+                }
+            }
+            lengths
+        });
+        let path = temp_connection();
+        std::fs::write(
+            &path,
+            connection(
+                &format!("http://{address}"),
+                24_000,
+                93.75,
+                json!([{"name":"Normal", "query_style_id":6000, "decode_style_id":3001}]),
+            )
+            .to_string(),
+        )
+        .unwrap();
+        let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
+        let count = 4_000;
+        let mut frames = SingerFrames {
+            hop_seconds: 256.0 / 24_000.0,
+            inventory: vec!["<sil>".into(), "a".into()],
+            phonemes: vec![1; count],
+            f0_hz: vec![440.0; count],
+            energy: vec![0.5; count],
+        };
+        frames.f0_hz[count - 100..].fill(880.0);
+        let score = SingerScore {
+            notes: vec![SingerNote {
+                key: Some(69),
+                frame_length: count as u32,
+                lyric: "ア".into(),
+            }],
+        };
+        let original = score.clone();
+        let mut progress = Vec::new();
+        let rendered = backend.sing_render_with(&frames, Some(&score), 0, 0, &mut |done, total| {
+            progress.push((done, total));
+            true
+        });
+        let lengths = server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+        let rendered = rendered.unwrap();
+        assert!(
+            lengths.len() >= 6,
+            "prediction and decoding must both be split"
+        );
+        assert_eq!(rendered.samples, vec![0.25; count * 256]);
+        assert_eq!(
+            rendered.backend_pitch.unwrap().hz,
+            frames
+                .f0_hz
+                .iter()
+                .map(|hz| f64::from(*hz))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(score, original);
+        assert_eq!(progress.first().unwrap().0, 0);
+        let total = progress.last().unwrap().1;
+        assert_eq!(progress.last(), Some(&(total, total)));
+        assert!(
+            progress
+                .windows(2)
+                .all(|pair| pair[0].0 <= pair[1].0 && pair[0].1 == pair[1].1)
+        );
+    }
+
     fn temp_connection() -> PathBuf {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         std::env::temp_dir().join(format!(
@@ -1353,6 +1539,93 @@ mod tests {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ))
+    }
+
+    #[test]
+    fn a_long_render_can_be_cancelled_after_prediction_before_decoding() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            assert!(request.starts_with("POST /sing_frame_audio_query?"));
+            let count = request_body(&request)["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|note| note["frame_length"].as_u64().unwrap() as usize)
+                .sum::<usize>();
+            let query = json!({"f0": vec![440.0; count], "volume": vec![1.0; count],
+                "phonemes": [{"phoneme": "a", "frame_length": count}]});
+            answer(
+                &mut stream,
+                "application/json",
+                &serde_json::to_vec(&query).unwrap(),
+            );
+            listener
+        });
+        let path = temp_connection();
+        std::fs::write(
+            &path,
+            connection(
+                &format!("http://{address}"),
+                24_000,
+                93.75,
+                json!([{"name":"Normal", "query_style_id":6000, "decode_style_id":3001}]),
+            )
+            .to_string(),
+        )
+        .unwrap();
+        let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
+        let frames = SingerFrames {
+            hop_seconds: 256.0 / 24_000.0,
+            inventory: vec!["<sil>".into(), "a".into()],
+            phonemes: vec![1; 4000],
+            f0_hz: vec![440.0; 4000],
+            energy: vec![0.8; 4000],
+        };
+        let score = test_score(&[(4000, "ア")]);
+        let result =
+            backend.sing_render_with(&frames, Some(&score), 0, 0, &mut |done, _| done == 0);
+        assert!(matches!(result, Err(SingError::Cancelled)));
+        let listener = server.join().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn long_scores_report_original_lyric_indices_before_contacting_the_engine() {
+        let path = temp_connection();
+        std::fs::write(
+            &path,
+            connection(
+                "http://127.0.0.1:1",
+                24_000,
+                93.75,
+                json!([{"name":"Normal", "query_style_id":6000, "decode_style_id":3001}]),
+            )
+            .to_string(),
+        )
+        .unwrap();
+        let mut backend = VoicevoxBackend::load(&path, Acceleration::Cpu, false).unwrap();
+        let score = test_score(&[(2000, "コーヒー"), (2000, "unreadable")]);
+        let frames = SingerFrames {
+            hop_seconds: 256.0 / 24_000.0,
+            inventory: vec!["<sil>".into(), "a".into()],
+            phonemes: vec![1; 4000],
+            f0_hz: vec![440.0; 4000],
+            energy: vec![0.8; 4000],
+        };
+        let result = backend.sing_render_with(&frames, Some(&score), 0, 0, &mut |_, _| true);
+        assert!(matches!(
+            result,
+            Err(SingError::InvalidLyric { event: 1, .. })
+        ));
+        std::fs::remove_file(path).unwrap();
     }
 
     fn connection(url: &str, sample_rate: u32, frame_rate: f64, styles: Value) -> Value {
