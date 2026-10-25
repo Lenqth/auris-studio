@@ -52,6 +52,7 @@ pub struct ListeningJob {
     focus: String,
     aspect: Option<ComparisonAspect>,
     options: AudioReviewOptions,
+    selection: Option<crate::audio_review::ReviewerSelection>,
 }
 
 /// Completed feedback awaiting document/revision validation and bounded retention.
@@ -235,6 +236,7 @@ impl Session {
             return Err("Comparison requires the same bars and timing as the baseline; request a new baseline after tempo or meter changes".into());
         }
         Ok(ListeningJob {
+            selection: None,
             owner: self.listening.owner.clone(),
             revision: self.revision(),
             render: self.render_job(),
@@ -262,6 +264,20 @@ impl Session {
 }
 
 impl ListeningJob {
+    /// Discovers a reviewer without loading weights or uploading audio, then pins that choice.
+    /// Returns a model name when the desktop must obtain consent before running this job.
+    pub fn prepare_reviewer(
+        mut self,
+        cancel: &AtomicBool,
+    ) -> Result<(Self, Option<String>), String> {
+        let (options, selection, confirm) = self.options.prepare(cancel)?;
+        let model = confirm.then(|| options.model.clone());
+        self.options = options;
+        self.selection = Some(selection);
+        check_cancel(cancel)?;
+        Ok((self, model))
+    }
+
     /// Renders at 48 kHz and sends actual WAV bytes to the configured audio critic.
     ///
     /// A/B files share one protective gain; raw baselines never change. Cancellation is checked
@@ -343,8 +359,11 @@ impl ListeningJob {
                 AssessmentRequest::Diagnostic(&self.focus),
             )
         };
-        let review =
+        let mut review =
             assess_audio_cancellable(&inputs, &request, self.range.seconds, &self.options, cancel)?;
+        if let Some(selection) = self.selection {
+            review.selection = selection;
+        }
         check_cancel(cancel)?;
         let excerpt = Arc::new(Excerpt {
             id: crate::transient_id::transient_id("audition"),
@@ -414,6 +433,7 @@ mod tests {
         );
         (
             AudioReviewOptions {
+                configured: true,
                 auto_select: false,
                 url: format!("{url}/v1"),
                 model: "scripted-critic".into(),

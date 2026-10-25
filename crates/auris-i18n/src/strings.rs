@@ -1515,6 +1515,9 @@ strings! {
     MenuTranscribeMixture { en: "Transcribe Mixture (Noncommercial)…", ja: "混合音源を採譜（非商用）…" }
     MuscriptorWarning { en: "MuScriptor model weights are licensed under CC BY-NC 4.0 for noncommercial use only. Do not use this model for commercial work without separate permission from its rights holders. This optional model does not change Auris Studio's Apache-2.0 license. Acknowledgement does not grant commercial rights. Terms: https://creativecommons.org/licenses/by-nc/4.0/", ja: "MuScriptorのモデルはCC BY-NC 4.0に基づく非商用利用限定です。権利者から別途許諾を得ずに、商用目的の作業にこのモデルを使用しないでください。この任意モデルによってAuris Studio本体のApache-2.0ライセンスが変わることはありません。同意しても商用利用の権利は得られません。利用条件：https://creativecommons.org/licenses/by-nc/4.0/" }
     MuscriptorAgree { en: "Use for Noncommercial Work", ja: "非商用の作業に使用する" }
+    AudioModelLoadTitle { en: "Load audio review model?", ja: "試聴モデルを読み込みますか？" }
+    AudioModelLoadBody { en: "The local model “{model}” is not confirmed to be loaded. Loading it for this review can use substantial memory and CPU/GPU resources and slow down your computer. Cancel to skip this review.", ja: "ローカルモデル「{model}」の読み込み済み状態を確認できません。この試聴のために読み込むと、メモリやCPU・GPUを多く使用し、パソコンの動作が重くなることがあります。キャンセルすると今回の試聴を中止します。" }
+    AudioModelLoadConfirm { en: "Load and Review", ja: "読み込んで試聴する" }
     MuscriptorModel { en: "Select converted MuScriptor Small decoder.onnx", ja: "変換済みMuScriptor Smallのdecoder.onnxを選択" }
     MuscriptorDraft { en: "MuScriptor draft (CC BY-NC 4.0 model). Notes and instrument groups need review. Playback sounds are placeholders; choose patches after import.", ja: "MuScriptorの採譜下書き（モデル：CC BY-NC 4.0）。音符と楽器分類の確認・修正が必要です。取り込み後に各トラックの再生音色を選んでください。" }
     MuscriptorCreateTracks { en: "Add Draft as Instrument Tracks", ja: "下書きを楽器別トラックに追加" }
