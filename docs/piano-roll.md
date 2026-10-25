@@ -27,3 +27,11 @@ pressing **Control** after starting the drag refines it to the project division
 when that is finer. The existing free-edit gesture, **Command** on macOS or
 **Ctrl** on Windows, also remains available. A modifier used to create a note
 does not disable snapping for the drawing gesture.
+
+## Time navigation
+
+Drag the horizontal scrollbar below the arrangement, piano roll or drum grid to move
+through time with an ordinary mouse. The arrangement and note editors share their time
+position. **Shift + mouse wheel** scrolls horizontally over the grids; the ordinary
+wheel also moves through time when the pointer is over a horizontal time scrollbar.
+These gestures change the view without editing the song.

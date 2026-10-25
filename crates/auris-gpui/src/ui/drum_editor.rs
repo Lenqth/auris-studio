@@ -1069,6 +1069,11 @@ impl AurisApp {
                             .on_scroll_wheel(cx.listener(Self::scroll_drums)),
                     ),
             )
+            .child(
+                div()
+                    .pl(px(LABEL_WIDTH))
+                    .child(self.time_scrollbar(crate::ui::scrollbars::ScrollPanel::EditorTime, cx)),
+            )
             .into_any_element()
     }
 
@@ -1542,6 +1547,29 @@ mod window_tests {
             assert!(bounds.bottom() <= toolbar.bottom());
             assert!(bounds.right() <= viewport.width);
         }
+    }
+
+    #[gpui::test]
+    fn drum_time_scrollbar_moves_the_song_without_editing_the_kit(cx: &mut TestAppContext) {
+        use crate::ui::scrollbars::ScrollPanel;
+        let (app, cx, _, _) = fixture(cx);
+        paint(&app, cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        let bar = app.read_with(cx, |this, _| {
+            this.canvas
+                .scrollbar(ScrollPanel::EditorTime)
+                .get()
+                .unwrap()
+        });
+        drag(
+            cx,
+            point(bar.left() + px(3.0), bar.center().y),
+            bar.center(),
+        );
+        app.read_with(cx, |this, _| {
+            assert!(this.timeline.scroll_ticks > Ticks::ZERO);
+            assert_eq!(this.project(), &before);
+        });
     }
 
     fn hit_point(

@@ -11,6 +11,7 @@
 //! [`crate::ui::widgets::scrollbar_thumb`] and its two neighbours, which never knew about a panel
 //! or an axis at all.
 
+use auris_session::prelude::{TICKS_PER_QUARTER, Ticks};
 use gpui::{
     Axis, Bounds, Div, MouseDownEvent, Pixels, Point, ScrollHandle, Stateful, canvas, div, point,
     prelude::*, px,
@@ -35,11 +36,15 @@ pub(crate) enum ScrollPanel {
     Agent,
     /// The central overview of all tracks.
     TrackGrid,
+    /// The arrangement's horizontal musical time axis.
+    ArrangementTime,
+    /// The shared piano-roll and drum-editor time axis.
+    EditorTime,
 }
 
 impl ScrollPanel {
     /// Every panel there is, in the order that indexes the arrays keyed by one.
-    pub(crate) const ALL: [ScrollPanel; 7] = [
+    pub(crate) const ALL: [ScrollPanel; 9] = [
         ScrollPanel::Library,
         ScrollPanel::Inspector,
         ScrollPanel::Log,
@@ -47,6 +52,8 @@ impl ScrollPanel {
         ScrollPanel::Mixer,
         ScrollPanel::Agent,
         ScrollPanel::TrackGrid,
+        ScrollPanel::ArrangementTime,
+        ScrollPanel::EditorTime,
     ];
 
     /// How many there are.
@@ -60,7 +67,9 @@ impl ScrollPanel {
     /// Which way the panel scrolls, and so which way its bar is drawn and dragged.
     pub(crate) fn axis(self) -> Axis {
         match self {
-            ScrollPanel::Mixer => Axis::Horizontal,
+            ScrollPanel::Mixer | ScrollPanel::ArrangementTime | ScrollPanel::EditorTime => {
+                Axis::Horizontal
+            }
             _ => Axis::Vertical,
         }
     }
@@ -75,6 +84,8 @@ impl ScrollPanel {
             ScrollPanel::Mixer => "mixer-scrollbar",
             ScrollPanel::Agent => "agent-scrollbar",
             ScrollPanel::TrackGrid => "track-grid-scrollbar",
+            ScrollPanel::ArrangementTime => "arrangement-time-scrollbar",
+            ScrollPanel::EditorTime => "editor-time-scrollbar",
         }
     }
 }
@@ -111,6 +122,26 @@ pub(crate) fn as_scrolled(offset: f32) -> Pixels {
 }
 
 impl AurisApp {
+    /// A mouse-only time-navigation strip, with a reminder of the wheel shortcut.
+    pub(crate) fn time_scrollbar(&self, panel: ScrollPanel, cx: &mut gpui::Context<Self>) -> Div {
+        div().child(
+            div()
+                .id(("time-scroll-help", panel.index()))
+                .debug_selector(move || format!("{}-help", panel.element_id()))
+                .tooltip(crate::ui::tooltip::keyed_tip(
+                    self.t(auris_i18n::Key::TimelineScrollHelp),
+                    "Shift+Wheel",
+                    &self.theme,
+                ))
+                .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+                    let delta = event.delta.pixel_delta(px(24.0));
+                    this.timeline.scroll_by(-delta.x - delta.y);
+                    cx.stop_propagation();
+                    cx.notify();
+                }))
+                .child(self.panel_scrollbar(panel, cx)),
+        )
+    }
     /// The scroll position gpui keeps for a panel, for the four that scroll a container.
     ///
     /// `None` for the lane column, which is painted on a canvas at an offset of its own rather
@@ -123,12 +154,37 @@ impl AurisApp {
             ScrollPanel::Mixer => Some(&self.mixer_scroll),
             ScrollPanel::Agent => Some(&self.agent_chat.scroll),
             ScrollPanel::TrackGrid => Some(&self.track_grid.scroll),
-            ScrollPanel::Lanes => None,
+            ScrollPanel::Lanes | ScrollPanel::ArrangementTime | ScrollPanel::EditorTime => None,
         }
     }
 
     /// Where a panel has been scrolled to.
     pub(crate) fn scroll_view(&self, panel: ScrollPanel) -> ScrollView {
+        if matches!(
+            panel,
+            ScrollPanel::ArrangementTime | ScrollPanel::EditorTime
+        ) {
+            let bounds = match panel {
+                ScrollPanel::ArrangementTime => self.canvas.lanes.get(),
+                _ => self.canvas.roll.get(),
+            };
+            let viewport = bounds.map_or(0.0, |bounds| f32::from(bounds.size.width));
+            // Keep room to author beyond the last clip, including in an empty project. A
+            // wheel-scrolled position remains reachable even beyond the document's extent.
+            let end = self
+                .project()
+                .end_tick()
+                .0
+                .saturating_add(8 * TICKS_PER_QUARTER)
+                .max(64 * TICKS_PER_QUARTER);
+            let offset = f32::from(self.timeline.duration_to_width(self.timeline.scroll_ticks));
+            let extent = f32::from(self.timeline.duration_to_width(Ticks(end)));
+            return ScrollView {
+                offset: -offset,
+                max_offset: (extent - viewport).max(offset).max(0.0),
+                viewport,
+            };
+        }
         let Some(handle) = self.scroll_handle(panel) else {
             return ScrollView {
                 offset: as_scroll_offset(self.lane_scroll),
@@ -157,6 +213,16 @@ impl AurisApp {
 
     /// Scrolls a panel to `offset`, in gpui's convention.
     pub(crate) fn set_scroll_offset(&mut self, panel: ScrollPanel, offset: f32) {
+        if matches!(
+            panel,
+            ScrollPanel::ArrangementTime | ScrollPanel::EditorTime
+        ) {
+            let maximum = self.scroll_view(panel).max_offset;
+            self.timeline.scroll_ticks = self
+                .timeline
+                .width_to_duration(px((-offset).clamp(0.0, maximum)));
+            return;
+        }
         let Some(handle) = self.scroll_handle(panel) else {
             // Clamped again here, though the caller clamps too: the lane column's limit moves as
             // tracks are opened and closed, and an offset that was the bottom a moment ago is
@@ -218,7 +284,7 @@ impl AurisApp {
     /// The press is measured against the bar rather than against the panel it scrolls: a panel
     /// carries its own padding, and a fraction taken from the wrong rectangle puts the thumb a
     /// few pixels from the pointer at one end of the track and nowhere near it at the other.
-    fn panel_scrollbar(&self, panel: ScrollPanel, cx: &mut gpui::Context<Self>) -> Div {
+    pub(crate) fn panel_scrollbar(&self, panel: ScrollPanel, cx: &mut gpui::Context<Self>) -> Div {
         let view = self.scroll_view(panel);
         let recorded = self.canvas.scrollbar(panel);
         div()
@@ -243,6 +309,10 @@ impl AurisApp {
                     |_, _, _, _| (),
                 )
                 .absolute()
+                // An unanchored absolute child keeps its static position after the track.
+                // Record the track itself, rather than the divider immediately below it.
+                .top_0()
+                .left_0()
                 .size_full(),
             )
     }
@@ -314,6 +384,92 @@ fn measure(axis: Axis, at: Point<Pixels>, bar: Bounds<Pixels>) -> (f32, f32) {
 mod tests {
     use super::*;
     use crate::ui::widgets::scrollbar_thumb;
+
+    #[gpui::test]
+    fn time_scrollbar_and_shift_wheel_move_the_view_without_editing_the_song(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::harness::{drag_to, paint, press, release, with_a_clip};
+        let (app, cx, _, _) = with_a_clip(cx);
+        paint(&app, cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        let bar = app.read_with(cx, |this, _| {
+            this.canvas
+                .scrollbar(ScrollPanel::ArrangementTime)
+                .get()
+                .unwrap()
+        });
+        let from = gpui::point(bar.left() + px(3.0), bar.center().y);
+        let to = gpui::point(bar.center().x, bar.center().y);
+        assert_eq!(
+            Some(bar),
+            cx.debug_bounds("arrangement-time-scrollbar-help")
+        );
+        press(cx, from);
+        app.read_with(cx, |this, _| {
+            assert!(
+                matches!(
+                    this.drag,
+                    Some(Drag::PanelScroll {
+                        panel: ScrollPanel::ArrangementTime,
+                        ..
+                    })
+                ),
+                "the bar must receive the press, got {:?}",
+                this.drag
+            );
+        });
+        drag_to(cx, to);
+        release(cx, to);
+        app.read_with(cx, |this, _| {
+            assert!(this.timeline.scroll_ticks > Ticks::ZERO);
+            assert_eq!(this.project(), &before);
+        });
+        paint(&app, cx);
+        let at = app.read_with(cx, |this, _| this.canvas.lanes.get().unwrap().center());
+        let previous = app.read_with(cx, |this, _| this.timeline.scroll_ticks);
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position: at,
+            delta: gpui::ScrollDelta::Lines(gpui::point(0.0, -3.0)),
+            modifiers: gpui::Modifiers {
+                shift: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        app.read_with(cx, |this, _| {
+            assert!(this.timeline.scroll_ticks > previous);
+            assert_eq!(this.project(), &before);
+        });
+    }
+
+    #[gpui::test]
+    fn piano_roll_time_bar_shares_the_arrangement_position_and_clamps_at_start(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::harness::{drag, paint, with_a_clip};
+        let (app, cx, _, clip) = with_a_clip(cx);
+        app.update(cx, |this, _| this.open_clip_in_editor(clip));
+        paint(&app, cx);
+        paint(&app, cx);
+        let bar = app.read_with(cx, |this, _| {
+            this.canvas
+                .scrollbar(ScrollPanel::EditorTime)
+                .get()
+                .unwrap()
+        });
+        let from = gpui::point(bar.left() + px(3.0), bar.center().y);
+        drag(cx, from, bar.center());
+        app.update(cx, |this, _| {
+            assert!(this.timeline.scroll_ticks > Ticks::ZERO);
+            assert_eq!(
+                this.scroll_view(ScrollPanel::EditorTime).offset,
+                this.scroll_view(ScrollPanel::ArrangementTime).offset
+            );
+            this.set_scroll_offset(ScrollPanel::EditorTime, 100.0);
+            assert_eq!(this.timeline.scroll_ticks, Ticks::ZERO);
+        });
+    }
 
     #[test]
     fn every_panel_indexes_its_own_slot() {
