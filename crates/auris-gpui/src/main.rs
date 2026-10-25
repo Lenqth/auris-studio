@@ -65,7 +65,7 @@ fn main() {
     // open-document event rather than an argument. The handler has no window to talk to, so it
     // posts the URLs here and the window collects them once it exists.
     let (handed_over, open_requests) = std::sync::mpsc::channel::<Vec<String>>();
-    let application = Application::new();
+    let application = Application::new().with_assets(ui::provider_logo::ProviderAssets);
     application.on_open_urls(move |urls| {
         let _ = handed_over.send(urls);
     });

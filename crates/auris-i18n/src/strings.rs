@@ -2041,6 +2041,9 @@ new のオプション
     AgentSystemPromptHelp { en: "Replace the agent's shared instructions for all models. Apply to use them from the next request. Enter adds a line break. Blank uses the standard prompt. Tool permissions still apply.", ja: "全モデル共通の指示を編集します。「適用」すると次の依頼から反映されます。Enterで改行、空欄で標準プロンプトを使用します。ツールの権限設定は引き続き適用されます。" }
     AgentPromptReset { en: "Restore standard prompt", ja: "標準に戻す" }
     AgentProviderLabel { en: "Provider", ja: "プロバイダ" }
+    AgentProviders { en: "Providers", ja: "プロバイダー" }
+    AgentApiConnection { en: "API connection", ja: "API接続" }
+    AgentPathAutomatic { en: "Find installed CLI automatically", ja: "インストール済みCLIを自動検出" }
     AgentBackendLabel { en: "Backend", ja: "バックエンド" }
     AgentAntigravityPathLabel { en: "Antigravity CLI executable path (optional)", ja: "Antigravity CLI実行ファイルのパス（任意）" }
     AgentAntigravityHelp { en: "Sign in by running agy. Leave the path empty to find the installed CLI. Choose an Antigravity CLI model in the Agent panel. Song tools use Auris permissions; native shell tools and image attachments are unavailable.", ja: "agyを起動してログインしてください。パスが空欄ならインストール済みCLIを探します。エージェントパネルでAntigravity CLIのモデルを選択してください。作曲ツールにはAurisの権限が適用されます。CLIのシェル操作と画像添付は未対応です。" }

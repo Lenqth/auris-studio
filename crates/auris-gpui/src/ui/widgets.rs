@@ -328,7 +328,8 @@ where
         .on_click(on_click)
 }
 
-fn button_with_content<I, L, F>(
+/// A shared button with structured content and the standard keyboard and pointer behavior.
+pub(crate) fn button_with_content<I, L, F>(
     id: I,
     label: L,
     style: ButtonStyle,

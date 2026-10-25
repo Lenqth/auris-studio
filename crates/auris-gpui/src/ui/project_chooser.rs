@@ -1,8 +1,9 @@
 //! Startup project selection, before the editor claims realtime audio.
 
 use auris_i18n::Key;
-use gpui::{AnyElement, Context, IntoElement, KeyDownEvent, Window, div, prelude::*};
+use gpui::{AnyElement, Context, IntoElement, KeyDownEvent, Window, canvas, div, prelude::*};
 
+use super::icons::{Icon, paint_icon};
 use super::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled};
 use crate::app::{AurisApp, Pane};
 
@@ -139,11 +140,38 @@ impl AurisApp {
                 ("chooser-ai", Key::WorkshopTitle, true),
             ] {
                 tiles = tiles.child(
-                    button(
+                    super::widgets::button_with_content(
                         id,
-                        self.t(key),
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap_4()
+                            .child(
+                                div()
+                                    .size_24()
+                                    .flex_shrink_0()
+                                    .rounded(crate::theme::Metrics::RADIUS_LG)
+                                    .bg(theme.accent_soft)
+                                    .text_color(theme.accent)
+                                    .child(
+                                        canvas(
+                                            |_, _, _| (),
+                                            move |bounds, _, window, _| {
+                                                paint_icon(
+                                                    window,
+                                                    bounds,
+                                                    if ai { Icon::Sparkles } else { Icon::Notes },
+                                                    theme.accent,
+                                                );
+                                            },
+                                        )
+                                        .size_full(),
+                                    ),
+                            )
+                            .child(div().text_base().child(self.t(key))),
                         ButtonStyle::Normal,
-                        false,
+                        ButtonState::available(false, !busy),
                         theme.accent,
                         &theme,
                         cx.listener(move |this, _, window, cx| {
@@ -156,17 +184,10 @@ impl AurisApp {
                     )
                     .w_64()
                     .max_w_full()
-                    .h_40()
+                    .h_56()
                     .text_base()
                     .flex_col()
-                    .gap_4()
-                    .child(
-                        div().text_lg().text_color(theme.accent).child(if ai {
-                            "✦"
-                        } else {
-                            "+"
-                        }),
-                    ),
+                    .gap_4(),
                 );
             }
             content = content.child(tiles).child(
@@ -233,15 +254,20 @@ impl AurisApp {
             .flex_wrap()
             .items_center()
             .gap_2()
-            .child(button(
-                "chooser-setup",
-                self.t(Key::SetupGuide),
-                ButtonStyle::Normal,
-                false,
-                theme.accent,
-                &theme,
-                cx.listener(|this, _, _, cx| this.open_setup_guide(cx)),
-            ))
+            .child(
+                button_enabled(
+                    "chooser-setup",
+                    self.t(Key::SetupGuide),
+                    ButtonStyle::Normal,
+                    ButtonState::available(false, !busy),
+                    theme.accent,
+                    &theme,
+                    cx.listener(|this, _, _, cx| this.open_setup_guide(cx)),
+                )
+                .h_9()
+                .px_4()
+                .text_sm(),
+            )
             .child(
                 button_enabled(
                     "chooser-browse",
@@ -257,6 +283,7 @@ impl AurisApp {
                     cx.listener(|this, _, _, cx| this.pick_and_open_project(cx)),
                 )
                 .h_9()
+                .px_4()
                 .text_sm(),
             )
             .child(div().flex_1())
@@ -275,6 +302,7 @@ impl AurisApp {
                     cx.listener(|_, _, window, _| window.remove_window()),
                 )
                 .h_9()
+                .px_4()
                 .text_sm(),
             )
             .child(
@@ -296,6 +324,7 @@ impl AurisApp {
                     cx.listener(|this, _, window, cx| this.choose_project(window, cx)),
                 )
                 .h_9()
+                .px_4()
                 .text_sm(),
             );
         div()
