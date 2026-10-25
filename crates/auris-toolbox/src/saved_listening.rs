@@ -168,6 +168,7 @@ mod tests {
         let original = std::fs::read(&path).unwrap();
         let (url, worker) = scripted_critic();
         let options = AudioReviewOptions {
+            auto_select: false,
             url,
             model: "scripted-critic".into(),
             api_key: None,

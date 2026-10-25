@@ -37,6 +37,8 @@ pub struct AssessmentReply {
     pub model: String,
     /// WAV bytes were delivered; not proof of correct listening.
     pub audio_sent: bool,
+    /// Capability discovery and fallback metadata.
+    pub selection: super::ReviewerSelection,
     /// Original response, without extracting a verdict or confidence.
     pub raw_response: String,
 }
@@ -93,6 +95,7 @@ pub fn assess_audio_cancellable(
     let reply = review_audio_cancellable(audio, &prompt(request), options, cancel)?;
     Ok(AssessmentReply {
         model: reply.model,
+        selection: reply.selection,
         audio_sent: reply.audio_sent,
         raw_response: reply.review,
     })
