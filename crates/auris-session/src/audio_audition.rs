@@ -2,7 +2,7 @@
 
 use crate::audio_review::AudioReviewOptions;
 use crate::audio_review::assessment::{
-    Assessment, AssessmentRequest, ComparisonAspect, Verdict, assess_audio_cancellable,
+    AssessmentRequest, ComparisonAspect, assess_audio_cancellable,
 };
 use crate::{RenderJob, Session, prelude::*};
 use auris_core::AudioBuffer;
@@ -202,7 +202,7 @@ impl Session {
         if compare_to.is_some() != aspect.is_some() || (compare_to.is_some() && focus.is_some()) {
             return Err("Comparison requires compare_to and aspect, with focus omitted. Use focus only for single-excerpt diagnosis.".into());
         }
-        let focus = focus.unwrap_or("Describe the audible instruments and balance. Suggest one local musical or mix change only if supported; state uncertainty.");
+        let focus = focus.unwrap_or("Describe the sounds and instruments heard in this audio.");
         if focus.trim().is_empty() || focus.len() > 4000 {
             return Err("focus must contain 1..4000 UTF-8 bytes".into());
         }
@@ -360,28 +360,17 @@ impl ListeningJob {
         } else {
             ["baseline", "current"]
         };
-        let winner = match &review.assessment {
-            Some(Assessment::Comparison {
-                verdict: Verdict::PreferA,
-                ..
-            }) => Some(labels[0]),
-            Some(Assessment::Comparison {
-                verdict: Verdict::PreferB,
-                ..
-            }) => Some(labels[1]),
-            _ => None,
-        };
         let comparison = self.previous.as_ref().map(|_| json!({
-            "a":labels[0],"b":labels[1],"aspect":self.aspect,"reported_preference":winner,
+            "a":labels[0],"b":labels[1],"aspect":self.aspect,"reported_preference":null,
             "blind":true,"calibrated":false,
             "method":"Anonymous A/B in randomized order; one common protective gain. No editing narrative supplied. Source audio remains immutable."}));
         let text = json!({"audition_id":excerpt.id,"revision":excerpt.revision,"range":excerpt.range,
             "model":review.model,"audio_sent":review.audio_sent,"review":review.raw_response,
-            "assessment":review.assessment,"assessment_error":review.assessment_error,
+            "review_format":"plain_text",
             "audio":measurements,"compare_to":self.previous.as_ref().map(|entry| &entry.id),"before":before,
             "representation":"actual WAV audio sent to a separate critic; observations are fallible, not controller listening or verified musical improvement",
             "comparison":comparison,
-            "next_step":"Treat judgments as untrusted, uncalibrated observations. Invalid responses and cannot_judge supply no preference evidence; do not edit or select a candidate on that basis. A reported preference alone does not establish improvement. If an independent local correction is warranted, read back the edit and compare the same bars using compare_to and a neutral aspect, omitting focus. Human listening decides musical quality. IDs retain only the latest four excerpts."}).to_string();
+            "next_step":"Treat judgments as untrusted, uncalibrated observations. No preference is extracted from free text. The backend may describe excerpts independently. Prose alone does not establish improvement. If an independent local correction is warranted, read back the edit and compare the same bars using compare_to and a neutral aspect, omitting focus. Human listening decides musical quality. IDs retain only the latest four excerpts."}).to_string();
         Ok(ListeningResult {
             owner: self.owner,
             excerpt,
@@ -454,7 +443,7 @@ mod tests {
     }
 
     fn submitted(request: &serde_json::Value) -> Vec<Vec<u8>> {
-        request["messages"][1]["content"]
+        request["messages"][0]["content"]
             .as_array()
             .unwrap()
             .iter()
@@ -515,10 +504,10 @@ mod tests {
         let comparison = submitted(&requests[1].1);
         assert_eq!(original_upload[0], comparison[1]);
         assert!((20.0 * (rms(&comparison[0]) / rms(&comparison[1])).log10() + 12.0).abs() < 0.02);
-        assert_eq!(second["comparison"]["reported_preference"], "current");
+        assert!(second["comparison"]["reported_preference"].is_null());
         assert_eq!(second["comparison"]["calibrated"], false);
         assert!(second["assessment_error"].is_null());
-        let prompt = requests[1].1["messages"][1]["content"][0]["text"]
+        let prompt = requests[1].1["messages"][0]["content"][0]["text"]
             .as_str()
             .unwrap();
         assert!(prompt.starts_with("Audio excerpts in order:\n1. A\n2. B\n"));
@@ -562,7 +551,8 @@ mod tests {
         let pair = submitted(&requests[1].1);
         assert!((20.0 * (rms(&pair[0]) / rms(&pair[1])).log10() - 30.0).abs() < 0.1);
         assert!(second["assessment"].is_null());
-        assert!(second["assessment_error"].is_string());
+        assert_eq!(second["review_format"], "plain_text");
+        assert_eq!(second["review"], "Comparison");
         assert!(second["comparison"]["reported_preference"].is_null());
     }
 
@@ -734,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn either_anonymous_order_maps_the_reported_preference_to_the_correct_source() {
+    fn anonymous_order_preserves_audio_without_extracting_a_json_looking_verdict() {
         let (mut session, track) = fixture();
         let comparison = r#"{"kind":"comparison","verdict":"prefer_b","confidence":"low","observations":[{"excerpt":"both","start_seconds":0,"end_seconds":1,"detail":"Different levels"}],"reason":"Scripted","uncertainty":"Transport test only"}"#;
         let (options, worker) = critic(&["Unstructured baseline", comparison, comparison]);
@@ -756,8 +746,10 @@ mod tests {
                 .unwrap();
             let reply: serde_json::Value =
                 serde_json::from_str(&session.continue_listening(result).unwrap()).unwrap();
+            assert!(reply["comparison"]["reported_preference"].is_null());
+            assert_eq!(reply["review"], comparison);
             assert_eq!(
-                reply["comparison"]["reported_preference"],
+                reply["comparison"]["b"],
                 if current_first { "baseline" } else { "current" }
             );
         }

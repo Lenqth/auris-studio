@@ -420,11 +420,12 @@ the document or closing the session expires them. IDs are opaque, not file paths
 
 Single-excerpt diagnosis accepts a descriptive question. Comparison accepts only a neutral
 criterion: the critic receives anonymous A/B recordings in randomized order, with no edit
-narrative. The response contains `assessment` with timestamped observations and an explicit
-preference, tie or `cannot_judge`. Invalid JSON or evidence yields `assessment_error` and no
-usable judgment, while `audio_sent` still records successful delivery. The returned A/B mapping
-is revealed to the caller after review. Confidence and preferences are uncalibrated claims;
-they must not automatically select edits. See [critic calibration](audio-critic-calibration.md).
+narrative. The response contains short free text in `review`, with `review_format` set to
+`plain_text`. The original response is retained without extracting a verdict, confidence or
+preference; `audio_sent` records successful delivery, not accurate perception. The returned
+A/B mapping is revealed to the caller after review. Music Flamingo describes the two excerpts
+independently and explicitly labels its output accordingly. These observations must not
+automatically select edits. See [critic calibration](audio-critic-calibration.md).
 
 Each request covers 1–8 bars and at most 30 seconds, rendered at 48 kHz without effect
 tails. Both comparison excerpts use one common protective attenuation when needed for
