@@ -665,6 +665,7 @@ impl AurisApp {
                 }),
             ));
         div()
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -727,6 +728,7 @@ impl AurisApp {
             .child(footer)
             .children(library)
             .children(menu)
+            .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }

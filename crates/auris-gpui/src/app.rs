@@ -3492,10 +3492,9 @@ impl AurisApp {
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(crate::titlebar::options(self.t(Key::Settings))),
                 window_min_size: Some(size(px(480.0), px(360.0))),
                 focus: true,
-                ..Default::default()
+                ..crate::titlebar::options(self.t(Key::Settings))
             },
             |_, cx| {
                 cx.new(|cx| {

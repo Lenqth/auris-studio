@@ -277,6 +277,7 @@ impl Render for AurisApp {
             .child(status)
             .child(drop_ring)
             .children(overlays)
+            .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }

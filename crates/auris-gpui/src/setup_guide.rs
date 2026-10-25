@@ -240,6 +240,7 @@ impl Render for SetupGuide {
         }
         let last = self.step == STEPS.len() - 1;
         div()
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -345,6 +346,7 @@ impl Render for SetupGuide {
                         }),
                     )),
             )
+            .children(titlebar::resize_handles(window))
     }
 }
 
@@ -379,9 +381,8 @@ impl AurisApp {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(560.), px(420.))),
-                titlebar: Some(titlebar::options(self.t(Key::SetupGuide))),
                 focus: true,
-                ..Default::default()
+                ..titlebar::options(self.t(Key::SetupGuide))
             },
             |window, cx| {
                 let view = cx.new(|cx: &mut Context<SetupGuide>| {
