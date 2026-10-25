@@ -1,5 +1,7 @@
 # Real-recording calibration of Physical Choir
 
+[日本語](choir-copy-synthesis.ja.md)
+
 The wordless choir's factory tract geometry, lip radiation, Tone, Breath and Attack
 are calibrated against sustained vowels from **VocalSet**, using the actual Rust
 instrument at 48 kHz. The loss is a fixed, gain-invariant temporal log-mel distance.

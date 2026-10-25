@@ -1,5 +1,7 @@
 # Audio-only Codex cover and section-aware composition
 
+[日本語](codex-autonomous-cover-evaluation.ja.md)
+
 The 2026-10-21 follow-up completed an editable cover from an attached WAV and a
 short request, without supplying analysis code, an interpreter path, reference
 notes or manual approvals. The ordinary request selected bundled Basic Pitch;
@@ -112,11 +114,11 @@ for every short piece. Existing song-spec composition already saves its form.
 
 ## Remaining tasks and local outputs
 
-Leading/trailing padding and BPM/beat estimation are explicitly open in the
-[production issue list](agent-production-audit.md#other-workflow-gaps). Both covers
-kept the project's default 120 BPM, while the source score is 100 BPM. Source-second
-timing is preserved, but that does not align its music with the bar grid or infer
-the source tempo. Padding removal must account for pickups, quiet attacks, releases
+At the time of this evaluation, leading/trailing padding and BPM/beat estimation
+remained open. Both covers kept the project's default 120 BPM, while the source score
+is 100 BPM. Source-second timing is preserved, but that does not align its music with
+the bar grid or infer the source tempo. Padding removal must account for pickups, quiet attacks,
+releases
 and the resulting source-to-score offset. These tasks are not fixed by better
 approval evidence or a successful import.
 

@@ -1,5 +1,7 @@
 # Mixer signal flow
 
+[日本語](mixer-graph.ja.md)
+
 The Mixer opens on **Signal flow**. Each track or bus has one node containing
 its name, fader, pan, mute, solo and meters. Effects remain individual nodes in
 processing order. Fader controls still act after all inserts. Bus and master nodes sum their incoming signals.

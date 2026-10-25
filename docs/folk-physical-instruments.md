@@ -1,5 +1,7 @@
 # Folk physical instruments
 
+[日本語](folk-physical-instruments.ja.md)
+
 Auris Studio includes two sample-free instruments aimed at folk timbres:
 
 - `auris.physical.hammered_dulcimer`: zero-based GM hint 15 (program 16 in one-based lists).

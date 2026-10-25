@@ -1,5 +1,7 @@
 # Preset arrangement development
 
+[日本語](preset-arrangement.ja.md)
+
 This note records the default-seed arrangement shape case measured on 2026-10-04. It describes how parts enter, leave, and thin out across the form; it is not a total quality score. The machine-readable record is [preset-arrangement-structure-2026-10-04.json](data/preset-arrangement-structure-2026-10-04.json).
 
 The recorded measurements use the branch's General MIDI configuration before integration with the native physical-instrument presets. The integrated presets retain these section selections and note-writing changes, with every added part assigned to an internal physical instrument. The audio scores below describe the recorded SoundFont renders; the integrated native configuration has not been scored again.

@@ -1,5 +1,7 @@
 # Algorithmic backing for an authored melody
 
+[日本語](agent-accompaniment.ja.md)
+
 The live agent and saved-project MCP tools expose `accompaniment`. The agent can edit a
 foreground melody with `edit_notes`, then ask Auris to write bass, chords, pads, arpeggios or
 assigned drums. Requests contain roles, ranges and recipe controls; responses contain clip IDs,

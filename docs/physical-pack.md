@@ -1,5 +1,7 @@
 # Copy synthesis for bass, struck bars and physical drums
 
+[日本語](physical-pack.ja.md)
+
 Factory excitation/loss settings and causal radiation coloration are fitted against real
 recordings for Bass, Bell, Mallet and seven Drum Kit families. The baseline is
 `cfcd5a9`; the comparison uses actual production Rust PCM at 24 and 48 kHz.

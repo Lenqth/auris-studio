@@ -1,5 +1,7 @@
 # Optional local music models
 
+[日本語](music-analysis-models.ja.md)
+
 The ordinary chord, tempo and isolated-melody commands remain CPU signal processing.
 Two separate commands add learned inference: YAMNet instrument-presence tagging and
 MuScriptor Small multi-instrument note drafts. Both run on the CPU; neither needs CUDA,

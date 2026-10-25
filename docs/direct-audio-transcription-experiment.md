@@ -1,5 +1,7 @@
 # Direct audio-LLM transcription experiment
 
+[日本語](direct-audio-transcription-experiment.ja.md)
+
 The 2026-10-21 local experiment did not support replacing Basic Pitch with direct
 note predictions from the tested Gemma 4/Ollama connections. One configuration
 invented notes on silence; the other returned empty drafts. These are results for

@@ -1,5 +1,7 @@
 # Physical instruments
 
+[日本語](physical-instruments.ja.md)
+
 Choose **Physical Piano, Guitar, Electric Guitar, Bass, Bell, Mallet, Violin, Clarinet,
 Hammered Dulcimer or Tin Whistle** in the sound library.
 Each is a separate built-in plugin with its own stable ID, such as `auris.physical.guitar`.

@@ -1,5 +1,7 @@
 # Development
 
+[日本語](development.ja.md)
+
 How the workspace is laid out, how to build it on each platform, and how to add an
 instrument or an effect.
 
@@ -16,6 +18,7 @@ BACKEND — no UI dependency of any kind
   crates/auris-engine   render graph, transport, cpal in and out, offline renderer
   crates/auris-io       audio file import/export, project save/load
   crates/auris-gpu      optional wgpu compute for offline analysis
+  crates/auris-analysis offline music recognition with DSP and optional local models
   crates/auris-compose  score-based automatic composition: a text spec in, notes out
   crates/auris-vocal    singing: lyrics to IPA phonemes, notes to voice-model frames
   crates/auris-singer   singing: DiffSinger, LeapSinger and VOICEVOX, offline
@@ -32,6 +35,8 @@ FRONTEND
 NOT THE WORKSPACE
   vendor/rustysynth     somebody else's crate, forked — see its own README
   vendor/midir          MIDI library fork — see README-AURIS.md
+  vendor/vst3-host      VST3 host fork — see README-AURIS.md
+  vendor/gpui-flow      mixer graph UI fork — see README-AURIS.md
 ```
 
 Dependencies run strictly downhill, and the boundary is enforced by what each crate is *allowed

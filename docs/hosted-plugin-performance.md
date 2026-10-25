@@ -1,5 +1,7 @@
 # Hosted plugin playback performance
 
+[日本語](hosted-plugin-performance.ja.md)
+
 The CLAP host keeps active parameter displays in an atomic snapshot. Automation written by
 Auris and global parameter-value events emitted by the plugin update that snapshot on the
 audio side without allocating or taking a lock. Preset values are read before activation;

@@ -1,5 +1,7 @@
 # Live performance edit validation
 
+[日本語](agent-performance-validation.ja.md)
+
 On 2026-10-22, the built-in Codex and Claude Code backends both completed real
 performance edits through the application's agent panel, including independent
 readback, audio rendering and Undo/Redo checks. Claude's successful trial followed

@@ -1,5 +1,7 @@
 # Physical instruments in the bass register
 
+[日本語](physical-low-register.ja.md)
+
 The 2026-10-21 correction addresses metallic bass attacks in Physical Strings and excessive
 inharmonicity in Physical Piano. MIDI 24/36 denote C1/C2 here, with A4 = MIDI 69 = 440 Hz.
 The original renderer is from `2c4bcfd1`.

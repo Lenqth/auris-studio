@@ -1,5 +1,7 @@
 # Guitar amplifier refinement
 
+[日本語](amp-refinement.ja.md)
+
 The current amplifier uses one symmetric soft-clipping stage:
 
 ```text

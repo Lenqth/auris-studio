@@ -1,5 +1,7 @@
 # Singing backends
 
+[日本語](singing-backends.ja.md)
+
 `auris-singer` renders a common `SingerFrames` timeline and, when needed, its parallel
 `SingerScore` through a `SingingBackend`. The session loads a `VoiceModel` facade and does not
 depend on a concrete model layout. This keeps model

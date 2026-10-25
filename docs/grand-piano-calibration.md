@@ -1,5 +1,7 @@
 # Grand-piano calibration
 
+[日本語](grand-piano-calibration.ja.md)
+
 The native Physical Piano factory voice is calibrated against the University of Iowa's
 [Steinway model B recordings](https://theremin.music.uiowa.edu/MISpiano.html), performed
 by Evan Mazunik. The 2026-10-05 revision adjusts felt hardness, strike position, string

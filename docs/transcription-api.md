@@ -1,5 +1,7 @@
 # Recognizer-independent transcription API
 
+[日本語](transcription-api.ja.md)
+
 Live agents can analyze original attached audio with local tools and import a note
 draft without claiming to be the bundled Basic Pitch recognizer. The same live
 contracts are offered to Codex, Claude Code and native API transports. A transport

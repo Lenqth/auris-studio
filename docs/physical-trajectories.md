@@ -1,5 +1,7 @@
 # Sustained and moving-pitch copy synthesis
 
+[日本語](physical-trajectories.ja.md)
+
 This continues the [one-second real-recording calibration](physical-copy-synthesis.md).
 The offline worker now keeps one excitation alive while applying sample-timed pitch bend
 and expression. It renders the actual Rust instrument, including the production sample rate.

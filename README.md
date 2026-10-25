@@ -1,3 +1,5 @@
+[日本語](README.ja.md)
+
 # Auris Studio
 
 A digital audio workstation written in Rust with a GPU-rendered
@@ -22,6 +24,20 @@ Windows also requires Visual Studio C++ Build Tools and LLVM. Run
 `.\tools\setup-windows.ps1 -InstallLlvm` in a Visual Studio developer PowerShell terminal
 before building. See [Development](docs/development.md#building-on-each-platform) for
 platform setup. See [physical instruments](docs/physical-instruments.md) for the native sounds.
+
+## Install the composition agent skill
+
+The optional `auris-composition` skill helps a coding agent use Auris Studio to compose,
+render, and check original music. Install it for Codex with:
+
+```sh
+npx skills add uthree/auris-studio --skill auris-composition -a codex -g -y
+```
+
+This installs the skill globally. To install it only in the current project, run the
+command from that project's directory without `-g`. The skill does not install the
+Auris Studio application or its CLI; install those separately using the steps above.
+See [Agent skills](docs/agent-skills.md) for updates, paths, and MCP configuration.
 
 ## Documentation
 

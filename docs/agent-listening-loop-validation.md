@@ -1,11 +1,12 @@
 # Live rendered-audio feedback validation
 
+[日本語](agent-listening-loop-validation.ja.md)
+
 On 2026-10-21, the in-app Codex backend completed a real composition, audio review,
 local edit and A/B review using the current unsaved document. Claude Code reached
 its native CLI and exclusive live MCP connection, but both Sonnet and Haiku hit
 the account session limit before making a tool call. Its actual listening loop
-remains unverified. This follows the earlier
-[missing-path investigation](agent-listening-loop-audit.md).
+remains unverified.
 
 ## Implementation and scope
 

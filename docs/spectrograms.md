@@ -1,5 +1,7 @@
 # Spectrograms
 
+[日本語](spectrograms.ja.md)
+
 Right-click a track header or an empty area of its lane and choose **Audio Display →
 Spectrogram**. This is available for audio, instrument, drum, singer and bus tracks.
 Choose **Waveform** on an audio track, or **Clips** on another track, to restore the

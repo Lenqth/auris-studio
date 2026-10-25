@@ -1,5 +1,7 @@
 # Composition harness validation — 2026-10-24
 
+[日本語](composition-quality-validation-2026-10-24.ja.md)
+
 This report covers production records, immutable composition candidates, scoped
 phrase/cadence variation, task-specific prompts and cross-backend evaluation.
 It separates engineering correctness, delivery and musical preference. The

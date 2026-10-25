@@ -1,5 +1,7 @@
 # Lyric analysis, diagnosis and local repair
 
+[日本語](lyric-harness.ja.md)
+
 The lyric harness checks structural fit before composing or editing. It runs locally,
 without a singing model, inference server, audio device or document mutation during reads.
 It does not rate artistic quality or prove that a changed phrase retains its meaning.

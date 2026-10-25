@@ -1,5 +1,7 @@
 # Music analysis: compute and model deployment assessment
 
+[日本語](music-analysis-compute.ja.md)
+
 Assessment date: 2026-09-07. This is the follow-on compute assessment for the implemented
 [music-analysis workflow](music-analysis.md).
 

@@ -1,5 +1,7 @@
 # Agent audio materials and SFX
 
+[日本語](agent-audio-assets.ja.md)
+
 The agent panel and saved-project tools share `audio_assets`. Existing `import_audio`,
 `edit_clip`, `edit_track`, `mixer_graph`, `inspect_audio` and `render` complete the workflow.
 All examples below show live operation-specific arguments. Saved-project calls also take

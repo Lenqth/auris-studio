@@ -1,5 +1,7 @@
 # Shaping a clip's performance
 
+[日本語](performance.ja.md)
+
 Select a MIDI clip and use **Performance** in the inspector. These controls work on authored
 and generated clips. They change playback and MIDI export while preserving the
 original score. Save stores the controls and seeds; disabling a control restores the score's
@@ -150,7 +152,7 @@ overlapping voices still suppress automatic channel gestures.
 All four controls default to zero (off). Source notes and curves remain editable; **Keep
 the Performance** writes the heard notes and controllers, and Undo restores the settings.
 
-Saved projects use format version 28 for editable long-note volume contours.
+Editable long-note volume contours are saved with the project.
 
 ## Starting from automatic composition
 

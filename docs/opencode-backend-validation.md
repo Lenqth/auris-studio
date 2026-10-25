@@ -1,5 +1,7 @@
 # OpenCode backend validation
 
+[日本語](opencode-backend-validation.ja.md)
+
 The 2026-10-24 trials use the installed OpenCode 2.1.3 CLI, actual model inference,
 the real GPUI window harness, live authenticated MCP and the normal session and
 renderer. All songs and external files are generated scratch fixtures. The

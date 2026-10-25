@@ -1,5 +1,7 @@
 # Exact composition candidates
 
+[日本語](composition-candidates.ja.md)
+
 For the live agent panel, set `AURIS_COMPOSITION_CANDIDATES=1` before starting
 Auris to advertise the experimental candidate and phrase tools. Their additional
 schemas need context headroom. History can exhaust even a 64k local-model

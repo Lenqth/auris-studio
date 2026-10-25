@@ -1,5 +1,7 @@
 # Agent backends
 
+[日本語](agent-backends.ja.md)
+
 The Agent panel discovers the signed-in Codex, Claude Code, OpenCode and Antigravity CLIs, local Ollama,
 and the API connection configured in Settings > Agent. An `OPENAI_API_KEY` also enables
 discovery at OpenAI's default endpoint. Providers are queried concurrently;

@@ -1,5 +1,7 @@
 # Learned music calibration, October 2026
 
+[日本語](learned-music-tuning.ja.md)
+
 The evaluator uses the pinned TuneJury and MuQ-MuLan protocol in
 [evaluation.md](evaluation.md). This experiment measured all nine presets before
 changing the composer and retained both successful and rejected candidates.

@@ -1,5 +1,7 @@
 # Codex transcription through the new live APIs
 
+[日本語](codex-live-transcription-evaluation.ja.md)
+
 The 2026-10-21 application evaluation completed original-audio export, local analysis,
 generic note import, note readback and rendered-audio inspection with real Codex
 inference. The new APIs preserve recognition results from an existing frozen

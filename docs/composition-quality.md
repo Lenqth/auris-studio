@@ -1,5 +1,7 @@
 # Agent composition quality trials
 
+[日本語](composition-quality.ja.md)
+
 `tools/eval/composition_quality.py` runs the real agent-panel host in an isolated,
 unsaved fixture. The versioned manifest contains eight development tasks and four
 held-out tasks. Freeze it before collecting a baseline; do not tune against holdout

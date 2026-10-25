@@ -1,5 +1,7 @@
 # Composing from an idea
 
+[日本語](composition-intent.ja.md)
+
 In the song sheet, choose a mood, major or minor, and a speed, then create the song.
 For example, **Dark**, **Minor**, and **Slow** asks for a dark minor-key song at 80 BPM.
 **Follow the mood** chooses a scale from the mood and picks a slow, moderate, or fast tempo

@@ -1,7 +1,8 @@
 # Agent tool consolidation validation
 
-Date: 2026-10-22. Implementation and measurements cover the
-[approved audit plan](agent-tool-audit-plan.md). Machine-readable results are in
+[日本語](agent-tool-validation.ja.md)
+
+Date: 2026-10-22. Implementation and measurements are in
 [the validation record](../tools/eval/references/agent-tool-validation-2026-10-22.json).
 
 ## Resulting contracts

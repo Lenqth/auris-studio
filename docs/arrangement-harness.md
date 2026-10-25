@@ -1,5 +1,7 @@
 # Arrangement proposals for agents
 
+[日本語](arrangement-harness.ja.md)
+
 The arrangement harness connects instrument capabilities, phrase conditions, section
 orchestration, parameter movement and SFX to the shared session editing path. It retains
 authored notes, lyrics, harmony, tempo and meter, except for exact releases, pickup

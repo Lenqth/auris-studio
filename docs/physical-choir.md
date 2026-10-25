@@ -1,5 +1,7 @@
 # Physical Choir
 
+[日本語](physical-choir.ja.md)
+
 Choose **Physical Choir** in the instrument library and play notes or chords on an ordinary
 instrument track. Its stable plugin ID is `auris.physical.choir`. It synthesizes sustained,
 wordless ensemble vowels locally, with four singers per note and sixteen-note polyphony.

@@ -1,5 +1,7 @@
 # Audio critic calibration
 
+[日本語](audio-critic-calibration.ja.md)
+
 `listen` separates single-excerpt diagnosis from anonymous comparison. Diagnostic `focus`
 may ask a descriptive question. Comparison requires `compare_to` plus one typed `aspect`
 (`balance`, `phrasing`, `ensemble`, `sound`, `musical_coherence`) and rejects `focus`.

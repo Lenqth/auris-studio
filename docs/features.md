@@ -1,5 +1,7 @@
 # Features
 
+[日本語](features.ja.md)
+
 What the application does, panel by panel. The overview is in [the README](../README.md);
 how a piece writes itself is in [Automatic composition](composition.md).
 
@@ -100,9 +102,10 @@ Renaming goes through the platform's input handler, so an IME composes into the 
 it does anywhere else.
 
 Creating and deleting are pointer gestures, and which gesture does which is a setting. The
-defaults are Logic's — ⌘-click creates a note or a clip, ⌥-click deletes what is under the
-pointer — with the double-click available for either, though nothing destructive is bound there
-by default: a double-click opens a clip in every editor that has clips, and the gesture people
+defaults are Logic's — ⌘-click (Ctrl-click on Windows) creates a note or a clip, and ⌥-click
+(Alt-click on Windows) deletes what is under the pointer — with the double-click available for
+either, though nothing destructive is bound there by default: a double-click opens a clip in
+every editor that has clips, and the gesture people
 arrive with should not destroy their work. Dragging across empty space in the piano roll or the
 arrangement sweeps a selection rectangle; ⇧-drag adds to what is already selected, and a multiple
 selection moves, duplicates and deletes as one. A press on empty arrangement that never travelled
@@ -188,9 +191,10 @@ Logic offers that gesture on ⌃⌥-drag as well as on the tool, and that half c
 across: on macOS a ⌃-click becomes a right-click before the window sees it — ⌃ stripped off on
 the way — so it would arrive as a request for the context menu rather than as a drag.
 
-**Cut, copy and paste** are ⌘X, ⌘C and ⌘V, and they mean notes in the piano roll and clips in
-the arrangement — the same three keys, scoped to wherever the keyboard is, exactly as ⌘A and ⌘D
-already are. Both are on the Edit menu in pairs so it is possible to find out which one you just
+**Cut, copy and paste** are ⌘X, ⌘C and ⌘V (Ctrl+X, Ctrl+C and Ctrl+V on Windows), and they mean
+notes in the piano roll and clips in the arrangement — the same three keys, scoped to wherever
+the keyboard is, exactly as ⌘A and ⌘D already are. Both are on the Edit menu in pairs so it is
+possible to find out which one you just
 got. A paste lands at the playhead; a right-click on an empty lane offers *Paste Here* instead,
 because that is the one place a paste has a position of its own behind it.
 
@@ -447,9 +451,10 @@ stores whole microseconds per quarter note, so 144 bpm goes out as 416 667 and c
 
 **Pitch bend and modulation travel both ways.** A clip carries both curves itself — on the clip
 rather than in an automation lane, because they belong to the phrase and a clip dragged four bars
-later takes them along. **View → Pitch Bend** (`⌘⌥B`) and **View → Modulation** (`⌘⌥W`) put a strip
-under the piano roll for each: a press on empty strip writes the point it is about to drag, so
-placing a curve and shaping it is one gesture; ⌥-click takes one off; right-click straightens the
+later takes them along. **View → Pitch Bend** (`⌘⌥B`; Ctrl+Alt+B on Windows) and
+**View → Modulation** (`⌘⌥W`; Ctrl+Alt+W on Windows) put a strip under the piano roll for each:
+a press on empty strip writes the point it is about to drag, so placing a curve and shaping it is
+one gesture; ⌥-click takes one off; right-click straightens the
 whole clip. They span the same timeline as the notes above them, because both happen at a moment in
 the phrase and the only useful way to look at one is with the note it is shaping directly overhead.
 

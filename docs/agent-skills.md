@@ -1,5 +1,7 @@
 # Agent skills
 
+[日本語](agent-skills.ja.md)
+
 ## Auris composition skill
 
 `auris-composition` teaches a coding agent when and how to use Auris Studio for original songs with lyrics and game/video music: editable scores, vocal synthesis, loopable cues, themes, transitions, previews, renders, stems, and measurable delivery checks. Its [vocal workflow](../skills/auris-composition/references/vocals.md) covers lyric/melody development, voice selection, CLI/MCP synthesis, and full-song coverage checks. It is distributed separately from the Auris desktop binary and does not install or update that binary.

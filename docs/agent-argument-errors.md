@@ -1,9 +1,11 @@
 # Agent argument errors: cause and validation
 
+[日本語](agent-argument-errors.ja.md)
+
 Date: 2026-10-22.
 Implementation: `f233bdc5`.
 
-The preceding [composition rerun](agent-tool-improvements.md) completed all four
+The preceding composition rerun completed all four
 scenarios but recovered from four argument refusals. This follow-up addresses
 those refusals without changing the composition algorithms or tool count.
 
@@ -93,7 +95,7 @@ four argument mistakes. It remains unresolved by this argument-contract change.
 No musical-quality or universal model-reliability claim follows from this trial.
 
 The WAV clipping was subsequently reproduced from the retained project and fixed
-in the [output-headroom follow-up](agent-export-clipping.md). Its separate same-prompt
+in the output-headroom follow-up. Its separate same-prompt
 Codex rerun passed all four encoded-WAV delivery checks.
 
 ## Code validation

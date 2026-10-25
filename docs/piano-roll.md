@@ -1,5 +1,7 @@
 # Piano-roll snapping
 
+[日本語](piano-roll.ja.md)
+
 The piano roll has its own Snap menu. It opens from the editor header or the
 **Piano Roll Snap…** command in the command palette; the command can also be
 assigned a keyboard shortcut. Preferences are remembered between runs and do

@@ -1,5 +1,7 @@
 # Evaluating what the composer writes
 
+[日本語](evaluation.ja.md)
+
 Development measurements, none part of any release build. They exist for the same reason
 every level and timing constant in this workspace was calibrated by rendering and measuring:
 a change to a writer or a dial should be judged against numbers first and ears always.

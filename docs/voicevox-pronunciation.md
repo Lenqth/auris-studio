@@ -1,5 +1,7 @@
 # VOICEVOX pronunciation checks
 
+[日本語](voicevox-pronunciation.ja.md)
+
 The 2026-10-22 investigation uses VOICEVOX Engine 0.25.2, prediction style 6000,
 and the adapter's 93.75 fps clock. Its baseline is commit `8025e4ab`.
 

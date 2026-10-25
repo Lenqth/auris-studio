@@ -1,5 +1,7 @@
 # Conversation production records
 
+[日本語](production-record.ja.md)
+
 The live `production_record` tool retains intent, musical roles, motifs, decisions
 and unresolved issues beside the conversation's model memory. Entries have a stable
 key, category, text, explicit clip IDs and either a quoted user request or an agent

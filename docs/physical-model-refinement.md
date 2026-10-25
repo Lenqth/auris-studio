@@ -1,5 +1,7 @@
 # Physical model refinement
 
+[日本語](physical-model-refinement.ja.md)
+
 This records the refinement through commit `5a6ccac`. The subsequent
 [real-recording copy-synthesis calibration](physical-copy-synthesis.md) supplies the current
 piano, guitar and violin factory settings and radiation gains.

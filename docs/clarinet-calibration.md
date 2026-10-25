@@ -1,5 +1,7 @@
 # Clarinet model and copy-synthesis evaluation
 
+[日本語](clarinet-calibration.ja.md)
+
 Physical Clarinet is a sample-free, 16-voice instrument. A fractional half-period
 delay with an inverted bore reflection supplies the closed-open tube resonance.
 A bounded nonlinear pressure-flow approximation excites it with a reed signal

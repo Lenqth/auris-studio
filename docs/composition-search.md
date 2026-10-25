@@ -1,5 +1,7 @@
 # Bounded composition search
 
+[日本語](composition-search.ja.md)
+
 Composition search repeatedly writes a song, measures its written notes, and retains the exact
 best generated score. It is a sequential, headless command exposed through
 `auris_session::composition_search::search_composition`. Running it needs no audio device,

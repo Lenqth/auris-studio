@@ -1,5 +1,7 @@
 # Timbre map
 
+[日本語](timbre-map.ja.md)
+
 Open **Timbre Map** at the top of the library. Auris measures the built-in melodic instruments
 and melodic presets of loaded SoundFonts in the background. The counter shows completed sounds;
 Cancel, Close and Escape stop a running scan. Use **Rescan Library** after loading another font.

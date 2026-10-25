@@ -1,5 +1,7 @@
 # Drum tracks
 
+[日本語](drums.ja.md)
+
 Drums have their own track kind, separate from melodic software instruments. Create a drum
 track to start with the built-in kit, or select a SoundFont or hosted instrument for that track.
 Changing its sound preserves its drum identity. Composed percussion and imported MIDI channel

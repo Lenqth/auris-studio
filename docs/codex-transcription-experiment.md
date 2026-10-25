@@ -1,5 +1,7 @@
 # Codex-led transcription experiment
 
+[日本語](codex-transcription-experiment.ja.md)
+
 The 2026-10-21 experiment used the installed Codex CLI 0.163.0 with the user's
 configured `gpt-6.1-sol`, high reasoning effort, and ChatGPT sign-in. Codex produced
 usable note drafts by writing and running its own signal-analysis program without

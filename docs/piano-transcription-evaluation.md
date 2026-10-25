@@ -1,5 +1,7 @@
 # Piano-cover transcription: confidence and missing notes
 
+[日本語](piano-transcription-evaluation.ja.md)
+
 The 2026-10-21 decoder revision improves the bundled Basic Pitch piano-cover backend.
 It changes note decoding and catastrophic stereo-cancellation handling; model weights,
 the composer, instrument synthesis and existing notes in saved projects are unchanged.
@@ -76,10 +78,11 @@ mixtures still miss many events. The per-case record keeps these failures visibl
 
 ## An independent existing score
 
-The earlier [agent production audit](agent-production-audit.md) supplies the independent
-Mutopia SATB *Ode to Joy* score, rendered as piano and as reeds/strings. Neither its notes
-nor its new-decoder results were used to select parameters. The 238-event reference is read
-independently from the exported MIDI; input WAVs are identical to the audit's hashed files.
+An independent Mutopia SATB *Ode to Joy* score from an earlier audit was rendered as
+piano and as reeds/strings. Neither its notes nor its new-decoder results were used
+to select parameters. The 238-event reference is read independently from the
+exported MIDI; input WAVs match the files hashed in the
+[measurement snapshot](../tools/eval/references/agent-production-audit-2026-10-21.json).
 This is controlled synthesis of an existing work, not an independent acoustic recording.
 
 | Input | FP before → after | FN before → after | Onset F1 before → after |

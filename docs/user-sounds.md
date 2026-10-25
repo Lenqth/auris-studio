@@ -1,5 +1,7 @@
 # Reusable sounds
 
+[日本語](user-sounds.ja.md)
+
 Select an instrument or drum track, adjust its instrument and insert effects, then choose
 **Save as user sound…** in the track inspector. Enter a new name. Saved sounds appear in the
 library's **User sounds** section and in library search, and remain available after restarting.

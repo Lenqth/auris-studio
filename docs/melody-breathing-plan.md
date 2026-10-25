@@ -1,5 +1,7 @@
 # Melody breathing
 
+[日本語](melody-breathing-plan.ja.md)
+
 The arrangement harness measures phrase space and prepares explicit foreground note
 repairs. Enable it with `AURIS_ARRANGEMENT_HARNESS=1`. Shared composition guidance
 also asks agents to plan calls, continuations, answers and breathing points when writing

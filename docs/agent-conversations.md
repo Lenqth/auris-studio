@@ -1,5 +1,7 @@
 # Agent conversations
 
+[日本語](agent-conversations.ja.md)
+
 The Agent panel keeps separate conversations for each project. **New conversation**
 preserves the existing history and draft. **Conversations** opens the list, ordered
 by the most recent message. Search matches conversation titles. The first request

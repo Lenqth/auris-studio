@@ -1,5 +1,7 @@
 # Agent tools and workflows
 
+[日本語](agent-workflows.ja.md)
+
 Saved-project MCP, the built-in Claude/Codex backends and native API agents share
 canonical session commands, schemas and validation. Saved calls add `project`
 (an absolute path or project_id from open_project/create_project). Live calls act

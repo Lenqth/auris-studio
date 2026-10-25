@@ -1,5 +1,7 @@
 # Physical-model experiments against real recordings
 
+[日本語](physical-extensions.ja.md)
+
 Six causal radiation resonances, register-dependent contact/loss controls and a nonlinear
 violin expression response reduce held-out temporal log-mel error by about 2.7% for guitar
 and violin. These are incremental changes to the already calibrated instruments. The baseline

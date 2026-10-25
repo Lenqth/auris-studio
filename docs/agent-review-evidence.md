@@ -1,5 +1,7 @@
 # Automatic approval evidence
 
+[日本語](agent-review-evidence.ja.md)
+
 AutoReview still asks an independent, tool-free model to assess the exact pending
 operation. Deny rules, one-time permissions, document revision checks and cancellation
 remain in force. Uncertainty, malformed output, unsupported evidence and timeouts

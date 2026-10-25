@@ -1,5 +1,7 @@
 # Experimental composition workflows
 
+[日本語](composition-workflows.ja.md)
+
 Set `AURIS_COMPOSITION_WORKFLOWS=1` before starting Auris to test the compact
 common prompt and task-specific workflows. The complete tool catalog stays the
 same, so prompt experiments do not silently compare different tools. The default

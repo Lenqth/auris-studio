@@ -1,5 +1,7 @@
 # Music analysis
 
+[日本語](music-analysis.ja.md)
+
 Auris can estimate chords from written notes, estimate constant tempo and major/minor chords
 from audio, and turn isolated monophonic audio into an editable note draft. These operations
 use Rust signal processing and fixed templates on the CPU. They load no learned weights and

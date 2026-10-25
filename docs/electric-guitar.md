@@ -1,5 +1,7 @@
 # Electric guitar and amplifier
 
+[日本語](electric-guitar.ja.md)
+
 Choose **Electric Guitar** (`auris.physical.electric_guitar`) in the instrument library,
 then add **Guitar Amp** (`auris.fx.guitar_amp`) to its track. Both are built in, work without
 samples, and save through ordinary instrument/effect state. GM hints 26–31 select the DI;

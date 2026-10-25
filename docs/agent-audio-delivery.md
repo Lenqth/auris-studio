@@ -1,5 +1,7 @@
 # Agent audio delivery
 
+[日本語](agent-audio-delivery.ja.md)
+
 The saved-project MCP tools and the live rig agent use the same session command for
 whole-mix normalization. A sound search result identifies a sound, but its fader value does
 not predict the sound's output level. After `set_instrument` or `setup_tracks`, measure the

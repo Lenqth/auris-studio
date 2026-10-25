@@ -1,5 +1,7 @@
 # Installing Auris Studio
 
+[日本語](installation.ja.md)
+
 The [release page](https://github.com/uthree/auris-studio/releases) offers desktop installers
 and portable archives. Desktop releases contain the application, the `auris` CLI, the
 `auris-mcp` server, the update helper and the Japanese dictionary from one build. Linux releases

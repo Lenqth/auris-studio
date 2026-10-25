@@ -1,5 +1,7 @@
 # Automatic composition
 
+[日本語](composition.ja.md)
+
 A whole piece from a text specification, and clips you can regenerate against the current
 chords with **Write It Again**. The rest of the application is in [Features](features.md).
 

@@ -1,5 +1,7 @@
 # Physical instrument copy synthesis
 
+[日本語](physical-copy-synthesis.ja.md)
+
 The native piano, guitar and violin are calibrated against **real recordings**, using a fixed
 temporal mel-spectrogram loss. The Rust instrument renders every candidate; the search adjusts
 shared excitation/loss parameters and twelve radiation-filter gains. Only those numbers enter

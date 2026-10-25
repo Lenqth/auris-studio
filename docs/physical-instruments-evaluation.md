@@ -1,5 +1,7 @@
 # Physical instrument measurements
 
+[日本語](physical-instruments-evaluation.ja.md)
+
 Measured on Windows at 48 kHz on 2026-10-01. The comparison build is commit
 `64ca54ee60b4105df336e46b53512b5c7d07334d`; the candidate is the physical instrument
 initial implementation at `aaf5a0f`, described in [physical instruments](physical-instruments.md).

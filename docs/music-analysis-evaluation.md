@@ -1,5 +1,7 @@
 # CPU transcription: temporal decoding and evaluation
 
+[日本語](music-analysis-evaluation.ja.md)
+
 The second CPU iteration reduces note fragmentation caused by vibrato. It runs through the
 existing desktop, CLI and model-tool commands; no new setup or weights are needed. The audio
 report's algorithm identifier is `cpu-spectral-yin-v2`.
