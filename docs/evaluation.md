@@ -187,6 +187,14 @@ repeatability. Model weights are CC-BY-NC 4.0; their use here is offline researc
 
 ## Controlled melody listening
 
+The [2026-10-26 local evaluator trial](local-music-evaluators-2026-10-26.ja.md)
+ran SongEval and Meta Audiobox Aesthetics on four fixed-context vocal mixes,
+with repeated-input and silence controls. Both ran on Windows CPU; neither is
+shipped in the application or calibrated as an automatic selector. The retained
+[results](../tools/eval/references/local-music-evaluators-2026-10-26.json) distinguish
+successful local inference from the Antigravity CLI attempt, which did not
+deliver raw audio and produced no valid music assessment.
+
 `melody_ab.py` transplants an instrumental lead into a frozen backing;
 `melody_continuity_ab.py` freezes the renderer and makes level-matched chorus
 excerpts. `melody_phrase_ab.py` compares baseline, pitch, rhythm and combined
