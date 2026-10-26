@@ -124,6 +124,45 @@ def frozen_source(
     } | {"source_reference_sha256": hashlib.sha256(payload).hexdigest()}
 
 
+def freeze_seed_project(source: Path, destination: Path) -> dict[str, object]:
+    """Copy a project document and its project-local Audio directory for a trial suite.
+
+    The original is never opened for writing by the harness.  The deliberately narrow copy
+    excludes unrelated siblings; references to external assets in the project JSON remain
+    references and must be audited/resolved in the same environment separately.
+    """
+    if source.is_symlink() or source.parent.is_symlink():
+        raise ValueError("--seed-project must not use a symlink")
+    source = source.resolve(strict=True)
+    if source.suffix.lower() != ".auris" or not source.is_file():
+        raise ValueError("--seed-project must name an existing .auris file")
+    if source.parent.name != source.stem:
+        raise ValueError("--seed-project must be in the project-named folder")
+    audio = source.parent / "Audio"
+    if audio.exists() and (not audio.is_dir() or audio.is_symlink()):
+        raise ValueError("Seed project Audio must be a real directory")
+    if audio.exists() and any(path.is_symlink() for path in audio.rglob("*")):
+        raise ValueError("Seed project Audio must not contain symlinks")
+    destination.mkdir(parents=True)
+    frozen = destination / source.stem
+    frozen.mkdir()
+    frozen_file = frozen / source.name
+    shutil.copy2(source, frozen_file)
+    if audio.exists():
+        shutil.copytree(audio, frozen / "Audio")
+    files = {
+        str(path.relative_to(destination)).replace("\\", "/"): digest(path)
+        for path in sorted(destination.rglob("*"))
+        if path.is_file()
+    }
+    return {
+        "source": str(source),
+        "source_sha256": digest(source),
+        "frozen_root": str(destination.resolve()),
+        "files": files,
+    }
+
+
 def run(args) -> None:
     suite = manifest(args.manifest)
     condition = None
@@ -140,6 +179,16 @@ def run(args) -> None:
     eligible = {case["id"] for case in suite["cases"] if case["split"] == args.split}
     if args.case and not set(args.case) <= eligible:
         raise ValueError("Requested case is not in the selected split")
+    selected_cases = [
+        case
+        for case in suite["cases"]
+        if case["split"] == args.split
+        and (not args.case or case["id"] in args.case)
+    ]
+    if args.seed_project is not None and any(
+        case["fixture"] != "blank" for case in selected_cases
+    ):
+        raise ValueError("--seed-project currently supports only blank fixtures")
     executable = args.executable.resolve(strict=True)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -151,6 +200,11 @@ def run(args) -> None:
     for folder in [executable.parent.parent, executable.parent]:
         for source in folder.glob("*.dll"):
             shutil.copy2(source, frozen / source.name)
+    seed_provenance = None
+    frozen_seed = None
+    if args.seed_project is not None:
+        frozen_seed = output / "seed-project"
+        seed_provenance = freeze_seed_project(args.seed_project, frozen_seed)
     provenance = {
         "schema_version": 1,
         "manifest": suite,
@@ -201,6 +255,9 @@ def run(args) -> None:
         "quality_status": "unscored; transport and structural measurements are not musical preference",
         "trials": [],
     }
+    if seed_provenance is not None:
+        provenance["seed_project"] = seed_provenance
+        (output / "input-projects").mkdir()
     if condition is not None:
         provenance["prompt_condition"] = condition
         provenance["prompt_condition_sha256"] = condition_sha256
@@ -229,6 +286,12 @@ def run(args) -> None:
                 ],
                 "output": str(destination),
             }
+            if frozen_seed is not None:
+                input_root = output / "input-projects" / trial_id
+                shutil.copytree(frozen_seed, input_root)
+                config["seed_project"] = str(
+                    (input_root / args.seed_project.stem / args.seed_project.name).resolve()
+                )
             if condition is not None:
                 config["prompt_condition"] = {
                     key: condition[key]
@@ -272,6 +335,14 @@ def run(args) -> None:
                 for p in sorted(destination.rglob("*"))
                 if p.is_file()
             }
+            if frozen_seed is not None:
+                frozen_files = {
+                    str(path.relative_to(frozen_seed)).replace("\\", "/"): digest(path)
+                    for path in sorted(frozen_seed.rglob("*"))
+                    if path.is_file()
+                }
+                if frozen_files != seed_provenance["files"]:
+                    raise ValueError("Frozen seed project changed during trial")
             provenance["trials"].append(
                 {
                     "id": trial_id,
@@ -441,6 +512,11 @@ def main() -> None:
         "--source-suite",
         type=Path,
         help="Previous suite binding an identical frozen runtime to its original source",
+    )
+    runner.add_argument(
+        "--seed-project",
+        type=Path,
+        help="Read-only source .auris project to freeze and use as every trial's initial state",
     )
     runner.add_argument(
         "--prompt-condition",

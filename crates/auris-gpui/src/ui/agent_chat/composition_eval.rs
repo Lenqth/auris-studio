@@ -23,6 +23,8 @@ struct Evaluation {
     prompts: Vec<String>,
     #[serde(default)]
     prompt_condition: Option<PromptCondition>,
+    #[serde(default)]
+    seed_project: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -87,6 +89,63 @@ fn codex_backend() -> String {
 }
 fn context_tokens() -> u32 {
     65536
+}
+
+fn validate_seed_project(path: &Path) -> Result<PathBuf, &'static str> {
+    if !path.is_absolute()
+        || !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("auris"))
+    {
+        return Err("Seed project must be an absolute .auris path");
+    }
+    let canonical = fs::canonicalize(path).map_err(|_| "Seed project cannot be read")?;
+    let metadata = fs::symlink_metadata(&canonical).map_err(|_| "Seed project cannot be read")?;
+    if !metadata.is_file() {
+        return Err("Seed project must be a file");
+    }
+    let stem = canonical
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or("Seed project has no valid name")?;
+    if canonical
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        != Some(stem)
+    {
+        return Err("Seed project must be in the project-named folder");
+    }
+    let audio = canonical.parent().unwrap().join("Audio");
+    if audio.exists() {
+        let metadata =
+            fs::symlink_metadata(&audio).map_err(|_| "Seed project Audio cannot be read")?;
+        if !metadata.is_dir() {
+            return Err("Seed project Audio must be a directory");
+        }
+    }
+    Ok(canonical)
+}
+
+#[test]
+fn seed_project_validation_requires_a_real_project_named_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join("SeedSong");
+    fs::create_dir(&folder).unwrap();
+    let path = folder.join("SeedSong.auris");
+    fs::write(&path, b"{}").unwrap();
+    assert_eq!(
+        validate_seed_project(&path).unwrap(),
+        fs::canonicalize(&path).unwrap()
+    );
+
+    let ambiguous = root.path().join("song.auris");
+    fs::write(&ambiguous, b"{}").unwrap();
+    assert_eq!(
+        validate_seed_project(&ambiguous),
+        Err("Seed project must be in the project-named folder")
+    );
 }
 
 fn melody_fixture(quarter: Ticks) -> (Ticks, Vec<Note>) {
@@ -155,6 +214,13 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
         config.backend.as_str(),
         "codex" | "claude" | "rig"
     ));
+    let seed_project = config.seed_project.as_deref().map(|path| {
+        assert_eq!(
+            config.fixture, "blank",
+            "seed projects only support the blank fixture"
+        );
+        validate_seed_project(path).expect("frozen seed project must be valid")
+    });
     fs::create_dir(&config.output).expect("a fresh evidence folder");
     let system_prompt = config.prompt_condition.as_ref().map(|condition| {
         condition
@@ -170,10 +236,15 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
     .unwrap();
     let (app, cx) = crate::harness::open(cx);
     app.update(cx, |this, _| {
-        this.session.new_project();
-        match config.fixture.as_str() {
-            "blank" => {}
-            "melody_six_eight" | "melody_six_eight_eight_bars" => {
+        if let Some(path) = seed_project.as_deref() {
+            this.session.open(path).expect("seed project opens");
+        } else {
+            this.session.new_project();
+        }
+        match (seed_project.is_some(), config.fixture.as_str()) {
+            (true, "blank") => {}
+            (false, "blank") => {}
+            (false, "melody_six_eight" | "melody_six_eight_eight_bars") => {
                 // Keep v1's four-bar seed unchanged for frozen paired comparisons.
                 let quarter = if config.fixture == "melody_six_eight" {
                     Ticks(480)
@@ -196,7 +267,7 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
                 this.session
                     .set_curve_point(clip, ClipCurve::Controller(1), Ticks(333), 0.37);
             }
-            other => panic!("unknown fixture {other}"),
+            (_, other) => panic!("unknown fixture {other}"),
         }
         this.settings.agent = AgentPreferences {
             backend: config.backend.clone(),

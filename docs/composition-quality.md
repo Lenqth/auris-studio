@@ -17,6 +17,13 @@ Build the GPUI **test binary**, locate its executable in Cargo's JSON output, an
 pass that executable to the runner (not `auris-studio.exe`). The runner copies the
 binary and runtime DLLs before execution. A fresh output directory is required.
 
+For a fixed existing musical seed, pass `--seed-project <project-folder>/<project-folder>.auris`
+with a blank fixture. The runner preserves the original, records its hashes, and creates a
+separate seed copy for each trial, so an agent save cannot contaminate the next trial. Only the
+project document and project-local `Audio/` are copied; external asset references remain external
+and must be available and audited in the same environment. This is useful for comparing
+before/after melody or accompaniment edits while holding the starting project constant.
+
 ```powershell
 cargo test -p auris-gpui --bins --no-run --message-format=json > build.jsonl
 uv run tools/eval/composition_quality.py run --executable <test-executable> --output target/quality-before --repetitions 3
