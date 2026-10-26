@@ -1839,7 +1839,7 @@ fn same_font_file(left: &Path, right: &Path) -> bool {
 }
 
 /// Serialises cooperating writers across processes, including the optimistic disk check.
-fn project_write_lock(path: &Path) -> Result<std::fs::File, SessionError> {
+pub(super) fn project_write_lock(path: &Path) -> Result<std::fs::File, SessionError> {
     let folder = path.parent().ok_or(SessionError::NoPath)?;
     let lock_path = folder.join(".auris-write.lock");
     let file = std::fs::OpenOptions::new()
