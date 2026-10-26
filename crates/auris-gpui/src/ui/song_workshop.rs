@@ -3,7 +3,7 @@
 use super::text_field::{KeyEffect, TextField};
 use super::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled};
 use crate::app::{AurisApp, Pane};
-use auris_i18n::Key;
+use auris_i18n::{Key, messages};
 use auris_session::prelude::{PartSpec, Role};
 use auris_session::{
     SongCandidate, SongIdea, SongRequest, SongSinger, SongSinging, SongSourceChoice,
@@ -48,7 +48,11 @@ pub(crate) struct SongWorkshop {
     progress: [String; 3],
     cancel: Arc<AtomicBool>,
     ideas: Option<[SongIdea; 3]>,
-    candidates: [Option<SongCandidate>; 3],
+    /// Shared so a draft can be written as a project of its own off the window thread; its
+    /// temporary audio lives exactly as long as the last holder.
+    candidates: [Option<Arc<SongCandidate>>; 3],
+    /// Where each draft, as it stands now, was last kept as a project.
+    saved: [Option<std::path::PathBuf>; 3],
     errors: [Option<String>; 3],
     pending: [bool; 3],
     error: Option<String>,
@@ -221,6 +225,7 @@ impl AurisApp {
             cancel: Arc::new(AtomicBool::new(false)),
             ideas: None,
             candidates: std::array::from_fn(|_| None),
+            saved: std::array::from_fn(|_| None),
             errors: std::array::from_fn(|_| None),
             pending: [false; 3],
             error: None,
@@ -272,6 +277,7 @@ impl AurisApp {
                 state.step = 3;
                 state.captured_brief = brief;
                 state.candidates = std::array::from_fn(|_| None);
+                state.saved = std::array::from_fn(|_| None);
                 state.errors = std::array::from_fn(|_| None);
                 state.ideas = None;
                 state.error = None;
@@ -345,7 +351,10 @@ impl AurisApp {
                     Ok(CandidateEvent::Complete(index, result)) => {
                         state.pending[index] = false;
                         match result {
-                            Ok(candidate) => state.candidates[index] = Some(*candidate),
+                            Ok(candidate) => {
+                                state.candidates[index] = Some(Arc::from(candidate));
+                                state.saved[index] = None;
+                            }
                             Err(error) => state.errors[index] = Some(error),
                         }
                         cx.notify();
@@ -435,6 +444,89 @@ impl AurisApp {
         self.reset_view();
         self.focus_pane(Pane::Arrangement, window);
         cx.notify();
+    }
+
+    /// Asks where to keep one draft as a project of its own, without adopting it.
+    fn save_song_candidate(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(state) = &self.song_workshop else {
+            return;
+        };
+        let Some(candidate) = state.candidates[index].clone() else {
+            return;
+        };
+        let identity = state.identity;
+        let language = self.language();
+        let view = cx.entity().downgrade();
+        window
+            .spawn(cx, async move |cx| {
+                let handle = rfd::AsyncFileDialog::new()
+                    .set_title(Key::DialogSaveProject.get(language))
+                    .set_file_name(format!(
+                        "{}.{}",
+                        candidate.idea.title,
+                        auris_session::PROJECT_EXTENSION
+                    ))
+                    .add_filter(
+                        Key::FilterProject.get(language),
+                        &[auris_session::PROJECT_EXTENSION],
+                    )
+                    .save_file()
+                    .await;
+                let Some(handle) = handle else { return };
+                let path = handle.path().to_path_buf();
+                let _ = view.update(cx, |this, cx| {
+                    this.finish_save_song_candidate(identity, index, candidate, path, cx);
+                });
+            })
+            .detach();
+    }
+
+    /// Writes a draft at the chosen path off the window thread and marks its card.
+    pub(crate) fn finish_save_song_candidate(
+        &mut self,
+        identity: u64,
+        index: usize,
+        candidate: Arc<SongCandidate>,
+        path: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        let view = cx.entity().downgrade();
+        cx.spawn(async move |_, cx| {
+            let kept = Arc::clone(&candidate);
+            let saved = cx
+                .background_executor()
+                .spawn(async move { kept.save_as(&path) })
+                .await;
+            let _ = view.update(cx, |this, cx| {
+                let failure = saved
+                    .as_ref()
+                    .err()
+                    .map(|error| this.failure(Key::WorkshopSave, error));
+                // A workshop closed, restarted or regenerated meanwhile is not the one asked.
+                let Some(state) = this
+                    .song_workshop
+                    .as_mut()
+                    .filter(|state| state.identity == identity)
+                else {
+                    return;
+                };
+                if !state.candidates[index]
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, &candidate))
+                {
+                    return;
+                }
+                match saved {
+                    Ok(report) => {
+                        state.saved[index] = Some(report.document);
+                        state.errors[index] = None;
+                    }
+                    Err(_) => state.errors[index] = failure,
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub(crate) fn render_song_workshop(
@@ -527,6 +619,12 @@ impl AurisApp {
                 if let Some(error) = &state.errors[index] {
                     card = card.child(div().text_color(theme.danger).child(error.clone()));
                 }
+                if let Some(saved) = &state.saved[index] {
+                    card = card.child(div().text_color(theme.text_muted).child(messages::saved(
+                        self.language(),
+                        &saved.display().to_string(),
+                    )));
+                }
                 card = card.child(
                     div()
                         .flex()
@@ -569,6 +667,17 @@ impl AurisApp {
                                     s.generate(vec![index]);
                                 }
                                 cx.notify();
+                            }),
+                        ))
+                        .child(button_enabled(
+                            ("song-save", index),
+                            self.t(Key::WorkshopSave),
+                            ButtonStyle::Normal,
+                            enabled(ready && !state.pending[index]),
+                            theme.accent,
+                            &theme,
+                            cx.listener(move |this, _, window, cx| {
+                                this.save_song_candidate(index, window, cx)
                             }),
                         ))
                         .child(button_enabled(
@@ -735,6 +844,7 @@ impl AurisApp {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[gpui::test]
     fn workshop_fields_modes_and_source_picker_preserve_the_draft(cx: &mut gpui::TestAppContext) {
@@ -877,5 +987,56 @@ mod tests {
             assert_eq!(app.session.project(), &before);
         });
         assert!(cancel.load(std::sync::atomic::Ordering::Acquire));
+    }
+
+    #[gpui::test]
+    fn an_unchosen_draft_is_kept_as_a_project_without_touching_the_open_one(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| app.update(cx, |app, cx| app.open_song_workshop(window, cx)));
+        let candidate = Arc::new(
+            SongCandidate::generate(
+                SongIdea {
+                    title: "Second".into(),
+                    description: "Bright keys".into(),
+                    preset: "chiptune".into(),
+                    tempo: 120.0,
+                    key: "C major".into(),
+                    density: 0.5,
+                    lead: "piano".into(),
+                },
+                "Bright instrumental",
+                30,
+                42,
+                &AtomicBool::new(false),
+            )
+            .unwrap(),
+        );
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Second.auris");
+        let before = app.read_with(cx, |app, _| app.session.project().clone());
+        let identity = app.update(cx, |app, _| {
+            let state = app.song_workshop.as_mut().unwrap();
+            state.candidates[1] = Some(Arc::clone(&candidate));
+            state.identity
+        });
+        for _ in 0..2 {
+            let (candidate, chosen) = (Arc::clone(&candidate), chosen.clone());
+            app.update(cx, |app, cx| {
+                app.finish_save_song_candidate(identity, 1, candidate, chosen, cx)
+            });
+            cx.run_until_parked();
+        }
+        let document = root.path().join("Second/Second.auris");
+        assert!(document.is_file());
+        app.read_with(cx, |app, _| {
+            let state = app.song_workshop.as_ref().unwrap();
+            assert_eq!(state.saved[1].as_deref(), Some(document.as_path()));
+            // The second save named the same folder, and was refused rather than replacing it.
+            assert!(state.errors[1].is_some());
+            assert!(state.saved[0].is_none() && state.saved[2].is_none());
+            assert_eq!(app.session.project(), &before);
+        });
     }
 }
