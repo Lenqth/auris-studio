@@ -31,7 +31,7 @@ const NATIVE_TOOLS: &[&str] = &[
     "apply_patch",
 ];
 
-fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
+pub(crate) fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.opencode_path.trim().is_empty() {
         let path = PathBuf::from(prefs.opencode_path.trim());
         if cfg!(windows)

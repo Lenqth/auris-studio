@@ -2050,6 +2050,15 @@ new のオプション
     AgentProviders { en: "Providers", ja: "プロバイダー" }
     AgentApiConnection { en: "API connection", ja: "API接続" }
     AgentPathAutomatic { en: "Find installed CLI automatically", ja: "インストール済みCLIを自動検出" }
+    AgentProviderCheck { en: "Check connections", ja: "接続を確認" }
+    AgentProviderChecking { en: "Checking", ja: "確認中" }
+    AgentProviderConnected { en: "Connection verified", ja: "接続確認済み" }
+    AgentProviderUnavailable { en: "Needs attention", ja: "要確認" }
+    AgentProviderNoModels { en: "Connected · no models", ja: "接続済み・モデルなし" }
+    AgentProviderCheckNeeded { en: "Check again after changes", ja: "変更後の再確認が必要" }
+    AgentProviderVersionUnknown { en: "Version unavailable", ja: "バージョン不明" }
+    AgentProviderModelCount { en: "Models: {count}", ja: "{count}モデル" }
+    AgentProviderStatusHelp { en: "Checks model discovery without generating a response. Expand a provider for details. After editing settings, check again using the unsaved values.", ja: "応答を生成せずにモデル一覧の取得を確認します。詳細は各プロバイダーを開いて確認できます。設定の変更後は、保存前の入力値で再確認できます。" }
     AgentBackendLabel { en: "Backend", ja: "バックエンド" }
     AgentAntigravityPathLabel { en: "Antigravity CLI executable path (optional)", ja: "Antigravity CLI実行ファイルのパス（任意）" }
     AgentAntigravityHelp { en: "Sign in by running agy. Leave the path empty to find the installed CLI. Choose an Antigravity CLI model in the Agent panel. Song tools use Auris permissions; native shell tools and image attachments are unavailable.", ja: "agyを起動してログインしてください。パスが空欄ならインストール済みCLIを探します。エージェントパネルでAntigravity CLIのモデルを選択してください。作曲ツールにはAurisの権限が適用されます。CLIのシェル操作と画像添付は未対応です。" }

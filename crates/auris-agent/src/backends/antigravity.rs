@@ -22,7 +22,7 @@ const MAX_ROUNDS: usize = 40;
 #[cfg(test)]
 mod live_tests;
 
-fn executable(prefs: &AgentPreferences) -> Result<PathBuf, String> {
+pub(crate) fn executable(prefs: &AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.antigravity_path.trim().is_empty() {
         let path = PathBuf::from(prefs.antigravity_path.trim());
         if cfg!(windows)
@@ -230,6 +230,8 @@ pub(crate) async fn list_models(prefs: &AgentPreferences) -> Result<String, Stri
     validate_user_profile()?;
     let directory = working_directory()?;
     let mut command = Command::new(executable(prefs)?);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
     let output = command
         .arg("--log-file")
         .arg(directory.path().join("cli.log"))
