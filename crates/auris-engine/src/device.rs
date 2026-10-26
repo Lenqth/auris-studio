@@ -317,19 +317,98 @@ impl Drop for AudioDevice {
 /// accepts commands and reports `is_running() == false`, so the application opens and stays
 /// editable on a machine with no audio hardware.
 pub fn start_audio(settings: &AudioSettings) -> Result<(AudioDevice, EngineHandle), EngineError> {
-    match open_output(settings) {
-        Ok(setup) => match start_with_device(settings, setup) {
-            Ok(started) => Ok(started),
-            Err(error) => {
-                log::warn!("could not start the audio stream ({error}); running silently");
-                Ok(start_silent(settings))
-            }
-        },
+    match try_start_audio(settings) {
+        Ok(started) => Ok(started),
         Err(error) => {
             log::warn!("no audio output available ({error}); running silently");
             Ok(start_silent(settings))
         }
     }
+}
+
+/// [`start_audio`] without the silent fallback: the reason no device opened, instead.
+///
+/// For a caller that will try again and wants to decide for itself what is worth saying about
+/// each failure.
+pub fn try_start_audio(
+    settings: &AudioSettings,
+) -> Result<(AudioDevice, EngineHandle), EngineError> {
+    // An ASIO driver is an apartment-threaded object that the stream's start, stop and drop all
+    // talk to from the caller's thread afterwards, so it is opened there too.
+    if settings.host.as_deref() == Some("ASIO") {
+        return start_with_device(settings, open_output(settings)?);
+    }
+    let settings = settings.clone();
+    on_opener_thread(move || start_with_device(&settings, open_output(&settings)?))
+}
+
+/// How long a caller waits for the backend to open an output before giving up on it.
+const OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+type OpenJob = Box<dyn FnOnce() + Send>;
+
+/// The thread every output is opened on, for as long as the process runs.
+///
+/// Not the caller's, because a window thread's COM state is not the engine's to rely on. On
+/// Windows, opening the default output from the window thread began failing after the machine
+/// woke from sleep — `RPC_E_CHANGED_MODE`, on every attempt, for as long as the window stayed
+/// open — while a thread whose only work is opening devices never has its apartment changed
+/// under it. It lives as long as the process, because the objects it creates belong to the
+/// apartment it joined, and that must outlive them.
+///
+/// Also why a caller waits with a deadline: cpal blocks until the system answers an activation,
+/// and a system that never answers would otherwise freeze the window that asked.
+static OPENER: std::sync::Mutex<Option<crossbeam_channel::Sender<OpenJob>>> =
+    std::sync::Mutex::new(None);
+
+/// Runs `job` on the opener thread and waits up to [`OPEN_TIMEOUT`] for it.
+fn on_opener_thread<T: Send + 'static>(
+    job: impl FnOnce() -> Result<T, EngineError> + Send + 'static,
+) -> Result<T, EngineError> {
+    let (reply, answer) = crossbeam_channel::bounded(1);
+    let job: OpenJob = Box::new(move || {
+        // A caller that gave up has dropped `answer`; what was opened is dropped here instead.
+        let _ = reply.send(job());
+    });
+    let sent = {
+        let mut opener = OPENER
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let sender = opener.get_or_insert_with(spawn_opener);
+        sender.send(job).is_ok()
+    };
+    if !sent {
+        return Err(EngineError::NoOutputDevice);
+    }
+    match answer.recv_timeout(OPEN_TIMEOUT) {
+        Ok(result) => result,
+        Err(_) => {
+            // The thread is stuck inside the backend. Leave it there and give the next open a
+            // thread of its own, rather than queueing every later attempt behind this one.
+            log::warn!("the audio backend did not answer; abandoning that open");
+            *OPENER
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            Err(EngineError::OpenTimedOut {
+                seconds: OPEN_TIMEOUT.as_secs(),
+            })
+        }
+    }
+}
+
+fn spawn_opener() -> crossbeam_channel::Sender<OpenJob> {
+    let (sender, jobs) = crossbeam_channel::unbounded::<OpenJob>();
+    let spawned = std::thread::Builder::new()
+        .name("auris-audio-open".into())
+        .spawn(move || {
+            for job in jobs {
+                job();
+            }
+        });
+    if let Err(error) = spawned {
+        log::error!("could not start the audio opener thread: {error}");
+    }
+    sender
 }
 
 fn start_with_device(
@@ -2299,6 +2378,19 @@ mod tests {
         for sample in data {
             assert!((sample - TONE_AMPLITUDE).abs() < 1e-5, "got {sample}");
         }
+    }
+
+    #[test]
+    fn outputs_are_opened_on_one_long_lived_thread_and_answered_back() {
+        let name = || std::thread::current().name().map(str::to_owned);
+        let first = on_opener_thread(move || Ok(name())).unwrap();
+        let second = on_opener_thread(move || Ok(name())).unwrap();
+        assert_eq!(first.as_deref(), Some("auris-audio-open"));
+        assert_eq!(first, second);
+        assert!(matches!(
+            on_opener_thread(|| Err::<(), _>(EngineError::NoOutputDevice)),
+            Err(EngineError::NoOutputDevice)
+        ));
     }
 
     #[test]

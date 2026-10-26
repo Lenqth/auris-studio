@@ -408,6 +408,8 @@ pub struct Session {
     /// Set when the output was lost or replaced without anyone asking; see
     /// [`Session::take_output_changed`].
     output_changed: bool,
+    /// Reopen attempts that have failed in a row; spaces the next one out and keeps the log quiet.
+    output_failures: u32,
 
     history: History,
     agent_request: Option<agent_history::AgentRequest>,
@@ -715,6 +717,7 @@ impl Session {
             output_retry: None,
             output_heartbeat: None,
             output_changed: false,
+            output_failures: 0,
             history: History::default(),
             agent_request: None,
             agent_request_serial: 0,
@@ -858,14 +861,15 @@ impl Session {
             return Ok(());
         }
         self.audio = preferences;
-        self.reopen_output()
+        self.reopen_output(false)
     }
 
     /// Replaces the output device and engine with fresh ones opened from [`Self::audio_preferences`].
     ///
     /// The transport comes back stopped at the same musical position, and an open input is
-    /// reopened against the new engine's clock.
-    fn reopen_output(&mut self) -> Result<(), SessionError> {
+    /// reopened against the new engine's clock. A `quiet` reopen is one of a series of retries
+    /// that has already said the device is unavailable, and does not say it again.
+    fn reopen_output(&mut self, quiet: bool) -> Result<(), SessionError> {
         // Musical position survives a device-rate change and a suspended engine alike.
         let playhead = self.playhead();
         // What a stream that never starts falls back to: its own playhead never leaves zero.
@@ -886,6 +890,11 @@ impl Session {
         self.device = None;
         let (device, engine) = if self.headless || self.audio_suspended {
             auris_engine::start_silent(&settings)
+        } else if quiet {
+            auris_engine::try_start_audio(&settings).unwrap_or_else(|error| {
+                log::debug!("the audio output is still unavailable: {error}");
+                auris_engine::start_silent(&settings)
+            })
         } else {
             start_audio(&settings).map_err(|error| SessionError::AudioRestart(error.to_string()))?
         };
@@ -921,7 +930,7 @@ impl Session {
         Ok(())
     }
 
-    /// Opens a new output in place of a real stream that died, and keeps trying until one opens.
+    /// Opens a new output in place of one that was lost or never opened, and keeps trying.
     ///
     /// The stream died under a session that wants sound — on Windows, switching or disabling the
     /// default output device does this. Only the audio thread writes the transport flag, so
@@ -933,6 +942,10 @@ impl Session {
     /// default pointing at it for a moment, a stream opened in that moment starts without error,
     /// and then the device that would call it is gone — nothing ever reports it. Its callback
     /// count standing still is the only sign, so that counts as lost too.
+    ///
+    /// And an open can simply fail — a machine just woken from sleep may refuse for a moment —
+    /// leaving a silent engine that never plays. Whichever way a session that should have sound
+    /// ends up without it, it tries again, further apart each time.
     fn recover_lost_output(&mut self, now: std::time::Instant) {
         let (real, running) = self.device.as_ref().map_or((false, false), |device| {
             (device.sample_format().is_some(), device.is_running())
@@ -943,27 +956,39 @@ impl Session {
             self.output_heartbeat = Some(watch);
             if !stalled {
                 self.output_retry = None;
+                self.output_failures = 0;
                 return;
             }
         } else {
             self.output_heartbeat = None;
         }
-        if real && self.output_retry.is_none() {
-            log::warn!(
-                "the audio output {}",
-                if running {
-                    "stopped asking for audio"
-                } else {
-                    "stream died"
+        if self.output_retry.is_none() {
+            if real {
+                log::warn!(
+                    "the audio output {}",
+                    if running {
+                        "stopped asking for audio"
+                    } else {
+                        "stream died"
+                    }
+                );
+                // A dead engine's playhead still reads where it stopped, and nothing will after
+                // this. One that never ran never moved, and the position it was opened at is kept
+                // already.
+                if self.engine.callback_count() > 0 {
+                    self.suspended_playhead = self.playhead();
                 }
-            );
-            // A dead engine's playhead still reads where it stopped, and nothing will after this.
-            // One that never ran never moved, and the position it was opened at is kept already.
-            if self.engine.callback_count() > 0 {
-                self.suspended_playhead = self.playhead();
+                self.output_retry = Some(now);
+                self.output_changed = true;
+            } else if !self.headless && !self.audio_suspended {
+                // Silent although it should not be: whatever opened this engine already said why.
+                // The position it was opened at is in `suspended_playhead`, which every path to
+                // here leaves there.
+                self.output_failures = self.output_failures.max(1);
+                self.output_retry = Some(now + output_retry_delay(self.output_failures));
+            } else {
+                return;
             }
-            self.output_retry = Some(now);
-            self.output_changed = true;
         }
         let Some(due) = self.output_retry else {
             return;
@@ -973,16 +998,24 @@ impl Session {
         {
             return;
         }
-        log::warn!("the audio output was lost; reopening it");
+        let quiet = self.output_failures > 0;
+        if !quiet {
+            log::warn!("the audio output was lost; reopening it");
+        }
         let playhead = self.playhead();
-        if let Err(error) = self.reopen_output() {
+        if let Err(error) = self.reopen_output(quiet) {
             log::error!("could not reopen the audio output: {error}");
         }
         if self.device.as_ref().is_some_and(AudioDevice::is_running) {
+            if quiet {
+                log::info!("the audio output is back");
+            }
+            self.output_failures = 0;
             self.output_changed = true;
         } else {
+            self.output_failures += 1;
             self.suspended_playhead = playhead;
-            self.output_retry = Some(now + OUTPUT_RETRY_INTERVAL);
+            self.output_retry = Some(now + output_retry_delay(self.output_failures));
         }
     }
 
@@ -1744,8 +1777,15 @@ fn watch_callbacks(
     }
 }
 
-/// How long to wait between attempts to reopen a lost output.
-const OUTPUT_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+/// How long to wait before the next attempt to reopen an output, after `failures` in a row.
+///
+/// One second, doubling to half a minute: soon enough to catch a device that was only busy for
+/// a moment, and rare enough that a machine with no output at all, or an ASIO driver that will
+/// not load, is not asked again every second for as long as the window stays open.
+fn output_retry_delay(failures: u32) -> std::time::Duration {
+    let seconds = 1u64 << failures.saturating_sub(1).min(5);
+    std::time::Duration::from_secs(seconds.min(30))
+}
 
 /// Whether a session may open a new output in place of one it lost.
 ///
@@ -1837,6 +1877,14 @@ mod tests {
         assert!(!stalled);
         let (stalled, _) = watch_callbacks(Some(watch), 7, tick(10_033));
         assert!(!stalled);
+    }
+
+    #[test]
+    fn reopen_attempts_spread_out_to_half_a_minute() {
+        let delays: Vec<_> = (1..=8)
+            .map(|failures| output_retry_delay(failures).as_secs())
+            .collect();
+        assert_eq!(delays, [1, 2, 4, 8, 16, 30, 30, 30]);
     }
 
     #[test]
