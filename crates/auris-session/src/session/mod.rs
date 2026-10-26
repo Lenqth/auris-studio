@@ -73,7 +73,6 @@ mod levels;
 pub mod lyric_harness;
 mod lyrics;
 mod mixer;
-mod mixture;
 mod monitor;
 mod musical_analysis;
 mod note_preview;
@@ -133,9 +132,6 @@ pub use levels::{
     TARGET_LUFS, TrackLevel, fader_for, faders_lift_db, master_gain_db,
 };
 pub use lyrics::LyricsMeasure;
-pub use mixture::{
-    MUSCRIPTOR_NOTICE, MixtureAnalysis, MixtureNote, MixtureOptions, transcribe_mixture_file,
-};
 pub use monitor::MonitorStatus;
 pub use musical_analysis::MusicalClipAnalysis;
 pub use note_preview::NoteSelectionPreview;
@@ -146,8 +142,7 @@ pub(crate) use plugin_discovery::scan_installed_plugin_files;
 pub use readiness::{PlaybackReadiness, PlaybackState};
 pub use recognition::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
-    ClipInstrumentAnalysis, ClipMixtureAnalysis, analyze_audio_file, analyze_instrument_file,
-    transcribe_piano_file,
+    ClipInstrumentAnalysis, analyze_audio_file, analyze_instrument_file, transcribe_piano_file,
 };
 pub use rhythm::{RhythmGrid, RhythmRow};
 pub use singer::{

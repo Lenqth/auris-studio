@@ -1621,16 +1621,9 @@ strings! {
     MenuAnalyzeAllChords { en: "Analyze Chords across Tracks", ja: "全トラックのコードを解析" }
     MenuAnalyzeAudio { en: "Analyze Audio BPM / Chords", ja: "音声のBPM・コードを解析" }
     MenuAnalyzeInstruments { en: "Estimate Instruments…", ja: "楽器の種類を推定…" }
-    MenuTranscribeMixture { en: "Transcribe Mixture (Noncommercial)…", ja: "混合音源を採譜（非商用）…" }
-    MuscriptorWarning { en: "MuScriptor model weights are licensed under CC BY-NC 4.0 for noncommercial use only. Do not use this model for commercial work without separate permission from its rights holders. This optional model does not change Auris Studio's Apache-2.0 license. Acknowledgement does not grant commercial rights. Terms: https://creativecommons.org/licenses/by-nc/4.0/", ja: "MuScriptorのモデルはCC BY-NC 4.0に基づく非商用利用限定です。権利者から別途許諾を得ずに、商用目的の作業にこのモデルを使用しないでください。この任意モデルによってAuris Studio本体のApache-2.0ライセンスが変わることはありません。同意しても商用利用の権利は得られません。利用条件：https://creativecommons.org/licenses/by-nc/4.0/" }
-    MuscriptorAgree { en: "Use for Noncommercial Work", ja: "非商用の作業に使用する" }
     AudioModelLoadTitle { en: "Load audio review model?", ja: "試聴モデルを読み込みますか？" }
     AudioModelLoadBody { en: "The local model “{model}” is not confirmed to be loaded. Loading it for this review can use substantial memory and CPU/GPU resources and slow down your computer. Cancel to skip this review.", ja: "ローカルモデル「{model}」の読み込み済み状態を確認できません。この試聴のために読み込むと、メモリやCPU・GPUを多く使用し、パソコンの動作が重くなることがあります。キャンセルすると今回の試聴を中止します。" }
     AudioModelLoadConfirm { en: "Load and Review", ja: "読み込んで試聴する" }
-    MuscriptorModel { en: "Select converted MuScriptor Small decoder.onnx", ja: "変換済みMuScriptor Smallのdecoder.onnxを選択" }
-    MuscriptorDraft { en: "MuScriptor draft (CC BY-NC 4.0 model). Notes and instrument groups need review. Playback sounds are placeholders; choose patches after import.", ja: "MuScriptorの採譜下書き（モデル：CC BY-NC 4.0）。音符と楽器分類の確認・修正が必要です。取り込み後に各トラックの再生音色を選んでください。" }
-    MuscriptorCreateTracks { en: "Add Draft as Instrument Tracks", ja: "下書きを楽器別トラックに追加" }
-    CliTranscribeMixtureUsage { en: "Usage: auris transcribe-mixture <audio> --model <decoder.onnx> --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply] [--at-beat 0]", ja: "使い方: auris transcribe-mixture <audio> --model <decoder.onnx> --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply] [--at-beat 0]" }
     DialogYamnetModel { en: "Select prepared YAMNet ONNX model", ja: "変換済みYAMNetモデル（ONNX）を選択" }
     AnalysisInstruments { en: "Instrument/voice hypotheses (YAMNet, CPU). Overlapping windows; scores are not probabilities. Empty candidates mean unknown. Labels are the model's original vocabulary.", ja: "楽器・歌声の候補（YAMNet・CPU）。時間窓は重複します。スコアは確率ではなく、候補なしは判定不明です。名称はモデルの原表記です。" }
     AnalysisInstrumentMean { en: "Whole-clip mean scores", ja: "クリップ全体の平均スコア" }
@@ -1891,9 +1884,6 @@ COMMANDS
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
     transcribe-audio <audio-file> [--midi <new.mid>] [--project <file.auris> --apply]
                                   Extract an isolated monophonic note draft on the CPU
-    transcribe-mixture <audio-file> --model <decoder.onnx>
-      --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply]
-                                  Transcribe a mixture with user-converted noncommercial ONNX models
     render <project.auris> [opts] Render a project to a WAV file
     convert-track-to-audio <project.auris> --track <name|id:number>
                                   Replace an instrument, drum or singer track with audio
@@ -1974,9 +1964,6 @@ auris — コマンドラインから使う Auris Studio
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
     transcribe-audio <audio-file> [--midi <new.mid>] [--project <file.auris> --apply]
                                   単旋律の音声からノーツの下書きをCPUで作成
-    transcribe-mixture <audio-file> --model <decoder.onnx>
-      --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply]
-                                  自分で変換した非商用ONNXモデルで混合音源を採譜
     render <project.auris> [opts] プロジェクトを WAV に書き出す
     sing <project.auris> [opts]   シンガートラックを声のモデルで歌わせる
     frames <project.auris> [opts] シンガートラックが声のモデルに渡すフレームを書き出す

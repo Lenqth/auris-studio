@@ -77,7 +77,7 @@ notes cannot silently disappear. It remains unsaved. Use `read_notes` and
 
 Saved-project MCP adds required `project` to the same import contract and saves
 changed results with a checkpoint. Live imports stay unsaved. All transports expose
-`transcribe_audio` with explicit YIN, Basic Pitch or MuScriptor backend selection.
+`transcribe_audio` with explicit YIN or Basic Pitch backend selection.
 Recognition returns an immutable `draft_id`, a preview and a report, without editing.
 Use `read_report` for large reports and `import_transcription` for explicit acceptance.
 See [agent workflows](agent-workflows.md) for limits and license acknowledgement.

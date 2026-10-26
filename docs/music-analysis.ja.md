@@ -5,7 +5,7 @@
 
 Auris は、書かれた音符からコードを推定し、音声から一定テンポとメジャー／マイナーコードを推定し、分離したモノラル音声を編集可能な音符ドラフトに変換できます。これらの処理は CPU 上で Rust の信号処理と固定テンプレートを使います。学習済み重みは読み込まず、GPU も必要ありません。再現可能な測定と現在の品質上の制限は [music-analysis-evaluation.md](music-analysis-evaluation.ja.md) にあります。
 
-オプションの CPU モデルでは、楽器の存在タグ付けと複数楽器の音符ドラフトも利用できます。[ローカルモデルのセットアップ、ライセンス告知、測定済みの制限](music-analysis-models.ja.md)を参照してください。MuScriptor は、呼び出しごとに謝辞が必要な別の非商用オプションです。エージェントは、ローカルファイルやライブ添付には `transcribe_audio` を使い、`yin`、`basic_pitch`、`muscriptor` のいずれかを選びます。付属の Apache-2.0 Basic Pitch ONNX モデルは外部の重みや Python を必要とせず、CPU 上で重なった音高の音符を推定します。最大10分／8チャンネルの音声を、通常の権限と Undo の経路を通じて編集可能なピアノトラックにできます。このドラフトは `import_transcription` と、返される `draft_id` で個別に承認します。[ピアノカバー評価](piano-transcription-evaluation.ja.md)には、作曲／音声ペアのベンチマーク、信頼度で制御するデコード、既存スコアの結果、残る未対応項目が記録されています。ローカル分析ツールを持つエージェントは、元の添付ファイルを書き出し、[認識器に依存しない API](transcription-api.ja.md) から外部の音符ドラフトをインポートすることもできます。長期的なモデルと計算資源のトレードオフは、[計算量の評価](music-analysis-compute.ja.md)で追跡しています。
+オプションの CPU モデルでは、楽器の存在タグ付けも利用できます。[ローカルモデルのセットアップ、ライセンス告知、測定済みの制限](music-analysis-models.ja.md)を参照してください。エージェントは、ローカルファイルやライブ添付には `transcribe_audio` を使い、`yin` または `basic_pitch` を選びます。付属の Apache-2.0 Basic Pitch ONNX モデルは外部の重みや Python を必要とせず、CPU 上で重なった音高の音符を推定します。最大10分／8チャンネルの音声を、通常の権限と Undo の経路を通じて編集可能なピアノトラックにできます。このドラフトは `import_transcription` と、返される `draft_id` で個別に承認します。[ピアノカバー評価](piano-transcription-evaluation.ja.md)には、作曲／音声ペアのベンチマーク、信頼度で制御するデコード、既存スコアの結果、残る未対応項目が記録されています。ローカル分析ツールを持つエージェントは、元の添付ファイルを書き出し、[認識器に依存しない API](transcription-api.ja.md) から外部の音符ドラフトをインポートすることもできます。長期的なモデルと計算資源のトレードオフは、[計算量の評価](music-analysis-compute.ja.md)で追跡しています。
 
 <a id="use-the-desktop-controls"></a>
 ## デスクトップの操作を使う

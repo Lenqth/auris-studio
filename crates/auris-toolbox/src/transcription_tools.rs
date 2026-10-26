@@ -16,14 +16,6 @@ pub enum Backend {
     Yin,
     /// Bundled Basic Pitch ONNX model, supports overlapping pitched notes.
     BasicPitch,
-    /// User-prepared instrument-labeled model; noncommercial acknowledgement is per invocation.
-    Muscriptor {
-        /// Absolute converted decoder.onnx path beside audio.onnx and muscriptor.json.
-        model: String,
-        /// True only after presenting the CC BY-NC 4.0 notice and obtaining explicit user acknowledgement for this invocation.
-        #[serde(default)]
-        acknowledge_noncommercial: bool,
-    },
 }
 
 /// Recognition arguments are identical across every transport.
@@ -34,14 +26,14 @@ pub struct Args {
     pub path: Option<String>,
     /// Conversation-local attachment_id; available only in a live conversation.
     pub attachment: Option<String>,
-    /// Explicit algorithm and any required local model/acknowledgement.
+    /// Explicit recognition algorithm.
     pub backend: Backend,
 }
 
 /// Single public recognition entry point.
 pub const NAME: &str = "transcribe_audio";
 /// Shared model-facing instructions.
-pub const DESCRIPTION: &str = "Recognize a local audio file or live attachment with an explicit backend: yin for isolated monophonic audio, basic_pitch for overlapping pitched notes, or muscriptor for instrument-labeled notes. MuScriptor requires an explicitly prepared local ONNX model and per-invocation user acknowledgement of CC BY-NC 4.0 noncommercial restrictions. No automatic download or audio upload. Recognition never edits the project. Returns an immutable draft_id with bounded preview; import_transcription explicitly accepts it. Drafts expire after 30 minutes, restart or eviction (8 drafts, 64 MiB total). Review uncertainty and never claim faithful transcription from analysis alone.";
+pub const DESCRIPTION: &str = "Recognize a local audio file or live attachment with an explicit backend: yin for isolated monophonic audio or basic_pitch for overlapping pitched notes. No automatic download or audio upload. Recognition never edits the project. Returns an immutable draft_id with bounded preview; import_transcription explicitly accepts it. Drafts expire after 30 minutes, restart or eviction (8 drafts, 64 MiB total). Review uncertainty and never claim faithful transcription from analysis alone.";
 
 struct Entry {
     id: String,
@@ -52,23 +44,13 @@ struct Entry {
 static DRAFTS: OnceLock<Mutex<Vec<Entry>>> = OnceLock::new();
 
 impl Args {
-    /// Validate explicit source selection and license acknowledgement before file/model access.
+    /// Validate explicit source selection before file access.
     pub fn validate(&self) -> Result<(), String> {
-        if let Backend::Muscriptor {
-            acknowledge_noncommercial: false,
-            ..
-        } = self.backend
-        {
-            return Err(auris_session::MUSCRIPTOR_NOTICE.into());
-        }
         if self.path.is_some() == self.attachment.is_some() {
             return Err("Supply exactly one of path or attachment".into());
         }
         if let Some(path) = &self.path {
             validate_path(path)?;
-        }
-        if let Backend::Muscriptor { model, .. } = &self.backend {
-            validate_path(model)?;
         }
         Ok(())
     }
@@ -88,19 +70,8 @@ fn validate_path(value: &str) -> Result<(), String> {
 /// Retain validated events and publish an opaque reference with a small preview.
 pub fn retain(draft: TranscriptionDraft) -> Result<String, String> {
     draft.validate()?;
-    let preview = match &draft {
-        TranscriptionDraft::Piano { transcription } => {
-            serde_json::json!({"source":transcription.source,"seconds":transcription.seconds,"notes":transcription.notes.iter().take(16).collect::<Vec<_>>(),"limitations":transcription.limitations})
-        }
-        TranscriptionDraft::Mixture {
-            seconds,
-            notes,
-            model_sha256,
-            ..
-        } => {
-            serde_json::json!({"seconds":seconds,"notes":notes.iter().take(16).collect::<Vec<_>>(),"model_sha256":model_sha256,"limitations":"Instrument labels are estimates; playback patches and source separation are not recovered. Model is noncommercial only."})
-        }
-    };
+    let TranscriptionDraft::Piano { transcription } = &draft;
+    let preview = serde_json::json!({"source":transcription.source,"seconds":transcription.seconds,"notes":transcription.notes.iter().take(16).collect::<Vec<_>>(),"limitations":transcription.limitations});
     let bytes = serde_json::to_vec(&draft).map_err(|e| e.to_string())?.len();
     if bytes > 32 * 1024 * 1024 {
         return Err("Recognized draft exceeds 32 MiB".into());
@@ -191,29 +162,6 @@ pub fn recognize(
                 "Pitched note estimates; dense mixtures can produce extra/missing notes. Relative strengths are not original MIDI velocities.",
             )
         }
-        Backend::Muscriptor {
-            model,
-            acknowledge_noncommercial,
-        } => {
-            if !acknowledge_noncommercial {
-                return Err(auris_session::MUSCRIPTOR_NOTICE.into());
-            }
-            let report = auris_session::transcribe_mixture_file(
-                path,
-                &auris_session::MixtureOptions {
-                    model: model.into(),
-                    acknowledge_noncommercial,
-                },
-                control,
-            )
-            .map_err(|e| e.to_string())?;
-            TranscriptionDraft::Mixture {
-                seconds: report.seconds,
-                notes: report.notes,
-                model_sha256: report.model_sha256,
-                checkpoint_sha256: report.checkpoint_sha256,
-            }
-        }
     };
     if control.is_cancelled() {
         return Err("Transcription cancelled".into());
@@ -242,63 +190,20 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn recognition_never_accepts_write_destinations_and_license_precedes_io() {
-        let args: Args = serde_json::from_value(
-            json!({"path":"missing.wav","backend":{"kind":"muscriptor","model":"missing"}}),
-        )
-        .unwrap();
-        assert!(run(&args).unwrap_err().contains("CC BY-NC 4.0"));
+    fn recognition_supports_only_yin_and_basic_pitch() {
+        for kind in ["yin", "basic_pitch"] {
+            assert!(serde_json::from_value::<Backend>(json!({"kind":kind})).is_ok());
+        }
+        assert!(serde_json::from_value::<Backend>(json!({"kind":"muscriptor"})).is_err());
+    }
+
+    #[test]
+    fn recognition_never_accepts_write_destinations() {
         for extra in ["project", "apply", "midi_output", "at_beat"] {
             let mut args = json!({"path":"missing.wav","backend":{"kind":"yin"}});
             args[extra] = true.into();
             assert!(serde_json::from_value::<Args>(args).is_err(), "{extra}");
         }
         assert!(resolve("invented").is_err());
-    }
-
-    #[test]
-    fn mixture_draft_survives_acceptance_with_labels_and_one_undo() {
-        let draft = TranscriptionDraft::Mixture {
-            seconds: 2.0,
-            notes: vec![
-                auris_session::MixtureNote {
-                    pitch: 60,
-                    start: 0.1,
-                    end: 1.0,
-                    instrument: "piano".into(),
-                },
-                auris_session::MixtureNote {
-                    pitch: 36,
-                    start: 0.2,
-                    end: 0.5,
-                    instrument: "drums".into(),
-                },
-            ],
-            model_sha256: "a".repeat(64),
-            checkpoint_sha256: "b".repeat(64),
-        };
-        let response: serde_json::Value = serde_json::from_str(&retain(draft).unwrap()).unwrap();
-        let imported = resolve(response["draft_id"].as_str().unwrap()).unwrap();
-        let mut session =
-            auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
-        session.add_bus_track("Existing");
-        let before = session.project().clone();
-        let request: crate::live_agent::transcription_import::Args =
-            serde_json::from_value(json!({"draft_id":response["draft_id"],"at_tick":997})).unwrap();
-        session
-            .agent_command(request.command(&AnalysisControl::default()).unwrap())
-            .unwrap();
-        assert_eq!(session.project().tracks.len(), 3);
-        assert_eq!(session.project().tracks[0], before.tracks[0]);
-        assert!(
-            session
-                .project()
-                .tracks
-                .iter()
-                .any(|track| track.kind.is_drum())
-        );
-        assert_eq!(imported.note_count(), 2);
-        session.undo();
-        assert_eq!(session.project(), &before);
     }
 }

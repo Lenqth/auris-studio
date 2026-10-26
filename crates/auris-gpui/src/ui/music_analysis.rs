@@ -28,8 +28,6 @@ pub(crate) enum AnalysisCommand {
     Transcribe,
     /// Instrument recognition.
     Instruments,
-    /// Multi-instrument transcription.
-    Mixture,
     /// Drum measurements and mapping.
     Drums,
     /// Progress and acceptance controls.
@@ -45,8 +43,6 @@ pub(crate) enum MusicReport {
     Audio(Box<ClipAudioAnalysis>),
     /// Local model's instrument-presence hypotheses, without an acceptance edit.
     Instruments(Box<auris_session::ClipInstrumentAnalysis>),
-    /// Optional noncommercial multi-instrument transcription.
-    Mixture(Box<auris_session::ClipMixtureAnalysis>),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -188,30 +184,6 @@ mod tests {
             assert!(bounds.right() <= panel.right());
             assert!(bounds.top() >= panel.top());
             assert!(bounds.bottom() <= panel.bottom());
-        }
-    }
-
-    #[gpui::test]
-    fn mixture_notice_is_required_each_time_and_cancel_starts_no_worker(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        for _ in 0..2 {
-            app.update(cx, |this, cx| {
-                this.run_menu_command(MenuCommand::TranscribeMixture(ClipId(999)), cx);
-                assert!(this.music_analysis.control.is_none());
-                assert!(this.music_analysis.report.is_none());
-                assert!(matches!(
-                    this.prompt.as_ref().map(|p| &p.body),
-                    Some(crate::ui::prompt::PromptBody::Ask(
-                        crate::ui::prompt::Question::Muscriptor { .. }
-                    ))
-                ));
-            });
-            paint(&app, cx);
-            click("prompt-cancel", cx);
-            app.read_with(cx, |this, _| {
-                assert!(this.prompt.is_none());
-                assert!(this.music_analysis.control.is_none());
-            });
         }
     }
 
@@ -567,7 +539,6 @@ impl AurisApp {
                 transcribe: command == Transcribe,
             }),
             Instruments => audio.map(MenuCommand::AnalyzeInstruments),
-            Mixture => audio.map(MenuCommand::TranscribeMixture),
             Drums if track.is_some_and(|t| t.kind.is_drum()) => None,
             Results => None,
             _ => {
@@ -657,68 +628,6 @@ impl AurisApp {
         let detail = detail.into();
         self.music_analysis.fail(detail.clone());
         self.set_failed_status(detail);
-    }
-
-    /// Shows the model-use notice before loading a model or source audio.
-    pub(crate) fn request_mixture_transcription(&mut self, clip: ClipId) {
-        self.music_analysis.clear();
-        self.open_prompt(Prompt::ask(
-            self.t(Key::MenuTranscribeMixture),
-            crate::ui::prompt::Question::Muscriptor {
-                clip,
-                generation: self.music_analysis.generation,
-            },
-        ));
-    }
-
-    /// Continues only the invocation acknowledged in the license sheet.
-    pub(crate) fn choose_mixture_model(
-        &mut self,
-        clip: ClipId,
-        generation: u64,
-        cx: &mut Context<Self>,
-    ) {
-        if generation != self.music_analysis.generation {
-            return;
-        }
-        let job = match self
-            .session
-            .audio_analysis_job(clip, AudioOptions::default())
-        {
-            Ok(job) => job,
-            Err(e) => {
-                self.fail_music_analysis(e.to_string());
-                return;
-            }
-        };
-        let title = self.t(Key::MuscriptorModel).to_string();
-        cx.spawn(async move |this, cx| {
-            let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title(title)
-                .add_filter("MuScriptor Small ONNX", &["onnx"])
-                .pick_file()
-                .await
-            else {
-                return;
-            };
-            let options = auris_session::MixtureOptions {
-                model: file.path().to_path_buf(),
-                acknowledge_noncommercial: true,
-            };
-            let _ = this.update(cx, |this, cx| {
-                if generation != this.music_analysis.generation {
-                    return;
-                }
-                this.start_music_worker(
-                    move |control| {
-                        job.run_mixture(&options, control)
-                            .map(|r| MusicReport::Mixture(Box::new(r)))
-                    },
-                    cx,
-                );
-            });
-        })
-        .detach();
     }
 
     /// Schedules analysis of all pitched tracks or the selected note track.
@@ -873,7 +782,6 @@ impl AurisApp {
             MusicReport::Chords(r) => self.session.chord_analysis_is_current(r),
             MusicReport::Audio(r) => self.session.audio_analysis_is_current(r),
             MusicReport::Instruments(r) => self.session.instrument_analysis_is_current(r),
-            MusicReport::Mixture(r) => self.session.mixture_analysis_is_current(r),
         }
     }
 
@@ -904,14 +812,6 @@ impl AurisApp {
         let name = self.t(Key::AnalysisDraft).to_string();
         let outcome = match &report {
             MusicReport::Instruments(_) => return,
-            MusicReport::Mixture(r) if notes => {
-                self.session.create_clip_mixture_tracks(r).map(|tracks| {
-                    if let Some(track) = tracks.first().copied() {
-                        self.select_track(track);
-                    }
-                })
-            }
-            MusicReport::Mixture(_) => return,
             MusicReport::Chords(r) => match choice {
                 Some((segment, candidate)) => {
                     self.session.apply_chord_candidate(r, segment, candidate)
@@ -977,27 +877,6 @@ impl AurisApp {
             )
         };
         match report {
-            MusicReport::Mixture(r) => {
-                lines = vec![self.t(Key::MuscriptorDraft).into()];
-                for n in r.analysis.notes.iter().take(256) {
-                    lines.push(
-                        format!(
-                            "{}: {} / {:.2}–{:.2} s",
-                            n.instrument,
-                            n.pitch,
-                            n.start + r.source_offset_seconds,
-                            n.end + r.source_offset_seconds
-                        )
-                        .into(),
-                    );
-                }
-                if r.analysis.notes.is_empty() {
-                    lines.push(self.t(Key::AnalysisUnknown).into());
-                }
-                if r.analysis.notes.len() > 256 {
-                    lines.push(self.t(Key::AnalysisPreviewLimit).into());
-                }
-            }
             MusicReport::Instruments(r) => {
                 lines = vec![
                     self.t(Key::AnalysisInstruments).into(),
@@ -1158,17 +1037,15 @@ impl AurisApp {
         let Some(report) = &self.music_analysis.report else {
             return rows;
         };
-        if !matches!(report, MusicReport::Mixture(_)) {
-            rows.push(
-                div()
-                    .debug_selector(|| "analysis-score-help".to_owned())
-                    .text_xs()
-                    .text_color(theme.text_muted)
-                    .whitespace_normal()
-                    .child(self.t(Key::AnalysisScores))
-                    .into_any_element(),
-            );
-        }
+        rows.push(
+            div()
+                .debug_selector(|| "analysis-score-help".to_owned())
+                .text_xs()
+                .text_color(theme.text_muted)
+                .whitespace_normal()
+                .child(self.t(Key::AnalysisScores))
+                .into_any_element(),
+        );
         rows.push(action_button(
             "music-view",
             self.t(Key::AnalysisView).to_string(),
@@ -1176,16 +1053,6 @@ impl AurisApp {
         ));
         // Validation is performed on completion and application, not while painting every frame.
         if matches!(report, MusicReport::Instruments(_)) {
-            return rows;
-        }
-        if let MusicReport::Mixture(r) = report {
-            if !r.analysis.notes.is_empty() {
-                rows.push(action_button(
-                    "music-mixture-notes",
-                    self.t(Key::MuscriptorCreateTracks).to_string(),
-                    MenuCommand::CreateTranscriptionTrack,
-                ));
-            }
             return rows;
         }
         rows.push(action_button(

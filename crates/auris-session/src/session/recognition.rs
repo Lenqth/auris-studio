@@ -1,6 +1,5 @@
 //! Immutable recognition jobs and explicit, undoable acceptance of their drafts.
 
-use super::mixture::{self, MixtureAnalysis, MixtureOptions};
 use crate::{Edit, Session, SessionError};
 use auris_analysis::instruments::{self, INSTRUMENT_RATE, InstrumentAnalysis};
 use auris_analysis::{
@@ -111,17 +110,6 @@ pub struct ClipInstrumentAnalysis {
     job: AudioAnalysisJob,
 }
 
-/// A noncommercial MuScriptor draft tied to one immutable audio clip source.
-#[derive(Clone, Debug, Serialize)]
-pub struct ClipMixtureAnalysis {
-    /// Original source time at the analyzed trim's start.
-    pub source_offset_seconds: f64,
-    /// Notes relative to the trimmed first pass, before stretch/effects.
-    pub analysis: MixtureAnalysis,
-    #[serde(skip)]
-    job: AudioAnalysisJob,
-}
-
 impl AudioAnalysisJob {
     /// Resamples the trimmed first pass, then analyzes it on the CPU.
     ///
@@ -160,23 +148,6 @@ impl AudioAnalysisJob {
     fn source_offset_seconds(&self) -> f64 {
         self.clip.offset_frames.min(self.audio.frame_count() as u64) as f64
             / self.audio.sample_rate()
-    }
-
-    /// Runs optional MuScriptor after checking this invocation's noncommercial acknowledgement.
-    pub fn run_mixture(
-        &self,
-        options: &MixtureOptions,
-        control: &AnalysisControl,
-    ) -> Result<ClipMixtureAnalysis, SessionError> {
-        options.validate()?;
-        check_cancel(control)?;
-        let prepared = self.prepared(16000.0)?;
-        let analysis = mixture::transcribe_buffer(&prepared, options, control)?;
-        Ok(ClipMixtureAnalysis {
-            source_offset_seconds: self.source_offset_seconds(),
-            analysis,
-            job: self.clone(),
-        })
     }
 
     fn prepared(&self, rate: f64) -> Result<AudioBuffer, SessionError> {
@@ -234,143 +205,6 @@ pub fn analyze_instrument_file(
 }
 
 impl Session {
-    /// Whether the source and document still match a multi-instrument draft.
-    pub fn mixture_analysis_is_current(&self, report: &ClipMixtureAnalysis) -> bool {
-        self.recognition_fingerprint()
-            .is_ok_and(|f| f == report.job.fingerprint)
-            && self
-                .bank
-                .get(report.job.clip.source)
-                .is_some_and(|b| Arc::ptr_eq(b, &report.job.audio))
-    }
-
-    /// Accepts a file's instrument-labeled notes as new tracks in one undo step.
-    /// Track/clip names retain MuScriptor provenance; playback patches require user selection.
-    pub fn create_mixture_tracks(
-        &mut self,
-        report: &MixtureAnalysis,
-        start: Ticks,
-    ) -> Result<Vec<TrackId>, SessionError> {
-        let groups = self.mixture_groups(report)?;
-        let origin = self.project.tempo_map.ticks_to_seconds(start).0;
-        let mapped = groups
-            .into_iter()
-            .map(|(name, notes)| {
-                (
-                    name,
-                    self.map_transcription(&notes, origin, 1.0, start, Ticks(i64::MAX)),
-                )
-            })
-            .collect();
-        self.place_mixture_groups(mapped, start)
-    }
-
-    /// Accepts all parts of a clip draft, preserving trim, stretch, loops and source audio.
-    pub fn create_clip_mixture_tracks(
-        &mut self,
-        report: &ClipMixtureAnalysis,
-    ) -> Result<Vec<TrackId>, SessionError> {
-        if !self.mixture_analysis_is_current(report) {
-            return Err(failure("the audio or document changed; analyze it again"));
-        }
-        let groups = self.mixture_groups(&report.analysis)?;
-        let source = &report.job.clip;
-        let content = self.audio_clip_length_ticks(source);
-        if content.raw() <= 0 || source.loop_end.raw() / content.raw() > 200_000 {
-            return Err(failure("invalid or excessive audio repeats"));
-        }
-        let stretch = source.stretch_in(&self.project.tempo_map);
-        let mut mapped = Vec::new();
-        let mut total = 0;
-        for (name, events) in groups {
-            let mut notes = Vec::new();
-            for (offset, span) in loop_passes(content, source.loop_end) {
-                let pass = source.start + offset;
-                let origin = self.project.tempo_map.ticks_to_seconds(pass).0;
-                let batch =
-                    self.map_transcription(&events, origin, stretch, source.start, pass + span);
-                total += batch.len();
-                if total > 200_000 {
-                    return Err(failure("too many mixture notes after repeating"));
-                }
-                notes.extend(batch);
-            }
-            mapped.push((name, notes));
-        }
-        self.place_mixture_groups(mapped, source.start)
-    }
-
-    fn mixture_groups(
-        &self,
-        report: &MixtureAnalysis,
-    ) -> Result<std::collections::BTreeMap<String, Vec<TranscribedNote>>, SessionError> {
-        if !report.seconds.is_finite()
-            || !(0.0..=600.0).contains(&report.seconds)
-            || report.notes.is_empty()
-        {
-            return Err(failure("no usable mixture transcription"));
-        }
-        let mut notes = report.notes.clone();
-        mixture::validate_notes(&mut notes, report.seconds)?;
-        let mut groups = std::collections::BTreeMap::<String, Vec<TranscribedNote>>::new();
-        for n in notes {
-            groups
-                .entry(n.instrument)
-                .or_default()
-                .push(TranscribedNote {
-                    pitch: n.pitch,
-                    start: n.start,
-                    end: n.end,
-                    strength: 0.7,
-                });
-            if groups.len() > 128 {
-                return Err(failure("too many instrument groups"));
-            }
-        }
-        Ok(groups)
-    }
-
-    fn place_mixture_groups(
-        &mut self,
-        groups: Vec<(String, Vec<Note>)>,
-        start: Ticks,
-    ) -> Result<Vec<TrackId>, SessionError> {
-        if self.transaction.is_some() {
-            return Err(SessionError::EditInProgress);
-        }
-        if start.raw() < 0 || groups.iter().all(|(_, n)| n.is_empty()) {
-            return Err(failure("no notes at the requested placement"));
-        }
-        self.begin_transaction(Edit::AddInstrumentTrack);
-        let outcome = (|| {
-            let mut tracks = Vec::new();
-            for (instrument, notes) in groups {
-                let Some(length) = notes.iter().map(Note::end).max() else {
-                    continue;
-                };
-                let name = format!("MuScriptor [NC] - {instrument}");
-                let track = if instrument == "drums" {
-                    self.add_default_drum_track(&name)?
-                } else {
-                    self.add_default_instrument_track(&name)?
-                };
-                let clip = self.add_midi_clip(track, &name, start, length)?;
-                self.project
-                    .midi_clip_mut(clip)
-                    .expect("inserted clip")
-                    .notes = notes;
-                tracks.push(track);
-            }
-            Ok(tracks)
-        })();
-        if outcome.is_err() {
-            self.revert_transaction();
-        } else {
-            self.end_transaction();
-        }
-        outcome
-    }
-
     fn recognition_fingerprint(&self) -> Result<String, SessionError> {
         let bytes = serde_json::to_vec(&self.project).map_err(failure)?;
         Ok(hex::encode(Sha256::digest(bytes)))
@@ -1121,76 +955,6 @@ mod tests {
                 draft.notes
             );
         }
-    }
-    #[test]
-    fn mixture_groups_are_one_undo_step_and_source_edits_invalidate_the_draft() {
-        let mut s = session();
-        let rate = s.project().sample_rate;
-        let source = s
-            .place_audio(
-                Path::new("mixture.wav"),
-                AudioBuffer::from_planar(vec![vec![0.0; (rate * 2.0) as usize]], rate).unwrap(),
-                Ticks::QUARTER,
-            )
-            .unwrap();
-        let job = s
-            .audio_analysis_job(source, AudioOptions::default())
-            .unwrap();
-        let report = ClipMixtureAnalysis {
-            source_offset_seconds: 0.0,
-            analysis: MixtureAnalysis {
-                algorithm: "test-fixture",
-                model_license: "CC-BY-NC-4.0",
-                model_sha256: "test".into(),
-                checkpoint_sha256: "test".into(),
-                seconds: 2.0,
-                notes: vec![
-                    super::mixture::MixtureNote {
-                        pitch: 60,
-                        start: 0.25,
-                        end: 0.75,
-                        instrument: "piano".into(),
-                    },
-                    super::mixture::MixtureNote {
-                        pitch: 48,
-                        start: 0.25,
-                        end: 1.0,
-                        instrument: "bass".into(),
-                    },
-                    super::mixture::MixtureNote {
-                        pitch: 36,
-                        start: 0.25,
-                        end: 0.4,
-                        instrument: "drums".into(),
-                    },
-                ],
-            },
-            job,
-        };
-        let before = s.project().clone();
-        assert!(s.mixture_analysis_is_current(&report));
-        let tracks = s.create_clip_mixture_tracks(&report).unwrap();
-        assert_eq!(tracks.len(), 3);
-        for track in tracks {
-            let track = s.project().track(track).unwrap();
-            assert!(track.name.starts_with("MuScriptor [NC]"));
-            assert_eq!(track.kind.is_drum(), track.name.ends_with("drums"));
-            let clip = &track.kind.as_instrument().unwrap().clips[0];
-            assert_eq!(clip.start, Ticks::QUARTER);
-            assert_eq!(clip.notes[0].start, Ticks::from_beats(0.5));
-        }
-        let exported =
-            auris_io::read_midi_bytes(&auris_io::write_midi_bytes(s.project()).unwrap()).unwrap();
-        assert_eq!(exported.tracks.len(), 3);
-        for track in exported.tracks {
-            assert_eq!(track.channel == 9, track.name.ends_with("drums"));
-        }
-        assert!(!s.mixture_analysis_is_current(&report));
-        s.undo();
-        assert_eq!(s.project(), &before);
-        assert!(s.mixture_analysis_is_current(&report));
-        s.add_default_instrument_track("edit").unwrap();
-        assert!(s.create_clip_mixture_tracks(&report).is_err());
     }
     #[test]
     fn chord_report_is_read_only_apply_preserves_outside_and_undo_restores() {

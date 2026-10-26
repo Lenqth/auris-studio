@@ -8,11 +8,10 @@ use Rust signal processing and fixed templates on the CPU. They load no learned 
 require no GPU. Reproducible measurements and current quality limits are in
 [music-analysis-evaluation.md](music-analysis-evaluation.md).
 
-Optional CPU models now add instrument-presence tagging and multi-instrument note drafts.
+An optional CPU model adds instrument-presence tagging.
 See [local model setup, license notices and measured limitations](music-analysis-models.md).
-MuScriptor is a separate noncommercial option requiring acknowledgement on every invocation.
-Agents use `transcribe_audio` for local files or live attachments, choosing `yin`,
-`basic_pitch` or `muscriptor`. The bundled
+Agents use `transcribe_audio` for local files or live attachments, choosing `yin` or
+`basic_pitch`. The bundled
 Apache-2.0 Basic Pitch ONNX model needs no external weights or Python and estimates
 overlapping pitched notes on the CPU. Up to ten minutes/eight channels can become
 an editable piano track through the normal permission and Undo paths. This draft

@@ -688,11 +688,6 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                 actions::AnalyzeSelectedInstruments,
                 "analysis.instruments",
             ),
-            command(
-                t(Key::MenuTranscribeMixture),
-                actions::TranscribeSelectedMixture,
-                "analysis.mixture",
-            ),
             MenuRow::Separator,
             command(
                 t(Key::AnalysisDrums),

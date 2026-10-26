@@ -5,7 +5,7 @@
 
 評価日：2026-09-07。実装済みの[音楽分析ワークフロー](music-analysis.ja.md)に続く計算資源評価です。
 
-クラウド資源は準備しておらず、モデルも学習しておらず、音声もアップロードしていません。YAMNetと、明示的に許可した非商用MuScriptor Smallチェックポイントは準備してCPU上でローカル実行しました。MuScriptorは利用者が変換したONNXグラフとRustデコーダーで動作し、Pythonが必要なのは変換時だけです。統合、ハッシュ、測定値、精度の限界は[モデルガイド](music-analysis-models.ja.md)にあります。
+クラウド資源は準備しておらず、モデルも学習しておらず、音声もアップロードしていません。YAMNetは準備してCPU上でローカル実行しました。統合、ハッシュ、測定値、精度の限界は[モデルガイド](music-analysis-models.ja.md)にあります。
 
 <a id="amd-only-hardware-does-not-make-every-neural-method-a-cloud-workload"></a>
 ## AMD専用ハードウェアでも、すべてのニューラル手法がクラウド処理になるわけではない
@@ -28,7 +28,6 @@ ROCmのサポートはGPU、OS、ソフトウェアのバージョンに依存�
 | YAMNet | 任意のCPU楽器存在タグ付けを実装済み。 | Googleの重みと構成はApache-2.0、出力と参照の一致を確認済み。ローカル試料では閾値0.2で楽器カバー率が低かった。[Weight terms](https://groups.google.com/g/audioset-users/c/Ly4guQnlv_o) |
 | MT3 | 複数楽器ノートの外部推論参照。 | T5X研究スタック、リポジトリはApache-2.0。計算資源を見積もる前にチェックポイントと実行環境を固定する。[Source](https://github.com/magenta/mt3) |
 | YourMT3+ | 商用ワークフローの優先候補。RunPod提案前にCPUで試行。 | 実際のHFソースはApache-2.0ヘッダーを持ち、チェックポイントカードも重みをApache-2.0と明記する。正確なHF成果物を固定する。今回の取得はHTTP 429/500で失敗し、チェックポイントは未実行。[Code](https://huggingface.co/spaces/mimbres/YourMT3/blob/5e66c1ea173a8186e0d20432b841d3180cc015b5/amt/src/model/ymt3.py)、[weights](https://huggingface.co/mimbres/YourMT3/blob/main/README.md) |
-| MuScriptor Small | 任意のローカル非商用ONNX転写下書きを実装済み。 | コードはMIT、重みはCC BY-NC 4.0。実行ごとの警告と確認が必要。12秒の混合音はRust／ONNXで7.33秒に完了し、22.46秒のPyTorch基準の58ノートすべてと一致した。楽器の混同は残る。[Model](https://huggingface.co/MuScriptor/muscriptor-small) |
 | Demucs＋転写 | 分離で採用ノート精度が上がるかを調べる任意の外部診断。 | MITリポジトリ。4つの既定ステムは任意の個別パートを識別しない。直接転写と分離＋転写を、精度・実行時間・分離生成物で比較する。[Source](https://github.com/facebookresearch/demucs) |
 | 転写／タグ付けモデルの学習・微調整 | エラー分析で具体的なデータ／モデルの不足が示された後の、別個のRunPod提案。 | データセット権利、学習手順、チェックポイント、測定済みメモリ／スループットが必要。根拠のある固定GPU時間見積もりはまだない。 |
 

@@ -212,8 +212,6 @@ actions!(
         TranscribeSelectedAudio,
         /// Estimate instruments in audio.
         AnalyzeSelectedInstruments,
-        /// Transcribe an audio mixture.
-        TranscribeSelectedMixture,
         /// Open drum measurements.
         OpenDrumAnalysis,
         /// Open analysis progress and results.
@@ -570,7 +568,6 @@ bindable! {
         "analysis.audio", GroupAnalysis, MenuAnalyzeAudio, "" => AnalyzeSelectedAudio;
         "analysis.transcribe", GroupAnalysis, MenuTranscribeAudio, "" => TranscribeSelectedAudio;
         "analysis.instruments", GroupAnalysis, MenuAnalyzeInstruments, "" => AnalyzeSelectedInstruments;
-        "analysis.mixture", GroupAnalysis, MenuTranscribeMixture, "" => TranscribeSelectedMixture;
         "analysis.drums", GroupAnalysis, AnalysisDrums, "" => OpenDrumAnalysis;
         "visualizer.toggle", GroupAnalysis, VisualizerTitle, "" => ToggleVisualizer;
         "visualizer.source", GroupAnalysis, VisualizerSelected, "" => VisualizerSource;

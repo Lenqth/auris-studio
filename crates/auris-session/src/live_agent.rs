@@ -348,7 +348,7 @@ pub enum Command {
     ImportTranscription {
         /// Validated recognizer-independent draft; resolved by the tool host before authorization.
         draft: Box<crate::TranscriptionDraft>,
-        /// New track/clip name for a piano draft; mixture labels retain their instrument names.
+        /// New track/clip name for the pitched note draft.
         name: String,
         /// Nonnegative absolute insertion tick.
         at_tick: i64,

@@ -248,15 +248,6 @@
 //! the job boundary, never to the audio callback. Unknown harmony and silence are distinct,
 //! and candidate scores are matching scores rather than calibrated probabilities.
 //!
-//! Optional multi-instrument transcription runs a user-converted MuScriptor Small ONNX package
-//! in `auris-analysis`, using the CPU provider and a bounded Rust token loop with KV caches.
-//! Its audio graph includes STFT/log-mel preprocessing; Rust joins sustained notes across chunks.
-//! Python is only conversion tooling. The session requires per-run acknowledgement of the model's
-//! noncommercial terms before decoding; models remain local external data, verified against their
-//! export manifest. Cancellation is checked between inference calls. Instrument-labeled drafts
-//! follow source validation and tempo mapping, with all new tracks in one undo transaction.
-//! No model inference or model-file I/O belongs on the audio callback.
-//!
 //! # The smallest complete program
 //!
 //! ```
@@ -387,12 +378,11 @@ pub mod architecture {
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
     //! attachment IDs. `transcribe_audio` recognizes an attachment or authorized local file
-    //! on a worker using explicit YIN, Basic Pitch or MuScriptor selection. Recognition returns
+    //! on a worker using explicit YIN or Basic Pitch selection. Recognition returns
     //! an immutable bounded draft and never changes the score. `import_transcription` explicitly
     //! accepts that draft, inline recognized events or a bounded JSON file. Source seconds map
     //! through the current tempo map, and the complete import creates one Undo transaction.
     //! Notes remain estimates; provenance and model hashes do not verify musical accuracy.
-    //! MuScriptor requires its separate model prerequisites and acknowledgement on every call.
     //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
     //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
     //! exposes the internal snapshot. One current copy per attachment is retained; re-export

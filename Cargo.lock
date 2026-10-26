@@ -647,7 +647,6 @@ dependencies = [
  "auris-core",
  "auris-dsp",
  "hex",
- "ndarray",
  "ort",
  "schemars",
  "serde",

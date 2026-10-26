@@ -20,7 +20,6 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
         "analyze-chords" => Key::CliAnalyzeChordsUsage,
         "analyze-audio" => Key::CliAnalyzeAudioUsage,
         "analyze-instruments" => Key::CliAnalyzeInstrumentsUsage,
-        "transcribe-mixture" => Key::CliTranscribeMixtureUsage,
         _ => Key::CliTranscribeAudioUsage,
     }
     .get(LANGUAGE);
@@ -40,21 +39,12 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
             .contains(&key),
             "analyze-audio" => false,
             "analyze-instruments" => ["--model", "--threshold"].contains(&key),
-            "transcribe-mixture" => [
-                "--model",
-                "--acknowledge-noncommercial",
-                "--midi",
-                "--project",
-                "--apply",
-                "--at-beat",
-            ]
-            .contains(&key),
             _ => ["--midi", "--project", "--at-beat", "--name", "--apply"].contains(&key),
         };
         if !allowed || options.contains_key(key) {
             return Err(usage.into());
         }
-        let value = if matches!(key, "--apply" | "--acknowledge-noncommercial") {
+        let value = if key == "--apply" {
             ""
         } else {
             at += 1;
@@ -64,43 +54,7 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
         at += 1;
     }
     let control = AnalysisControl::default();
-    let value = if command == "transcribe-mixture" {
-        if !options.contains_key("--acknowledge-noncommercial") {
-            return Err(Key::MuscriptorWarning.get(LANGUAGE).into());
-        }
-        if options.contains_key("--project") != options.contains_key("--apply") {
-            return Err(usage.into());
-        }
-        if options.get("--midi").is_some_and(|p| Path::new(p).exists()) {
-            return Err(Key::AnalysisMidiExists.get(LANGUAGE).into());
-        }
-        let start = beat(options.get("--at-beat").copied().unwrap_or("0"))?;
-        let config = auris_session::MixtureOptions {
-            model: (*options.get("--model").ok_or(usage)?).into(),
-            acknowledge_noncommercial: true,
-        };
-        eprintln!("{}", Key::MuscriptorWarning.get(LANGUAGE));
-        let report = auris_session::transcribe_mixture_file(Path::new(path), &config, &control)
-            .map_err(|e| e.to_string())?;
-        if let Some(path) = options.get("--midi") {
-            let mut output = Session::new(SessionOptions::headless()).map_err(|e| e.to_string())?;
-            output
-                .create_mixture_tracks(&report, Ticks::ZERO)
-                .map_err(|e| e.to_string())?;
-            output
-                .export_midi(Path::new(path))
-                .map_err(|e| e.to_string())?;
-        }
-        if let Some(path) = options.get("--project") {
-            let mut output = Session::new(SessionOptions::headless()).map_err(|e| e.to_string())?;
-            output.open(Path::new(path)).map_err(|e| e.to_string())?;
-            output
-                .create_mixture_tracks(&report, start)
-                .map_err(|e| e.to_string())?;
-            output.save_with_checkpoint().map_err(|e| e.to_string())?;
-        }
-        serde_json::to_value(report).map_err(|e| e.to_string())?
-    } else if command == "analyze-instruments" {
+    let value = if command == "analyze-instruments" {
         let model = options.get("--model").ok_or(usage)?;
         let threshold = options
             .get("--threshold")
@@ -202,15 +156,6 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn mixture_requires_explicit_per_invocation_acknowledgement() {
-        let args = ["transcribe-mixture", "absent.wav", "--model", "absent"];
-        assert!(
-            run(&args.into_iter().map(str::to_string).collect::<Vec<_>>())
-                .unwrap_err()
-                .contains("CC BY-NC 4.0")
-        );
-    }
     #[test]
     fn malformed_options_fail_before_opening_audio() {
         for args in [

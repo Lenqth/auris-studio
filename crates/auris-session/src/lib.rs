@@ -151,8 +151,7 @@ pub use session::{
 };
 pub use session::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
-    ClipInstrumentAnalysis, ClipMixtureAnalysis, analyze_audio_file, analyze_instrument_file,
-    transcribe_piano_file,
+    ClipInstrumentAnalysis, analyze_audio_file, analyze_instrument_file, transcribe_piano_file,
 };
 pub use session::{CheckpointJob, CheckpointOperation, CheckpointResult};
 pub use session::{CompositionPreview, CompositionTrackPreview};
@@ -161,9 +160,6 @@ pub use session::{
     DrumVoiceAnalysis, probe_drum_request,
 };
 pub use session::{InstrumentParamChange, InstrumentParamEdit};
-pub use session::{
-    MUSCRIPTOR_NOTICE, MixtureAnalysis, MixtureNote, MixtureOptions, transcribe_mixture_file,
-};
 pub use session::{MusicalClipAnalysis, RenderedSpectrogramJob, SpectrogramJob};
 pub use session::{PreparedAudioSource, prepare_audio_source};
 pub use session::{
