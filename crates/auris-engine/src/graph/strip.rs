@@ -353,10 +353,11 @@ impl RenderStrip {
         strip.effects.reserve(mixer.effects.len());
         strip.enabled.reserve(mixer.effects.len());
         for slot in &mixer.effects {
-            // The caller's own effect first: it is already prepared — a hosted plugin was sized
-            // when it was activated and cannot be told a second time — and there is nothing for
-            // the registry to be asked about.
-            if let Some(effect) = placed.remove(&slot.id) {
+            // Like placed instruments, caller-built effects still need the graph's preparation
+            // callback. CLAP is already activated and only reserves host event storage here;
+            // VST3 starts its independent renderer in prepare rather than at construction.
+            if let Some(mut effect) = placed.remove(&slot.id) {
+                effect.prepare(prepare);
                 strip.effects.push(effect);
                 strip.enabled.push(slot.enabled);
                 continue;
@@ -667,6 +668,63 @@ mod tests {
         assert!(strip.enabled[1]);
         // The placeholder declares no tail, so it cannot lengthen an export either.
         assert_eq!(strip.tail_frames(), 0);
+    }
+
+    #[test]
+    fn a_caller_built_effect_is_prepared_before_processing_audio() {
+        struct PreparedGain(bool);
+        impl auris_core::plugin::Parameterized for PreparedGain {
+            fn parameters(&self) -> &[ParamDescriptor] {
+                &[]
+            }
+            fn param(&self, _: ParamId) -> f32 {
+                0.0
+            }
+            fn set_param(&mut self, _: ParamId, _: f32) {}
+        }
+        impl Effect for PreparedGain {
+            fn descriptor(&self) -> PluginDescriptor {
+                PluginDescriptor::effect(
+                    "test.prepared",
+                    "Prepared gain",
+                    "Test",
+                    PluginCategory::Utility,
+                )
+            }
+            fn prepare(&mut self, context: &PrepareContext) {
+                assert_eq!(context.sample_rate, 48_000.0);
+                assert_eq!(context.max_block_frames, 512);
+                self.0 = true;
+            }
+            fn reset(&mut self) {}
+            fn process(&mut self, buffer: &mut AudioBuffer, _: &ProcessContext) {
+                if self.0 {
+                    for sample in buffer.iter_channels_mut().flatten() {
+                        *sample *= 0.25;
+                    }
+                }
+            }
+        }
+        let mut project = Project::new("Graph", 48_000.0);
+        let slot = project.add_effect(None, "test.prepared").unwrap();
+        let mut placed = crate::graph::PlacedEffects::new();
+        placed.insert(slot, Box::new(PreparedGain(false)));
+        let mut strip = RenderStrip::from_mixer(
+            &project.master,
+            true,
+            &testkit::registry(),
+            &mut placed,
+            &PrepareContext::new(48_000.0, 512, 2),
+        );
+        let mut audio = AudioBuffer::stereo(512, 48_000.0);
+        for sample in audio.iter_channels_mut().flatten() {
+            *sample = 1.0;
+        }
+        strip.effects[0].process(
+            &mut audio,
+            &ProcessContext::realtime(48_000.0, 512, 0, 120.0, true),
+        );
+        assert_eq!(audio.peak(), 0.25);
     }
 
     #[test]
