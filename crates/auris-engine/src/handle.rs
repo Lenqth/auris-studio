@@ -148,6 +148,7 @@ pub struct EngineHandle {
     pub(crate) stream_notices: Arc<AtomicU32>,
     /// What the output says it is playing, and when, for a capture to line a take up against.
     pub(crate) clock: Arc<crate::clock::OutputClock>,
+    pub(crate) callbacks: Arc<AtomicU64>,
     pub(crate) sample_rate: f64,
     pub(crate) channel_count: usize,
     pub(crate) max_block: usize,
@@ -287,6 +288,15 @@ impl EngineHandle {
     /// that sees this go true should rebuild, or that track will play out of step with the rest.
     pub fn latency_is_stale(&self) -> bool {
         self.latency_stale.load(Ordering::Relaxed)
+    }
+
+    /// How many times the device has called the engine for audio since it opened.
+    ///
+    /// [`Self::is_running`] says only that nothing has reported the stream dead. A stream opened
+    /// on a device that is going away can start without error and then never be called, and
+    /// this standing still is the only sign of it.
+    pub fn callback_count(&self) -> u64 {
+        self.callbacks.load(Ordering::Relaxed)
     }
 
     /// `true` when an output stream is actually running.

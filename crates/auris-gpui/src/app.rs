@@ -2068,6 +2068,12 @@ impl AurisApp {
                         this.poll_pending_audition(cx);
                         this.poll_song_workshop(cx);
                         this.session.poll();
+                        if this.session.take_output_changed() {
+                            this.set_status(audio_line(
+                                &this.session.audio_status(),
+                                this.language,
+                            ));
+                        }
                         this.poll_song_search();
                         // Here rather than while drawing, and here rather than in `poll`: the
                         // input peak is destroyed by being read, so it has to be read exactly
