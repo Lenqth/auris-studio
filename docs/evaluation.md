@@ -9,6 +9,10 @@ a change to a writer or a dial should be judged against numbers first and ears a
 The [agent composition trials](composition-quality.md) exercise complete panel tasks,
 preserve failures and provenance, and prepare blinded human listening comparisons.
 
+The [local refinement loop](composition-refinement.md) connects those trials to
+SongEval, bounded foreground edits and retained before/after audio. It records
+per-axis evidence and validity checks without an automatic musical winner.
+
 The [preset arrangement study](preset-arrangement.md) pairs these measurements with track
 participation and density across the form, and records the default-seed selection, fresh-seed
 check, and per-preset tradeoffs from the 2026-10-04 revision.
@@ -188,6 +192,14 @@ the retained full renders as well. An unchanged-file comparison checks inference
 repeatability. Model weights are CC-BY-NC 4.0; their use here is offline research.
 
 ## Controlled melody listening
+
+The [2026-10-26 local evaluator trial](local-music-evaluators-2026-10-26.ja.md)
+ran SongEval and Meta Audiobox Aesthetics on four fixed-context vocal mixes,
+with repeated-input and silence controls. Both ran on Windows CPU; neither is
+shipped in the application or calibrated as an automatic selector. The retained
+[results](../tools/eval/references/local-music-evaluators-2026-10-26.json) distinguish
+successful local inference from the Antigravity CLI attempt, which did not
+deliver raw audio and produced no valid music assessment.
 
 `melody_ab.py` transplants an instrumental lead into a frozen backing;
 `melody_continuity_ab.py` freezes the renderer and makes level-matched chorus

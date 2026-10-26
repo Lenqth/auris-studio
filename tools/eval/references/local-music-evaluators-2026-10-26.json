@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-26",
+  "timezone": "Asia/Tokyo",
+  "experiment": "local-music-evaluators-controlled-pop",
+  "inputs": "Four complete mixes from pop-melody-controlled-2026-10-26; unchanged.",
+  "song_eval": {
+    "repository": "https://github.com/ASLP-lab/SongEval",
+    "revision": "848fb2ff3a2a9d64dcb20d46f07238c28abd7add",
+    "head_sha256": "0cb1eb8be02b96e9949ca3a2b66997c5ac7d9da3567240df4dbfc2048eb98efd",
+    "muq_revision": "0562a57814f6f8bbd9fdea0a25921a2fce1a841a",
+    "device": "cpu",
+    "threads": 4,
+    "score_range": [
+      1,
+      5
+    ],
+    "repeat_equal_at_official_four_decimal_precision": true,
+    "silence": {
+      "Coherence": 1.0583,
+      "Musicality": 1.0721,
+      "Memorability": 1.0532,
+      "Clarity": 1.0449,
+      "Naturalness": 1.0608
+    },
+    "naturalness_definition": "Vocal breathing and phrasing; not a separate general-naturalness score."
+  },
+  "audiobox": {
+    "repository": "https://github.com/facebookresearch/audiobox-aesthetics",
+    "source_revision": "2618e9d451b456e9328b39495b5e6234678aa550",
+    "model_revision": "9b1dd8e5df9af7216e836a98974fe3b82c56ded6",
+    "model_files": {
+      "config.json": {
+        "bytes": 492,
+        "sha256": "0b8eabc5ced92cefed116a3aca8f1e59d2a33dc4d376b9e86dfb9c072e1d280d"
+      },
+      "model.safetensors": {
+        "bytes": 415472992,
+        "sha256": "a5a3c2412649cc2384ec525ffd5180ce6c4778f43bed6108e0a1303de04d014e"
+      }
+    },
+    "versions": {
+      "torch": "2.14.1+cpu",
+      "torchaudio": "2.11.0+cpu",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0"
+    },
+    "device": "cpu",
+    "threads": 2,
+    "score_range": [
+      1,
+      10
+    ],
+    "repeat_equal": true,
+    "file_vs_tensor_max_abs_delta": 9.5367431640625e-07,
+    "silence": {
+      "CE": 3.2453479766845703,
+      "CU": 6.458009243011475,
+      "PC": 1.7016308307647705,
+      "PQ": 6.742216110229492
+    }
+  },
+  "rows": [
+    {
+      "id": "pair-01-A",
+      "pair": "pair-01",
+      "label": "A",
+      "condition": "after",
+      "input_sha256": "39f0c4a837375acc3e9a85d52dbc9812657e193f43f316473517237457d0f1a0",
+      "duration_seconds": 51.4285625,
+      "songeval": {
+        "Coherence": 3.6212,
+        "Musicality": 3.3378,
+        "Memorability": 3.5312,
+        "Clarity": 3.4672,
+        "Naturalness": 3.1008
+      },
+      "songeval_seconds": 6.008255399996415,
+      "audiobox": {
+        "CE": 6.823267936706543,
+        "CU": 7.745450973510742,
+        "PC": 3.5420565605163574,
+        "PQ": 8.350083351135254
+      },
+      "audiobox_seconds": 5.593507199999294
+    },
+    {
+      "id": "pair-01-B",
+      "pair": "pair-01",
+      "label": "B",
+      "condition": "before",
+      "input_sha256": "5e792f0fd23d7acabd3cd62dd1a10d7c74e93d70d341ea768a63f7dd11022341",
+      "duration_seconds": 51.4285625,
+      "songeval": {
+        "Coherence": 3.6424,
+        "Musicality": 3.3169,
+        "Memorability": 3.5764,
+        "Clarity": 3.4681,
+        "Naturalness": 3.0802
+      },
+      "songeval_seconds": 6.723354100002325,
+      "audiobox": {
+        "CE": 6.8393635749816895,
+        "CU": 7.742802143096924,
+        "PC": 3.794426679611206,
+        "PQ": 8.366625785827637
+      },
+      "audiobox_seconds": 3.7482799000063096
+    },
+    {
+      "id": "pair-02-A",
+      "pair": "pair-02",
+      "label": "A",
+      "condition": "before",
+      "input_sha256": "ff48299208b2d18427b34c2681967c36d5f7c982eaa804758d91e699c4d93efd",
+      "duration_seconds": 51.4285625,
+      "songeval": {
+        "Coherence": 3.6335,
+        "Musicality": 3.2922,
+        "Memorability": 3.5428,
+        "Clarity": 3.4574,
+        "Naturalness": 3.1107
+      },
+      "songeval_seconds": 5.010785299993586,
+      "audiobox": {
+        "CE": 6.792865753173828,
+        "CU": 7.742041110992432,
+        "PC": 3.6561317443847656,
+        "PQ": 8.339364051818848
+      },
+      "audiobox_seconds": 3.979621099999349
+    },
+    {
+      "id": "pair-02-B",
+      "pair": "pair-02",
+      "label": "B",
+      "condition": "after",
+      "input_sha256": "7f76805ab674f4ada6481d6dc53b11f8f96b74162076cf6369b4bf057bf16d41",
+      "duration_seconds": 51.4285625,
+      "songeval": {
+        "Coherence": 3.6658,
+        "Musicality": 3.3924,
+        "Memorability": 3.6245,
+        "Clarity": 3.5157,
+        "Naturalness": 3.1289
+      },
+      "songeval_seconds": 29.787650199999916,
+      "audiobox": {
+        "CE": 6.860358238220215,
+        "CU": 7.763276100158691,
+        "PC": 3.7826297283172607,
+        "PQ": 8.38290786743164
+      },
+      "audiobox_seconds": 3.8360224999996717
+    }
+  ],
+  "after_minus_before": {
+    "pair-01": {
+      "songeval": {
+        "Coherence": -0.0212,
+        "Musicality": 0.0209,
+        "Memorability": -0.0452,
+        "Clarity": -0.0009,
+        "Naturalness": 0.0206
+      },
+      "audiobox": {
+        "CE": -0.016096,
+        "CU": 0.002649,
+        "PC": -0.25237,
+        "PQ": -0.016542
+      }
+    },
+    "pair-02": {
+      "songeval": {
+        "Coherence": 0.0323,
+        "Musicality": 0.1002,
+        "Memorability": 0.0817,
+        "Clarity": 0.0583,
+        "Naturalness": 0.0182
+      },
+      "audiobox": {
+        "CE": 0.067492,
+        "CU": 0.021235,
+        "PC": 0.126498,
+        "PQ": 0.043544
+      }
+    }
+  },
+  "antigravity": {
+    "cli_version": "1.4.7",
+    "selected_model": "gemini-3.8-flash-low",
+    "authenticated_text_response": true,
+    "verified_audio_evaluation": false,
+    "scores": null,
+    "free_tier_entitlement_verified": false,
+    "evidence": [
+      "Local WAV path and @file prompts produced media=0 transport logs.",
+      "The @file response stated that raw audio was not received.",
+      "The four-file request attempted RunCommand, denied by the CLI headless sandbox.",
+      "Current Auris CLI attachment route sends local audio measurements, not binary audio.",
+      "No new billing setup or separate paid Gemini API was used."
+    ],
+    "scope": "The installed CLI path only; no conclusion about all Antigravity IDE versions."
+  },
+  "interpretation": [
+    "Local inference and repeatability succeeded; musical preference validity is not established.",
+    "SongEval slightly favors after on musicality and vocal phrasing in both pairs, while memorability differs by pair.",
+    "Pair-01 SongEval vocal phrasing direction conflicts with this listener's breathing preference.",
+    "Small score deltas have no calibrated threshold here. Do not count axes as independent votes.",
+    "Audiobox production complexity is descriptive, not a more-is-better objective.",
+    "Silence scoring demonstrates a response to a gross control, not melody discrimination.",
+    "The consumer Antigravity login and response do not establish billing or free entitlement."
+  ]
+}

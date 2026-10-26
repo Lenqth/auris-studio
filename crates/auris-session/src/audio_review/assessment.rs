@@ -30,6 +30,17 @@ pub enum AssessmentRequest<'a> {
     Comparison(ComparisonAspect),
 }
 
+/// Validation state for a review response.
+///
+/// Delivery of WAV bytes is tracked separately by `audio_sent`; it never upgrades this
+/// unvalidated response to an observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssessmentStatus {
+    /// Non-empty plain text was received, but this API does not validate claims or judgments.
+    UnvalidatedResponse,
+}
+
 /// Audio delivery and untrusted prose returned by the reviewer.
 #[derive(Debug, Serialize)]
 pub struct AssessmentReply {
@@ -37,6 +48,8 @@ pub struct AssessmentReply {
     pub model: String,
     /// WAV bytes were delivered; not proof of correct listening.
     pub audio_sent: bool,
+    /// Validation state for the review response; this is never a preference or quality score.
+    pub status: AssessmentStatus,
     /// Capability discovery and fallback metadata.
     pub selection: super::ReviewerSelection,
     /// Original response, without extracting a verdict or confidence.
@@ -93,10 +106,13 @@ pub fn assess_audio_cancellable(
         );
     }
     let reply = review_audio_cancellable(audio, &prompt(request), options, cancel)?;
+    // The current API intentionally asks for bounded free text and does not validate a
+    // structured assessment schema. Preserve the prose, but never call it an observation.
     Ok(AssessmentReply {
         model: reply.model,
         selection: reply.selection,
         audio_sent: reply.audio_sent,
         raw_response: reply.review,
+        status: AssessmentStatus::UnvalidatedResponse,
     })
 }

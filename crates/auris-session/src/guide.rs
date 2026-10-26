@@ -52,6 +52,13 @@
 //! The frontend owns presentation, provider selection, audition and explicit editor handoff.
 //! Local cross-project preference evidence records contextual choices. It is optional, inspectable
 //! and clearable, and does not infer dislike from nonselection or override explicit instructions.
+//! Direction planning, lyric generation and composer workers share the agent's musical-design
+//! principles. The conversational composer extends the resolved live-agent prompt with its
+//! isolated-session contract: expressive note authoring, purposeful arrangement, a mixer pass
+//! and inspection of the current full mix. The `SongRequest` authoring API also provides a
+//! source-and-singer setup without notes and validates authored-note, mix and vocal evidence
+//! before rendering standalone candidates. A failed agent never silently falls back to a
+//! preset-generated song. These checks establish completion evidence, not musical quality.
 //!
 //! A conversation also retains a bounded `memory.production.json` beside model memory.
 //! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;

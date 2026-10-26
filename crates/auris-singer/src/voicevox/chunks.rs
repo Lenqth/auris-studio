@@ -160,6 +160,62 @@ mod tests {
     }
 
     #[test]
+    fn a_long_absolute_lead_in_stays_in_bounded_local_windows() {
+        let frame_rate = 93.75;
+        let leading = (200.0 * frame_rate) as usize;
+        let sung = 1_000;
+        let score = SingerScore {
+            notes: vec![
+                SingerNote {
+                    key: None,
+                    frame_length: leading as u32,
+                    lyric: String::new(),
+                },
+                SingerNote {
+                    key: Some(60),
+                    frame_length: sung as u32,
+                    lyric: "ア".into(),
+                },
+            ],
+        };
+        let count = leading + sung;
+        let plan = ChunkPlan::new(&score, count, frame_rate);
+        let limit = (frame_rate * REQUEST_SECONDS).floor() as usize;
+        let context = plan.context;
+        let mut cursor = 0;
+        let mut sung_core_frames = 0;
+        for core in &plan.cores {
+            assert_eq!(
+                core.start, cursor,
+                "cores must preserve absolute frame order"
+            );
+            assert!(core.end > core.start);
+            let window = plan.window(core, count);
+            assert!(
+                window.len() + 2 * context <= limit,
+                "each local Engine request must stay within the seconds budget"
+            );
+            let local = slice_score(&score, window.clone());
+            let mut local_at = window.start;
+            for note in local.notes {
+                let end = local_at + note.frame_length as usize;
+                if note.key.is_some() {
+                    assert!(local_at >= leading && end <= count);
+                    sung_core_frames += end.min(core.end).saturating_sub(local_at.max(core.start));
+                }
+                local_at = end;
+            }
+            assert_eq!(local_at, window.end);
+            cursor = core.end;
+        }
+        assert_eq!(cursor, count);
+        assert_eq!(
+            sung_core_frames, sung,
+            "all sung frames retain their absolute placement"
+        );
+    }
+
+    #[test]
     fn cuts_prefer_a_rest_then_note_boundaries_over_a_sustained_sound() {
         let score = SingerScore {
             notes: vec![

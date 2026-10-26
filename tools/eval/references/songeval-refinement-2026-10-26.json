@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "experiment": "songeval-refinement-2026-10-26",
+  "status": "completed_review_required",
+  "duration_seconds": 51.4285625,
+  "elapsed_seconds": 641.1178660392761,
+  "recipe_sha256": "e8e5ed63d05276c4bca495b475769319879cb3cac74f6c161c9a42108844e997",
+  "scripts": {
+    "composition_listening_assets.py": "7da73736fc2fab67ada9bccb4a11ea6db3ff32a006006ba58e56cbfeb513ece0",
+    "composition_quality.py": "10473958729a430bbac952014bbd9337a1dc0d814a1b7d195bcb18b33f2f6874",
+    "composition_refine.py": "e0139db431032ad79a01926dba3e9a3fa52ccb6fec66f589330835f36f465294",
+    "songeval.py": "029a04c00dd4b551859896b1e3e2814bda649a4f5240d7562a9a82c02b7f5a86"
+  },
+  "runtime": {
+    "device": "cpu",
+    "torch_threads": 4,
+    "upstream": "https://github.com/ASLP-lab/SongEval",
+    "upstream_revision": "848fb2ff3a2a9d64dcb20d46f07238c28abd7add",
+    "requested_upstream_revision": "848fb2ff3a2a9d64dcb20d46f07238c28abd7add",
+    "artifacts": {
+      "checkpoint": "0cb1eb8be02b96e9949ca3a2b66997c5ac7d9da3567240df4dbfc2048eb98efd",
+      "muq": {
+        "model.safetensors": "273febab2be02872c37d2c37e48a9d6c52c1c9392f3eeeabd498efa281ccb7a6",
+        "pytorch_model.bin": "334df3de2832ec1acfd8b6ce54e7de4073401fe821f7ec0ad0d954832be2d26a"
+      },
+      "muq_config": "237335ee27d8fb951ce778701a12a79e06c51ae636dd786f97e45f51ce532543",
+      "source": {
+        "model.py": "5c40c1cf318c46f6d97e33231356f09a5fe9d00f5896b410f6035076052fc6b2",
+        "eval.py": "8bda6eb4499133962a8b82bbbc05ed9acfa99bb54677173299fe3b6f6e6ab152",
+        "config.yaml": "833ab78c6f380b63ceb08daa66e9af3e19ae1c3105d113274317843f229c951d"
+      }
+    },
+    "packages": {
+      "torch": "2.7.0",
+      "torchaudio": "2.7.0",
+      "librosa": "0.11.0",
+      "muq": "0.1.0",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0",
+      "transformers": "4.57.6",
+      "hydra-core": "1.3.2",
+      "huggingface-hub": "0.36.2",
+      "safetensors": "0.8.0",
+      "scipy": "1.17.1"
+    },
+    "preprocessing_version": "songeval-adapter-v2",
+    "preprocessing": "librosa mono 24 kHz; MuQ hidden_states[6]; no loudness normalization"
+  },
+  "renderer_hashes": {
+    "auris.exe": "514a59cb79e109f2d9e155d5d220af738af483cea98ae3f48f8b02b71b348cf3",
+    "DirectML.dll": "9c9e6d822561c6c41b90e6994b3e8857cf1d66dbfb1e0c4c799c7c89b4e92da1"
+  },
+  "voice_config_sha256": "4736fd99c595efd18e381da0d2f2e2c702e983c657bf9d7a148fde04f015eef6",
+  "voice_engine_version": "0.26.0",
+  "renderer_source": "Reused frozen CLI; its source is not inferred from this checkout.",
+  "panel_source": "b1d9ba943b1e38ae29447ae09b767041529a09e7",
+  "before": {
+    "scores": {
+      "Coherence": 3.5245,
+      "Musicality": 3.1599,
+      "Memorability": 3.4196,
+      "Clarity": 3.383,
+      "Naturalness": 3.0023
+    },
+    "audio": "57a7dd71e0ef4a8bda24b97c194439b4ad8571231215fa7a7d757198a6689b4a",
+    "composed_changed_notes": 79
+  },
+  "after": {
+    "scores": {
+      "Coherence": 3.5428,
+      "Musicality": 3.1769,
+      "Memorability": 3.4326,
+      "Clarity": 3.3951,
+      "Naturalness": 3.0185
+    },
+    "audio": "3a2785ce32a2ef22e2accbbf3cb0e3cea8e9207170d89206c4d5a21ccec4109a",
+    "changes": [
+      {
+        "clip_id": 6,
+        "note_index": 7,
+        "fields": {
+          "length": {
+            "before": 720,
+            "after": 960
+          }
+        }
+      }
+    ]
+  },
+  "delta": {
+    "Coherence": 0.0183,
+    "Musicality": 0.017,
+    "Memorability": 0.013,
+    "Clarity": 0.0121,
+    "Naturalness": 0.0162
+  },
+  "backing_identical_sha256": "52966af9899aaaf9c1d6d8f2b4e8a947f3d2afee9015fdae59f85ff7f15c32b6",
+  "selected_stage": "00-baseline",
+  "human_preference": "unmeasured",
+  "short_auditions": {
+    "before": {
+      "path": "before-phrase.wav",
+      "sha256": "e050f5beaca90cf0591516552565f0bc91c25acb079363120b5ee3d4bca18b1b",
+      "start_seconds": 7.5714375,
+      "end_seconds": 13.857145833333334,
+      "gain_normalization": "none",
+      "scored": false
+    },
+    "after": {
+      "path": "after-phrase.wav",
+      "sha256": "d1ce510c6c85eb4988c7296ea5fdaf9ad7ae48501c95321387e797d9890a32a9",
+      "start_seconds": 7.5714375,
+      "end_seconds": 13.857145833333334,
+      "gain_normalization": "none",
+      "scored": false
+    }
+  },
+  "limitations": [
+    "One development composition and one local rhythm intervention; not evidence of general improvement.",
+    "Full mixes were scored; short phrase auditions were not scored.",
+    "Scores rose on all axes, but differences are uncalibrated and no candidate was promoted."
+  ],
+  "panel_source_diff_sha256": "0c27eabd700961c6c9ac3f96e132bba2336787405698a5b0ec25555a6c5e7a8c",
+  "panel_source_reference_sha256": "e405185769b0c2e5de2ca3b3155fa349c33a279a93341b5617cffb1a3d1966fd",
+  "panel_source_note": "The reused panel runtime is bound to the prior suite's commit plus recorded diff and untracked Rust sources; it is not attributed to today's checkout."
+}

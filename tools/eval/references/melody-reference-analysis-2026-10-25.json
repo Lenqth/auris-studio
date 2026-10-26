@@ -1,0 +1,1183 @@
+{
+  "schema_version": 3,
+  "source": {
+    "repository": "https://github.com/music-x-lab/POP909-Dataset.git",
+    "commit": "d83e6edba6872a704f5d3b8b32f5cb540088dae6",
+    "working_tree_status": "",
+    "pattern": "POP909/*/*.mid",
+    "limit": 30,
+    "files": [
+      "POP909/001/001.mid",
+      "POP909/002/002.mid",
+      "POP909/003/003.mid",
+      "POP909/004/004.mid",
+      "POP909/005/005.mid",
+      "POP909/006/006.mid",
+      "POP909/007/007.mid",
+      "POP909/008/008.mid",
+      "POP909/009/009.mid",
+      "POP909/010/010.mid",
+      "POP909/011/011.mid",
+      "POP909/012/012.mid",
+      "POP909/013/013.mid",
+      "POP909/014/014.mid",
+      "POP909/015/015.mid",
+      "POP909/016/016.mid",
+      "POP909/017/017.mid",
+      "POP909/018/018.mid",
+      "POP909/019/019.mid",
+      "POP909/020/020.mid",
+      "POP909/021/021.mid",
+      "POP909/022/022.mid",
+      "POP909/023/023.mid",
+      "POP909/024/024.mid",
+      "POP909/025/025.mid",
+      "POP909/026/026.mid",
+      "POP909/027/027.mid",
+      "POP909/028/028.mid",
+      "POP909/029/029.mid",
+      "POP909/030/030.mid"
+    ],
+    "tool": "mido 1.3.3",
+    "index_parser": "openpyxl 3.1.5",
+    "analyzer_sha256": "245a4eff163d2fd73701de3b3b8d4a19dbc2234b1e49e8f602081bf41c75ad15",
+    "index_sha256": "f31fe13b7d926b59bca495134ec37c603c8cc4bebdade65965574a61c291980d"
+  },
+  "track": "MELODY",
+  "summary": {
+    "files_total": 30,
+    "files_valid_intervals": 30,
+    "files_suspect_or_error": 0,
+    "notes": {
+      "files": 30,
+      "mean": 329,
+      "median": 342.0,
+      "min": 156,
+      "max": 468
+    },
+    "pitch_range_semitones": {
+      "files": 30,
+      "mean": 17.7667,
+      "median": 17.0,
+      "min": 9,
+      "max": 32
+    },
+    "mean_abs_nonzero_interval_semitones": {
+      "files": 30,
+      "mean": 2.9456,
+      "median": 3.0213,
+      "min": 2.083,
+      "max": 3.6797
+    },
+    "small_motion_fraction": {
+      "files": 30,
+      "mean": 0.4684,
+      "median": 0.4516,
+      "min": 0.2675,
+      "max": 0.6725
+    },
+    "unison_fraction": {
+      "files": 30,
+      "mean": 0.2206,
+      "median": 0.195,
+      "min": 0.0545,
+      "max": 0.4667
+    },
+    "duration_median_quarters": {
+      "files": 30,
+      "mean": 0.313,
+      "median": 0.3125,
+      "min": 0.1333,
+      "max": 0.5583
+    },
+    "positive_union_gap_fraction_ge_1_quarter": {
+      "files": 30,
+      "mean": 0.0353,
+      "median": 0.0187,
+      "min": 0.0,
+      "max": 0.1604
+    }
+  },
+  "files": [
+    {
+      "file": "POP909/001/001.mid",
+      "sha256": "a93079efb82bdf1e27e75951b7eb454509efb130f0bc0e936257df5c73aabcb0",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 264,
+      "pitch_min": 61,
+      "pitch_max": 70,
+      "pitch_range_semitones": 9,
+      "pitch_median": 66.0,
+      "mean_abs_nonzero_interval_semitones": 3.2594,
+      "small_motion_fraction": 0.4106,
+      "unison_fraction": 0.0913,
+      "duration_median_quarters": 0.2052,
+      "duration_mean_quarters": 0.3882,
+      "positive_union_gap_count": 263,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0722,
+      "median_positive_union_gap_quarters": 0.2208,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "123我爱你",
+        "artist": "新乐尘符"
+      }
+    },
+    {
+      "file": "POP909/002/002.mid",
+      "sha256": "5c6d62a8bbace19b95e01964cf0dfbe0219111478fa4e08c10a505af50a77e62",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 310,
+      "pitch_min": 68,
+      "pitch_max": 85,
+      "pitch_range_semitones": 17,
+      "pitch_median": 75.0,
+      "mean_abs_nonzero_interval_semitones": 2.4179,
+      "small_motion_fraction": 0.6699,
+      "unison_fraction": 0.1327,
+      "duration_median_quarters": 0.3,
+      "duration_mean_quarters": 0.3668,
+      "positive_union_gap_count": 307,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0065,
+      "median_positive_union_gap_quarters": 0.1583,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "123木头人",
+        "artist": "黑涩会美眉"
+      }
+    },
+    {
+      "file": "POP909/003/003.mid",
+      "sha256": "22e913530ff39f9c3702758f6353b027f1f6197d7c06f79df8a34347762b4c1d",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 422,
+      "pitch_min": 70,
+      "pitch_max": 84,
+      "pitch_range_semitones": 14,
+      "pitch_median": 79.0,
+      "mean_abs_nonzero_interval_semitones": 2.083,
+      "small_motion_fraction": 0.4608,
+      "unison_fraction": 0.399,
+      "duration_median_quarters": 0.2542,
+      "duration_mean_quarters": 0.3119,
+      "positive_union_gap_count": 421,
+      "positive_union_gap_fraction_ge_1_quarter": 0.019,
+      "median_positive_union_gap_quarters": 0.1521,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "9420",
+        "artist": "麦小兜"
+      }
+    },
+    {
+      "file": "POP909/004/004.mid",
+      "sha256": "bc7c43fc8a11257eac69dc4bc827fd3a2653916674b105e863e179e86afe1490",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 156,
+      "pitch_min": 68,
+      "pitch_max": 83,
+      "pitch_range_semitones": 15,
+      "pitch_median": 75.0,
+      "mean_abs_nonzero_interval_semitones": 2.6838,
+      "small_motion_fraction": 0.5935,
+      "unison_fraction": 0.1226,
+      "duration_median_quarters": 0.5,
+      "duration_mean_quarters": 1.1151,
+      "positive_union_gap_count": 20,
+      "positive_union_gap_fraction_ge_1_quarter": 0.05,
+      "median_positive_union_gap_quarters": 0.0021,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "Dear Friend",
+        "artist": "顺子"
+      }
+    },
+    {
+      "file": "POP909/005/005.mid",
+      "sha256": "ebc1a3cb2c84e38b1d6e0375f6a079919173709c3c70c4a4f960d5c4c4b6fc44",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 367,
+      "pitch_min": 62,
+      "pitch_max": 79,
+      "pitch_range_semitones": 17,
+      "pitch_median": 72,
+      "mean_abs_nonzero_interval_semitones": 3.0232,
+      "small_motion_fraction": 0.5246,
+      "unison_fraction": 0.1749,
+      "duration_median_quarters": 0.5,
+      "duration_mean_quarters": 0.7528,
+      "positive_union_gap_count": 64,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0,
+      "median_positive_union_gap_quarters": 0.0021,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "I Believe",
+        "artist": "范逸臣"
+      }
+    },
+    {
+      "file": "POP909/006/006.mid",
+      "sha256": "68acb53b43c6a603a87c29d2868baacec10b7f7fbc4a8e9dff1c1bcec432a571",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 468,
+      "pitch_min": 58,
+      "pitch_max": 70,
+      "pitch_range_semitones": 12,
+      "pitch_median": 63.0,
+      "mean_abs_nonzero_interval_semitones": 2.5109,
+      "small_motion_fraction": 0.3961,
+      "unison_fraction": 0.409,
+      "duration_median_quarters": 0.5,
+      "duration_mean_quarters": 0.7593,
+      "positive_union_gap_count": 197,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0102,
+      "median_positive_union_gap_quarters": 0.0021,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "Lovelovelove",
+        "artist": "蔡依林"
+      }
+    },
+    {
+      "file": "POP909/007/007.mid",
+      "sha256": "d2ad108f0b353b9ba00f40e0dfb470535cbb94676bbe186cf191b77693556f5e",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 350,
+      "pitch_min": 62,
+      "pitch_max": 78,
+      "pitch_range_semitones": 16,
+      "pitch_median": 71.0,
+      "mean_abs_nonzero_interval_semitones": 2.8386,
+      "small_motion_fraction": 0.3696,
+      "unison_fraction": 0.361,
+      "duration_median_quarters": 0.3083,
+      "duration_mean_quarters": 0.6674,
+      "positive_union_gap_count": 348,
+      "positive_union_gap_fraction_ge_1_quarter": 0.092,
+      "median_positive_union_gap_quarters": 0.2865,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一万个对不起",
+        "artist": "祁隆"
+      }
+    },
+    {
+      "file": "POP909/008/008.mid",
+      "sha256": "fdb45b4546d5464e23b5f0a40cc818c54a9dbf66e1f10da6416713fb6e6e7a2c",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 416,
+      "pitch_min": 60,
+      "pitch_max": 82,
+      "pitch_range_semitones": 22,
+      "pitch_median": 72.0,
+      "mean_abs_nonzero_interval_semitones": 3.1224,
+      "small_motion_fraction": 0.2675,
+      "unison_fraction": 0.4096,
+      "duration_median_quarters": 0.1354,
+      "duration_mean_quarters": 0.3451,
+      "positive_union_gap_count": 412,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0267,
+      "median_positive_union_gap_quarters": 0.1313,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一万个理由",
+        "artist": "郑源"
+      }
+    },
+    {
+      "file": "POP909/009/009.mid",
+      "sha256": "c834f5e5fb62b8e88e276f89c05273a2178e345f3c490f7b7410930a59d4070d",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 346,
+      "pitch_min": 56,
+      "pitch_max": 73,
+      "pitch_range_semitones": 17,
+      "pitch_median": 66.0,
+      "mean_abs_nonzero_interval_semitones": 3.4076,
+      "small_motion_fraction": 0.2696,
+      "unison_fraction": 0.4667,
+      "duration_median_quarters": 0.4229,
+      "duration_mean_quarters": 0.6568,
+      "positive_union_gap_count": 345,
+      "positive_union_gap_fraction_ge_1_quarter": 0.1333,
+      "median_positive_union_gap_quarters": 0.2917,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "一万个舍不得",
+        "artist": "庄心妍"
+      }
+    },
+    {
+      "file": "POP909/010/010.mid",
+      "sha256": "887e6eaa163edd8a5ce7a862479eb7054b3fb64333c31b31c51bffecd520a8f0",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 349,
+      "pitch_min": 57,
+      "pitch_max": 73,
+      "pitch_range_semitones": 16,
+      "pitch_median": 67,
+      "mean_abs_nonzero_interval_semitones": 3.0521,
+      "small_motion_fraction": 0.4195,
+      "unison_fraction": 0.1724,
+      "duration_median_quarters": 0.3458,
+      "duration_mean_quarters": 0.5712,
+      "positive_union_gap_count": 343,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0262,
+      "median_positive_union_gap_quarters": 0.1688,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一个人失忆",
+        "artist": "薛凯琪"
+      }
+    },
+    {
+      "file": "POP909/011/011.mid",
+      "sha256": "5867d686c9d378e3d89284a1002c441f90a027e06add886b7904157f050e181e",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 427,
+      "pitch_min": 58,
+      "pitch_max": 77,
+      "pitch_range_semitones": 19,
+      "pitch_median": 67,
+      "mean_abs_nonzero_interval_semitones": 3.2145,
+      "small_motion_fraction": 0.4765,
+      "unison_fraction": 0.1573,
+      "duration_median_quarters": 0.3354,
+      "duration_mean_quarters": 0.4394,
+      "positive_union_gap_count": 426,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0094,
+      "median_positive_union_gap_quarters": 0.15,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "一个人的北京",
+        "artist": "好妹妹乐队"
+      }
+    },
+    {
+      "file": "POP909/012/012.mid",
+      "sha256": "1c1982d738756a2f2e2e87313d06ff5d56bad812fba21e68ce1e6d2c9da3227e",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 440,
+      "pitch_min": 58,
+      "pitch_max": 80,
+      "pitch_range_semitones": 22,
+      "pitch_median": 72.0,
+      "mean_abs_nonzero_interval_semitones": 3.2046,
+      "small_motion_fraction": 0.4784,
+      "unison_fraction": 0.2096,
+      "duration_median_quarters": 0.1667,
+      "duration_mean_quarters": 0.3235,
+      "positive_union_gap_count": 435,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0184,
+      "median_positive_union_gap_quarters": 0.1313,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一个人的天荒地老",
+        "artist": "张宇"
+      }
+    },
+    {
+      "file": "POP909/013/013.mid",
+      "sha256": "433f575776eb1665718bbdf2e6814a1da97bdda3d2a49d4decfd1c3ada567be0",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 353,
+      "pitch_min": 60,
+      "pitch_max": 79,
+      "pitch_range_semitones": 19,
+      "pitch_median": 69,
+      "mean_abs_nonzero_interval_semitones": 3.0271,
+      "small_motion_fraction": 0.4119,
+      "unison_fraction": 0.3722,
+      "duration_median_quarters": 0.1333,
+      "duration_mean_quarters": 0.2942,
+      "positive_union_gap_count": 350,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0086,
+      "median_positive_union_gap_quarters": 0.1292,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一个人的寂寞两个人的错",
+        "artist": "贺一航"
+      }
+    },
+    {
+      "file": "POP909/014/014.mid",
+      "sha256": "dec906182d8ac808aa7f1d43f20024ec37cd6e14f8772dd5656d7ac63b6d998b",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 275,
+      "pitch_min": 67,
+      "pitch_max": 80,
+      "pitch_range_semitones": 13,
+      "pitch_median": 77,
+      "mean_abs_nonzero_interval_semitones": 2.3136,
+      "small_motion_fraction": 0.5912,
+      "unison_fraction": 0.1971,
+      "duration_median_quarters": 0.5563,
+      "duration_mean_quarters": 0.5592,
+      "positive_union_gap_count": 270,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0519,
+      "median_positive_union_gap_quarters": 0.2771,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一个人的精彩",
+        "artist": "萧亚轩"
+      }
+    },
+    {
+      "file": "POP909/015/015.mid",
+      "sha256": "ca5bc097e202449ccae653ba84397195641bd013557a33795ad0e6e093118833",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 355,
+      "pitch_min": 67,
+      "pitch_max": 82,
+      "pitch_range_semitones": 15,
+      "pitch_median": 75,
+      "mean_abs_nonzero_interval_semitones": 2.9307,
+      "small_motion_fraction": 0.4887,
+      "unison_fraction": 0.226,
+      "duration_median_quarters": 0.1437,
+      "duration_mean_quarters": 0.3167,
+      "positive_union_gap_count": 351,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0142,
+      "median_positive_union_gap_quarters": 0.1333,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一个人走",
+        "artist": "刘佳"
+      }
+    },
+    {
+      "file": "POP909/016/016.mid",
+      "sha256": "d8fa5a1edc3d4458b197207076324e4ed1ae76a6b79220b9cfea11608b3c0ea4",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 290,
+      "pitch_min": 58,
+      "pitch_max": 74,
+      "pitch_range_semitones": 16,
+      "pitch_median": 68.0,
+      "mean_abs_nonzero_interval_semitones": 2.6603,
+      "small_motion_fraction": 0.4152,
+      "unison_fraction": 0.2768,
+      "duration_median_quarters": 0.3396,
+      "duration_mean_quarters": 0.5048,
+      "positive_union_gap_count": 285,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0105,
+      "median_positive_union_gap_quarters": 0.1729,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一亿个伤心",
+        "artist": "蒙面哥"
+      }
+    },
+    {
+      "file": "POP909/017/017.mid",
+      "sha256": "6457955a8e5bb4c0a0f482e5ebf58d1834094555e7ae15e457e62464956f8726",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 224,
+      "pitch_min": 61,
+      "pitch_max": 78,
+      "pitch_range_semitones": 17,
+      "pitch_median": 73.0,
+      "mean_abs_nonzero_interval_semitones": 3.52,
+      "small_motion_fraction": 0.4126,
+      "unison_fraction": 0.1031,
+      "duration_median_quarters": 0.3208,
+      "duration_mean_quarters": 0.5584,
+      "positive_union_gap_count": 221,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0407,
+      "median_positive_union_gap_quarters": 0.1396,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一剪梅",
+        "artist": "费玉清"
+      }
+    },
+    {
+      "file": "POP909/018/018.mid",
+      "sha256": "852dd54faad03effe759919bd24d4f2b86e06eec01b9a5b26cf46caa16572f73",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 224,
+      "pitch_min": 61,
+      "pitch_max": 78,
+      "pitch_range_semitones": 17,
+      "pitch_median": 73.0,
+      "mean_abs_nonzero_interval_semitones": 3.52,
+      "small_motion_fraction": 0.4126,
+      "unison_fraction": 0.1031,
+      "duration_median_quarters": 0.3208,
+      "duration_mean_quarters": 0.5584,
+      "positive_union_gap_count": 221,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0407,
+      "median_positive_union_gap_quarters": 0.1396,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一剪梅 DJ费玉清",
+        "artist": "DJ费玉清"
+      }
+    },
+    {
+      "file": "POP909/019/019.mid",
+      "sha256": "ca3bcd65789cb02257adfa4857673f38ea98b18acb612628688cc14385dfb844",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 313,
+      "pitch_min": 62,
+      "pitch_max": 83,
+      "pitch_range_semitones": 21,
+      "pitch_median": 74,
+      "mean_abs_nonzero_interval_semitones": 2.7649,
+      "small_motion_fraction": 0.609,
+      "unison_fraction": 0.0865,
+      "duration_median_quarters": 0.3,
+      "duration_mean_quarters": 0.3793,
+      "positive_union_gap_count": 311,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0129,
+      "median_positive_union_gap_quarters": 0.1313,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一千年以后",
+        "artist": "林俊杰"
+      }
+    },
+    {
+      "file": "POP909/020/020.mid",
+      "sha256": "f7a076f2fe30780d73690f44a44ef894af873ce14de6db96575930156075f48f",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 346,
+      "pitch_min": 64,
+      "pitch_max": 79,
+      "pitch_range_semitones": 15,
+      "pitch_median": 72.0,
+      "mean_abs_nonzero_interval_semitones": 2.6875,
+      "small_motion_fraction": 0.6725,
+      "unison_fraction": 0.0725,
+      "duration_median_quarters": 0.2938,
+      "duration_mean_quarters": 0.5486,
+      "positive_union_gap_count": 341,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0323,
+      "median_positive_union_gap_quarters": 0.2687,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一千零一夜",
+        "artist": "邰正宵"
+      }
+    },
+    {
+      "file": "POP909/021/021.mid",
+      "sha256": "fad6fb054b5ce652424de8f7c144f5b974922c5478d18df6e297627b372aec3b",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 292,
+      "pitch_min": 58,
+      "pitch_max": 75,
+      "pitch_range_semitones": 17,
+      "pitch_median": 67.0,
+      "mean_abs_nonzero_interval_semitones": 2.4472,
+      "small_motion_fraction": 0.6186,
+      "unison_fraction": 0.1546,
+      "duration_median_quarters": 0.2021,
+      "duration_mean_quarters": 0.3903,
+      "positive_union_gap_count": 290,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0069,
+      "median_positive_union_gap_quarters": 0.1375,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一吻之间",
+        "artist": "张碧晨"
+      }
+    },
+    {
+      "file": "POP909/022/022.mid",
+      "sha256": "7cfae8884c174bcd7dabd089fcaf30570ef6b26320a62cdf8f9141c0c338ce41",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 355,
+      "pitch_min": 65,
+      "pitch_max": 81,
+      "pitch_range_semitones": 16,
+      "pitch_median": 72,
+      "mean_abs_nonzero_interval_semitones": 3.6797,
+      "small_motion_fraction": 0.3446,
+      "unison_fraction": 0.3475,
+      "duration_median_quarters": 0.25,
+      "duration_mean_quarters": 0.5752,
+      "positive_union_gap_count": 113,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0088,
+      "median_positive_union_gap_quarters": 0.0021,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一场游戏一场梦",
+        "artist": "王杰"
+      }
+    },
+    {
+      "file": "POP909/023/023.mid",
+      "sha256": "c7adeef6afb1940d17b0dbbda34d168629e5338252b6ff73c46d014a280d0222",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 293,
+      "pitch_min": 63,
+      "pitch_max": 82,
+      "pitch_range_semitones": 19,
+      "pitch_median": 73,
+      "mean_abs_nonzero_interval_semitones": 3.0917,
+      "small_motion_fraction": 0.4247,
+      "unison_fraction": 0.2534,
+      "duration_median_quarters": 0.3167,
+      "duration_mean_quarters": 0.4503,
+      "positive_union_gap_count": 285,
+      "positive_union_gap_fraction_ge_1_quarter": 0.007,
+      "median_positive_union_gap_quarters": 0.1375,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一壶老酒",
+        "artist": "陆树铭"
+      }
+    },
+    {
+      "file": "POP909/024/024.mid",
+      "sha256": "c3cc42526c6b0ae37b3b2dca4baff17a85a9764d436de9d019370a811793b2cf",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 311,
+      "pitch_min": 61,
+      "pitch_max": 77,
+      "pitch_range_semitones": 16,
+      "pitch_median": 70,
+      "mean_abs_nonzero_interval_semitones": 3.0326,
+      "small_motion_fraction": 0.3581,
+      "unison_fraction": 0.4065,
+      "duration_median_quarters": 0.1396,
+      "duration_mean_quarters": 0.3227,
+      "positive_union_gap_count": 310,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0129,
+      "median_positive_union_gap_quarters": 0.1396,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 1
+      },
+      "source_index": {
+        "title": "一天一点爱恋",
+        "artist": "梁朝伟"
+      }
+    },
+    {
+      "file": "POP909/025/025.mid",
+      "sha256": "399fab08bcf7e229d0cbd040890585d37d9c52e1dc1d56a421fc0862152605d9",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 338,
+      "pitch_min": 66,
+      "pitch_max": 98,
+      "pitch_range_semitones": 32,
+      "pitch_median": 76.0,
+      "mean_abs_nonzero_interval_semitones": 2.9265,
+      "small_motion_fraction": 0.5371,
+      "unison_fraction": 0.1929,
+      "duration_median_quarters": 0.3563,
+      "duration_mean_quarters": 0.5166,
+      "positive_union_gap_count": 321,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0156,
+      "median_positive_union_gap_quarters": 0.1437,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一天到晚游泳的鱼",
+        "artist": "张雨生"
+      }
+    },
+    {
+      "file": "POP909/026/026.mid",
+      "sha256": "419edde86248615ddde00d076e3494917598e818c25f00ca62448025e19c602d",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 166,
+      "pitch_min": 67,
+      "pitch_max": 83,
+      "pitch_range_semitones": 16,
+      "pitch_median": 78.0,
+      "mean_abs_nonzero_interval_semitones": 3.2821,
+      "small_motion_fraction": 0.4424,
+      "unison_fraction": 0.0545,
+      "duration_median_quarters": 0.5583,
+      "duration_mean_quarters": 0.9185,
+      "positive_union_gap_count": 106,
+      "positive_union_gap_fraction_ge_1_quarter": 0.1604,
+      "median_positive_union_gap_quarters": 0.2875,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一帘幽梦",
+        "artist": "邓丽君"
+      }
+    },
+    {
+      "file": "POP909/027/027.mid",
+      "sha256": "1d72ed5f38955a7fb31aff3077ab43123ec024c6d0ab0255aa603393692a7d0f",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 332,
+      "pitch_min": 72,
+      "pitch_max": 93,
+      "pitch_range_semitones": 21,
+      "pitch_median": 84.0,
+      "mean_abs_nonzero_interval_semitones": 3.5171,
+      "small_motion_fraction": 0.3233,
+      "unison_fraction": 0.2054,
+      "duration_median_quarters": 0.3292,
+      "duration_mean_quarters": 0.4167,
+      "positive_union_gap_count": 280,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0714,
+      "median_positive_union_gap_quarters": 0.1698,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一曲红尘",
+        "artist": "郭少杰"
+      }
+    },
+    {
+      "file": "POP909/028/028.mid",
+      "sha256": "dc6927b1dfe55a6cb6fcd78570b1cf70b340283802e9cb4e8fa04cbfe44ef1b9",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 453,
+      "pitch_min": 61,
+      "pitch_max": 80,
+      "pitch_range_semitones": 19,
+      "pitch_median": 71,
+      "mean_abs_nonzero_interval_semitones": 2.3787,
+      "small_motion_fraction": 0.6394,
+      "unison_fraction": 0.1062,
+      "duration_median_quarters": 0.1938,
+      "duration_mean_quarters": 0.2815,
+      "positive_union_gap_count": 392,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0179,
+      "median_positive_union_gap_quarters": 0.1229,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一百个放心",
+        "artist": "张津涤"
+      }
+    },
+    {
+      "file": "POP909/029/029.mid",
+      "sha256": "657b40eba5d1775aad82dde847df2e02da6ceb1ff2e2f805e256fd8a83fc21bd",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 267,
+      "pitch_min": 55,
+      "pitch_max": 86,
+      "pitch_range_semitones": 31,
+      "pitch_median": 70,
+      "mean_abs_nonzero_interval_semitones": 2.7512,
+      "small_motion_fraction": 0.4737,
+      "unison_fraction": 0.1992,
+      "duration_median_quarters": 0.3688,
+      "duration_mean_quarters": 0.6538,
+      "positive_union_gap_count": 252,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0635,
+      "median_positive_union_gap_quarters": 0.2812,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一直很安静",
+        "artist": "阿桑"
+      }
+    },
+    {
+      "file": "POP909/030/030.mid",
+      "sha256": "237fba644aad59f016c5dfcb1033d787b30cc188f05b4b7b6e9a8fdf82aca949",
+      "track_index": 1,
+      "track_names": [
+        "MELODY"
+      ],
+      "ticks_per_quarter": 480,
+      "notes": 368,
+      "pitch_min": 67,
+      "pitch_max": 84,
+      "pitch_range_semitones": 17,
+      "pitch_median": 79.0,
+      "mean_abs_nonzero_interval_semitones": 3.0194,
+      "small_motion_fraction": 0.5395,
+      "unison_fraction": 0.1553,
+      "duration_median_quarters": 0.2917,
+      "duration_mean_quarters": 0.3884,
+      "positive_union_gap_count": 307,
+      "positive_union_gap_fraction_ge_1_quarter": 0.0195,
+      "median_positive_union_gap_quarters": 0.15,
+      "simultaneous_onset": false,
+      "interval_metrics_valid": true,
+      "status": "valid",
+      "diagnostics": {
+        "unmatched_note_off": 0,
+        "unclosed_note_on": 0,
+        "zero_duration_note": 0,
+        "same_pitch_overlap_pairs": 0,
+        "max_simultaneous_voices": 2
+      },
+      "source_index": {
+        "title": "一眼万年",
+        "artist": "S.H.E"
+      }
+    }
+  ]
+}

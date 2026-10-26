@@ -2,6 +2,10 @@
 
 [日本語](composition-quality.ja.md)
 
+For phrase design, reference-MIDI limitations and arrangement-specific listening
+questions, use the separate [melody domain trials](melody-domain-evaluation.md).
+Keep their versioned cohort separate from the original quality trials below.
+
 `tools/eval/composition_quality.py` runs the real agent-panel host in an isolated,
 unsaved fixture. The versioned manifest contains eight development tasks and four
 held-out tasks. Freeze it before collecting a baseline; do not tune against holdout
@@ -12,6 +16,13 @@ the same live application host (`--backend codex|claude|rig`, `--model <name>`).
 Build the GPUI **test binary**, locate its executable in Cargo's JSON output, and
 pass that executable to the runner (not `auris-studio.exe`). The runner copies the
 binary and runtime DLLs before execution. A fresh output directory is required.
+
+For a fixed existing musical seed, pass `--seed-project <project-folder>/<project-folder>.auris`
+with a blank fixture. The runner preserves the original, records its hashes, and creates a
+separate seed copy for each trial, so an agent save cannot contaminate the next trial. Only the
+project document and project-local `Audio/` are copied; external asset references remain external
+and must be available and audited in the same environment. This is useful for comparing
+before/after melody or accompaniment edits while holding the starting project constant.
 
 ```powershell
 cargo test -p auris-gpui --bins --no-run --message-format=json > build.jsonl
@@ -81,6 +92,91 @@ Use v2 for new runtime checks. Neither runtime smoke version measures preference
 uv run --with pytest pytest tools/eval/test_composition_quality.py
 uv run --with ruff ruff check tools/eval/composition_quality.py tools/eval/test_composition_quality.py
 ```
+
+## Frozen instruction comparisons and sung auditions
+
+Use `run --prompt-condition <condition.json>` to compare instruction packages with
+the same executable. The condition file has exactly five string fields: `name`,
+`source_commit`, `expected_prefix`, `replacement_prefix`, and `skill_context`.
+The test host requires the expected prefix to match its default prompt, replaces
+only that prefix, preserves the operational suffix, and appends the explicit
+skill context. It normalizes CRLF when matching. The runner freezes and hashes
+the condition file, and each trial saves the resulting `system-prompt.txt`.
+An empty or mismatched prefix is an error. This compares a complete instruction
+package; it does not isolate individual rules or fix the LLM's random seed.
+
+The separate `melody-listening-v1.json` manifest contains three genres with
+instrumental and vocal cases. Its [protocol](melody-listening-protocol.ja.md)
+defines the controls and listening questions. Keep the executable, voice
+configuration, controller settings, case prompts and all attempts fixed.
+`--context-tokens` is not an effective Codex CLI context-window override.
+
+Prepare each completed trial's final snapshot using the common voice and CLI:
+
+```powershell
+uv run tools/eval/composition_listening_assets.py --source-dir <trial-folder> --output <fresh-asset-folder> --auris <frozen-auris-executable> --voice <existing-voice-config> --speaker "ずんだもん / ノーマル" --seed 0
+```
+
+The helper creates an isolated editable project, synthesizes a real take when
+the foreground is a singer, verifies score/lyric preservation, and exports mix,
+foreground and backing auditions. Float renders are retained before a fixed
+protective gain and 24-bit encoding. `audit.json` records voice/backend/binary
+provenance, measured files, take checks and failures. These separate renders
+pass through the master processing; they are reference auditions, not guaranteed
+additive stems. Preparation does not change the original trial snapshots.
+
+Audio preparation can also succeed from a timed-out trial's last snapshot. This
+does not complete the source trial or restore its delivery status. Count
+successful generation/delivery, available audition audio, and valid paired
+comparisons separately. Preserve such audio as a labeled reference alongside
+the original failure; do not promote it into the completed comparison set.
+
+For anonymous, level-matched listening, provide a JSON object with `pairs`.
+Each entry has a stable `id`, optional `metadata` (`genre`, `vocal_mode`, `tempo`,
+`meter`), and `conditions.before` / `conditions.after`, each mapping `mix`,
+`foreground` and `backing` to WAV paths. Then run:
+
+```powershell
+uv run tools/eval/composition_listening.py <pairs.json> <fresh-listening-folder> --seed 20261025
+```
+
+The builder preserves pre-match copies, chooses one feasible loudness target per
+pair and view, applies constant gain only, and checks encoded loudness/true peak.
+It writes `listening.html`, a public manifest and a separate private identity key
+with file hashes and measurements. The Japanese page offers four independent
+ratings plus independent optional overall/melody/backing preferences, delayed-recall notes, a pair index, browser-local persistence and JSON
+export/display. Keep `tie`, `cannot_judge` and unanswered fields distinct. Missing
+audio remains visible as an incomplete pair; do not replace failed compositions
+with a preferred rerun or infer musical improvement from the numeric checks.
+
+The rating JSON's additive `preferences` object uses `overall`, `melody` and
+`backing`, each with `A`, `B`, `tie`, `cannot_judge` or `null`. Schema version 2
+retains the original four `ratings` axes. Missing preferences in older saved
+state stay unanswered; never infer them from an axis or a free-text comment.
+After revealing identities or using feedback to tune guidance, mark that cohort
+as exposed/development evidence. A former holdout is no longer an untouched
+test of the revised guidance. Preserve its original pages, audio and labels.
+
+For controlled foreground trials, decode every axis through that pair's identity
+key; counterbalanced pairs do not share a global A/B meaning. Bind imported
+ratings to the manifest and verify its referenced audio hashes before decoding.
+Hash the same UTF-8 bytes that are written, rather than text that may acquire
+platform-specific newlines. Preserve an explicitly documented legacy binding
+instead of silently accepting arbitrary mismatches or rewriting a released bundle.
+Keep rhythm, motif preference, chorus preference, naturalness and breathing
+separate. Do not sum correlated axes into an overall vote or infer delayed recall
+from motif preference. The [controlled pop-vocal follow-up](pop-melody-controlled-results-2026-10-26.ja.md)
+retains two repetitions with mixed preferences and no clear improvement. To
+attribute an effect to one melody operation, hold the other melody features as
+well as compatible backing, lyrics and sound settings fixed.
+
+## Automatic local refinement
+
+The [SongEval refinement wrapper](composition-refinement.md) runs this same panel
+harness for an initial composition and at most one locally justified revision. It renders
+and scores the baseline, skips repeat rendering for no-change decisions, and retains
+projects, transcripts, audio, rejected edits and per-axis results. Numerical scores
+do not promote candidates or establish improved musical preference.
 
 ## 2026-10-24 implementation pilot
 

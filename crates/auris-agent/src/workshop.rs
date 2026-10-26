@@ -900,7 +900,11 @@ fn compose(
         allow: vec![],
         deny: vec!["search_internet".into(), "edit_project.listen".into()],
     };
-    prefs.system_prompt = auris_toolbox::workshop::COMPOSER.into();
+    prefs.system_prompt = format!(
+        "{}\n{}",
+        crate::system_prompt(&prefs),
+        auris_toolbox::workshop::COMPOSER
+    );
     let worker = crate::Worker::spawn(prefs.clone(), None, true, None)?;
     if candidate.direction.protected_tracks.len() > 128
         || candidate
@@ -1058,6 +1062,9 @@ fn execute(
     if matches!(
         action,
         "render"
+            | "compose"
+            | "phrase_variation"
+            | "edit_recipe"
             | "listen"
             | "import_transcription"
             | "preview"
@@ -1072,6 +1079,14 @@ fn execute(
             | "arrangement"
     ) {
         return Err("This operation is not available inside candidate production".into());
+    }
+    if action == "generate_phrase"
+        && !matches!(
+            command["part"].as_str(),
+            Some("chords" | "pad" | "arp" | "drums" | "kick" | "snare" | "hat")
+        )
+    {
+        return Err("Author expressive lead and bass notes directly with edit_notes".into());
     }
     let vocal = matches!(action, "list_voices" | "set_singer_voice" | "sing");
     let command = serde_json::from_value(command).map_err(|e| e.to_string())?;
