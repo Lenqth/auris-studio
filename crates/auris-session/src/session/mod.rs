@@ -574,7 +574,7 @@ pub struct MidiReport {
     pub tracks: usize,
     /// How many notes, across all of them.
     pub notes: usize,
-    /// Position just past the last note.
+    /// Last note release or performance-curve point, including pedal releases after the notes.
     pub length: Ticks,
 }
 
