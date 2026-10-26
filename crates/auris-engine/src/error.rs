@@ -5,6 +5,16 @@ use thiserror::Error;
 /// Everything that can go wrong in the engine.
 #[derive(Debug, Error)]
 pub enum EngineError {
+    /// The backend was asked to open an output and did not answer in time.
+    ///
+    /// The open is abandoned rather than waited out: some backends block until the system
+    /// replies, and one that never does must not take the caller with it.
+    #[error("the audio device did not answer within {seconds} seconds")]
+    OpenTimedOut {
+        /// How long the caller waited.
+        seconds: u64,
+    },
+
     /// A requested host is not available in this build or on this platform.
     #[error("audio host `{0}` is not available")]
     HostUnavailable(String),

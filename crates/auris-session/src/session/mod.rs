@@ -390,7 +390,21 @@ pub struct Session {
     /// Whether this session must never claim a real device, however it is reconfigured.
     headless: bool,
     audio_suspended: bool,
+    /// The playhead while no engine can hold it: suspended, or waiting for a lost output.
     suspended_playhead: Ticks,
+    /// When to try again for an output that was lost, while none has come back.
+    ///
+    /// A device that disappears takes the default with it for a moment, and an engine opened in
+    /// that moment is a silent one that never plays and never moves its playhead. Without a
+    /// retry, unplugging headphones mid-song would leave the window unable to play anything.
+    output_retry: Option<std::time::Instant>,
+    /// The last movement seen in the output's callback count; see [`watch_callbacks`].
+    output_heartbeat: Option<CallbackWatch>,
+    /// Set when the output was lost or replaced without anyone asking; see
+    /// [`Session::take_output_changed`].
+    output_changed: bool,
+    /// Reopen attempts that have failed in a row; spaces the next one out and keeps the log quiet.
+    output_failures: u32,
 
     history: History,
     agent_request: Option<agent_history::AgentRequest>,
@@ -695,6 +709,10 @@ impl Session {
             headless: !options.audio,
             audio_suspended: options.audio_suspended,
             suspended_playhead: Ticks::ZERO,
+            output_retry: None,
+            output_heartbeat: None,
+            output_changed: false,
+            output_failures: 0,
             history: History::default(),
             agent_request: None,
             agent_request_serial: 0,
@@ -837,13 +855,27 @@ impl Session {
             }
             return Ok(());
         }
+        self.audio = preferences;
+        self.reopen_output(false)
+    }
+
+    /// Replaces the output device and engine with fresh ones opened from [`Self::audio_preferences`].
+    ///
+    /// The transport comes back stopped at the same musical position, and an open input is
+    /// reopened against the new engine's clock. A `quiet` reopen is one of a series of retries
+    /// that has already said the device is unavailable, and does not say it again.
+    fn reopen_output(&mut self, quiet: bool) -> Result<(), SessionError> {
         // Musical position survives a device-rate change and a suspended engine alike.
         let playhead = self.playhead();
+        // What a stream that never starts falls back to: its own playhead never leaves zero.
+        self.suspended_playhead = playhead;
+        self.output_retry = None;
+        self.output_heartbeat = None;
         let settings = AudioSettings {
-            host: preferences.host.clone(),
-            device: preferences.device.clone(),
-            sample_rate: preferences.sample_rate,
-            block_frames: Some(preferences.block_frames.max(16)),
+            host: self.audio.host.clone(),
+            device: self.audio.device.clone(),
+            sample_rate: self.audio.sample_rate,
+            block_frames: Some(self.audio.block_frames.max(16)),
             ..AudioSettings::default()
         };
 
@@ -853,13 +885,17 @@ impl Session {
         self.device = None;
         let (device, engine) = if self.headless || self.audio_suspended {
             auris_engine::start_silent(&settings)
+        } else if quiet {
+            auris_engine::try_start_audio(&settings).unwrap_or_else(|error| {
+                log::debug!("the audio output is still unavailable: {error}");
+                auris_engine::start_silent(&settings)
+            })
         } else {
             start_audio(&settings).map_err(|error| SessionError::AudioRestart(error.to_string()))?
         };
 
         self.device = Some(device);
         self.engine = engine;
-        self.audio = preferences;
 
         // The capture reads the *engine's* playhead atomic to stamp where a take begins, and this
         // is a different engine. An input left open across the swap would be stamping takes
@@ -887,6 +923,103 @@ impl Session {
         self.publish_loop();
         self.seek(playhead);
         Ok(())
+    }
+
+    /// Opens a new output in place of one that was lost or never opened, and keeps trying.
+    ///
+    /// The stream died under a session that wants sound — on Windows, switching or disabling the
+    /// default output device does this. Only the audio thread writes the transport flag, so
+    /// without a new engine the window would read "playing" forever while every Stop sent to it
+    /// was discarded unheard. Read from the device rather than from the backend's notice, which
+    /// is taken once: a take that postpones the reopen must not cancel it.
+    ///
+    /// A stream can also be lost without dying. Disabling a Bluetooth headset mid-song leaves the
+    /// default pointing at it for a moment, a stream opened in that moment starts without error,
+    /// and then the device that would call it is gone — nothing ever reports it. Its callback
+    /// count standing still is the only sign, so that counts as lost too.
+    ///
+    /// And an open can simply fail — a machine just woken from sleep may refuse for a moment —
+    /// leaving a silent engine that never plays. Whichever way a session that should have sound
+    /// ends up without it, it tries again, further apart each time.
+    fn recover_lost_output(&mut self, now: std::time::Instant) {
+        let (real, running) = self.device.as_ref().map_or((false, false), |device| {
+            (device.sample_format().is_some(), device.is_running())
+        });
+        if real && running {
+            let (stalled, watch) =
+                watch_callbacks(self.output_heartbeat, self.engine.callback_count(), now);
+            self.output_heartbeat = Some(watch);
+            if !stalled {
+                self.output_retry = None;
+                self.output_failures = 0;
+                return;
+            }
+        } else {
+            self.output_heartbeat = None;
+        }
+        if self.output_retry.is_none() {
+            if real {
+                log::warn!(
+                    "the audio output {}",
+                    if running {
+                        "stopped asking for audio"
+                    } else {
+                        "stream died"
+                    }
+                );
+                // A dead engine's playhead still reads where it stopped, and nothing will after
+                // this. One that never ran never moved, and the position it was opened at is kept
+                // already.
+                if self.engine.callback_count() > 0 {
+                    self.suspended_playhead = self.playhead();
+                }
+                self.output_retry = Some(now);
+                self.output_changed = true;
+            } else if !self.headless && !self.audio_suspended {
+                // Silent although it should not be: whatever opened this engine already said why.
+                // The position it was opened at is in `suspended_playhead`, which every path to
+                // here leaves there.
+                self.output_failures = self.output_failures.max(1);
+                self.output_retry = Some(now + output_retry_delay(self.output_failures));
+            } else {
+                return;
+            }
+        }
+        let Some(due) = self.output_retry else {
+            return;
+        };
+        if now < due
+            || !reopens_lost_output(self.headless, self.audio_suspended, self.take.is_some())
+        {
+            return;
+        }
+        let quiet = self.output_failures > 0;
+        if !quiet {
+            log::warn!("the audio output was lost; reopening it");
+        }
+        let playhead = self.playhead();
+        if let Err(error) = self.reopen_output(quiet) {
+            log::error!("could not reopen the audio output: {error}");
+        }
+        if self.device.as_ref().is_some_and(AudioDevice::is_running) {
+            if quiet {
+                log::info!("the audio output is back");
+            }
+            self.output_failures = 0;
+            self.output_changed = true;
+        } else {
+            self.output_failures += 1;
+            self.suspended_playhead = playhead;
+            self.output_retry = Some(now + output_retry_delay(self.output_failures));
+        }
+    }
+
+    /// Whether the output was lost or reopened by [`Self::poll`] since the last call.
+    ///
+    /// A frontend that shows which device is playing reads this to know its line has gone stale:
+    /// nothing else tells it, because nobody asked for the change.
+    pub fn take_output_changed(&mut self) -> bool {
+        std::mem::take(&mut self.output_changed)
     }
 
     /// Whether this document currently leaves realtime hardware to another session.
@@ -974,6 +1107,7 @@ impl Session {
         {
             device.discard_pending();
         }
+        self.recover_lost_output(std::time::Instant::now());
         // Writing a parameter is the one edit that reaches a plugin without rebuilding, so it is
         // also the one that can leave the tracks compensated for the wrong number of frames.
         // Rebuilding re-measures every chain and re-sizes the delay lines to match — and going
@@ -1589,6 +1723,75 @@ fn output_changed(before: &AudioPreferences, after: &AudioPreferences) -> bool {
         || before.block_frames != after.block_frames
 }
 
+/// How long the output may go without asking for audio before it is taken as lost.
+///
+/// A callback comes every few milliseconds on any device, so this is two hundred of them at the
+/// least, and short enough that a person pressing Play again is not left waiting.
+const OUTPUT_STALL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// A gap between polls longer than this means the watch was not watching — the machine slept,
+/// or the window thread was busy — and the stillness seen across it proves nothing.
+const OUTPUT_POLL_GAP: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The output's callback count as last seen, and since when it has stood still.
+#[derive(Clone, Copy, Debug)]
+struct CallbackWatch {
+    callbacks: u64,
+    since: std::time::Instant,
+    polled: std::time::Instant,
+}
+
+/// Advances the watch on the output's callbacks, and says whether they have stopped.
+fn watch_callbacks(
+    watch: Option<CallbackWatch>,
+    callbacks: u64,
+    now: std::time::Instant,
+) -> (bool, CallbackWatch) {
+    match watch {
+        Some(watch)
+            if watch.callbacks == callbacks
+                && now.saturating_duration_since(watch.polled) <= OUTPUT_POLL_GAP =>
+        {
+            let stalled = now.saturating_duration_since(watch.since) >= OUTPUT_STALL;
+            (
+                stalled,
+                CallbackWatch {
+                    polled: now,
+                    ..watch
+                },
+            )
+        }
+        _ => (
+            false,
+            CallbackWatch {
+                callbacks,
+                since: now,
+                polled: now,
+            },
+        ),
+    }
+}
+
+/// How long to wait before the next attempt to reopen an output, after `failures` in a row.
+///
+/// One second, doubling to half a minute: soon enough to catch a device that was only busy for
+/// a moment, and rare enough that a machine with no output at all, or an ASIO driver that will
+/// not load, is not asked again every second for as long as the window stays open.
+fn output_retry_delay(failures: u32) -> std::time::Duration {
+    let seconds = 1u64 << failures.saturating_sub(1).min(5);
+    std::time::Duration::from_secs(seconds.min(30))
+}
+
+/// Whether a session may open a new output in place of one it lost.
+///
+/// Not for a headless session, which never had a device, nor a suspended one, which has handed
+/// the hardware to another window. Not during a take either: the take is stamped against the
+/// engine that is about to be replaced, which is why [`Session::set_audio_preferences`] refuses
+/// the same swap. The input goes on being written, and the output comes back once the take ends.
+fn reopens_lost_output(headless: bool, suspended: bool, recording: bool) -> bool {
+    !headless && !suspended && !recording
+}
+
 impl Drop for Session {
     /// Closes a take that is still being written.
     ///
@@ -1621,6 +1824,71 @@ mod tests {
     use crate::session::fixtures::session;
     use auris_core::param::ParamId;
     use auris_core::{ClipId, EffectSlotId, Note};
+
+    #[test]
+    fn the_playhead_is_kept_while_a_lost_output_is_waited_for() {
+        let mut session = session();
+        let bar = Ticks::from_beats(4.0);
+        // A silent engine has no playhead to keep; this is the state a reopen that found no
+        // device leaves behind.
+        session.seek(bar);
+        assert_eq!(session.playhead(), Ticks::ZERO);
+        session.output_retry = Some(std::time::Instant::now());
+        session.seek(bar);
+        assert_eq!(session.playhead(), bar);
+        // A headless session never reopens, so the wait and the position both survive the poll.
+        session.poll();
+        assert!(session.output_retry.is_some());
+        assert_eq!(session.playhead(), bar);
+    }
+
+    #[test]
+    fn an_output_that_stops_calling_back_is_noticed_but_a_sleep_is_not() {
+        use std::time::{Duration, Instant};
+        let start = Instant::now();
+        let tick = |ms: u64| start + Duration::from_millis(ms);
+        // Polled every 33 ms with the count standing still: lost once two seconds have passed.
+        let mut watch = None;
+        let mut first_stalled = None;
+        for poll in 0..100 {
+            let (stalled, next) = watch_callbacks(watch, 7, tick(poll * 33));
+            watch = Some(next);
+            if stalled && first_stalled.is_none() {
+                first_stalled = Some(poll * 33);
+            }
+        }
+        let at = first_stalled.unwrap();
+        assert!((2000..2040).contains(&at), "noticed at {at} ms");
+        // A count that moves is never lost, however long it is watched.
+        let mut watch = None;
+        for poll in 0..100 {
+            let (stalled, next) = watch_callbacks(watch, poll, tick(poll * 33));
+            assert!(!stalled);
+            watch = Some(next);
+        }
+        // Ten seconds between two polls is the machine asleep, not the device gone.
+        let (_, watch) = watch_callbacks(None, 7, tick(0));
+        let (stalled, watch) = watch_callbacks(Some(watch), 7, tick(10_000));
+        assert!(!stalled);
+        let (stalled, _) = watch_callbacks(Some(watch), 7, tick(10_033));
+        assert!(!stalled);
+    }
+
+    #[test]
+    fn reopen_attempts_spread_out_to_half_a_minute() {
+        let delays: Vec<_> = (1..=8)
+            .map(|failures| output_retry_delay(failures).as_secs())
+            .collect();
+        assert_eq!(delays, [1, 2, 4, 8, 16, 30, 30, 30]);
+    }
+
+    #[test]
+    fn only_a_session_that_owns_live_hardware_reopens_a_lost_output() {
+        assert!(reopens_lost_output(false, false, false));
+        assert!(!reopens_lost_output(true, false, false));
+        assert!(!reopens_lost_output(false, true, false));
+        assert!(!reopens_lost_output(false, false, true));
+    }
 
     #[test]
     fn mechanical_readers_follow_tracks_and_disable_retired_graphs() {

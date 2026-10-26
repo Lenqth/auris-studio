@@ -458,6 +458,10 @@ fn engine_error_text(error: &EngineError, language: Language) -> String {
             format!("audio driver `{host}` is not available"),
             format!("オーディオドライバー `{host}` は利用できません"),
         ),
+        EngineError::OpenTimedOut { seconds } => (
+            format!("the audio device did not answer within {seconds} seconds"),
+            format!("オーディオデバイスが{seconds}秒以内に応答しませんでした"),
+        ),
         EngineError::NoOutputDevice => (
             "no default audio output device is available".to_string(),
             "既定のオーディオ出力デバイスがありません".to_string(),
