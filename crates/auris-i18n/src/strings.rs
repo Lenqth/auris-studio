@@ -98,6 +98,7 @@ strings! {
     WorkshopListen { en: "Listen", ja: "試聴" }
     WorkshopStop { en: "Stop", ja: "停止" }
     WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopSave { en: "Save as project…", ja: "プロジェクトとして保存…" }
     WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
