@@ -2,7 +2,7 @@
 
 use super::audio_player::{PlayerState, PlayerTarget};
 use super::text_field::{KeyEffect, TextField};
-use super::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled};
+use super::widgets::{ButtonState, ButtonStyle, Latch, activity_indicator, button, button_enabled};
 use crate::app::{AurisApp, Pane};
 use auris_agent::workshop::{Command, Snapshot, Workshop};
 use auris_i18n::Key;
@@ -415,13 +415,24 @@ impl AurisApp {
                         ));
                         continue;
                     }
-                    let mut cards = div().flex().flex_col().gap_3();
+                    let mut cards = div()
+                        .id(("song-candidates", round_index))
+                        .w_full()
+                        .min_w_0()
+                        .flex_shrink_0()
+                        .overflow_x_scroll()
+                        .flex()
+                        .gap_3();
                     for (index, candidate) in round.candidates.iter().enumerate() {
                         let id = candidate.id;
                         let ready = s.candidates[index].is_some();
                         let running = snapshot.progress.contains_key(&id);
                         let selected = snapshot.document.selected == Some(id);
                         let mut card = div()
+                            .id(("song-candidate", index))
+                            .debug_selector(move || format!("song-candidate-{index}"))
+                            .flex_1()
+                            .min_w(gpui::px(300.0))
                             .p_3()
                             .border_1()
                             .border_color(if selected {
@@ -439,7 +450,7 @@ impl AurisApp {
                             card = card.child(self.t(Key::WorkshopSelected));
                         }
                         if let Some(stage) = snapshot.progress.get(&id) {
-                            card = card.child(self.t(match stage.as_str() {
+                            let label = self.t(match stage.as_str() {
                                 "harmony" => Key::WorkshopHarmonyProgress,
                                 "melody" => Key::WorkshopMelodyProgress,
                                 "compose" => Key::WorkshopComposing,
@@ -449,7 +460,20 @@ impl AurisApp {
                                 "stopping" => Key::WorkshopStopping,
                                 "planning" => Key::WorkshopPlanning,
                                 _ => Key::WorkshopArrangeProgress,
-                            }));
+                            });
+                            card = card.child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(activity_indicator(
+                                        gpui::SharedString::from(format!(
+                                            "song-candidate-activity-{index}"
+                                        )),
+                                        theme.accent,
+                                    ))
+                                    .child(label),
+                            );
                         }
                         if let Some(error) = &candidate.error {
                             card = card.child(div().text_color(theme.danger).child(error.clone()));
@@ -468,6 +492,7 @@ impl AurisApp {
                         card = card.child(
                             div()
                                 .flex()
+                                .flex_wrap()
                                 .gap_2()
                                 .child(button_enabled(
                                     ("song-adopt", index),
@@ -512,7 +537,14 @@ impl AurisApp {
                 }
             }
             if snapshot.planning {
-                body = body.child(self.t(Key::WorkshopPlanning));
+                body = body.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(activity_indicator("song-planning-activity", theme.accent))
+                        .child(self.t(Key::WorkshopPlanning)),
+                );
             }
             if s.show_memory {
                 for (index, selection) in snapshot.preferences.selections.iter().enumerate() {
@@ -563,7 +595,14 @@ impl AurisApp {
                 ));
             }
         } else {
-            body = body.child(self.t(Key::WorkshopLoadingModels));
+            body = body.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(activity_indicator("song-loading-activity", theme.accent))
+                    .child(self.t(Key::WorkshopLoadingModels)),
+            );
         }
         if let Some(error) = &s.error {
             body = body.child(div().text_color(theme.danger).child(error.clone()));
@@ -750,6 +789,61 @@ mod tests {
                 error: None,
             });
         });
+    }
+
+    #[gpui::test]
+    fn candidates_stay_horizontal_and_identify_active_workers(cx: &mut gpui::TestAppContext) {
+        use auris_session::workshop::{Candidate, Direction, Message, Round};
+
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.view_round = Some(0);
+            let snapshot = s.snapshot.as_mut().unwrap();
+            snapshot.document.messages.push(Message {
+                user: false,
+                text: "Compare these songs".into(),
+            });
+            snapshot.document.rounds.push(Round {
+                after_message: 1,
+                candidates: (0..3)
+                    .map(|id| Candidate {
+                        id,
+                        parent: None,
+                        ready: false,
+                        error: None,
+                        direction: Direction {
+                            title: format!("Candidate {id}"),
+                            description: "Piano and strings".into(),
+                            instructions: String::new(),
+                            protected_tracks: Vec::new(),
+                        },
+                    })
+                    .collect(),
+            });
+            snapshot.progress.insert(0, "melody".into());
+            snapshot.planning = true;
+        });
+        for width in [1200.0, 800.0] {
+            crate::harness::resize(&app, cx, gpui::size(gpui::px(width), gpui::px(800.0)));
+            let a = cx.debug_bounds("song-candidate-0").unwrap();
+            let b = cx.debug_bounds("song-candidate-1").unwrap();
+            let c = cx.debug_bounds("song-candidate-2").unwrap();
+            assert_eq!(a.origin.y, b.origin.y);
+            assert_eq!(b.origin.y, c.origin.y);
+            assert!(a.right() < b.left() && b.right() < c.left());
+            assert!(a.size.width >= gpui::px(300.0));
+            assert!(cx.debug_bounds("song-candidate-activity-0").is_some());
+            assert!(cx.debug_bounds("song-candidate-activity-1").is_none());
+            assert!(cx.debug_bounds("song-planning-activity").is_some());
+        }
     }
 
     #[gpui::test]
