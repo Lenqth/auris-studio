@@ -335,7 +335,11 @@ pub fn try_start_audio(
 ) -> Result<(AudioDevice, EngineHandle), EngineError> {
     // An ASIO driver is an apartment-threaded object that the stream's start, stop and drop all
     // talk to from the caller's thread afterwards, so it is opened there too.
-    if settings.host.as_deref() == Some("ASIO") {
+    if settings
+        .host
+        .as_deref()
+        .is_some_and(|host| host.eq_ignore_ascii_case("ASIO"))
+    {
         return start_with_device(settings, open_output(settings)?);
     }
     let settings = settings.clone();
@@ -375,7 +379,13 @@ fn on_opener_thread<T: Send + 'static>(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let sender = opener.get_or_insert_with(spawn_opener);
-        sender.send(job).is_ok()
+        if sender.send(job).is_ok() {
+            true
+        } else {
+            // A failed spawn must not leave its disconnected sender cached for every retry.
+            *opener = None;
+            false
+        }
     };
     if !sent {
         return Err(EngineError::NoOutputDevice);
@@ -2381,7 +2391,7 @@ mod tests {
     }
 
     #[test]
-    fn outputs_are_opened_on_one_long_lived_thread_and_answered_back() {
+    fn outputs_reuse_a_live_opener_and_replace_a_disconnected_one() {
         let name = || std::thread::current().name().map(str::to_owned);
         let first = on_opener_thread(move || Ok(name())).unwrap();
         let second = on_opener_thread(move || Ok(name())).unwrap();
@@ -2391,6 +2401,16 @@ mod tests {
             on_opener_thread(|| Err::<(), _>(EngineError::NoOutputDevice)),
             Err(EngineError::NoOutputDevice)
         ));
+        // A failed thread spawn leaves a sender with no receiver. A later open must be able to
+        // replace it once resources become available again, rather than fail for the whole run.
+        let (sender, receiver) = crossbeam_channel::unbounded::<OpenJob>();
+        drop(receiver);
+        *OPENER.lock().unwrap() = Some(sender);
+        assert!(matches!(
+            on_opener_thread(|| Ok(())),
+            Err(EngineError::NoOutputDevice)
+        ));
+        assert_eq!(on_opener_thread(|| Ok(42)).unwrap(), 42);
     }
 
     #[test]
