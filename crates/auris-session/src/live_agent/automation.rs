@@ -201,7 +201,19 @@ impl Session {
                 .collect();
             let next = offset + page.len();
             let choice_next = choice_offset + choices.len();
-            return Ok(serde_json::json!({"revision":self.agent_document_revision()?,"key":descriptor.key,"name":descriptor.name,"min":descriptor.min,"max":descriptor.max,"unit":descriptor.unit,"value":self.param_value(target,&descriptor),"curve":lane.map(|lane|lane.curve),"points":page,"total":points.len(),"next_offset":(next<points.len()).then_some(next),"choices":choices,"choice_count":descriptor.choices.len(),"next_choice_offset":(choice_next<descriptor.choices.len()).then_some(choice_next)}).to_string());
+            let mut report = self.agent_parameter_report(target, &descriptor);
+            report["revision"] = self.agent_document_revision()?.into();
+            report["curve"] = serde_json::json!(lane.map(|lane| lane.curve));
+            report["points"] = serde_json::json!(page);
+            report["total"] = points.len().into();
+            report["next_offset"] = serde_json::json!((next < points.len()).then_some(next));
+            report["choices"] = serde_json::json!(choices);
+            report["next_choice_offset"] =
+                serde_json::json!((choice_next < descriptor.choices.len()).then_some(choice_next));
+            return Ok(report.to_string());
+        }
+        if descriptor.read_only && matches!(operation, Operation::Set { .. }) {
+            return Err("parameter is read-only".into());
         }
         if expected_revision.as_deref() != Some(self.agent_document_revision()?.as_str()) {
             return Err("Read automation first and supply its current revision".into());

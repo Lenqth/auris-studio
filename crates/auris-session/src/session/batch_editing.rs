@@ -32,6 +32,10 @@ pub struct InstrumentParamChange {
     pub value: f32,
     /// Descriptor unit label.
     pub unit: String,
+    /// Arithmetic domain of the returned values: normalized for VST3, otherwise native.
+    pub value_domain: &'static str,
+    /// The plugin's display unit, which does not change the normalized VST3 range.
+    pub display_unit: String,
     /// Whether playback automation overrides the static value.
     pub automated: bool,
 }
@@ -67,6 +71,12 @@ impl Session {
             let descriptors = self.instrument_descriptors(edit.track);
             let descriptor = descriptors.iter().find(|descriptor| descriptor.key == edit.param)
                 .ok_or_else(|| format!("track {}: unknown instrument parameter; use automation read to discover exact keys", edit.track.0))?;
+            if descriptor.read_only {
+                return Err(format!(
+                    "track {}: {} is read-only",
+                    edit.track.0, edit.param
+                ));
+            }
             if !seen.insert((edit.track, descriptor.id)) {
                 return Err(format!(
                     "duplicate target: track {}, {}",
@@ -115,7 +125,20 @@ impl Session {
                     name: descriptor.name.to_string(),
                     previous,
                     value: self.param_value(target, &descriptor),
-                    unit: format!("{:?}", descriptor.unit),
+                    unit: format!(
+                        "{:?}",
+                        if descriptor.key.starts_with("vst3.") {
+                            auris_core::param::ParamUnit::Plain
+                        } else {
+                            descriptor.unit
+                        }
+                    ),
+                    value_domain: if descriptor.key.starts_with("vst3.") {
+                        "normalized"
+                    } else {
+                        "native"
+                    },
+                    display_unit: format!("{:?}", descriptor.unit),
                     automated: self.is_automated(target),
                 },
             )

@@ -1456,6 +1456,15 @@ pub mod plugins {
     //! panic also restarts each VST3 effect with `IAudioProcessor::setProcessing(false/true)`,
     //! the VST3 audio-thread transition that clears delay, reverb and filter history without the
     //! control-thread-only `IComponent::setActive` lifecycle.
+    //! The graph calls `Effect::prepare` for caller-built inserts as well as registry effects,
+    //! just as it does for instruments. CLAP activation has already sized the plugin's own
+    //! buffers; its callback reserves host event storage. VST3 uses the callback to start its
+    //! independent renderer, so constructing the wrapper alone is insufficient for processing.
+    //!
+    //! Agent parameter inspection preserves read-only flags and discrete position counts.
+    //! VST3 arithmetic remains normalized to 0..1 even when its display unit is Hz or dB;
+    //! instrument, insert and automation reports identify that domain separately. Session
+    //! commands reject writes to read-only outputs before changing the document or history.
     //!
     //! **Notes are translated, and the translation is lossy in one direction only.** A note port
     //! declares which dialects it speaks. CLAP's own carries the key as a field and a bend as a

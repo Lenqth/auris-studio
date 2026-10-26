@@ -104,6 +104,9 @@ pub struct ParamDescriptor {
     pub steps: Option<u32>,
     /// Labels for a [`ParamUnit::Choice`] parameter, in value order.
     pub choices: Cow<'static, [Cow<'static, str>]>,
+    /// Whether the plugin reports this control as an output that the host cannot edit.
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 impl ParamDescriptor {
@@ -127,6 +130,7 @@ impl ParamDescriptor {
             curve: ParamValueCurve::Linear,
             steps: None,
             choices: Cow::Borrowed(&[]),
+            read_only: false,
         }
     }
 

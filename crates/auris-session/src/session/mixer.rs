@@ -959,7 +959,10 @@ impl Session {
                 .strip(track)
                 .is_some_and(|strip| strip.effects.iter().any(|effect| effect.id == slot)),
         };
-        present.then(|| self.descriptor_for(target)).flatten()
+        present
+            .then(|| self.descriptor_for(target))
+            .flatten()
+            .filter(|descriptor| !descriptor.read_only)
     }
 
     fn strip(&self, track: Option<TrackId>) -> Option<&auris_core::MixerStrip> {
@@ -1000,6 +1003,7 @@ impl Session {
     /// a control that does not work.
     fn param_key(&mut self, target: ParamTarget) -> Option<String> {
         self.descriptor_for(target)
+            .filter(|descriptor| !descriptor.read_only)
             .map(|descriptor| descriptor.key.to_string())
     }
 }
