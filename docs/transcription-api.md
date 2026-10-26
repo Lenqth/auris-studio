@@ -3,7 +3,7 @@
 [日本語](transcription-api.ja.md)
 
 Live agents can analyze original attached audio with local tools and import a note
-draft without claiming to be the bundled Basic Pitch recognizer. The same live
+draft prepared by an external analysis tool. The same live
 contracts are offered to Codex, Claude Code and native API transports. A transport
 still needs access to local analysis tools; exporting a file does not make a model
 hear audio or supply a recognizer.
@@ -27,8 +27,8 @@ not edit or save the document.
 
 ## Import a note draft
 
-Call `import_transcription` with exactly one of `draft_id` (from `transcribe_audio`),
-`transcription` (the external piano object below) or `path` (an absolute local JSON
+Call `import_transcription` with exactly one of `transcription` (the external piano
+object below) or `path` (an absolute local JSON
 file containing that object). Optional `name` defaults to `Transcription`;
 `at_tick` is a nonnegative absolute insertion tick and defaults to zero.
 Use a JSON file for large drafts instead of putting thousands of events into chat.
@@ -76,11 +76,7 @@ notes cannot silently disappear. It remains unsaved. Use `read_notes` and
 `inspect_audio` to review the result.
 
 Saved-project MCP adds required `project` to the same import contract and saves
-changed results with a checkpoint. Live imports stay unsaved. All transports expose
-`transcribe_audio` with explicit YIN or Basic Pitch backend selection.
-Recognition returns an immutable `draft_id`, a preview and a report, without editing.
-Use `read_report` for large reports and `import_transcription` for explicit acceptance.
-See [agent workflows](agent-workflows.md) for limits and license acknowledgement.
+changed results with a checkpoint. Live imports stay unsaved.
 
 ## Validation
 

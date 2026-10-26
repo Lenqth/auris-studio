@@ -49,7 +49,6 @@ mod project_files;
 mod recognition;
 mod reports;
 mod saved_listening;
-pub mod transcription_tools;
 pub use reports::read_report;
 pub mod plugin_paths;
 mod sound_search;

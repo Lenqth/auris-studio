@@ -11,7 +11,7 @@ use crate::{
 use auris_i18n::Key;
 use auris_session::prelude::*;
 use auris_session::{
-    AnalysisControl, AudioOptions, ChordAnalysisReport, ChordState, ClipAudioAnalysis, SessionError,
+    AnalysisControl, ChordAnalysisReport, ChordState, ClipAudioAnalysis, SessionError,
 };
 use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 
@@ -24,8 +24,6 @@ pub(crate) enum AnalysisCommand {
     AllChords,
     /// Tempo and harmony from audio.
     Audio,
-    /// Monophonic audio transcription.
-    Transcribe,
     /// Instrument recognition.
     Instruments,
     /// Drum measurements and mapping.
@@ -411,64 +409,6 @@ mod tests {
         cx.run_until_parked();
         app.read_with(cx, |this, _| assert!(this.music_analysis.report.is_none()));
     }
-
-    #[gpui::test]
-    fn audio_worker_creates_an_editable_track_without_changing_its_source(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        let (before, previous_clip) = app.update(cx, |this, cx| {
-            let previous_clip = written_triad(this);
-            let rate = this.project().sample_rate;
-            let samples = (0..rate as usize)
-                .map(|i| (std::f64::consts::TAU * 440.0 * i as f64 / rate).sin() as f32 * 0.4)
-                .collect();
-            let buffer = AudioBuffer::from_planar(vec![samples], rate).unwrap();
-            let clip = this
-                .session
-                .place_audio(std::path::Path::new("mono.wav"), buffer, Ticks::ZERO)
-                .unwrap();
-            this.select_track(this.session.track_of_clip(clip).unwrap());
-            this.select_clip(Some(clip));
-            this.run_menu_command(
-                MenuCommand::AnalyzeAudio {
-                    clip,
-                    transcribe: true,
-                },
-                cx,
-            );
-            (this.project().clone(), previous_clip)
-        });
-        cx.run_until_parked();
-        // Selecting another clip does not invalidate the worker's source.
-        // Accepting the draft must then move every editor to the new track together.
-        app.update(cx, |this, _| {
-            this.select_track(this.session.track_of_clip(previous_clip).unwrap());
-            this.selected_notes.insert(0);
-            assert_eq!(this.selected_clip, Some(previous_clip));
-        });
-        paint(&app, cx);
-        let mut analysis = analysis_window(&app, cx);
-        click("music-notes", &mut analysis);
-        app.update(cx, |this, _| {
-            assert_eq!(this.project().tracks.len(), before.tracks.len() + 1);
-            let selected_track = this.selected_track.unwrap();
-            assert!(before.track(selected_track).is_none());
-            let selected_clip = this
-                .selected_clip
-                .expect("the new draft is open for editing");
-            assert_eq!(
-                this.session.track_of_clip(selected_clip),
-                Some(selected_track)
-            );
-            assert_ne!(selected_clip, previous_clip);
-            assert_eq!(
-                this.selected_clips.iter().copied().collect::<Vec<_>>(),
-                [selected_clip]
-            );
-            assert!(this.selected_notes.is_empty());
-            this.session.undo();
-            assert_eq!(this.project(), &before);
-        });
-    }
 }
 
 /// One active worker and its last result, owned by the frontend.
@@ -534,10 +474,7 @@ impl AurisApp {
                 .filter(|t| !t.kind.is_drum() && t.kind.note_clips().is_some())
                 .map(|t| MenuCommand::AnalyzeChords(Some(t.id))),
             AllChords => Some(MenuCommand::AnalyzeChords(None)),
-            Audio | Transcribe => audio.map(|clip| MenuCommand::AnalyzeAudio {
-                clip,
-                transcribe: command == Transcribe,
-            }),
+            Audio => audio.map(MenuCommand::AnalyzeAudio),
             Instruments => audio.map(MenuCommand::AnalyzeInstruments),
             Drums if track.is_some_and(|t| t.kind.is_drum()) => None,
             Results => None,
@@ -658,16 +595,8 @@ impl AurisApp {
     }
 
     /// Schedules analysis of an audio clip's trimmed source.
-    pub(crate) fn begin_audio_analysis(
-        &mut self,
-        clip: ClipId,
-        transcribe: bool,
-        cx: &mut Context<Self>,
-    ) {
-        match self
-            .session
-            .audio_analysis_job(clip, AudioOptions { transcribe })
-        {
+    pub(crate) fn begin_audio_analysis(&mut self, clip: ClipId, cx: &mut Context<Self>) {
+        match self.session.audio_analysis_job(clip) {
             Ok(job) => self.start_music_worker(
                 move |control| job.run(control).map(|r| MusicReport::Audio(Box::new(r))),
                 cx,
@@ -678,10 +607,7 @@ impl AurisApp {
 
     /// Prompts for a prepared model; the source snapshot is captured before the dialog.
     pub(crate) fn choose_instrument_model(&mut self, clip: ClipId, cx: &mut Context<Self>) {
-        let job = match self
-            .session
-            .audio_analysis_job(clip, AudioOptions::default())
-        {
+        let job = match self.session.audio_analysis_job(clip) {
             Ok(job) => job,
             Err(e) => {
                 self.fail_music_analysis(e.to_string());
@@ -803,13 +729,11 @@ impl AurisApp {
     pub(crate) fn accept_music_analysis(
         &mut self,
         choice: Option<(usize, usize)>,
-        notes: bool,
         tempo: Option<usize>,
     ) {
         let Some(report) = self.music_analysis.report.clone() else {
             return;
         };
-        let name = self.t(Key::AnalysisDraft).to_string();
         let outcome = match &report {
             MusicReport::Instruments(_) => return,
             MusicReport::Chords(r) => match choice {
@@ -819,12 +743,6 @@ impl AurisApp {
                 None => self.session.apply_chord_analysis(r),
             }
             .map(|_| ()),
-            MusicReport::Audio(r) if notes => self
-                .session
-                .create_clip_transcription_track(r, &name)
-                .map(|(track, _)| {
-                    self.select_track(track);
-                }),
             MusicReport::Audio(r) if tempo.is_some() => {
                 self.session.apply_audio_source_tempo(r, tempo.unwrap())
             }
@@ -838,9 +756,7 @@ impl AurisApp {
             Ok(()) => {
                 self.music_analysis.report = None;
                 self.music_analysis.outcome = MusicAnalysisOutcome::Empty;
-                self.set_status(self.t(if notes {
-                    Key::AnalysisCreateNotes
-                } else if tempo.is_some() {
+                self.set_status(self.t(if tempo.is_some() {
                     Key::AnalysisSetSourceTempo
                 } else {
                     Key::AnalysisApplyChords
@@ -931,21 +847,6 @@ impl AurisApp {
                 }
                 for c in &r.analysis.tempo.candidates {
                     lines.push(format!("{:.1} BPM ({:.2})", c.bpm, c.score).into());
-                }
-                if r.analysis.options.transcribe {
-                    lines.push(self.t(Key::AnalysisMonophonic).into());
-                    lines.extend(r.analysis.notes.iter().take(256).map(|n| {
-                        format!(
-                            "{}: {:.2}–{:.2} s",
-                            n.pitch,
-                            n.start + r.source_offset_seconds,
-                            n.end + r.source_offset_seconds
-                        )
-                        .into()
-                    }));
-                    if r.analysis.notes.len() > 256 {
-                        lines.push(self.t(Key::AnalysisPreviewLimit).into());
-                    }
                 }
                 lines.extend(r.analysis.chords.iter().take(256).map(|s| {
                     format!(
@@ -1061,13 +962,6 @@ impl AurisApp {
             MenuCommand::ApplyMusicChords,
         ));
         if let MusicReport::Audio(r) = report {
-            if !r.analysis.notes.is_empty() {
-                rows.push(action_button(
-                    "music-notes",
-                    self.t(Key::AnalysisCreateNotes).to_string(),
-                    MenuCommand::CreateTranscriptionTrack,
-                ));
-            }
             for (i, c) in r.analysis.tempo.candidates.iter().enumerate() {
                 rows.push(
                     button(

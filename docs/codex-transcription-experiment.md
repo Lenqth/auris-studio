@@ -63,7 +63,7 @@ publishing results. No model or program edits followed reference scoring.
 ## Accuracy on the same inputs
 
 The corpus consists of the same 12 held-out synthetic recordings from the
-[previous evaluation](piano-transcription-evaluation.md): three presets, two seeds,
+[previous evaluation](../tools/eval/references/piano-transcription-2026-10-21.json): three presets, two seeds,
 and piano/mixture versions. Coincident unisons merge into 924 reference events.
 The independent scorer verifies the frozen project annotations and recording hashes.
 Matching requires exact MIDI pitch and onset within 50 ms, with maximum one-to-one

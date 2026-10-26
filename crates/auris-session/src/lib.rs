@@ -91,11 +91,8 @@ pub mod singer_portrait;
 pub mod transient_id;
 pub mod voice_setup;
 
-pub use auris_analysis::audio::{
-    AudioAnalysis, AudioChordSegment, AudioOptions, TempoAnalysis, TempoCandidate, TranscribedNote,
-};
-pub use auris_analysis::basic_pitch::PianoTranscription;
-pub use auris_analysis::transcription::{NoteTranscription, TranscriptionSource};
+pub use auris_analysis::audio::{AudioAnalysis, AudioChordSegment, TempoAnalysis, TempoCandidate};
+pub use auris_analysis::transcription::{NoteTranscription, TranscribedNote, TranscriptionSource};
 mod transcription;
 mod transcription_draft;
 pub use auris_analysis::chords::{
@@ -151,7 +148,7 @@ pub use session::{
 };
 pub use session::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
-    ClipInstrumentAnalysis, analyze_audio_file, analyze_instrument_file, transcribe_piano_file,
+    ClipInstrumentAnalysis, analyze_audio_file, analyze_instrument_file,
 };
 pub use session::{CheckpointJob, CheckpointOperation, CheckpointResult};
 pub use session::{CompositionPreview, CompositionTrackPreview};

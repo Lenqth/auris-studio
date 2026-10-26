@@ -142,7 +142,7 @@ pub(crate) use plugin_discovery::scan_installed_plugin_files;
 pub use readiness::{PlaybackReadiness, PlaybackState};
 pub use recognition::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
-    ClipInstrumentAnalysis, analyze_audio_file, analyze_instrument_file, transcribe_piano_file,
+    ClipInstrumentAnalysis, analyze_audio_file, analyze_instrument_file,
 };
 pub use rhythm::{RhythmGrid, RhythmRow};
 pub use singer::{

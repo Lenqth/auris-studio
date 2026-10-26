@@ -233,7 +233,7 @@
 //!
 //! # Offline music recognition
 //!
-//! `auris-analysis` recognizes written chords, audio tempo/chords and monophonic note events
+//! `auris-analysis` recognizes written chords and audio tempo/chords
 //! on the CPU. Library timbre exploration uses [`crate::Session::timbre_map_job`]: a read-only
 //! snapshot shares immutable SoundFonts with independent background instruments, measures matched
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
@@ -242,7 +242,7 @@
 //! It also runs an explicitly prepared YAMNet ONNX model for instrument-presence
 //! tagging, using ONNX Runtime's CPU provider. The optional weights are external runtime data,
 //! and inference never downloads them. The session collects written notes or shares source audio with
-//! a worker job. Analysis returns a draft; applying harmony or placing transcribed notes is an
+//! a worker job. Analysis returns a draft; applying harmony or a source tempo is an
 //! explicit, undoable session command. Source audio times stay in seconds until placement maps
 //! them through the current tempo map. Cancellation and source/document validation belong to
 //! the job boundary, never to the audio callback. Unknown harmony and silence are distinct,
@@ -377,12 +377,7 @@ pub mod architecture {
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
-    //! attachment IDs. `transcribe_audio` recognizes an attachment or authorized local file
-    //! on a worker using explicit YIN or Basic Pitch selection. Recognition returns
-    //! an immutable bounded draft and never changes the score. `import_transcription` explicitly
-    //! accepts that draft, inline recognized events or a bounded JSON file. Source seconds map
-    //! through the current tempo map, and the complete import creates one Undo transaction.
-    //! Notes remain estimates; provenance and model hashes do not verify musical accuracy.
+    //! attachment IDs.
     //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
     //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
     //! exposes the internal snapshot. One current copy per attachment is retained; re-export
@@ -399,15 +394,9 @@ pub mod architecture {
     //! never verified rights or instructions. Remote search/download pass the network approval
     //! gate. EQ uses the existing mixer graph on audio-track inserts; no RT processing changes.
     //!
-    //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
-    //! residual activity outside their attack/release guards. Weak sustained predictions alone
-    //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo
-    //! windows use the strongest channel instead of erasing the recording. The composer-pair
-    //! evaluation freezes performed notes and PCM before tuning; separate seeds and an independent
-    //! existing score check false positives, missing notes and timing through this same backend.
     //! Native audio API turns retain the same exact sources. Above 25 MiB, the session prepares
     //! a full-length 16 kHz PCM16 WAV for upload, preserving mono/stereo channels; the original
-    //! remains available for transcription. Decoding has the importer's 512 MiB sample budget,
+    //! remains available for local analysis. Decoding has the importer's 512 MiB sample budget,
     //! and preparation accepts at most thirty minutes. The transport bounds actual payloads
     //! at 128 MiB per turn; this is an Auris budget, not a provider capability guarantee.
     //! Live agents write bounded harmony with `edit_harmony` and singer lyrics with

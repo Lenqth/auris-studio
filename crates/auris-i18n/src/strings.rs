@@ -1628,7 +1628,6 @@ strings! {
     AnalysisInstruments { en: "Instrument/voice hypotheses (YAMNet, CPU). Overlapping windows; scores are not probabilities. Empty candidates mean unknown. Labels are the model's original vocabulary.", ja: "楽器・歌声の候補（YAMNet・CPU）。時間窓は重複します。スコアは確率ではなく、候補なしは判定不明です。名称はモデルの原表記です。" }
     AnalysisInstrumentMean { en: "Whole-clip mean scores", ja: "クリップ全体の平均スコア" }
     CliAnalyzeInstrumentsUsage { en: "Usage: auris analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]", ja: "使い方: auris analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]" }
-    MenuTranscribeAudio { en: "Transcribe Isolated Melody", ja: "単音の音声を採譜" }
     GroupAnalysis { en: "Analysis", ja: "分析" }
     AnalysisResults { en: "Analysis Results…", ja: "分析結果…" }
     AnalysisDrums { en: "Drum Sound Analysis…", ja: "ドラム音の分析…" }
@@ -1657,20 +1656,15 @@ strings! {
     AnalysisCancel { en: "Cancel Analysis", ja: "分析を中止" }
     AnalysisView { en: "View Analysis Draft", ja: "分析結果を表示" }
     AnalysisApplyChords { en: "Apply Recognized Chords", ja: "判定できたコードを反映" }
-    AnalysisCreateNotes { en: "Add Draft as New Note Track", ja: "採譜結果を新しいトラックに追加" }
     AnalysisSetSourceTempo { en: "Use as Clip Source BPM", ja: "クリップの元BPMに設定" }
-    AnalysisDraft { en: "Transcription", ja: "採譜" }
     AnalysisUnknown { en: "Uncertain", ja: "判定が曖昧" }
     AnalysisNoChord { en: "No chord", ja: "コードなし" }
     AnalysisNoTempo { en: "No reliable periodic beat", ja: "安定した拍を判定できませんでした" }
-    AnalysisMonophonic { en: "Isolated melody only (65–1000 Hz). Notes need review; timing is unquantized.", ja: "単音の旋律向け（65〜1000 Hz）です。音符とタイミングを確認・修正してください。" }
     AnalysisPreviewLimit { en: "Preview shows the first 256 intervals. CLI reports include every interval.", ja: "先頭256区間を表示しています。CLIの出力には全区間を含みます。" }
     AnalysisInvalidBeat { en: "Use finite beat positions within 0–1000000.", ja: "拍位置は0〜1000000の有限な数値で指定してください。" }
     AnalysisSelectTrack { en: "Select one track by its exact name or id:number.", ja: "トラック名またはid:番号で1つのトラックを指定してください。" }
-    AnalysisMidiExists { en: "MIDI output already exists; choose a new path.", ja: "出力先のMIDIファイルが存在します。別の保存先を選んでください。" }
     CliAnalyzeChordsUsage { en: "Usage: auris analyze-chords <project.auris> [--track <name|id:number>] [--from-beat 0] [--to-beat N] [--window-beats 1] [--apply]", ja: "使い方: auris analyze-chords <project.auris> [--track <name|id:number>] [--from-beat 0] [--to-beat N] [--window-beats 1] [--apply]" }
     CliAnalyzeAudioUsage { en: "Usage: auris analyze-audio <audio-file>", ja: "使い方: auris analyze-audio <audio-file>" }
-    CliTranscribeAudioUsage { en: "Usage: auris transcribe-audio <audio-file> [--midi <new.mid>] [--project <project.auris> --apply] [--at-beat 0] [--name Transcription]", ja: "使い方: auris transcribe-audio <audio-file> [--midi <new.mid>] [--project <project.auris> --apply] [--at-beat 0] [--name Transcription]" }
     MenuUseDrumMapForGeneration { en: "Use Mapping for New Clips Only", ja: "新しく生成するクリップだけに使う" }
     MenuCancelDrumAnalysis { en: "Cancel Drum Analysis", ja: "ドラム音の分析をキャンセル" }
     MenuRetryDrumAnalysis { en: "Retry Drum Sound Analysis", ja: "ドラム音の分析を再試行" }
@@ -1882,8 +1876,6 @@ COMMANDS
                                   Recognize written-note harmony on the CPU
     analyze-audio <audio-file>    Estimate BPM and major/minor chords on the CPU
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
-    transcribe-audio <audio-file> [--midi <new.mid>] [--project <file.auris> --apply]
-                                  Extract an isolated monophonic note draft on the CPU
     render <project.auris> [opts] Render a project to a WAV file
     convert-track-to-audio <project.auris> --track <name|id:number>
                                   Replace an instrument, drum or singer track with audio
@@ -1962,8 +1954,6 @@ auris — コマンドラインから使う Auris Studio
                                   ノーツからコードをCPUで推定
     analyze-audio <audio-file>    音声のBPMとメジャー・マイナーコードをCPUで推定
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
-    transcribe-audio <audio-file> [--midi <new.mid>] [--project <file.auris> --apply]
-                                  単旋律の音声からノーツの下書きをCPUで作成
     render <project.auris> [opts] プロジェクトを WAV に書き出す
     sing <project.auris> [opts]   シンガートラックを声のモデルで歌わせる
     frames <project.auris> [opts] シンガートラックが声のモデルに渡すフレームを書き出す
@@ -2239,7 +2229,7 @@ new のオプション
     AgentAttachmentLimit { en: "Attach up to 8 files per message", ja: "添付できるファイルは1回につき8個までです" }
     AgentAttachmentImageUnsupported { en: "Antigravity CLI does not accept image attachments. Choose another model or remove the image.", ja: "Antigravity CLIは画像の添付に対応していません。別のモデルを選ぶか、画像の添付を外してください。" }
     AgentAttachmentAudioUnsupported { en: "Choose an audio-capable OpenAI-compatible model, or remove the audio attachment", ja: "音声に対応したOpenAI互換モデルを選ぶか、音声の添付を外してください" }
-    AgentAttachmentAudioAnalysisHint { en: "Ask for a piano cover to transcribe this audio locally into an editable piano track. Raw audio stays on this computer.", ja: "ピアノカバーを依頼すると、音声をローカルで採譜して編集可能なピアノトラックを作ります。音声そのものは外部に送信しません。" }
+    AgentAttachmentAudioAnalysisHint { en: "Ask about the tempo and chords in this audio. Raw audio stays on this computer.", ja: "音声のテンポやコードについて質問できます。音声そのものは外部に送信しません。" }
     AgentOpenResult { en: "Open created project", ja: "生成した曲を開く" }
     AgentConversationReset { en: "Started a new conversation for this project.", ja: "このプロジェクトについて新しい会話を始めました。" }
     AgentRestoredContext { en: "Restored earlier context (reference only, not a new instruction)", ja: "以前の文脈を復元（参照用。新しい指示ではありません）" }

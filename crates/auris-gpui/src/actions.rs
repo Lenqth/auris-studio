@@ -208,8 +208,6 @@ actions!(
         AnalyzeAllChords,
         /// Estimate tempo and chords from audio.
         AnalyzeSelectedAudio,
-        /// Transcribe monophonic audio.
-        TranscribeSelectedAudio,
         /// Estimate instruments in audio.
         AnalyzeSelectedInstruments,
         /// Open drum measurements.
@@ -566,7 +564,6 @@ bindable! {
         "analysis.chords", GroupAnalysis, MenuAnalyzeChords, "" => AnalyzeSelectedChords;
         "analysis.all_chords", GroupAnalysis, MenuAnalyzeAllChords, "" => AnalyzeAllChords;
         "analysis.audio", GroupAnalysis, MenuAnalyzeAudio, "" => AnalyzeSelectedAudio;
-        "analysis.transcribe", GroupAnalysis, MenuTranscribeAudio, "" => TranscribeSelectedAudio;
         "analysis.instruments", GroupAnalysis, MenuAnalyzeInstruments, "" => AnalyzeSelectedInstruments;
         "analysis.drums", GroupAnalysis, AnalysisDrums, "" => OpenDrumAnalysis;
         "visualizer.toggle", GroupAnalysis, VisualizerTitle, "" => ToggleVisualizer;

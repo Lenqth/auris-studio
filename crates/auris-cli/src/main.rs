@@ -60,9 +60,7 @@ fn main() -> ExitCode {
         "render" => render(&args),
         "convert-track-to-audio" => convert_track_to_audio(&args),
         "analyze-drums" => analyze_drums(&args),
-        "analyze-chords" | "analyze-audio" | "transcribe-audio" | "analyze-instruments" => {
-            music_analysis::run(&args)
-        }
+        "analyze-chords" | "analyze-audio" | "analyze-instruments" => music_analysis::run(&args),
         "sing" => sing(&args),
         "frames" => frames(&args),
         "sing-frames" => sing_frames(&args),

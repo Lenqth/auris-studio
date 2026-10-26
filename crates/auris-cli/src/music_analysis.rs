@@ -1,7 +1,7 @@
 //! CPU music analysis command-line parsing and presentation.
 
 use super::*;
-use auris_session::{AnalysisControl, AudioOptions, ChordOptions};
+use auris_session::{AnalysisControl, ChordOptions};
 use std::collections::BTreeMap;
 
 fn beat(value: &str) -> Result<Ticks, String> {
@@ -20,7 +20,7 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
         "analyze-chords" => Key::CliAnalyzeChordsUsage,
         "analyze-audio" => Key::CliAnalyzeAudioUsage,
         "analyze-instruments" => Key::CliAnalyzeInstrumentsUsage,
-        _ => Key::CliTranscribeAudioUsage,
+        _ => return Err(Key::CliUsage.get(LANGUAGE).into()),
     }
     .get(LANGUAGE);
     let path = args.get(1).ok_or(usage)?;
@@ -39,7 +39,7 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
             .contains(&key),
             "analyze-audio" => false,
             "analyze-instruments" => ["--model", "--threshold"].contains(&key),
-            _ => ["--midi", "--project", "--at-beat", "--name", "--apply"].contains(&key),
+            _ => false,
         };
         if !allowed || options.contains_key(key) {
             return Err(usage.into());
@@ -110,43 +110,8 @@ pub(super) fn run(args: &[String]) -> Result<(), String> {
         }
         serde_json::to_value(report).map_err(|e| e.to_string())?
     } else {
-        if options.contains_key("--project") != options.contains_key("--apply") {
-            return Err(usage.into());
-        }
-        if options.get("--midi").is_some_and(|p| Path::new(p).exists()) {
-            return Err(Key::AnalysisMidiExists.get(LANGUAGE).into());
-        }
-        let start = beat(options.get("--at-beat").copied().unwrap_or("0"))?;
-        let report = auris_session::analyze_audio_file(
-            Path::new(path),
-            AudioOptions {
-                transcribe: command == "transcribe-audio",
-            },
-            &control,
-        )
-        .map_err(|e| e.to_string())?;
-        let name = options
-            .get("--name")
-            .copied()
-            .unwrap_or(Key::AnalysisDraft.get(LANGUAGE));
-        if let Some(path) = options.get("--midi") {
-            let mut output = Session::new(SessionOptions::headless()).map_err(|e| e.to_string())?;
-            output
-                .create_transcription_track(&report, Ticks::ZERO, name)
-                .map_err(|e| e.to_string())?;
-            output
-                .export_midi(Path::new(path))
-                .map_err(|e| e.to_string())?;
-        }
-        if let Some(path) = options.get("--project") {
-            let mut session =
-                Session::new(SessionOptions::headless()).map_err(|e| e.to_string())?;
-            session.open(Path::new(path)).map_err(|e| e.to_string())?;
-            session
-                .create_transcription_track(&report, start, name)
-                .map_err(|e| e.to_string())?;
-            session.save_with_checkpoint().map_err(|e| e.to_string())?;
-        }
+        let report = auris_session::analyze_audio_file(Path::new(path), &control)
+            .map_err(|e| e.to_string())?;
         serde_json::to_value(report).map_err(|e| e.to_string())?
     };
     let json = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;

@@ -90,18 +90,7 @@ impl AurisApp {
             .item_if(
                 !is_midi,
                 self.t(Key::MenuAnalyzeAudio),
-                MenuCommand::AnalyzeAudio {
-                    clip,
-                    transcribe: false,
-                },
-            )
-            .item_if(
-                !is_midi,
-                self.t(Key::MenuTranscribeAudio),
-                MenuCommand::AnalyzeAudio {
-                    clip,
-                    transcribe: true,
-                },
+                MenuCommand::AnalyzeAudio(clip),
             )
             .item_if(
                 !is_midi,

@@ -679,11 +679,6 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                 "analysis.audio",
             ),
             command(
-                t(Key::MenuTranscribeAudio),
-                actions::TranscribeSelectedAudio,
-                "analysis.transcribe",
-            ),
-            command(
                 t(Key::MenuAnalyzeInstruments),
                 actions::AnalyzeSelectedInstruments,
                 "analysis.instruments",

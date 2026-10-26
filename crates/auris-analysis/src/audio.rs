@@ -1,13 +1,11 @@
-//! CPU tempo, major/minor harmony and isolated monophonic transcription.
+//! CPU tempo and major/minor harmony analysis.
 //!
 //! Input is band-limited PCM at 11025 Hz, prepared by the session's ordinary resampler.
 //! FFT frames are pooled across channels after transformation, avoiding stereo cancellation.
-//! Pitch uses YIN's cumulative normalized difference, not a trained predictor.
 
 use crate::{
     AnalysisControl, AnalysisError,
     chords::{ChordReading, rank, smooth},
-    pitch,
 };
 use auris_core::AudioBuffer;
 use auris_dsp::SpectrumAnalyzer;
@@ -17,13 +15,6 @@ use serde::Serialize;
 pub const ANALYSIS_RATE: f64 = 11_025.0;
 const HOP: usize = 220;
 const FFT: usize = 2048;
-
-/// Independent work the audio worker should perform.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct AudioOptions {
-    /// Also extract note events, assuming one pitched voice at a time.
-    pub transcribe: bool,
-}
 
 /// A plausible constant tempo and its periodicity score.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -54,44 +45,25 @@ pub struct AudioChordSegment {
     pub reading: ChordReading,
 }
 
-/// One note hypothesis in source seconds before musical quantization.
-#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub struct TranscribedNote {
-    /// MIDI pitch, 0..=127.
-    pub pitch: u8,
-    /// Inclusive source time in seconds.
-    pub start: f64,
-    /// Exclusive source time in seconds.
-    pub end: f64,
-    /// Relative level mapped into 0..=1; not a recovered MIDI velocity.
-    pub strength: f32,
-}
-
-/// Audio measurements and an optional editable note draft.
+/// Tempo and chord measurements of source audio.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AudioAnalysis {
     /// Algorithm identifier for reproducibility.
     pub algorithm: &'static str,
     /// Analyzed duration in source seconds.
     pub seconds: f64,
-    /// Requested analysis modes.
-    pub options: AudioOptions,
     /// Constant-tempo alternatives and beat positions.
     pub tempo: TempoAnalysis,
     /// Chord windows at half-second resolution, independent of an uncertain beat grid.
     pub chords: Vec<AudioChordSegment>,
-    /// Isolated monophonic note estimates; empty unless requested.
-    pub notes: Vec<TranscribedNote>,
 }
 
 /// Analyzes prepared audio without I/O, GPU access, models or document edits.
 ///
 /// Bounded to thirty minutes and eight channels. Features are computed from every frame;
-/// memory grows with low-rate features rather than the full spectrogram. Transcription
-/// supports approximately 65–1000 Hz and assumes an isolated voice, not a polyphonic mix.
+/// memory grows with low-rate features rather than the full spectrogram.
 pub fn analyze_audio(
     audio: &AudioBuffer,
-    options: AudioOptions,
     control: &AnalysisControl,
 ) -> Result<AudioAnalysis, AnalysisError> {
     control.check(0.0)?;
@@ -110,31 +82,24 @@ pub fn analyze_audio(
     let mut chroma = vec![[0.0; 12]; chord_count];
     let mut envelope = Vec::with_capacity(count);
     let mut flux = Vec::with_capacity(count);
-    let mut pitches = Vec::with_capacity(count);
     let mut previous_spectrum = vec![0.0f32; FFT / 2 + 1];
     let mut analyzer = SpectrumAnalyzer::new(FFT);
     let mut window = vec![0.0f32; FFT];
     let mut magnitudes = vec![0.0f32; FFT / 2 + 1];
     let mut spectrum = vec![0.0f32; FFT / 2 + 1];
-    let mut pitch_window = [0.0f32; pitch::WINDOW];
-    let mut difference = [0.0f32; 174];
     for frame in 0..count {
         control.check(frame as f32 / count.max(1) as f32 * 0.8)?;
         let center = frame * HOP;
         spectrum.fill(0.0);
-        let mut best_channel = 0;
         let mut rms = 0.0f32;
-        for (channel, samples) in audio.iter_channels().enumerate() {
+        for samples in audio.iter_channels() {
             let end = (center + HOP).min(samples.len());
             let energy = samples[center..end].iter().map(|v| v * v).sum::<f32>()
                 / (end - center).max(1) as f32;
             if !energy.is_finite() {
                 return Err(AnalysisError::Invalid("audio contains non-finite samples"));
             }
-            if energy > rms {
-                rms = energy;
-                best_channel = channel;
-            }
+            rms = rms.max(energy);
             for (i, sample) in window.iter_mut().enumerate() {
                 *sample = samples
                     .get((center as isize + i as isize - FFT as isize / 2) as usize)
@@ -183,18 +148,6 @@ pub fn analyze_audio(
             }
             chroma[chord_index][(midi.round() as i32).rem_euclid(12) as usize] += peak;
         }
-        if options.transcribe && rms > 1e-7 {
-            let samples = audio.channel(best_channel);
-            for (i, sample) in pitch_window.iter_mut().enumerate() {
-                *sample = samples
-                    .get((center as isize + i as isize - pitch::WINDOW as isize / 2) as usize)
-                    .copied()
-                    .unwrap_or(0.0);
-            }
-            pitches.push(pitch::candidates(&pitch_window, &mut difference));
-        } else {
-            pitches.push(Vec::new());
-        }
     }
     let mut onset: Vec<f32> = envelope
         .iter()
@@ -208,12 +161,7 @@ pub fn analyze_audio(
     }
     let tempo = estimate_tempo(&onset, duration, control)?;
     let raw = chroma.iter().map(|w| rank(w, None, true)).collect();
-    let readings = smooth(
-        raw,
-        control,
-        0.9,
-        if options.transcribe { 0.94 } else { 1.0 },
-    )?;
+    let readings = smooth(raw, control, 0.9, 1.0)?;
     let chords = readings
         .into_iter()
         .enumerate()
@@ -223,20 +171,12 @@ pub fn analyze_audio(
             reading,
         })
         .collect();
-    let notes = if options.transcribe {
-        let path = pitch::decode(&pitches, &envelope, control)?;
-        note_events(&path, &envelope, duration)
-    } else {
-        Vec::new()
-    };
     control.check(1.0)?;
     Ok(AudioAnalysis {
-        algorithm: "cpu-spectral-yin-v2",
+        algorithm: "cpu-spectral-v2",
         seconds: duration,
-        options,
         tempo,
         chords,
-        notes,
     })
 }
 
@@ -348,41 +288,6 @@ fn estimate_tempo(
     Ok(result)
 }
 
-fn note_events(pitches: &[Option<u8>], levels: &[f32], duration: f64) -> Vec<TranscribedNote> {
-    let dt = HOP as f64 / ANALYSIS_RATE;
-    let maximum = levels.iter().copied().fold(0.0f32, f32::max);
-    let mut result = Vec::new();
-    let mut active: Option<(u8, usize, f32)> = None;
-    for i in 0..=pitches.len() {
-        let current = pitches
-            .get(i)
-            .copied()
-            .flatten()
-            .filter(|_| levels[i] > maximum * 0.03);
-        let attack = i > 0 && i < pitches.len() && levels[i] > levels[i - 1] * 2.5;
-        if let Some((pitch, from, level)) = active
-            && (current != Some(pitch) || (attack && i - from >= 4))
-        {
-            if i - from >= 3 {
-                result.push(TranscribedNote {
-                    pitch,
-                    start: from as f64 * dt,
-                    end: (i as f64 * dt).min(duration),
-                    strength: (level / maximum.max(1e-8)).sqrt().clamp(0.1, 1.0),
-                });
-            }
-            active = None;
-        }
-        if let Some(pitch) = current {
-            match &mut active {
-                Some((_, _, level)) => *level = level.max(levels[i]),
-                None => active = Some((pitch, i, levels[i])),
-            }
-        }
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -400,13 +305,7 @@ mod tests {
     #[test]
     fn silence_and_short_audio_do_not_invent_music() {
         for seconds in [0.0, 0.001, 3.0] {
-            let r = analyze_audio(
-                &buffer(seconds, |_| 0.0),
-                AudioOptions { transcribe: true },
-                &AnalysisControl::default(),
-            )
-            .unwrap();
-            assert!(r.notes.is_empty());
+            let r = analyze_audio(&buffer(seconds, |_| 0.0), &AnalysisControl::default()).unwrap();
             assert!(r.tempo.candidates.is_empty());
             assert!(
                 r.chords
@@ -425,8 +324,7 @@ mod tests {
                     0.0
                 }
             });
-            let r = analyze_audio(&audio, AudioOptions::default(), &AnalysisControl::default())
-                .unwrap();
+            let r = analyze_audio(&audio, &AnalysisControl::default()).unwrap();
             assert!(
                 r.tempo
                     .candidates
@@ -453,35 +351,6 @@ mod tests {
         }
     }
     #[test]
-    fn isolated_notes_keep_pitch_rests_and_source_timing() {
-        let audio = buffer(2.0, |t| {
-            let hz = if (0.2..0.8).contains(&t) {
-                440.0
-            } else if (1.1..1.7).contains(&t) {
-                261.6256
-            } else {
-                0.0
-            };
-            (t * hz * std::f64::consts::TAU).sin() as f32 * 0.4
-        });
-        let r = analyze_audio(
-            &audio,
-            AudioOptions { transcribe: true },
-            &AnalysisControl::default(),
-        )
-        .unwrap();
-        assert_eq!(
-            r.notes.iter().map(|n| n.pitch).collect::<Vec<_>>(),
-            vec![69, 60],
-            "{:?}",
-            r.notes
-        );
-        for (note, from, to) in [(&r.notes[0], 0.2, 0.8), (&r.notes[1], 1.1, 1.7)] {
-            assert!((note.start - from).abs() < 0.08, "{note:?}");
-            assert!((note.end - to).abs() < 0.08, "{note:?}");
-        }
-    }
-    #[test]
     fn triad_and_opposite_phase_stereo_produce_the_same_chords() {
         let mono = buffer(2.0, |t| {
             [261.6256, 329.6276, 391.9954]
@@ -497,13 +366,8 @@ mod tests {
             ANALYSIS_RATE,
         )
         .unwrap();
-        let a = analyze_audio(&mono, AudioOptions::default(), &AnalysisControl::default()).unwrap();
-        let b = analyze_audio(
-            &stereo,
-            AudioOptions::default(),
-            &AnalysisControl::default(),
-        )
-        .unwrap();
+        let a = analyze_audio(&mono, &AnalysisControl::default()).unwrap();
+        let b = analyze_audio(&stereo, &AnalysisControl::default()).unwrap();
         assert_eq!(a.chords, b.chords);
         assert_eq!(a.chords[1].reading.candidates[0].symbol, "C");
     }
@@ -512,16 +376,9 @@ mod tests {
         let control = AnalysisControl::default();
         control.cancel();
         assert!(matches!(
-            analyze_audio(&buffer(1.0, |_| 0.0), AudioOptions::default(), &control),
+            analyze_audio(&buffer(1.0, |_| 0.0), &control),
             Err(AnalysisError::Cancelled)
         ));
-        assert!(
-            analyze_audio(
-                &buffer(1.0, |_| f32::NAN),
-                AudioOptions::default(),
-                &AnalysisControl::default()
-            )
-            .is_err()
-        );
+        assert!(analyze_audio(&buffer(1.0, |_| f32::NAN), &AnalysisControl::default()).is_err());
     }
 }

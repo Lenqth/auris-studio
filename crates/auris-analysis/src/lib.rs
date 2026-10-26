@@ -8,10 +8,8 @@
 pub mod transcription;
 
 pub mod audio;
-pub mod basic_pitch;
 pub mod chords;
 pub mod instruments;
-mod pitch;
 
 use std::sync::{
     Arc,

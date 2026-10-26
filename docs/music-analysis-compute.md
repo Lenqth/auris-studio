@@ -12,7 +12,7 @@ measurements and accuracy limits are in [the model guide](music-analysis-models.
 ## AMD-only hardware does not make every neural method a cloud workload
 
 Symbolic chord recognition, onset/tempo analysis, chroma-based audio chords and monophonic
-pitch tracking should first use CPU implementations. Basic Pitch and small beat/tagging models
+pitch tracking should first use CPU implementations. Small beat/tagging models
 are candidates for pretrained CPU inference; training requirements do not determine inference
 requirements. Their speed in Auris is still unmeasured.
 
@@ -38,7 +38,6 @@ matrix only after the device is known.
 
 | Candidate | Placement and purpose | Deployment evidence / unresolved gate |
 | --- | --- | --- |
-| Basic Pitch | Local CPU trial for isolated-instrument polyphony; optional DirectML after parity checks. | Official ONNX artifact; repository Apache-2.0. Verify exact downloaded artifact, preprocessing/postprocessing parity and `ort` compatibility. [Source](https://github.com/spotify/basic-pitch) |
 | Beat this! small | Local CPU trial for beats and downbeats if DSP accuracy is insufficient. | Small checkpoint about 8.1 MB; code and weights MIT. File size does not equal peak RAM. Rust/ONNX export needs separate validation. [Source](https://github.com/CPJKU/beat_this) |
 | YAMNet | Implemented optional CPU instrument-presence tagging. | Google weights and architecture Apache-2.0, export/reference parity checked. The local sampled fixture exposed low instrument coverage at threshold 0.2. [Weight terms](https://groups.google.com/g/audioset-users/c/Ly4guQnlv_o) |
 | MT3 | External inference reference for multi-instrument notes. | T5X research stack; repository Apache-2.0. Pin checkpoint and runnable environment before estimating compute. [Source](https://github.com/magenta/mt3) |

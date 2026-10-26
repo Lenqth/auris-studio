@@ -10,7 +10,7 @@
 <a id="amd-only-hardware-does-not-make-every-neural-method-a-cloud-workload"></a>
 ## AMD専用ハードウェアでも、すべてのニューラル手法がクラウド処理になるわけではない
 
-記号コード認識、オンセット／テンポ分析、クロマベースの音声コード、単旋律のピッチ追跡は、まずCPU実装を使うべきです。Basic Pitchと小型ビート／タグ付けモデルは事前学習済みCPU推論の候補です。学習要件から推論要件を決めてはいけません。Aurisでの速度はまだ測定していません。
+記号コード認識、オンセット／テンポ分析、クロマベースの音声コード、単旋律のピッチ追跡は、まずCPU実装を使うべきです。小型ビート／タグ付けモデルは事前学習済みCPU推論の候補です。学習要件から推論要件を決めてはいけません。Aurisでの速度はまだ測定していません。
 
 測定環境はAMD Ryzen 7 9800X3D CPUとAMD GPUを備えたWindowsです。試行はCPUだけを使いました。GPU互換性とピークRAM／VRAM要件は未測定であり、GPUベンダーやチェックポイントサイズから推測しないでください。
 
@@ -23,7 +23,6 @@ ROCmのサポートはGPU、OS、ソフトウェアのバージョンに依存�
 
 | 候補 | 配置と目的 | 配置の証拠／未解決の条件 |
 | --- | --- | --- |
-| Basic Pitch | 分離楽器のポリフォニーを試すローカルCPU試行。整合性確認後はDirectMLも任意で使用。 | 公式ONNX成果物、リポジトリはApache-2.0。取得成果物、前後処理の一致、`ort`互換性を確認する。[Source](https://github.com/spotify/basic-pitch) |
 | Beat this! small | DSP精度が不十分な場合のビート／ダウンビート用ローカルCPU試行。 | 約8.1 MBの小型チェックポイント、コードと重みはMIT。サイズはピークRAMを示さない。Rust／ONNX出力は別途検証が必要。[Source](https://github.com/CPJKU/beat_this) |
 | YAMNet | 任意のCPU楽器存在タグ付けを実装済み。 | Googleの重みと構成はApache-2.0、出力と参照の一致を確認済み。ローカル試料では閾値0.2で楽器カバー率が低かった。[Weight terms](https://groups.google.com/g/audioset-users/c/Ly4guQnlv_o) |
 | MT3 | 複数楽器ノートの外部推論参照。 | T5X研究スタック、リポジトリはApache-2.0。計算資源を見積もる前にチェックポイントと実行環境を固定する。[Source](https://github.com/magenta/mt3) |
