@@ -173,8 +173,8 @@ well as compatible backing, lyrics and sound settings fixed.
 ## Automatic local refinement
 
 The [SongEval refinement wrapper](composition-refinement.md) runs this same panel
-harness for an initial composition and bounded independent revisions. It renders
-and scores between stages, protects the fixed musical context, and retains
+harness for an initial composition and at most one locally justified revision. It renders
+and scores the baseline, skips repeat rendering for no-change decisions, and retains
 projects, transcripts, audio, rejected edits and per-axis results. Numerical scores
 do not promote candidates or establish improved musical preference.
 

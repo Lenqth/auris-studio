@@ -1,31 +1,114 @@
 # Local composition refinement
 
-`tools/eval/composition_refine.py` runs the real panel composition harness, renders
-its saved score, evaluates the actual WAV with SongEval, and asks the agent for a
-bounded revision. It preserves the initial composition and every candidate. This
-is optional development tooling; the application does not load these model weights.
+The development harness follows three steps: **compose, evaluate, optionally revise
+once**. It keeps the baseline and at most one local candidate. There is no automatic
+musical winner or score threshold.
 
-The default decision is **retain the baseline for review**, even if every predicted
-axis rises. There is no sum, optimization target, automatic winner, repeated search
-for a score threshold, or automatic replacement of the user's original project.
+```mermaid
+flowchart LR
+  A[Compose and save baseline] --> B[Render and evaluate]
+  B --> C{Concrete musical repair?}
+  C -->|No| D[Return baseline]
+  C -->|Yes| E[Revise one foreground clip]
+  E --> F[Re-evaluate and retain both takes]
+```
 
-## Setup
+Run it with a musical brief and, optionally, a seed project:
 
-Use a Python 3.11 uv environment with the tested
-[`songeval-requirements.txt`](../tools/eval/songeval-requirements.txt), a local
-[SongEval checkout](https://github.com/ASLP-lab/SongEval) and checkpoint, and a local
+```sh
+uv run tools/eval/composition_refine.py --recipe tools/eval/references/composition-refine-pop-v2.json --output .local-evaluations/my-song --seed-project Song/Song.auris
+```
+
+The example uses the controlled 24-bar pop-vocal seed with a track named `Vocal`.
+For another song, write a schema-version-2 recipe:
+
+```json
+{
+  "schema_version": 2,
+  "brief": "Compose a short pop vocal with a recurring motif and a clear chorus arrival.",
+  "focus_track": "Vocal",
+  "revision_scope": {
+    "fields": ["pitch", "start", "length"],
+    "max_changed_notes": 16
+  }
+}
+```
+
+Only `brief` and `focus_track` are required alongside the schema version.
+The shown revision scope is the default. Optional `clip_ids` restricts eligible
+clips. The reviewer may change **one** of those clips, within the note budget.
+A seed starts a fresh foreground composition using its existing notes and lyrics;
+the initial composition can rewrite foreground pitch/start/length while preserving
+the other tracks and settings. The revision scope applies to the subsequent repair.
+Without a seed, the agent creates the named monophonic foreground from a blank fixture.
+
+## Shared machine configuration
+
+The default configuration is
+`~/.config/auris-studio/composition-refinement.json`; use `--config` for another file.
+Paths are resolved relative to that configuration file. Set these once:
+
+```json
+{
+  "schema_version": 1,
+  "executable": "C:/auris/panel-test.exe",
+  "auris": "C:/auris/auris.exe",
+  "evaluator_python": "C:/models/songeval/.venv/Scripts/python.exe",
+  "songeval_config": "C:/models/songeval-config.json",
+  "voice": "C:/voices/singer.voicevox.json",
+  "speaker": "selected speaker"
+}
+```
+
+`executable` is the real agent-panel test target described in
+[composition trials](composition-quality.md). Optional `source_suite` binds a reused
+executable to its recorded source instead of today's checkout. Omit voice/speaker
+for instrumental work. Optional settings are `model` (default `gpt-6.1-sol`),
+`backend` (`codex`), `prompt_profile` (`legacy`) and `timeout` (900 seconds).
+The composition agent uses its configured provider/account; SongEval runs locally.
+
+## Evaluation and repair
+
+A shared assessment function synthesizes vocals when needed, renders the mix,
+checks finite/audible/unclipped PCM, and runs SongEval. The agent then reads the
+score, the brief and all five predicted axes. It either keeps the song or explains
+one concrete local repair, its expected benefit and tradeoff. A low score alone
+does not identify a repair. The harness determines whether anything changed from
+the actual note diff, without requiring a separate model-response JSON protocol.
+
+No-change outcomes skip the second synthesis, render and evaluation. A changed
+candidate uses the same assessment path, with duration and evaluator-condition
+checks. Lyrics, note count/order, accompaniment, form, tempo, sounds, gain and effects
+are protected by the project comparison. The original project and its Audio copy are
+checked for mutation. External library references still require the same available assets.
+
+The usual output is two full mixes, editable projects, a short report and
+`listening.html`. Logs, prompts, source/model hashes and failed snapshots remain
+available for audit. Only the baseline mix exists for a no-change outcome.
+Add `--auditions` to render foreground and backing as well; only that mode compares
+backing audio hashes. Those extra views are separate full-master renders, not additive
+stems. All views retain original gain without independent normalization.
+
+The baseline remains selected even if all five scores rise. A failed revision
+returns status `baseline_only_revision_failed`, preserves the usable baseline,
+and exits unsuccessfully so automation cannot mistake a failure for a good candidate.
+An initial failure has no selected take. There is no automatic retry or candidate chain.
+
+## SongEval environment and standalone scoring
+
+Use a Python 3.11 uv environment with
+[songeval-requirements.txt](../tools/eval/songeval-requirements.txt), the local
+[SongEval source/checkpoint](https://github.com/ASLP-lab/SongEval) and a local
 [MuQ snapshot](https://huggingface.co/OpenMuQ/MuQ-large-msd-iter).
-The initial download requires network access; scoring subsequently forces offline
-mode. Keep these optional assets outside the release tree.
+The initial downloads require network access; inference forces offline mode.
+No weights are included in an application release.
 
 ```sh
 uv venv --python 3.11.15 .local-evaluations/songeval/.venv
 uv pip install --python .local-evaluations/songeval/.venv/Scripts/python.exe -r tools/eval/songeval-requirements.txt
 ```
 
-On macOS/Linux the interpreter is `.venv/bin/python`. The tested source revision is
-`848fb2ff3a2a9d64dcb20d46f07238c28abd7add`; the tested MuQ snapshot is
-`0562a57814f6f8bbd9fdea0a25921a2fce1a841a`. A configuration names existing local files:
+On macOS/Linux use `.venv/bin/python`. The separate SongEval configuration is:
 
 ```json
 {
@@ -37,97 +120,45 @@ On macOS/Linux the interpreter is `.venv/bin/python`. The tested source revision
 }
 ```
 
-The adapter checks the actual source revision and records source/configuration,
-head and MuQ weight hashes, package versions and preprocessing. SongEval's README
-states CC-BY-NC-SA 4.0 while its LICENSE file says Apache 2.0 at that revision.
-This integration uses the separately acquired model for local development research
-and does not redistribute it or assert commercial-use clearance.
-
-## Score existing audio
+The tested MuQ snapshot is `0562a57814f6f8bbd9fdea0a25921a2fce1a841a`.
+The adapter checks the source revision and records source/configuration, weights,
+packages and preprocessing. SongEval's README states CC-BY-NC-SA 4.0 while its LICENSE
+says Apache 2.0 at this revision; this integration uses separately acquired weights
+for development research and does not assert commercial-use clearance.
 
 ```sh
 <songeval-python> tools/eval/songeval.py --config songeval-config.json --output scores.json before.wav after.wav
 ```
 
-Alternatively pass `--manifest inputs.json` containing an array of `{id, path}`
-objects. Optional `group` and `condition` (`before`/`after`) fields produce per-axis
-paired deltas. Repeated basenames receive separate identities. Duplicate conditions
-within a comparison are rejected. A failed item remains in the report and makes
-the command unsuccessful. Whole recordings are decoded to mono 24 kHz with librosa,
-without gain normalization, and passed through MuQ hidden layer 6 and the SongEval
-head. The default length cap is 120 seconds; use a fixed, documented excerpt policy
-for longer tracks, or explicitly raise `--max-seconds` with sufficient memory.
+Alternatively use `--manifest inputs.json` with `{id, path}` entries. Optional
+`group` and `condition` (`before`/`after`) produce per-axis deltas. Failed inputs
+remain in the report and make the command unsuccessful. The default duration cap
+is 120 seconds; longer music needs documented excerpts or an explicit
+`--max-seconds` override and sufficient memory.
 
-Outputs are Coherence, Musicality, Memorability, Clarity and Naturalness on the
-model's 1–5 scale. Naturalness refers to vocal breathing and phrasing; Clarity to
-song structure. There is no separate rhythm score or timestamped repair diagnosis.
-Memorability does not measure a listener's later recall. Do not substitute a
-minimum target score for the musical brief, or interpret tiny differences as a
-validated preference margin. Instrumental scores, mastered recordings and synthetic
-vocals have different domain limitations. The [SongEval paper](https://arxiv.org/abs/2505.10793)
-describes a full-song benchmark of English and Chinese songs. Japanese synthesized
-singing and short instrumental excerpts are not a demonstrated preference benchmark
-for this head; treat the local listening evidence as a separate calibration.
+SongEval receives mono 24 kHz audio without gain normalization and uses MuQ hidden
+layer 6. Its five axes are Coherence, Musicality, Memorability, Clarity and Naturalness.
+Naturalness concerns vocal phrasing/breathing; Clarity concerns song structure.
+There is no rhythm-specific score or timestamped diagnosis, and Memorability is not
+a delayed-recall test. The [paper](https://arxiv.org/abs/2505.10793) describes English
+and Chinese full songs; Japanese synthesized vocals and short instrumental excerpts
+require separate listening calibration.
 
-## Run the automatic loop
-
-Build the ignored real-backend test target as described in
-[composition trials](composition-quality.md), and supply that test executable, a
-renderer and an authenticated agent backend. SongEval inference is local; the
-composition agent still uses its configured provider/account and normal usage.
-For a reused executable, pass `--source-suite` from the run which captured that
-exact runtime rather than attributing it to today's source checkout.
-
-```sh
-uv run tools/eval/composition_refine.py --recipe tools/eval/references/composition-refine-pop-v1.json --output .local-evaluations/my-refinement --executable <auris-gpui-test-executable> --auris <auris-cli> --evaluator-python <songeval-python> --songeval-config songeval-config.json --seed-project <Song/Song.auris> --voice <voice.voicevox.json> --speaker <speaker-name>
-```
-
-The example recipe uses the existing controlled pop-vocal seed: 24 bars at 112 BPM,
-with a `Vocal` track and clip IDs 5–12. For another song, write its own brief, focus
-track, permitted fields and clip IDs. Omit `--seed-project` to compose from a blank
-fixture; the agent is instructed to create the named monophonic foreground track.
-Omit voice arguments for instrumental music. A supplied seed is copied with its
-project-local Audio folder, and checked for changes afterwards. Existing external
-library references still require the same available assets on the machine.
-
-A recipe declares one to three interventions before any scores are seen. Each
-intervention has an `instruction`, allowed existing-note `fields` drawn from
-`pitch`, `start`, `length`, optional `clip_ids`, and `max_changed_notes` (1–128).
-All revisions branch independently from the initial composition, so a poor prior
-candidate cannot become the new default. Prior per-axis deltas are disclosed as
-uncertain context, never as a target. The agent must justify a specific musical
-edit from the score and brief; no change is a valid outcome.
-
-The hard checks preserve note count/order, written lyrics, accompaniment, form,
-tempo, sounds, gain and effects. They reject overlapping/out-of-bounds foreground
-notes, off-scope edits, excessive note changes, silent/clipped/nonfinite output,
-changed duration or changed backing render, and changed evaluator conditions.
-These checks concern experimental validity, not musical merit. A failed step
-stops the run and retains its logs and artifacts; do not hide it with a successful
-rerun. The foreground restriction currently supports monophonic singer/instrument
-tracks, not arbitrary arrangement or effect optimization.
-
-The output contains `report.json`, exact recipes/prompts, frozen runtime/source
-evidence, agent transcripts and score snapshots, per-stage native projects, full
-mix/foreground/backing WAVs, edit details and SongEval reports. `listening.html`
-compares the retained WAVs at original gain. Foreground/backing are separate renders
-through the full master chain, not additive stems. Labels are disclosed: this is
-an audit/listening page, not a blinded preference study. Retain an untouched cohort
-if using these findings to tune instructions further.
-
-## Checks
+## Validation and retained studies
 
 ```sh
 uv run --with pytest --with numpy --with soundfile pytest tools/eval/test_songeval.py tools/eval/test_composition_refine.py tools/eval/test_composition_quality.py
 uv run --with ruff ruff check tools/eval/songeval.py tools/eval/composition_refine.py tools/eval/test_songeval.py tools/eval/test_composition_refine.py
 ```
 
-The [initial local evaluator trial](local-music-evaluators-2026-10-26.ja.md) records
-same-input repeatability, silence controls and disagreement with human ratings.
-These calibration limits still apply inside an automatic loop.
+The [initial evaluator trial](local-music-evaluators-2026-10-26.ja.md) retains repeat
+and silence controls and disagreement with listeners. The [first loop](songeval-refinement-2026-10-26.ja.md)
+records the earlier multi-candidate runner's one-candidate pilot; its frozen artifacts
+remain historical evidence. The [reference-song calibration](songeval-reference-2026-10-26.ja.md)
+includes the NAS collection, a fresh official-source download and excerpt sensitivity.
+None establishes an automatic selection threshold.
 
-The [first complete loop](songeval-refinement-2026-10-26.ja.md) retains a fresh
-pop melody and a one-note rhythm revision with identical backing. The
-[reference-song calibration](songeval-reference-2026-10-26.ja.md) includes the
-user's existing NAS collection, one fresh official-source download and a
-within-song excerpt-sensitivity check. Neither study establishes a selection threshold.
+The [simplified workflow trial](simple-refinement-2026-10-26.ja.md) records a real
+no-change decision: one mix and one SongEval call, with the second assessment skipped.
+Candidate and failure paths are covered by regression tests; listener preference was
+not measured in that trial.

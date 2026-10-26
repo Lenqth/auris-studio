@@ -2,10 +2,10 @@
 # requires-python = ">=3.11"
 # dependencies = ["numpy>=2", "soundfile>=0.13"]
 # ///
-"""Run a bounded local compose/evaluate/revise experiment without choosing a score winner.
+"""Compose, evaluate, and optionally make one local revision without a score winner.
 
 Use a pinned panel-test executable, renderer and SongEval installation. Every stage is
-retained, including rejected edits. Revisions change one declared family of note fields;
+retained, including rejected edits. A revision changes one foreground clip;
 lyrics, accompaniment, instrument state, gain and form remain protected.
 """
 
@@ -52,31 +52,80 @@ def tree_hashes(root: Path) -> dict[str, str]:
 
 
 def recipe(path: Path) -> dict:
-    """Validate intervention bounds before starting a model or creating output."""
+    """Read a musical brief and edit scope; the agent chooses any repair after evaluation."""
     value = load(path)
-    if value.get("schema_version") != 1:
-        raise ValueError("Unsupported refinement recipe")
+    if value.get("schema_version") != 2:
+        raise ValueError("Use recipe schema_version 2 with revision_scope")
     for key in ("brief", "focus_track"):
         if not isinstance(value.get(key), str) or not value[key].strip():
             raise ValueError(f"Recipe needs {key}")
-    steps = value.get("interventions")
-    if not isinstance(steps, list) or not 1 <= len(steps) <= 3:
-        raise ValueError("Declare 1..3 interventions in advance")
-    for step in steps:
-        if (
-            not isinstance(step.get("instruction"), str)
-            or not step["instruction"].strip()
-        ):
-            raise ValueError("An intervention needs a musical instruction")
-        fields = step.get("fields")
-        if not isinstance(fields, list) or not fields or not set(fields) <= FIELDS:
-            raise ValueError("Intervention fields must be pitch/start/length")
-        if (
-            not isinstance(step.get("max_changed_notes"), int)
-            or not 1 <= step["max_changed_notes"] <= 128
-        ):
-            raise ValueError("Declare 1..128 maximum changed notes")
+    if "interventions" in value:
+        raise ValueError("Use revision_scope instead of predefined interventions")
+    scope = {
+        "fields": sorted(FIELDS),
+        "max_changed_notes": 16,
+        **value.get("revision_scope", {}),
+    }
+    fields = scope["fields"]
+    if (
+        not isinstance(fields, list)
+        or not fields
+        or not all(isinstance(f, str) for f in fields)
+        or not set(fields) <= FIELDS
+    ):
+        raise ValueError("Revision fields must be pitch/start/length")
+    if (
+        type(scope["max_changed_notes"]) is not int
+        or not 1 <= scope["max_changed_notes"] <= 128
+    ):
+        raise ValueError("Use 1..128 maximum changed notes")
+    clips = scope.get("clip_ids")
+    if clips is not None and (
+        not isinstance(clips, list)
+        or not clips
+        or not all(type(c) is int and c > 0 for c in clips)
+        or len(set(clips)) != len(clips)
+    ):
+        raise ValueError("clip_ids must contain distinct positive integers")
+    value["revision_scope"] = scope
     return value
+
+
+def configure(args):
+    """Resolve machine-specific settings once, relative to the shared config file."""
+    path = args.config.expanduser().resolve(strict=True)
+    config = load(path)
+    if config.get("schema_version") != 1:
+        raise ValueError("Use runtime config schema_version 1")
+    settings = {
+        "model": "gpt-6.1-sol",
+        "backend": "codex",
+        "prompt_profile": "legacy",
+        "timeout": 900,
+        "speaker": None,
+        **config,
+    }
+    for key in (
+        "executable",
+        "auris",
+        "evaluator_python",
+        "songeval_config",
+        "source_suite",
+        "voice",
+    ):
+        value = settings.get(key)
+        if value is None and key in {"source_suite", "voice"}:
+            settings[key] = None
+            continue
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"Runtime config needs {key}")
+        target = Path(value).expanduser()
+        settings[key] = (
+            target if target.is_absolute() else path.parent / target
+        ).resolve(strict=True)
+    if type(settings["timeout"]) is not int or not 60 <= settings["timeout"] <= 3600:
+        raise ValueError("Use a timeout between 60 and 3600 seconds")
+    return argparse.Namespace(**{**settings, **vars(args), "config": path})
 
 
 def focus(project: dict, name: str) -> dict:
@@ -244,7 +293,9 @@ def freeze_runtime(source: Path, output: Path) -> Path:
     return target
 
 
-def run_stage(args, root: Path, prompt: str, seed: Path | None) -> Path:
+def run_stage(
+    args, root: Path, prompt: str, seed: Path | None, *, review=False
+) -> Path:
     conditions = (
         "Work only in the open Auris project. Read notes before editing and read back edits. "
         "Do not invoke external search, shell tools, audio critics, sing, render, gain changes or exports. "
@@ -265,6 +316,17 @@ def run_stage(args, root: Path, prompt: str, seed: Path | None) -> Path:
             }
         ],
     }
+    if review:
+        suite["delivery_prompt"] = suite["delivery_prompt"].replace(
+            "Audio synthesis and evaluation are pending.",
+            "The baseline has already been synthesized and evaluated by the host. "
+            "A no-change decision reuses that audio and evaluation; only an edited candidate awaits them.",
+        )
+        suite["delivery_prompt"] += (
+            "\nExplain the one local repair, its concrete musical reason, expected benefit "
+            "and tradeoff, or why keeping the baseline is preferable. Report actual edits, "
+            "not intentions. A lower model score alone is not a repair reason."
+        )
     write_json(root / "manifest.json", suite)
     argv = [
         sys.executable,
@@ -349,7 +411,7 @@ def render(
         raise ValueError("Synthesis rewrote notes or lyrics")
     selected = focus(performed, focus_name)["id"]
     assets = {}
-    for mode in ("mix", "foreground", "backing"):
+    for mode in ("mix", "foreground", "backing") if args.auditions else ("mix",):
         audition = copy.deepcopy(performed)
         if mode != "mix":
             for track in audition["tracks"]:
@@ -359,8 +421,10 @@ def render(
                     mixer["mute"] = False
                 elif mode == "backing" and track["id"] == selected:
                     mixer["mute"] = True
-        audition_path = project.parent / f"{mode}.auris"
-        write_json(audition_path, audition)
+        audition_path = project
+        if mode != "mix":
+            audition_path = copy_project(project, project.parent, destination / mode)
+            write_json(audition_path, audition)
         wav = destination / f"{mode}.wav"
         command(
             [
@@ -387,9 +451,8 @@ def render(
     }
 
 
-def revision_prompt(
-    brief: dict, step: dict, evaluation: dict, previous_delta: dict | None
-) -> str:
+def revision_prompt(brief: dict, evaluation: dict) -> str:
+    step = brief["revision_scope"]
     return (
         brief["brief"] + "\n\nThis is a limited revision of the retained baseline. "
         "Keep its recognisable identity. The task is not to maximize an evaluator. "
@@ -398,15 +461,36 @@ def revision_prompt(
         "Small differences are uncalibrated; scores can disagree with listeners. "
         "Use these as uncertain context only; inspect actual notes and the brief before acting. "
         "Do not add silence, change loudness, instrumentation, lyrics, form or backing to raise scores. "
-        f"\nEvaluation (all axes, no total): {json.dumps(evaluation, ensure_ascii=False)}"
-        f"\nPrevious candidate delta, if any: {json.dumps(previous_delta)}"
-        f"\nThe only intervention: {step['instruction']}"
+        f"\nEvaluation (all axes, no total): {json.dumps(evaluation['scores'], ensure_ascii=False)}"
+        "\nInspect the written melody and lyrics, then choose KEEP or one local repair. "
+        "Identify a specific musical problem, benefit and tradeoff before editing. "
+        "If there is no justified repair, leave the score unchanged. Otherwise choose ONE "
+        "musical theme and edit ONE clip only. Do not make a whole-song rewrite."
         f"\nFocus track: {brief['focus_track']}; allowed existing note fields: {step['fields']}; "
         f"allowed clip IDs: {step.get('clip_ids', 'all in focus')}; at most {step['max_changed_notes']} changed notes. "
         "Preserve every other field, note count/order, lyric mapping and clip boundary. "
         "State a concrete musical reason, expected benefit and possible tradeoff. "
         "No change is valid if there is no justified edit. Do not claim an improvement before listening."
     )
+
+
+def review_decision(transcript: Path, audit: dict) -> dict:
+    """Derive the decision from actual edits, retaining the agent's musical explanation."""
+    messages = [
+        m["text"].strip()
+        for m in load(transcript)
+        if m.get("kind") == "assistant" and m.get("text", "").strip()
+    ]
+    if not messages:
+        raise ValueError("Missing review decision")
+    clips = {change["clip_id"] for change in audit["changes"]}
+    if len(clips) > 1:
+        raise ValueError("Revision changes more than one clip")
+    return {
+        "action": "revise" if clips else "keep",
+        "clip_id": next(iter(clips), None),
+        "reason": messages[-1],
+    }
 
 
 def listening_page(output: Path, stages: list[dict]) -> None:
@@ -418,30 +502,93 @@ def listening_page(output: Path, stages: list[dict]) -> None:
         rows.append(
             f"<h2>{html.escape(stage['name'])}</h2><p>{html.escape(stage['status'])}</p>"
         )
-        for mode in ("mix", "foreground", "backing"):
+        for mode in audio:
             relative = Path(audio[mode]["path"]).relative_to(output).as_posix()
             rows.append(
                 f'<p>{mode}</p><audio controls preload="none" src="{html.escape(relative, quote=True)}"></audio>'
             )
     page = (
-        "<!doctype html><meta charset='utf-8'><title>Composition revision auditions</title><style>body{font:16px system-ui;max-width:850px;margin:32px auto;padding:16px}audio{width:100%}</style><h1>Composition revision auditions</h1><p>Original output levels; no independent normalization. Model scores do not select a winner. The baseline remains the default. Foreground/backing are separate master renders.</p>"
+        "<!doctype html><meta charset='utf-8'><title>Composition revision auditions</title><style>body{font:16px system-ui;max-width:850px;margin:32px auto;padding:16px}audio{width:100%}</style><h1>Composition revision auditions</h1><p>Original levels; no independent normalization. The baseline remains the default. Optional foreground/backing auditions are separate master renders.</p>"
         + "\n".join(rows)
     )
     (output / "listening.html").write_bytes(page.encode("utf-8"))
 
 
-def run(args) -> None:
+def compose_take(
+    args,
+    output: Path,
+    report: dict,
+    brief: dict,
+    prompt: str,
+    seed: Path | None,
+    *,
+    review=False,
+) -> dict:
+    """Use the same composition and scope checks for the baseline and optional revision."""
+    name = "01-revision" if review else "00-baseline"
+    root = output / name
+    root.mkdir()
+    stage = {"name": name, "status": "running", "prompt": prompt}
+    report["stages"].append(stage)
+    write_json(output / "report.json", report)
+    snapshot = run_stage(args, root, prompt, seed, review=review)
+    stage["snapshot_sha256"] = quality.digest(snapshot)
+    stage["symbolic"] = validate_notes(load(snapshot), brief["focus_track"])
+    if seed:
+        scope = (
+            brief["revision_scope"]
+            if review
+            else {"fields": sorted(FIELDS), "max_changed_notes": 100000}
+        )
+        stage["edit_audit"] = audit_edit(
+            load(seed), load(snapshot), brief["focus_track"], scope
+        )
+    stage["project"] = str(
+        copy_project(
+            snapshot, seed.parent if seed else root / "agent/song-01", root / "Score"
+        )
+    )
+    if review:
+        stage["decision"] = review_decision(
+            root / "agent/song-01/transcript.json", stage["edit_audit"]
+        )
+    return stage
+
+
+def assess_take(
+    args, output: Path, stage: dict, focus_name: str, baseline: dict | None = None
+) -> None:
+    """Synthesize, render, validate and score a take through one shared path."""
+    root = output / stage["name"]
+    project = Path(stage["project"])
+    stage["render"] = render(args, project, project.parent, root / "audio", focus_name)
+    if baseline:
+        before, after = baseline["render"]["assets"], stage["render"]["assets"]
+        if (
+            abs(before["mix"]["seconds"] - after["mix"]["seconds"])
+            > 1 / before["mix"]["sample_rate"]
+        ):
+            raise ValueError("Rendered duration changed")
+        if args.auditions and before["backing"]["sha256"] != after["backing"]["sha256"]:
+            raise ValueError("Backing audition changed")
+    stage["scores"] = evaluate(args, root, stage["render"]["assets"]["mix"])
+    if baseline:
+        stage["score_delta"] = compare_scores(baseline["scores"], stage["scores"])
+
+
+def run(args) -> dict:
     brief = recipe(args.recipe)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "running",
-        "policy": "bounded independent revisions of baseline; no scalar objective or automatic musical winner",
+        "policy": "compose, evaluate, optionally revise one clip once; retain baseline without a score winner",
         "recipe": brief,
         "recipe_sha256": quality.digest(args.recipe),
         "stages": [],
         "started_unix": time.time(),
+        "selected_stage": None,
     }
     frozen_seed = None
     original_files = {}
@@ -456,6 +603,7 @@ def run(args) -> None:
         ):
             shutil.copy2(Path(__file__).with_name(name), scripts / name)
         report["scripts"] = tree_hashes(scripts)
+        shutil.copy2(args.config, output / "runtime-config.json")
         evaluator_config = output / "songeval-config.json"
         shutil.copy2(args.songeval_config, evaluator_config)
         args.songeval_config = evaluator_config
@@ -486,106 +634,47 @@ def run(args) -> None:
             }
         write_json(output / "recipe.json", brief)
         write_json(output / "report.json", report)
-        baseline = None
-        baseline_render = None
-        previous_delta = None
-        for index in range(len(brief["interventions"]) + 1):
-            name = "00-baseline" if index == 0 else f"{index:02}-revision"
-            stage_root = output / name
-            stage_root.mkdir()
-            stage = {
-                "name": name,
-                "status": "running",
-                "parent": "00-baseline" if index else "input",
-            }
-            report["stages"].append(stage)
-            write_json(output / "report.json", report)
-            if index == 0:
-                prompt = brief["brief"]
-                if frozen_seed:
-                    prompt += f"\nRewrite only existing pitch/start/length fields in {brief['focus_track']}. Preserve all other fields and every note/lyric in order."
-                else:
-                    prompt += f"\nCreate the monophonic foreground on a track named exactly {brief['focus_track']}."
-                seed = frozen_seed
-            else:
-                step = brief["interventions"][index - 1]
-                prompt = revision_prompt(
-                    brief, step, report["stages"][0]["scores"], previous_delta
-                )
-                seed = baseline
-            stage["prompt"] = prompt
-            try:
-                snapshot = run_stage(args, stage_root, prompt, seed)
-                stage["snapshot_sha256"] = quality.digest(snapshot)
-                current = load(snapshot)
-                stage["symbolic"] = validate_notes(current, brief["focus_track"])
-                if seed:
-                    rule = (
-                        brief["interventions"][index - 1]
-                        if index
-                        else {"fields": sorted(FIELDS), "max_changed_notes": 100000}
-                    )
-                    stage["edit_audit"] = audit_edit(
-                        load(seed), current, brief["focus_track"], rule
-                    )
-                project = copy_project(
-                    snapshot,
-                    seed.parent if seed else stage_root / "agent/song-01",
-                    stage_root / "Score",
-                )
-                stage["render"] = render(
-                    args,
-                    project,
-                    project.parent,
-                    stage_root / "audio",
-                    brief["focus_track"],
-                )
-                if baseline_render:
-                    before, after = baseline_render["assets"], stage["render"]["assets"]
-                    if before["backing"]["sha256"] != after["backing"]["sha256"]:
-                        raise ValueError(
-                            "Backing render changed despite protected symbolic projection"
-                        )
-                    if (
-                        abs(before["mix"]["seconds"] - after["mix"]["seconds"])
-                        > 1 / before["mix"]["sample_rate"]
-                    ):
-                        raise ValueError("Rendered duration changed")
-                stage["scores"] = evaluate(
-                    args, stage_root, stage["render"]["assets"]["mix"]
-                )
-                if index == 0:
-                    baseline, baseline_render = project, stage["render"]
-                    stage["status"] = "baseline_retained"
-                else:
-                    first = report["stages"][0]["scores"]
-                    stage["score_delta"] = compare_scores(first, stage["scores"])
-                    previous_delta = stage["score_delta"]
-                    stage["status"] = (
-                        "candidate_for_listening"
-                        if stage["edit_audit"]["changed_notes"]
-                        else "no_change"
-                    )
-                write_json(stage_root / "stage.json", stage)
-                print(f"{name}: {stage['status']}", flush=True)
-            except Exception as error:
-                stage.update(
-                    status="failed_or_rejected",
-                    error=f"{type(error).__name__}: {error}",
-                )
-                write_json(stage_root / "stage.json", stage)
-                raise
-            finally:
-                write_json(output / "report.json", report)
-                listening_page(output, report["stages"])
-        report["status"] = "completed_review_required"
+        prompt = brief["brief"]
+        if frozen_seed:
+            prompt += f"\nRewrite only existing pitch/start/length fields in {brief['focus_track']}. Preserve all other fields and every note/lyric in order."
+        else:
+            prompt += f"\nCreate the monophonic foreground on a track named exactly {brief['focus_track']}."
+        baseline = compose_take(args, output, report, brief, prompt, frozen_seed)
+        assess_take(args, output, baseline, brief["focus_track"])
+        baseline["status"] = "baseline_retained"
         report["selected_stage"] = "00-baseline"
-        report["selection_reason"] = (
-            "No automatic preference inference; compare retained audio before promoting a candidate."
+        write_json(output / "report.json", report)
+        listening_page(output, report["stages"])
+        print(
+            "Baseline ready; reviewing whether one local repair is justified.",
+            flush=True,
         )
-    except Exception as error:
-        report.update(status="failed", error=f"{type(error).__name__}: {error}")
-        raise
+
+        candidate = compose_take(
+            args,
+            output,
+            report,
+            brief,
+            revision_prompt(brief, baseline["scores"]),
+            Path(baseline["project"]),
+            review=True,
+        )
+        if candidate["decision"]["action"] == "keep":
+            candidate["status"] = "no_change"
+            report["status"] = "baseline_retained_no_change"
+        else:
+            assess_take(args, output, candidate, brief["focus_track"], baseline)
+            candidate["status"] = "candidate_for_listening"
+            report["status"] = "completed_review_required"
+    except Exception as error:  # noqa: BLE001 - preserve failed takes; the CLI exits unsuccessfully.
+        status = (
+            "baseline_only_revision_failed" if report["selected_stage"] else "failed"
+        )
+        report.update(status=status, error=f"{type(error).__name__}: {error}")
+        if report["stages"]:
+            report["stages"][-1].update(
+                status="failed_or_rejected", error=report["error"]
+            )
     finally:
         if frozen_seed and tree_hashes(output / "input") != report["seed"]["files"]:
             report.update(status="failed", error="Frozen input changed")
@@ -595,10 +684,15 @@ def run(args) -> None:
         ):
             report.update(status="failed", error="Original input changed")
         report["finished_unix"] = time.time()
+        for stage in report["stages"]:
+            write_json(output / stage["name"] / "stage.json", stage)
         write_json(output / "report.json", report)
         listening_page(output, report["stages"])
-    if report["status"] == "failed":
-        raise RuntimeError(report["error"])
+    print(
+        report["status"] + (": " + report["error"] if "error" in report else ""),
+        flush=True,
+    )
+    return report
 
 
 def evaluate(args, stage_root: Path, asset: dict) -> dict:
@@ -664,31 +758,22 @@ def compare_scores(baseline: dict, candidate: dict) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    for key in (
-        "recipe",
-        "output",
-        "executable",
-        "auris",
-        "evaluator-python",
-        "songeval-config",
-    ):
+    for key in ("recipe", "output"):
         parser.add_argument("--" + key, type=Path, required=True)
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path.home() / ".config/auris-studio/composition-refinement.json",
+    )
     parser.add_argument("--seed-project", type=Path)
-    parser.add_argument("--source-suite", type=Path)
-    parser.add_argument("--voice", type=Path)
-    parser.add_argument("--speaker")
-    parser.add_argument("--model", default="gpt-6.1-sol")
     parser.add_argument(
-        "--backend", choices=["codex", "claude", "rig"], default="codex"
+        "--auditions",
+        action="store_true",
+        help="Also render foreground and backing auditions",
     )
-    parser.add_argument(
-        "--prompt-profile", choices=["legacy", "modular"], default="legacy"
-    )
-    parser.add_argument("--timeout", type=int, default=900)
-    args = parser.parse_args()
-    if not 60 <= args.timeout <= 3600:
-        parser.error("Use a per-command timeout between 60 and 3600 seconds")
-    run(args)
+    report = run(configure(parser.parse_args()))
+    if report["status"] in {"failed", "baseline_only_revision_failed"}:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

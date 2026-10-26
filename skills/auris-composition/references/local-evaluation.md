@@ -11,12 +11,12 @@ Read `docs/composition-refinement.md` for its recipe and runtime arguments. This
 development tooling, not a built-in `listen` backend; discover actual available
 tools instead of inventing a SongEval tool call in an installed app.
 
-Declare a small edit family before evaluation: for example phrase-ending lengths,
-one motif answer, or a chorus-register alternative. Keep unrelated notes, lyrics,
-backing, sound and gain fixed. Ask for a musical reason grounded in the score and
-brief. SongEval has whole-recording predictions, not timestamped advice, and a low
-score does not establish which notes should change. Keep a no-change outcome when
-the proposed intervention is not justified.
+Compose and evaluate the baseline, then decide whether one local repair is justified.
+Choose the repair after inspecting the actual notes, lyrics, brief and all five
+SongEval axes. Explain the concrete musical issue, expected benefit and tradeoff.
+SongEval has whole-recording predictions, not timestamped advice; a low score alone
+does not identify a repair. Keep the baseline unchanged when no repair is justified.
+Limit a repair to one foreground clip within the user's allowed fields and note budget.
 
 Use all five axes as uncertain evidence, with identical model/preprocessing and
 audio identity checks. Do not sum them, chase a threshold, lengthen silence or
@@ -24,10 +24,11 @@ change the mix to obtain a higher score. Naturalness predicts vocal phrasing and
 breathing, not general melody quality; Memorability is not a delayed-recall test.
 Instrumental and synthetic-vocal results require their own listening calibration.
 
-Bound the run in advance. The current harness makes one to three independent
-revisions of the baseline, preserves failed candidates, and stops on invalid
-edits or rendering/evaluation failures. It keeps original and candidate audio,
-editable scores, prompts, source/model hashes, per-axis deltas and edit reasons.
-It retains the baseline as the default; a higher predicted score alone cannot
-promote a candidate or establish an audible improvement. Compare rhythm, motif,
+The harness creates at most one candidate. No-change decisions skip repeat synthesis
+and evaluation. Usually render the full mix only; request foreground/backing auditions
+when useful. Machine/model paths live in a shared configuration, while each song needs
+only a brief, focus track and optional revision scope. Preserve unrelated notes, lyrics,
+backing, sounds and gain. Keep original and candidate audio, editable scores and reasons.
+A failed revision leaves the baseline available and records the failure without retrying.
+The baseline remains the default even when predicted scores rise. Compare rhythm, motif,
 chorus contrast, naturalness and breathing separately when listening afterwards.
