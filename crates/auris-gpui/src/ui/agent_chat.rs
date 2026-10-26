@@ -5664,7 +5664,7 @@ mod tests {
     #[gpui::test]
     fn copy_answer_keeps_all_markdown_after_resizing(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
-        let answer = "## 再生結果\n\n- **WAV:** `C:/Music/preview.wav`\n\n  次の段落。";
+        let answer = "## 再生結果\n\n- **WAV:** `C:/Music/preview.wav`\n\n  次の段落。\n\n```json title=score\n{\"tempo\": 120}\n```";
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();

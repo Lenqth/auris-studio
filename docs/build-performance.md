@@ -88,6 +88,25 @@ variation. These measurements support the faster iteration setting but are not a
 estimate of CI speedup. The setup build used four jobs, rebuilt dependencies under the new
 profiles and took 13m23s; it is not comparable to the earlier partially cached 16-job build.
 
+## Dependency selection
+
+The desktop uses `gpui-component` 0.5.1 as a complete component library without its optional
+language grammar bundle. Conversation Markdown is still parsed with `markdown`'s GFM parser.
+Code blocks retain their contents and indentation but reach `TextView` without language
+metadata, avoiding its syntax highlighter. Copying a message retains the original Markdown.
+The component library's mandatory Tree-sitter core and JSON grammar remain dependencies.
+
+On the locked Windows graph, unique package/version pairs changed as follows:
+
+| Desktop dependencies | Before | After |
+| --- | ---: | ---: |
+| Normal and build | 750 | 722 |
+| Including test dependencies | 757 | 729 |
+
+The 28-package reduction consists of optional language grammars and also applies to the
+macOS and Linux desktop graphs. Counts describe selected target graphs rather than the
+all-platform lock file. They do not establish an elapsed build-time gain.
+
 ## Audio-processing check
 
 The profile change keeps the workspace audio crates at level 1 and audio dependencies at
@@ -118,3 +137,8 @@ passes, 50 ignored tests, no failures), `cargo clippy --workspace --all-targets 
 -- -D warnings`, `cargo fmt --all` and actionlint 1.7.12 for the CI workflow. The test build
 phase took 5m39s after the development build had populated compatible dependencies; this is
 not an initial-build measurement. Cross-platform and ASIO verification run in CI.
+
+The 2026-10-27 grammar reduction passed the same workspace test command (4,679 reported
+passes, 50 ignored tests, no failures), workspace Clippy with warnings denied, formatting
+and a desktop build. Regression coverage includes Japanese lists and quotes, nested code,
+literal fences, language metadata, scrolling, resizing and copying the original Markdown.
