@@ -116,6 +116,10 @@ impl AurisApp {
             return div().into_any_element();
         };
         let name = track.name.clone();
+        let instrument_id = track
+            .kind
+            .as_instrument()
+            .map(|instrument| instrument.instrument_id.clone());
         let color = theme.track_color(track.color.0);
         let gain_db = track.mixer.gain_db;
         let pan = track.mixer.pan;
@@ -174,6 +178,16 @@ impl AurisApp {
                 Insert::Empty => self.add_effect_row(("mixer-add-fx", index), Some(track_id), cx),
             })
             .collect();
+
+        let instrument_controls = instrument_id.map(|id| {
+            let name = self.instrument_label(track_id, &id);
+            self.compact_plugin_controls(
+                ("mixer-inst", index),
+                crate::ui::plugin_window::PluginSubject::Instrument(track_id),
+                name,
+                cx,
+            )
+        });
 
         div()
             .id(("strip", index))
@@ -294,6 +308,7 @@ impl AurisApp {
                 pan,
                 cx,
             ))
+            .children(instrument_controls)
             .child(self.output_row(index, track_id, destination, cx))
             .children(sends.into_iter().enumerate().map(
                 |(position, (send, bus, level_db, pre_fader))| {
@@ -456,12 +471,9 @@ impl AurisApp {
             .into_any_element()
     }
 
-    /// The button for one effect in a strip: click to bypass, right-click for the full menu.
-    ///
-    /// Wrapped in a plain `div` because [`button`] only carries a click handler, and a strip
-    /// this narrow has no room for reorder arrows next to every effect.
+    /// One effect's editor action, with secondary commands in its visible menu.
     fn effect_row(
-        &self,
+        &mut self,
         id: impl Into<gpui::ElementId> + Clone,
         label: String,
         track: Option<TrackId>,
@@ -469,9 +481,14 @@ impl AurisApp {
         enabled: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let theme = &self.theme;
+        let theme = self.theme.clone();
         let menu_label = label.clone();
+        let subject = crate::ui::plugin_window::PluginSubject::Insert { track, slot };
         div()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .gap_0p5()
             .when(self.dragging_effect(slot), |this| {
                 this.bg(theme.surface_raised).opacity(0.8)
             })
@@ -487,24 +504,15 @@ impl AurisApp {
             .on_mouse_move(cx.listener(move |this, _: &gpui::MouseMoveEvent, _, cx| {
                 this.drag_effect_onto(track, Some(slot), cx);
             }))
-            .child(button(
-                id,
-                label,
-                ButtonStyle::Ghost,
-                enabled,
-                theme.accent_soft,
-                theme,
-                // Opens the plugin's editor, the same as the inspector's own slots. Bypass used
-                // to be on this click, which meant the only way to *see* an effect from the
-                // mixer was to switch it off on the way.
-                cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                    this.open_plugin_window(crate::ui::plugin_window::PluginSubject::Insert {
-                        track,
-                        slot,
-                    });
-                    cx.notify();
-                }),
-            ))
+            .child(self.compact_plugin_controls(id, subject, label, cx))
+            .when(!enabled, |this| {
+                this.child(
+                    div()
+                        .text_xs()
+                        .text_color(theme.text_muted)
+                        .child(self.t(Key::PluginBypassed)),
+                )
+            })
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {

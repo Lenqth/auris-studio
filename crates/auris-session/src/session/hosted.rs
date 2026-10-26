@@ -509,8 +509,20 @@ impl HostedPlugins {
                 reason: "nothing hosted is here".into(),
             });
         };
+        let was_open = slot.plugin_mut().is_some_and(|plugin| plugin.gui_is_open());
         slot.editor = open;
-        slot.settle_editor(parent)
+        if let Err(error) = slot.settle_editor(parent) {
+            slot.editor = false;
+            return Err(error);
+        }
+        // Settling also runs on every tick. Only an explicit open request may take focus.
+        if open
+            && was_open
+            && let Some(plugin) = slot.plugin_mut()
+        {
+            plugin.raise_gui()?;
+        }
+        Ok(())
     }
 
     /// Runs every hosted plugin's clocks and keeps its window where the slot says.
@@ -1061,6 +1073,7 @@ impl Session {
     /// Not an undoable edit and not part of the document: which windows are open is a fact about
     /// this sitting, like which panel is showing. A project that reopened four plugin windows
     /// because it was saved with four open would be a project that took over the screen.
+    /// An explicit open request also raises an existing editor, preserving its current view.
     pub fn set_plugin_window_open(
         &mut self,
         which: PluginWindow,
@@ -2570,6 +2583,38 @@ mod tests {
             .set_plugin_window_open(which, false)
             .expect("closes");
         assert!(!session.plugin_window_is_open(which));
+    }
+
+    #[test]
+    fn only_an_explicit_open_request_raises_an_existing_clap_editor() {
+        use auris_clap::testkit::gui_step;
+        let (mut session, file) = session_with_fixture();
+        let slot = session.add_hosted_effect(None, &file, FIXTURE_ID).unwrap();
+        let which = PluginWindow::Effect(slot);
+        session.set_plugin_window_open(which, true).unwrap();
+        session.poll();
+        let calls = session
+            .hosted
+            .window_slot(which)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .value(ParamId(3))
+            .unwrap() as u32;
+        assert_eq!(calls & gui_step::RAISED, 0, "polling must not steal focus");
+
+        session.set_plugin_window_open(which, true).unwrap();
+        let calls = session
+            .hosted
+            .window_slot(which)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .value(ParamId(3))
+            .unwrap() as u32;
+        assert_ne!(calls & gui_step::RAISED, 0);
+        assert_eq!(calls & (gui_step::HIDDEN | gui_step::DESTROYED), 0);
+        assert!(session.plugin_window_is_open(which));
     }
 
     #[test]

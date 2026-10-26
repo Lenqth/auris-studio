@@ -738,6 +738,12 @@ strings! {
     CmdComposeFromSpec { en: "Compose from Specification…", ja: "仕様ファイルから作曲…" }
     CmdBalanceLevels { en: "Balance the Mix", ja: "ミックスの自動調整" }
     CmdOpenPluginWindow { en: "Open Plugin Window", ja: "プラグインの画面を開く" }
+    PluginOpenEditor { en: "Open editor…", ja: "画面を開く…" }
+    PluginRaiseEditor { en: "Bring to front", ja: "前面に表示" }
+    PluginParameters { en: "Parameters…", ja: "パラメーター一覧…" }
+    PluginCloseEditor { en: "Close editor", ja: "画面を閉じる" }
+    PluginActions { en: "Plugin actions", ja: "プラグインの操作" }
+    PluginBypassed { en: "Bypassed", ja: "バイパス中" }
     CmdSave { en: "Save", ja: "保存" }
     CmdSaveAs { en: "Save As", ja: "名前を付けて保存" }
     CmdImportAudio { en: "Import Audio", ja: "オーディオを読み込む" }

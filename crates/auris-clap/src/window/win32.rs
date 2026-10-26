@@ -13,10 +13,10 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRectEx, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, CreateWindowExW, DefWindowProcW,
-    DestroyWindow, GWLP_USERDATA, GetWindowLongPtrW, HMENU, IDC_ARROW, LoadCursorW,
-    RegisterClassExW, SW_SHOWNORMAL, SWP_NOMOVE, SWP_NOZORDER, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, WINDOW_EX_STYLE, WM_CLOSE, WNDCLASSEXW, WS_CAPTION, WS_MINIMIZEBOX, WS_OVERLAPPED,
-    WS_SYSMENU,
+    DestroyWindow, GWLP_USERDATA, GetWindowLongPtrW, HMENU, IDC_ARROW, IsIconic, LoadCursorW,
+    RegisterClassExW, SW_RESTORE, SW_SHOW, SWP_NOMOVE, SWP_NOZORDER, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, WINDOW_EX_STYLE, WM_CLOSE, WNDCLASSEXW,
+    WS_CAPTION, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -116,7 +116,17 @@ impl ContainerWindow for HostWindow {
 
     fn show(&self) {
         // SAFETY: the window is alive for as long as this value is.
-        let _ = unsafe { ShowWindow(self.hwnd, SW_SHOWNORMAL) };
+        unsafe {
+            let _ = ShowWindow(
+                self.hwnd,
+                if IsIconic(self.hwnd).as_bool() {
+                    SW_RESTORE
+                } else {
+                    SW_SHOW
+                },
+            );
+            let _ = SetForegroundWindow(self.hwnd);
+        }
     }
 
     fn was_closed(&self) -> bool {
@@ -223,4 +233,25 @@ unsafe extern "system" fn window_proc(
     }
     // SAFETY: the default handler is always safe to call with the message it was given.
     unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::SW_MINIMIZE;
+
+    #[test]
+    fn showing_a_minimized_container_restores_it_without_requesting_close() {
+        let window = HostWindow::open("Editor test", super::super::PROVISIONAL, None).unwrap();
+        window.show();
+        // SAFETY: This test owns the window on its creating thread.
+        unsafe {
+            let _ = ShowWindow(window.hwnd, SW_MINIMIZE);
+        }
+        assert!(unsafe { IsIconic(window.hwnd) }.as_bool());
+        assert!(!window.was_closed());
+        window.show();
+        assert!(!unsafe { IsIconic(window.hwnd) }.as_bool());
+        assert!(!window.was_closed());
+    }
 }

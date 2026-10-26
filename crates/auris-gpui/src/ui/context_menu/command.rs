@@ -516,6 +516,10 @@ pub enum MenuCommand {
         start: Ticks,
     },
 
+    /// Opens Auris's parameter editor for this exact plugin slot.
+    PluginParameters(crate::ui::plugin_window::PluginSubject),
+    /// Closes this plugin's primary editor without toggling its audio.
+    ClosePluginEditor(crate::ui::plugin_window::PluginSubject),
     /// Bypass or re-enable an effect.
     ToggleEffect {
         /// Track owning the chain, or `None` for the master bus.
@@ -1558,6 +1562,8 @@ impl AurisApp {
             }
 
             MenuCommand::ToggleEffect { track, slot } => self.toggle_effect(track, slot),
+            MenuCommand::PluginParameters(subject) => self.open_plugin_window(subject),
+            MenuCommand::ClosePluginEditor(subject) => self.close_plugin_editor(subject),
             MenuCommand::MoveEffect { track, slot, delta } => self.move_effect(track, slot, delta),
             MenuCommand::RemoveEffect(slot) => self.remove_effect(slot),
             MenuCommand::ShowEffectPicker { track, at } => {

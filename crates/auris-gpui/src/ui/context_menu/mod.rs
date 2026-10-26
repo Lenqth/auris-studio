@@ -28,7 +28,6 @@ mod tracks;
 
 pub use command::MenuCommand;
 pub use menu::ContextMenu;
-#[cfg(test)]
 pub use menu::MenuEntry;
 
 pub(crate) use recipe::{preset_key, subdivision_key};

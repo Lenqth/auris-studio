@@ -276,7 +276,9 @@ impl AurisApp {
         if let Some(surface) = self.raise_auxiliary.take()
             && let Some(handle) = self.auxiliary_windows.get(&surface)
         {
-            let _ = handle.update(cx, |_, window, _| window.activate_window());
+            let _ = handle.update(cx, |_, window, cx| {
+                crate::termination::activate(window, cx);
+            });
         }
     }
 

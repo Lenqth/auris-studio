@@ -791,10 +791,13 @@ impl Vst3Plugin {
         Ok(())
     }
 
-    /// Opens or closes the plugin's standalone native editor.
+    /// Opens or closes the plugin's native editor, raising an already-open one on request.
     pub fn set_gui_open(&mut self, open: bool) -> Result<(), Vst3Error> {
         if open {
             if self.gui_is_open() {
+                if let Some(window) = &self.window {
+                    window.bring_to_front();
+                }
                 return Ok(());
             }
             // A dismissed editor may still await the next poll. Detach it before attaching a

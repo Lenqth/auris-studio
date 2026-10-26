@@ -8,7 +8,8 @@ use auris_session::{PluginWindow, Session, SessionOptions};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumThreadWindows, GetClassNameW, IsWindow, SendMessageW, WM_CLOSE,
+    EnumThreadWindows, GetClassNameW, IsIconic, IsWindow, SW_MINIMIZE, SendMessageW, ShowWindow,
+    WM_CLOSE,
 };
 use windows::core::BOOL;
 
@@ -93,4 +94,28 @@ fn a_dismissed_vst3_editor_can_reopen_before_the_next_poll() {
     session.set_plugin_window_open(which, false).unwrap();
     // SAFETY: IsWindow accepts destroyed handles, including this test's closed editor.
     assert!(!unsafe { IsWindow(Some(reopened)) }.as_bool());
+}
+
+#[test]
+#[ignore = "requires AURIS_VST3_SMOKE_PLUGIN to name an installed VST3 with a native editor"]
+fn opening_an_existing_vst3_editor_restores_the_same_window() {
+    let (mut session, which) = session_with_editor();
+    session.set_plugin_window_open(which, true).unwrap();
+    let hwnd = editor_window();
+    // SAFETY: This test owns the editor and changes it on its creating thread.
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_MINIMIZE);
+    }
+    assert!(unsafe { IsIconic(hwnd) }.as_bool());
+    session.poll();
+    assert!(session.plugin_window_is_open(which));
+
+    session.set_plugin_window_open(which, true).unwrap();
+    assert_eq!(
+        editor_window(),
+        hwnd,
+        "reuse the editor instead of recreating its view"
+    );
+    assert!(!unsafe { IsIconic(hwnd) }.as_bool());
+    session.set_plugin_window_open(which, false).unwrap();
 }

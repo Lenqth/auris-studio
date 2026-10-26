@@ -39,6 +39,8 @@ pub enum Icon {
     ChevronRight,
     /// Remove something.
     Cross,
+    /// Additional commands: three horizontal dots.
+    More,
     /// A menu item that is currently on.
     Check,
     /// The sound library: a folder with a raised tab.
@@ -59,8 +61,6 @@ pub enum Icon {
     Knob,
     /// A sound — a font's preset, or the shelf a set of them sits on.
     Wave,
-    /// A window of its own: a frame with a title bar, which is what a plugin opens.
-    Window,
     /// The agent: a speech bubble, which is what a conversation is drawn as everywhere.
     Agent,
     /// AI-assisted creation: a large sparkle and two smaller glints.
@@ -153,6 +153,11 @@ pub fn paint_icon(window: &mut Window, bounds: Bounds<Pixels>, icon: Icon, color
     };
 
     match icon {
+        Icon::More => {
+            for x in [0.22, 0.5, 0.78] {
+                knob(window, x, 0.5, 0.13, 0.13);
+            }
+        }
         Icon::Sparkles => {
             for (cx, cy, radius) in [(0.47, 0.53, 0.31), (0.78, 0.23, 0.12), (0.78, 0.80, 0.08)] {
                 let mut builder = PathBuilder::fill();
@@ -437,26 +442,6 @@ pub fn paint_icon(window: &mut Window, bounds: Bounds<Pixels>, icon: Icon, color
             if let Ok(path) = builder.build() {
                 window.paint_path(path, color);
             }
-        }
-        Icon::Window => {
-            // A window seen from the front: a frame, and a title bar filled across its top. Two
-            // shapes and no more — a close box drawn in the corner of the title bar would be a
-            // dot a pixel across, which at this size reads as a smudge on the glyph.
-            let (x0, x1, y0, y1, r) = (0.16, 0.84, 0.22, 0.78, 0.08);
-            let mut builder = PathBuilder::stroke(px((side * 0.09).max(1.1)));
-            builder.move_to(at(x0 + r, y0));
-            builder.line_to(at(x1 - r, y0));
-            builder.curve_to(at(x1, y0 + r), at(x1, y0));
-            builder.line_to(at(x1, y1 - r));
-            builder.curve_to(at(x1 - r, y1), at(x1, y1));
-            builder.line_to(at(x0 + r, y1));
-            builder.curve_to(at(x0, y1 - r), at(x0, y1));
-            builder.line_to(at(x0, y0 + r));
-            builder.curve_to(at(x0 + r, y0), at(x0, y0));
-            if let Ok(path) = builder.build() {
-                window.paint_path(path, color);
-            }
-            bar(window, x0, y0, x1, 0.36);
         }
         Icon::Cross => {
             // Two bars rotated 45°, drawn as paths because quads cannot be rotated.
