@@ -170,6 +170,14 @@ retains two repetitions with mixed preferences and no clear improvement. To
 attribute an effect to one melody operation, hold the other melody features as
 well as compatible backing, lyrics and sound settings fixed.
 
+## Automatic local refinement
+
+The [SongEval refinement wrapper](composition-refinement.md) runs this same panel
+harness for an initial composition and bounded independent revisions. It renders
+and scores between stages, protects the fixed musical context, and retains
+projects, transcripts, audio, rejected edits and per-axis results. Numerical scores
+do not promote candidates or establish improved musical preference.
+
 ## 2026-10-24 implementation pilot
 
 The [retained numerical report](../tools/eval/references/composition-quality-pilot-2026-10-24.json)

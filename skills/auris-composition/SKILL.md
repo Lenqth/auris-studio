@@ -21,6 +21,8 @@ For a complete musical delivery, follow [arrangement.md](references/arrangement.
 
 For songs with lyrics or synthesized singing, read [vocals.md](references/vocals.md) before writing. It covers lyric/melody development, complete song form, voice prerequisites, CLI/MCP synthesis, and checking every sung section. A guide melody or a successful instrumental render is not a completed vocal delivery.
 
+When the user requests automatic evaluation and refinement with an available local model, read [local-evaluation.md](references/local-evaluation.md). It describes bounded SongEval-assisted revisions, fixed-context checks and retaining audible alternatives without selecting a score winner.
+
 ## Composition workflow
 
 1. Translate the brief into a short musical contract: purpose, emotional arc, reference-free style words, tempo, key or mode, duration in bars/seconds, instrumentation, loop points, and deliverables. Ask only for missing decisions that materially change the result; otherwise choose conservative defaults and record them.

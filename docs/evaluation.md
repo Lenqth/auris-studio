@@ -9,6 +9,10 @@ a change to a writer or a dial should be judged against numbers first and ears a
 The [agent composition trials](composition-quality.md) exercise complete panel tasks,
 preserve failures and provenance, and prepare blinded human listening comparisons.
 
+The [local refinement loop](composition-refinement.md) connects those trials to
+SongEval, bounded foreground edits and retained before/after audio. It records
+per-axis evidence and validity checks without an automatic musical winner.
+
 The [preset arrangement study](preset-arrangement.md) pairs these measurements with track
 participation and density across the form, and records the default-seed selection, fresh-seed
 check, and per-preset tradeoffs from the 2026-10-04 revision.
