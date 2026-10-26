@@ -26,6 +26,14 @@ Separate recognition from development: can a listener point to the same
 rhythmic fingerprint, and did a meaningful parameter change? Exact copying can
 serve a hook; constant novelty can erase foreground identity.
 
+Make development traceable in the score: retain the cell's actual onset pattern
+and interval contour in a short production note, with its first statement,
+answer, changed return and chorus location. A useful pop sketch is statement,
+recognizable answer with a changed tail, then a register-expanded chorus return.
+This is a candidate form, not a requirement for every song. Check the written
+notes for that relationship; merely naming unrelated phrases "motif A" does not
+make them related. Listen for recall separately from score recurrence.
+
 Use contrast between sections as a change in behaviour, not merely more notes:
 register, rhythmic density, note length, contour, harmonic arrival, texture, or
 silence can open a chorus. A refrain may keep the motif while widening range or
@@ -65,6 +73,27 @@ appoggiatura tones as gestures with a destination. A non-chord tone held on an
 accent can be expressive; the same note left unexplained at every cadence may
 sound accidental. Check the *performed* timing: a pickup or anticipation can
 make a nominally off-beat note the perceptual arrival.
+
+### Colour without compulsory complexity
+
+When the brief wants a more colourful melody, audition a 9th or another suitable
+extension at a meaningful word or target, rather than confining arrivals to a
+triad. Separate three questions: key degree, role against the *sounding chord*,
+and absolute pitch/register. A ninth is the compound form of a second; D can
+colour C harmony as its ninth while remaining degree 2 in C major. This does
+not require a ninth leap, a new pitch class or leaving the key. Over G, D is
+instead the fifth. A melody that already uses degrees 1 through 7 may already
+contain extensions against some chords.
+
+For an original local comparison over C harmony, keep the rhythm/backing and
+compare an E5 target with D5 held briefly before E5. The latter exposes a ninth
+then resolves to the third; it is an option, not intrinsically better. Check
+the bass, chord quality, duration, voicing and next harmony; an intentional
+held colour need not always resolve immediately. Do not add 9ths/11ths/13ths
+to every chord, require chromatic notes, or widen the singer just to meet a
+"tension" count. See [Open Music Theory: intervals](https://human.libretexts.org/Courses/Prince_Georges_Community_College/PGCC_Open_Music_Theory-Fundamentals/04:_Intervals)
+and [chord-scale theory](https://viva.pressbooks.pub/openmusictheory/chapter/chord-scale-theory/)
+for the vocabulary and the limits of choosing scales chord by chord.
 
 ### Worked four-bar sketch (original)
 
@@ -130,6 +159,15 @@ baseline. Repair a crowded phrase locally before delaying every line or enlargin
 every gap. Breathability, intelligibility and groove are separate listening
 questions; improving one is not evidence that the others improved.
 
+For a newly written pop/song melody without a contrary brief, use an eighth-note
+pulse as a starting backbone, interrupting it with holds and phrase releases.
+Place selected sixteenths at a pickup, turn or answer; avoid giving every word
+the same pattern or packing every gap. This preference concerns the foreground,
+not automatic quantization of the whole ensemble. In 6/8, keep the two groups
+of three eighths legible rather than importing a 4/4 accent pattern. Tempo,
+lyric consonants and the performer's articulation can require fewer attacks.
+Sparse ambient lines and deliberately continuous riffs retain their own briefs.
+
 For lyrics, map stressed words or important Japanese mora to a meaningful beat,
 long vowel, or melodic arrival. Leave consonant-heavy material enough attack
 time and place breaths at phrase boundaries or deliberate internal rests. Test
@@ -156,6 +194,15 @@ line is not automatically a natural ending: leave instrument-dependent decay,
 voice breath, and reverb tail space. The arrangement pass contains the project
 specific checks for held arrivals and phrase endings.
 
+For a bold chorus, actually sketch a register alternative: the same cell one
+octave up, an octave-shifted answer, or a raised final arrival. Retain an audible
+identity feature and check the entrance *and* the route back. Whole-phrase
+register transfer is not octave doubling, modulation, or a demand for an octave
+leap between consecutive notes. Check tessitura (where the phrase spends time),
+not only its extreme notes. If a full octave would strain the singer, lower the
+verse when allowed, lift only a fragment or use a smaller contrast. Compare
+with the same compatible backing before changing density or effects as well.
+
 ## A repeatable authoring pass
 
 For each new foreground line:
@@ -176,6 +223,10 @@ For each new foreground line:
    that the ending leaves the intended amount of space.
 8. Read the resulting notes and section boundaries back. A tool success, note
    count, or dense curve is evidence of execution, not evidence of a good line.
+   For a monophonic draft, check numeric onset/end positions for unintended
+   overlaps and bar overflow before judging phrasing. Map the actual lyric
+   mora to notes or explicit continuations; do not hide several mora or an
+   incomplete word behind an ambiguous "held word" annotation.
 
 When revising, change one high-impact issue at a time: unclear motif, crowded
 prosody, masked target, unplayable leap, flat section contrast, or abrupt release.
@@ -231,6 +282,8 @@ The evaluator should ask concrete, score-readable questions:
   a traceable rhythm or contour? (Score-readable.)
 - Does each variation name a changed parameter—rhythm, interval, register,
   harmony, or articulation? (Score-readable.)
+- Can the claimed motif relationship be located in actual note onsets/intervals,
+  and does the chorus register change fit the declared range and lyric vowels?
 - At strong attacks and phrase endings, do target notes fit the chord or carry a
   labelled, resolved tension?
 - Are rests, pickups, breaths, and held arrivals preserved at section joins?
@@ -249,3 +302,9 @@ render measurement, or successful tool call cannot establish those judgments.
 Keep symbolic diagnostics separate from listening claims. If no reliable audio
 critic or human listener is available, report note-level and measurement checks
 only and leave timbral, emotional, and memorability judgments unconfirmed.
+
+The eighth/sixteenth starting point and bold chorus candidates above incorporate
+listener production feedback from 2026-10-26. They are scoped creative preferences,
+not effects established by the 2026-10-25 A/B trials. Preserve a liked attack
+pattern and backing when making a local melody revision; more rests or a wider
+range are not automatic improvements.

@@ -10,6 +10,33 @@ Keep the singer intelligible through accompaniment register, voicing, timing, an
 
 When repairing intelligibility, keep word groups, mora assignments and rhythmic identity together. Uniformly widening every gap or slowing every syllable can remove the intended groove. Compare a local reading, consonant, note-length or phrase-boundary edit with the current take before changing the whole line. Preserve the user's chosen grid and held endings; a sustained particle can be an explicit preference for one lyric, not a rule for Japanese singing. Treat a user-edited project as the new baseline and protect its melody during backing-only changes.
 
+## Vowel, register and sustained words
+
+When authoring a new lyric and melody with an exposed high or powerful arrival,
+try a meaningful word sustained on あ /a/ or お /o/ as preferred candidates.
+Identify the vowel actually held in the word, its pitch and duration, and the
+consonant entering it; a kana label alone is not a complete vocal gesture.
+Do not sacrifice the lyric's meaning or natural word boundary for a vowel match.
+
+For ん, prefer a less exposed lower/middle placement or a brief phrase ending
+when that preserves the melodic contour and reading. Keep its mora slot and
+test the following consonant and preceding vowel. Do not assume every ん is
+quiet, forbid a nasal sustain, move every ん downward, or erase it to lengthen
+the preceding vowel. Fixed lyrics and a protected melody take precedence;
+try local timing, articulation or an allowed transposition before proposing a
+lyric change, and identify any remaining conflict.
+
+These are listener-informed authoring preferences, not a universal ranking of
+vowels. Voice, register, intensity and style affect vowel modification:
+[Titze's preliminary classical/belt study](https://vocology.utah.edu/_resources/documents/formant_frequency_shifts_titze.pdf)
+describes style-dependent changes, not a rule for Japanese lyric placement.
+[TUFS's mora-nasal lesson](https://www.coelang.tufs.ac.jp/ja/en/pmod/practical/02-03-01.php)
+explains that ん has its own mora and varies with the following sound; it does
+not prescribe a low pitch. Human singing findings are not validation of a
+synthesis model. Render the actual selected voice, compare the exposed word
+alone and in its phrase/mix, and keep pronunciation, effort and musical
+preference distinct from note-range diagnostics.
+
 ## Voice prerequisites
 
 Discover an installed voice before promising sung audio. MCP provides `list_voices`; with CLI, use a supplied voice path or inspect the configured Auris Voices directories. `auris help` is authoritative for the installed CLI; do not invent an `auris list_voices` command. Voice choices include a DiffSinger `dsconfig.yaml`, a `*.leapsinger.json` manifest, or a `*.voicevox.json` connection. Keep the model's supporting files together. Record the selected voice, speaker, and synthesis seed where supported. A seed does not guarantee identical audio from every backend; retain the actual generated take.

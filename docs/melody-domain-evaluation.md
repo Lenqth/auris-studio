@@ -60,3 +60,21 @@ are not preference labels. Research-informed guidance is in the skill's
 
 This manifest and rubric are evaluation infrastructure. No before/after human
 preference result is implied by adding them or passing their software tests.
+
+## Listener-informed revisions
+
+The [2026-10-26 unblinding report](melody-feedback-calibration-2026-10-26.ja.md)
+separates overall, melody/vocal and backing preferences from four human comments.
+Do not add those different components into one win rate. Naturalness, recall and
+breathing remain unscored unless a listener explicitly evaluates them.
+
+For a melody-only follow-up, keep compatible harmony/backing, instruments,
+lyrics, tempo and mix fixed; for a backing follow-up, protect the foreground.
+Record any required harmony dependency and evaluate the full interaction too.
+Inspect the actual motif returns, eighth/sixteenth articulation, chord-relative
+colour, chorus tessitura and sustained vowel, without making note counts or
+extension quotas pass conditions. Include narrow/sustained and protected-score
+cases so pop preferences do not become universal constraints. Old synthpop
+listening cases now inform development and cannot serve as an untouched holdout
+for this revision. New audio efficacy remains to be evaluated separately from
+prompt/skill behavior checks.

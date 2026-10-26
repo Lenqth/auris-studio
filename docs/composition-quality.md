@@ -137,10 +137,18 @@ The builder preserves pre-match copies, chooses one feasible loudness target per
 pair and view, applies constant gain only, and checks encoded loudness/true peak.
 It writes `listening.html`, a public manifest and a separate private identity key
 with file hashes and measurements. The Japanese page offers four independent
-ratings, delayed-recall notes, a pair index, browser-local persistence and JSON
+ratings plus independent optional overall/melody/backing preferences, delayed-recall notes, a pair index, browser-local persistence and JSON
 export/display. Keep `tie`, `cannot_judge` and unanswered fields distinct. Missing
 audio remains visible as an incomplete pair; do not replace failed compositions
 with a preferred rerun or infer musical improvement from the numeric checks.
+
+The rating JSON's additive `preferences` object uses `overall`, `melody` and
+`backing`, each with `A`, `B`, `tie`, `cannot_judge` or `null`. Schema version 2
+retains the original four `ratings` axes. Missing preferences in older saved
+state stay unanswered; never infer them from an axis or a free-text comment.
+After revealing identities or using feedback to tune guidance, mark that cohort
+as exposed/development evidence. A former holdout is no longer an untouched
+test of the revised guidance. Preserve its original pages, audio and labels.
 
 ## 2026-10-24 implementation pilot
 
