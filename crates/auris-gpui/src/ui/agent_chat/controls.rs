@@ -344,6 +344,15 @@ impl AurisApp {
     }
 
     fn permission_result(&mut self, id: u64, ok: bool, reason: &str) {
+        let _ = self.session.record_execution_outcome(
+            &format!("permission:{id}"),
+            "permission",
+            if ok {
+                "permission_allowed"
+            } else {
+                "permission_denied"
+            },
+        );
         let wire =
             serde_json::json!({"event":"permission_result", "id":id, "ok":ok, "reason":reason});
         if let Some(link) = self.agent_chat.link.as_mut()

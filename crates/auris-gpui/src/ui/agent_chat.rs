@@ -2191,6 +2191,7 @@ impl AurisApp {
 
     /// Stops the worker and checks for completed writes, which remain undoable.
     fn agent_stop(&mut self, cx: &mut gpui::Context<Self>) {
+        self.session.cancel_execution_calls();
         self.agent_chat.queue_paused = true;
         self.agent_chat.interrupting = false;
         self.session.end_agent_request();
@@ -2831,6 +2832,21 @@ impl AurisApp {
             let Some(event) = parse_event(&value.to_string()) else {
                 continue;
             };
+            match &event {
+                AgentEvent::Call { call_id, tool, .. } => {
+                    let _ = self.session.record_execution_call(call_id, tool);
+                }
+                AgentEvent::Result {
+                    call_id, tool, ok, ..
+                } => {
+                    let _ = self.session.record_execution_outcome(
+                        call_id,
+                        tool,
+                        if *ok { "success" } else { "failed" },
+                    );
+                }
+                _ => {}
+            }
             if self.agent_chat.interrupting {
                 if matches!(event, AgentEvent::Ended) {
                     let paused = self.agent_chat.queue_paused;

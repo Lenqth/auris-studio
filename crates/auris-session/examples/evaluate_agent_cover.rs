@@ -45,6 +45,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }),
         name: "Audio piano cover".into(),
         at_tick: 3840,
+        preview: false,
+        expected_revision: None,
     };
     let response: serde_json::Value = serde_json::from_str(&session.agent_command(command())?)?;
     let retained = session.project().tracks.first() == before.tracks.first();

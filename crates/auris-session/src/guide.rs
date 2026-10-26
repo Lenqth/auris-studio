@@ -392,6 +392,17 @@ pub mod architecture {
     //! accepts that draft, inline recognized events or a bounded JSON file. Source seconds map
     //! through the current tempo map, and the complete import creates one Undo transaction.
     //! Notes remain estimates; provenance and model hashes do not verify musical accuracy.
+    //! Version-one multitrack drafts extend this boundary with full MIDI range, percussion,
+    //! explicit playback mapping and persisted declared provenance. Preview validates the same
+    //! source-seconds mapping without editing. Unsupported fields are rejected before mutation.
+    //! Analysis rendering uses the existing snapshot/publication pipeline with precise frames
+    //! or seconds, stereo float32 samples and a persistent manifest. Source-preserving output
+    //! carries zero gain and separate document/render/dependency identities. An explicit
+    //! [`crate::audio_input::AudioInputContract`] fixes the model input representation and bounds;
+    //! incompatible inputs fail without lossy preprocessing. Optional
+    //! [`crate::execution_trace`] collection records bounded transition evidence after consent.
+    //! The collector owns durable run payloads, data policy and schema-compatible replay;
+    //! `docs/model-training.md` describes the public workflow.
     //! MuScriptor requires its separate model prerequisites and acknowledgement on every call.
     //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
     //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never

@@ -473,6 +473,19 @@ impl RenderJob {
         &self.project
     }
 
+    /// Fingerprint the decoded buffers actually used by this captured render.
+    pub(crate) fn audio_content_identity(&self) -> serde_json::Value {
+        use sha2::{Digest, Sha256};
+        serde_json::json!(self.project.audio_sources.keys().map(|id|{
+            let content=self.bank.get(*id).map(|audio|{
+                let mut hash=Sha256::new();
+                for channel in audio.channels() { for sample in channel {hash.update(sample.to_le_bytes());} }
+                serde_json::json!({"frames":audio.frame_count(),"channels":audio.channels().len(),"sample_rate":audio.sample_rate(),"planar_float32_sha256":hex::encode(hash.finalize())})
+            });
+            serde_json::json!({"source":id,"loaded":content})
+        }).collect::<Vec<_>>())
+    }
+
     /// Captures one repetition of the project's cycle region at the requested render rate.
     /// Instruments and effects are warmed up first; the file has exactly the cycle's length.
     ///
@@ -576,6 +589,67 @@ impl RenderJob {
         progress: &mut RenderProgress<'_>,
     ) -> Result<auris_io::StagedAudioExport, SessionError> {
         let (writer, _) = self.render_audio_writer(track, path, settings, options, progress)?;
+        Ok(writer.finish_staged()?)
+    }
+
+    /// Capture exact stereo float samples, optionally priming effects from timeline zero.
+    pub(crate) fn stage_analysis_export(
+        &mut self,
+        path: &Path,
+        options: &OfflineOptions,
+        track: Option<TrackId>,
+        context_from_start: bool,
+        progress: &mut RenderProgress<'_>,
+    ) -> Result<auris_io::StagedAudioExport, SessionError> {
+        let skip = if context_from_start {
+            options.start_frames
+        } else {
+            0
+        };
+        let mut performed = options.clone();
+        performed.start_frames -= skip;
+        let mut render = self.offline_render(track, &performed)?;
+        let frames = (options.end_frames.unwrap_or(0) - options.start_frames) as usize;
+        let settings = auris_io::WavExportSettings {
+            sample_rate: render.sample_rate().round() as u32,
+            bit_depth: auris_io::WavBitDepth::Float32,
+            dither: false,
+        };
+        let mut writer =
+            AudioExportWriter::create(path, RENDER_CHANNELS, frames, &settings.into())?;
+        let mut cursor = 0u64;
+        let mut written = 0usize;
+        let streamed = render.render_streamed(progress, |block| {
+            let count = block.frame_count();
+            let from = skip.saturating_sub(cursor).min(count as u64) as usize;
+            cursor += count as u64;
+            if from == count {
+                return Ok(());
+            }
+            // Only a block-sized copy is needed, including when the boundary splits a block.
+            let mut output = AudioBuffer::new(RENDER_CHANNELS, count - from, block.sample_rate());
+            for channel in 0..RENDER_CHANNELS {
+                let samples = &block.channel(channel)[from..];
+                if samples.iter().any(|sample| !sample.is_finite()) {
+                    return Err(auris_io::IoError::WavWrite(
+                        "Non-finite analysis samples".into(),
+                    ));
+                }
+                output.channel_mut(channel).copy_from_slice(samples);
+            }
+            written += output.frame_count();
+            writer.write(&output)
+        });
+        match streamed {
+            Ok(()) => {}
+            Err(OfflineStreamError::Render(error)) => return Err(error.into()),
+            Err(OfflineStreamError::Sink(error)) => return Err(error.into()),
+        }
+        if written != frames {
+            return Err(SessionError::RenderSource(
+                "Analysis renderer returned an incomplete range".into(),
+            ));
+        }
         Ok(writer.finish_staged()?)
     }
 

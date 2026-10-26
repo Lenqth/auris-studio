@@ -95,6 +95,8 @@ pub(super) fn stage(
         drop(audio);
         check()?;
         let inspection = crate::inspect_export(encoded.staged_path()).map_err(|e| e.to_string())?;
+        let source_inspection =
+            Some(crate::inspect_export(captured.staged_path()).map_err(|e| e.to_string())?);
         if inspection.true_peak_db > ceiling_db || inspection.full_scale_samples != 0 {
             return Err(
                 "Encoded delivery exceeds its peak ceiling; no files were published".into(),
@@ -108,6 +110,7 @@ pub(super) fn stage(
             source_true_peak_db,
             attenuation_db,
             ceiling_db,
+            source_inspection,
         });
     }
     Ok(staged)

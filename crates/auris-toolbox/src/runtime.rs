@@ -2,6 +2,11 @@
 
 use crate::{ToolGroups, tool_catalog, tool_group};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+
+fn schema_hash(parameters: &Value) -> String {
+    hex::encode(Sha256::digest(parameters.to_string().as_bytes()))
+}
 
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -42,8 +47,14 @@ pub fn call_live_reference_in(
             }
             "capabilities" => {
                 let _: Empty = serde_json::from_value(args).map_err(invalid)?;
+                let audio_input_contract =
+                    auris_session::audio_input::AudioInputContract::from_env()?;
                 let names: Vec<_> = catalog.iter().map(|d| d.name.as_str()).collect();
-                Ok(json!({"context":"open_document","tools":names}).to_string())
+                let schemas:Vec<_>=catalog.iter().map(|d|json!({"name":d.name,"group":tool_group(&d.name),"schema_sha256":schema_hash(&d.parameters)})).collect();
+                let catalog_sha256 = schema_hash(&json!(schemas));
+                Ok(json!({"context":"open_document","tools":names,"tool_schemas":schemas,"catalog_sha256":catalog_sha256,"audio_input_contract":audio_input_contract,
+                    "feature_flags":{"arrangement":auris_session::arrangement::enabled()},
+                    "groups":catalog.iter().map(|d|tool_group(&d.name)).collect::<std::collections::BTreeSet<_>>()}).to_string())
             }
             "tool_help" => {
                 let request: crate::tool_help::Args =
@@ -131,6 +142,10 @@ pub fn call_saved(groups: &ToolGroups, name: &str, args: Value) -> Result<String
                     .collect::<Vec<_>>()
             );
             value["context"] = "saved_project".into();
+            value["audio_input_contract"] =
+                json!(auris_session::audio_input::AudioInputContract::from_env()?);
+            value["tool_schemas"] = json!(catalog.iter().filter(|tool|groups.allows(&tool.name)).map(|tool|json!({"name":tool.name,"group":tool_group(&tool.name),"schema_sha256":schema_hash(&tool.parameters)})).collect::<Vec<_>>());
+            value["catalog_sha256"] = schema_hash(&value["tool_schemas"]).into();
             Ok(value.to_string())
         }
         "discover_tools" => discover_saved(

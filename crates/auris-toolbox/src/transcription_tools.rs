@@ -89,6 +89,9 @@ fn validate_path(value: &str) -> Result<(), String> {
 pub fn retain(draft: TranscriptionDraft) -> Result<String, String> {
     draft.validate()?;
     let preview = match &draft {
+        TranscriptionDraft::Multitrack { transcription } => {
+            serde_json::json!({"schema_version":transcription.schema_version,"source":transcription.source,"recognizer":transcription.recognizer,"parts":transcription.tracks.iter().map(|part|serde_json::json!({"name":part.name,"instrument":part.instrument,"drums":part.drums,"notes":part.notes.len()})).collect::<Vec<_>>(),"limitations":transcription.limitations})
+        }
         TranscriptionDraft::Piano { transcription } => {
             serde_json::json!({"source":transcription.source,"seconds":transcription.seconds,"notes":transcription.notes.iter().take(16).collect::<Vec<_>>(),"limitations":transcription.limitations})
         }

@@ -125,7 +125,11 @@ impl AudioReviewOptions {
         cancel: &AtomicBool,
     ) -> Result<(Self, ReviewerSelection, bool), String> {
         self.validate()?;
-        let (mut selected, report) = selection::select(self, cancel)?;
+        let mut fixed = self.clone();
+        if crate::audio_input::AudioInputContract::from_env()?.is_some() {
+            fixed.auto_select = false;
+        }
+        let (mut selected, report) = selection::select(&fixed, cancel)?;
         let confirm = selection::needs_load_confirmation(&selected, cancel);
         // Keep the approved endpoint/model fixed through rendering and upload.
         selected.auto_select = false;
@@ -156,6 +160,8 @@ pub struct AudioReview {
     /// True when WAV bytes were submitted and a nonempty response was returned.
     /// This records delivery, not a measurement of the model's perceptual accuracy.
     pub audio_sent: bool,
+    /// Negotiated transfer metadata; absent for legacy endpoints with no precise agreement.
+    pub transfer: Option<Value>,
 }
 
 /// Submits one excerpt or a labeled pair for auditory comparison.
@@ -180,6 +186,19 @@ pub fn review_audio_cancellable(
     options: &AudioReviewOptions,
     cancel: &AtomicBool,
 ) -> Result<AudioReview, String> {
+    let contract = crate::audio_input::AudioInputContract::from_env()?;
+    review_audio_with_contract(audio, prompt, options, contract.as_ref(), cancel)
+}
+
+/// Upload complete WAV inputs under an explicit agreement, fixing the endpoint/model.
+/// No automatic fallback may substitute a model with a different waveform contract.
+pub fn review_audio_with_contract(
+    audio: &[(&str, &Path)],
+    prompt: &str,
+    options: &AudioReviewOptions,
+    contract: Option<&crate::audio_input::AudioInputContract>,
+    cancel: &AtomicBool,
+) -> Result<AudioReview, String> {
     let check = || {
         if cancel.load(Ordering::Relaxed) {
             Err("Audio review cancelled".to_string())
@@ -189,8 +208,12 @@ pub fn review_audio_cancellable(
     };
     check()?;
     options.validate()?;
-    let content = audio_content(audio, prompt)?;
-    let (selected, selection) = selection::select(options, cancel)?;
+    let (content, transfer) = audio_content_agreed(audio, prompt, contract)?;
+    let mut fixed = options.clone();
+    if contract.is_some() {
+        fixed.auto_select = false;
+    }
+    let (selected, selection) = selection::select(&fixed, cancel)?;
     let options = &selected;
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(10)))
@@ -246,34 +269,59 @@ pub fn review_audio_cancellable(
         selection,
         review,
         audio_sent: true,
+        transfer,
     })
 }
 
+#[cfg(test)]
 fn audio_content(audio: &[(&str, &Path)], prompt: &str) -> Result<Vec<Value>, String> {
+    audio_content_agreed(audio, prompt, None).map(|(content, _)| content)
+}
+
+fn audio_content_agreed(
+    audio: &[(&str, &Path)],
+    prompt: &str,
+    contract: Option<&crate::audio_input::AudioInputContract>,
+) -> Result<(Vec<Value>, Option<Value>), String> {
     if audio.is_empty() || audio.len() > 2 {
         return Err("audio review needs one excerpt or two labeled excerpts for comparison".into());
     }
     if prompt.trim().is_empty() || prompt.len() > 32_000 {
         return Err("audio review prompt must contain 1 to 32000 bytes of text".into());
     }
-    let mut remaining = MAX_AUDIO_BYTES;
+    if let Some(contract) = contract {
+        contract.validate()?;
+        if audio.len() > usize::from(contract.max_inputs) {
+            return Err("Audio count exceeds the agreed context limit".into());
+        }
+    }
+    let mut remaining = contract.map_or(MAX_AUDIO_BYTES, |c| c.max_total_bytes);
     let mut content = Vec::new();
+    let mut transfers = Vec::new();
     for (label, path) in audio {
         if label.trim().is_empty() || label.len() > 256 {
             return Err("audio excerpt labels must contain 1 to 256 bytes of text".into());
         }
-        let file = std::fs::File::open(path)
-            .map_err(|error| format!("cannot read audio excerpt {}: {error}", path.display()))?;
-        if file.metadata().map_err(|error| error.to_string())?.len() > remaining {
-            return Err("audio excerpts exceed 25 MiB combined; use shorter previews".into());
-        }
-        let mut bytes = Vec::new();
-        file.take(remaining + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|error| error.to_string())?;
-        if bytes.len() as u64 > remaining {
-            return Err("audio excerpts exceed 25 MiB combined; use shorter previews".into());
-        }
+        let bytes = if let Some(contract) = contract {
+            let (bytes, metadata) = contract.read(path, remaining)?;
+            transfers.push(json!({"label":label,"transfer":metadata}));
+            bytes
+        } else {
+            let file = std::fs::File::open(path).map_err(|error| {
+                format!("cannot read audio excerpt {}: {error}", path.display())
+            })?;
+            if file.metadata().map_err(|error| error.to_string())?.len() > remaining {
+                return Err("audio excerpts exceed 25 MiB combined; use shorter previews".into());
+            }
+            let mut bytes = Vec::new();
+            file.take(remaining + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|error| error.to_string())?;
+            if bytes.len() as u64 > remaining {
+                return Err("audio excerpts exceed 25 MiB combined; use shorter previews".into());
+            }
+            bytes
+        };
         if bytes.len() < 44 || !bytes.starts_with(b"RIFF") || &bytes[8..12] != b"WAVE" {
             return Err(
                 "audio review accepts WAV excerpts; render or convert the audio to WAV first"
@@ -299,7 +347,9 @@ fn audio_content(audio: &[(&str, &Path)], prompt: &str) -> Result<Vec<Value>, St
         format!("Audio excerpts in order:\n{labels}\n\n{prompt}")
     };
     content.insert(0, json!({"type":"text","text":text}));
-    Ok(content)
+    let transfer=contract.map(|contract|json!({"contract":contract,"inputs":transfers,"context":"one_request",
+        "comparison_mode":if audio.len()==2 && contract.simultaneous_comparison {"simultaneous"}else if audio.len()==2 {"independent_reviews"}else{"single"}}));
+    Ok((content, transfer))
 }
 
 fn post_json(
@@ -655,6 +705,94 @@ pub(crate) mod tests {
                 &|name| (name == "AURIS_AUDIO_API_KEY_ENV").then(|| "MISSING".into())
             )
             .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod training_transfer_tests {
+    use super::*;
+    use crate::audio_input::tests::{contract, stereo};
+
+    #[test]
+    fn complete_five_minute_pair_reaches_one_model_context_in_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let a = directory.path().join("a.wav");
+        let b = directory.path().join("b.wav");
+        let frames = 48_000 * 300;
+        stereo(&a, frames, [0.75, -0.75], [0.25, -0.5]);
+        stereo(&b, frames, [-0.5, 0.75], [-0.25, 0.5]);
+        let (url, worker) = super::tests::server(vec![(
+            200,
+            super::tests::response("Compared both complete recordings"),
+        )]);
+        let options = AudioReviewOptions {
+            url: format!("{url}/v1"),
+            model: "custom-stereo-model".into(),
+            ollama_url: None,
+            auto_select: false,
+            ..Default::default()
+        };
+        let reply = review_audio_with_contract(
+            &[("A", &a), ("B", &b)],
+            "Compare the entire two recordings",
+            &options,
+            Some(&contract()),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        let requests = worker.join().unwrap();
+        assert_eq!(requests.len(), 1);
+        let content = requests[0].1["messages"][0]["content"].as_array().unwrap();
+        let report = reply.transfer;
+        assert_eq!(content.len(), 3);
+        assert_eq!(report.as_ref().unwrap()["comparison_mode"], "simultaneous");
+        assert_eq!(report.unwrap()["inputs"][1]["label"], "B");
+        for (index, first, last) in [
+            (1, [0.75, -0.75], [0.25, -0.5]),
+            (2, [-0.5, 0.75], [-0.25, 0.5]),
+        ] {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(content[index]["input_audio"]["data"].as_str().unwrap())
+                .unwrap();
+            let mut decoded = hound::WavReader::new(std::io::Cursor::new(bytes)).unwrap();
+            assert_eq!(decoded.spec().sample_rate, 48_000);
+            assert_eq!(decoded.spec().channels, 2);
+            assert_eq!(decoded.duration(), frames);
+            assert_eq!(
+                decoded
+                    .samples::<f32>()
+                    .take(2)
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>(),
+                first
+            );
+            decoded.seek(frames - 1).unwrap();
+            assert_eq!(
+                decoded
+                    .samples::<f32>()
+                    .take(2)
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>(),
+                last
+            );
+        }
+    }
+
+    #[test]
+    fn comparison_capability_is_reported_and_byte_limits_do_not_shorten_audio() {
+        let directory = tempfile::tempdir().unwrap();
+        let a = directory.path().join("a.wav");
+        stereo(&a, 4800, [0.5, -0.5], [0.25, -0.25]);
+        let mut agreement = contract();
+        agreement.simultaneous_comparison = false;
+        let (_, report) =
+            audio_content_agreed(&[("A", &a), ("B", &a)], "Compare", Some(&agreement)).unwrap();
+        assert_eq!(report.unwrap()["comparison_mode"], "independent_reviews");
+        agreement.max_total_bytes = 40_000;
+        agreement.max_bytes = 40_000;
+        assert!(
+            audio_content_agreed(&[("A", &a), ("B", &a)], "Compare", Some(&agreement)).is_err()
         );
     }
 }

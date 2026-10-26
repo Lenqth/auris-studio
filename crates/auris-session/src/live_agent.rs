@@ -55,6 +55,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Opt in to bounded transition evidence, read its cursor or stop collection. Starting requires explicit user consent via the host permission gate. No audio or document edits.
+    ExecutionTrace {
+        /// Collection control or cursor read.
+        operation: crate::execution_trace::TraceOperation,
+    },
     /// Propose exact local pitch variation with fixed rhythm and protected opening, or cadence pitch/length changes, without editing. Explicit clip-relative range and protected indices are enforced. Returns before/after notes and an equivalent edit_notes patch. Use candidates variation to compare and adopt the exact result; structural validity does not establish musical quality.
     PhraseVariation {
         /// Current content revision from read_notes.
@@ -192,7 +197,7 @@ pub enum Command {
         #[serde(default)]
         remap_clips: bool,
     },
-    /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. The exact requested waveform is attenuated only when needed for ceiling_db (default -1 dBTP), before integer encoding; this is not loudness normalization or limiting. Stems share one gain to preserve relative levels. Read attenuation_db, source_true_peak_db and encoded measurements; peak protection may leave loudness below a requested LUFS target. Existing outputs are never replaced. No project save or document edit; cancellation/stale documents discard private stages.
+    /// Render an immutable snapshot to a new WAV mix or stems, then measure the encoded files. Default delivery mode attenuates only when needed for ceiling_db (default -1 dBTP) before encoding; stems share one gain. Read attenuation_db, source and encoded measurements. Opt into analysis for an exact 1-frame..300-second range at an explicit rate, stereo float32 with zero protective gain, source/state/environment identities and a persistent manifest. Analysis has its own seconds/frame range and optional source/bus, dry routing, causal context or cycle warmup. Existing outputs are never replaced. No save or document edit; cancellation/stale documents discard private stages.
     Render {
         /// Explicit mix file or stem folder destination.
         destination: file_jobs::AudioDestination,
@@ -206,6 +211,8 @@ pub enum Command {
         /// Maximum encoded true peak, -12..-0.1 dBTP; default -1. Only attenuation is applied.
         #[schemars(range(min = -12, max = -0.1))]
         ceiling_db: Option<f32>,
+        /// Opt into immutable training output, precise timing and a persistent provenance manifest.
+        analysis: Option<file_jobs::AnalysisRender>,
     },
     /// Create a protected 24 kHz WAV audition of 1..120 seconds from the current snapshot. Returns a playable file under the document's preview folder. Does not imply listening.
     Preview {
@@ -352,6 +359,11 @@ pub enum Command {
         name: String,
         /// Nonnegative absolute insertion tick.
         at_tick: i64,
+        /// Validate and preview without editing the project.
+        #[serde(default)]
+        preview: bool,
+        /// Optional exact revision returned by preview; refuse a changed destination document.
+        expected_revision: Option<String>,
     },
     /// Read or edit the live mixer DAG through stable node identities.
     MixerGraph {
@@ -516,6 +528,7 @@ impl Command {
     /// Whether this operation can change the document; file output alone does not change it.
     pub fn is_mutating(&self) -> bool {
         match self {
+            Self::ImportTranscription { preview, .. } => !preview,
             Self::AudioAssets { operation } => operation.is_mutating(),
             Self::Candidates { operation } => matches!(
                 operation,
@@ -531,6 +544,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::ExecutionTrace { .. }
             | Self::PhraseVariation { .. }
             | Self::SuggestHarmony { .. }
             | Self::AnalyzeLyrics { .. }
@@ -618,7 +632,23 @@ impl Session {
         command: Command,
         plugin_paths: &[std::path::PathBuf],
     ) -> Result<String, String> {
-        self.with_agent_history(|session| session.execute_agent_command(command, plugin_paths))
+        let trace = if matches!(command, Command::ExecutionTrace { .. }) {
+            None
+        } else {
+            self.trace_call_begin()
+        };
+        let name = if trace.is_some() {
+            serde_json::to_value(&command)
+                .ok()
+                .and_then(|v| v["action"].as_str().map(str::to_owned))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let result =
+            self.with_agent_history(|session| session.execute_agent_command(command, plugin_paths));
+        self.trace_call_end(trace, &name, result.is_ok());
+        result
     }
 
     fn execute_agent_command(
@@ -633,6 +663,7 @@ impl Session {
             );
         }
         match command {
+            Command::ExecutionTrace { operation } => self.execution_trace(operation),
             Command::PhraseVariation {
                 expected_revision,
                 request,
@@ -858,7 +889,26 @@ impl Session {
                 draft,
                 name,
                 at_tick,
-            } => self.agent_import_draft(*draft, name, at_tick),
+                preview,
+                expected_revision,
+            } => {
+                if let Some(expected) = expected_revision
+                    && expected != self.agent_document_revision()?
+                {
+                    return Err("Transcription preview is stale; inspect/preview the current document again".into());
+                }
+                if preview {
+                    draft.validate()?;
+                    if let crate::TranscriptionDraft::Multitrack { transcription } = draft.as_ref()
+                    {
+                        self.import_multitrack_transcription(transcription, &name, at_tick, true)
+                    } else {
+                        Ok(serde_json::json!({"preview":true,"notes":draft.note_count(),"at_tick":at_tick,"revision":self.agent_document_revision()?}).to_string())
+                    }
+                } else {
+                    self.agent_import_draft(*draft, name, at_tick)
+                }
+            }
             Command::MixerGraph { operation } => self
                 .apply_mixer_graph(&operation)
                 .map(|report| report.to_string()),
