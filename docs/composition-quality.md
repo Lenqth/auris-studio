@@ -157,6 +157,19 @@ After revealing identities or using feedback to tune guidance, mark that cohort
 as exposed/development evidence. A former holdout is no longer an untouched
 test of the revised guidance. Preserve its original pages, audio and labels.
 
+For controlled foreground trials, decode every axis through that pair's identity
+key; counterbalanced pairs do not share a global A/B meaning. Bind imported
+ratings to the manifest and verify its referenced audio hashes before decoding.
+Hash the same UTF-8 bytes that are written, rather than text that may acquire
+platform-specific newlines. Preserve an explicitly documented legacy binding
+instead of silently accepting arbitrary mismatches or rewriting a released bundle.
+Keep rhythm, motif preference, chorus preference, naturalness and breathing
+separate. Do not sum correlated axes into an overall vote or infer delayed recall
+from motif preference. The [controlled pop-vocal follow-up](pop-melody-controlled-results-2026-10-26.ja.md)
+retains two repetitions with mixed preferences and no clear improvement. To
+attribute an effect to one melody operation, hold the other melody features as
+well as compatible backing, lyrics and sound settings fixed.
+
 ## 2026-10-24 implementation pilot
 
 The [retained numerical report](../tools/eval/references/composition-quality-pilot-2026-10-24.json)

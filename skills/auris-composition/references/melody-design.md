@@ -233,6 +233,15 @@ prosody, masked target, unplayable leap, flat section contrast, or abrupt releas
 Keep the prior candidate for comparison and stop after two local attempts unless
 the user asks for exploration.
 
+When listening preferences differ by axis, keep the baseline and the relevant
+local alternatives. A preferred breath does not establish better groove or
+naturalness; a stronger register contrast does not establish a preferred chorus.
+Do not select or combine whole takes by counting axis wins. Use the listener's
+stated priority, or retain the tradeoff when no overall choice was made. To learn
+whether a rhythmic turn, motif transformation or register lift helped, vary that
+intervention alone with compatible backing and other melody features held fixed.
+Equal motif preference does not establish equal delayed recall.
+
 ## MIDI and transcription analysis without imitation
 
 An exploratory 2026-10-25 study used the final MIDI files 001–030 in
