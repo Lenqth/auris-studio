@@ -308,8 +308,8 @@ Only listening can establish that the foreground is actually identifiable,
 intelligible, expressive, or memorable in the mix. A muted-backing comparison,
 render measurement, or successful tool call cannot establish those judgments.
 
-Keep symbolic diagnostics separate from listening claims. If no reliable audio
-critic or human listener is available, report note-level and measurement checks
+Keep symbolic diagnostics separate from listening claims. Without human listening
+feedback, report note-level and measurement checks
 only and leave timbral, emotional, and memorability judgments unconfirmed.
 
 The eighth/sixteenth starting point and bold chorus candidates above incorporate
