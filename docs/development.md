@@ -176,6 +176,9 @@ instead of quietly misleading whoever copied it.
 
 ## The commands
 
+The development and test profiles trade some optimization for shorter build times. See
+[build performance](build-performance.md) for the profile settings, CI caches and timing reports.
+
 ```bash
 cargo test --workspace                    # unit tests
 cargo clippy --workspace --all-targets    # lints

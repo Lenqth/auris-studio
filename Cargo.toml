@@ -128,9 +128,26 @@ wgpu = { version = "30.0", default-features = false, features = [
 opt-level = 1
 
 # Audio DSP is unusable when compiled without optimisations, so build dependencies at full
-# speed even in debug builds.
+# speed even in debug builds. Keep line tables for dependency backtraces without their
+# full type/variable information; workspace crates retain full debugger information.
 [profile.dev.package."*"]
 opt-level = 3
+debug = 1
+
+# Compile desktop presentation code at level 0 to avoid Cargo's implicit local Thin LTO.
+# Tests inherit these development overrides.
+[profile.dev.package.auris-gpui]
+opt-level = 0
+
+# Trade optimization for compilation time in these large UI/model dependencies.
+[profile.dev.package.gpui]
+opt-level = 1
+
+[profile.dev.package.gpui-component]
+opt-level = 1
+
+[profile.dev.package.rig-core]
+opt-level = 1
 
 [profile.release]
 lto = "thin"
