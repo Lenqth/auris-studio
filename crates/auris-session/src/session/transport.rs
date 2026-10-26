@@ -56,7 +56,7 @@ impl Session {
 
     /// Moves the playhead, clamping to the timeline start.
     pub fn seek(&mut self, tick: Ticks) {
-        if self.audio_suspended {
+        if self.holds_playhead() {
             self.suspended_playhead = tick.max_zero();
         }
         let frames = self
@@ -69,12 +69,18 @@ impl Session {
 
     /// Where the playhead is, in ticks.
     pub fn playhead(&self) -> Ticks {
-        if self.audio_suspended {
+        if self.holds_playhead() {
             return self.suspended_playhead;
         }
         self.project
             .tempo_map
             .seconds_to_ticks(Seconds(self.engine.playhead_seconds()))
+    }
+
+    /// Whether the session, not an engine, is keeping the playhead: suspended, or waiting for a
+    /// lost output to come back.
+    fn holds_playhead(&self) -> bool {
+        self.audio_suspended || self.output_retry.is_some()
     }
 
     /// Silences every voice.

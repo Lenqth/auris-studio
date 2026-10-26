@@ -2217,7 +2217,20 @@ impl AurisApp {
         self.reconcile_section_lyrics();
         // Menus sit above every field and accept choices rather than text. Keep both ordinary
         // input and IME updates away from the editor they cover.
-        if self.menu.is_some() || self.menu_bar.is_some() {
+        if self.menu.is_some() {
+            return None;
+        }
+        // The chooser covers the whole window and nothing behind it is drawn. A sheet waiting
+        // there — the recovery offer is opened at launch, before the chooser — must not take
+        // the text typed into the workshop, or every letter vanishes while Backspace, which the
+        // workshop handles as a key, still works.
+        if self.project_chooser.is_some() {
+            if let Some(browser) = self.song_library.as_mut() {
+                return browser.focused.then_some(&mut browser.search);
+            }
+            return self.song_workshop.as_mut()?.field_mut();
+        }
+        if self.menu_bar.is_some() {
             return None;
         }
         // In the order they sit in front of each other. The library's field is in a panel rather
@@ -2259,7 +2272,17 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         if self.compose_progress.is_some() {
             return None;
         }
-        if self.menu.is_some() || self.menu_bar.is_some() {
+        if self.menu.is_some() {
+            return None;
+        }
+        // In step with `writable_field`.
+        if self.project_chooser.is_some() {
+            if let Some(browser) = self.song_library.as_ref() {
+                return browser.focused.then_some(&browser.search);
+            }
+            return self.song_workshop.as_ref()?.field();
+        }
+        if self.menu_bar.is_some() {
             return None;
         }
         if let Some(palette) = self.palette.as_ref() {

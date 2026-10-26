@@ -1,6 +1,6 @@
 //! Independent song drafts whose audition and adoption share one exact document.
 
-use super::{Session, SessionOptions};
+use super::{SaveReport, Session, SessionOptions};
 use crate::{Edit, SessionError};
 use auris_compose::{SongSpec, compose, preset};
 use auris_core::{AssetPath, AudioBuffer, Project};
@@ -350,6 +350,49 @@ impl SongCandidate {
             .map(|track| track.name.clone())
             .collect()
     }
+
+    /// Writes this draft as a project of its own, leaving any open document alone.
+    ///
+    /// Adopting one draft discards the others, so this is how a draft that was not chosen is
+    /// kept. `chosen` lands in a folder of its own exactly as [`Session::save_as`] places it, and
+    /// the sung audio, which until now lives only in a temporary directory, is copied into that
+    /// folder's `Audio/`. An existing document is refused rather than replaced: keeping a draft
+    /// must never cost another project.
+    pub fn save_as(&self, chosen: &std::path::Path) -> Result<SaveReport, SessionError> {
+        let document = auris_io::document_in_folder(chosen);
+        let folder = auris_io::project_folder(&document)
+            .ok_or(SessionError::NoPath)?
+            .to_path_buf();
+        std::fs::create_dir_all(&folder)
+            .map_err(|error| auris_io::IoError::from_fs(&folder, error))?;
+        // Share the lock with ordinary saves, including the destination check and publication.
+        let _lock = super::files::project_write_lock(&document)?;
+        if document.exists() {
+            return Err(SessionError::WouldReplace(document));
+        }
+        let audio = folder.join(auris_io::AUDIO_DIR);
+        let mut project = self.project.clone();
+        for source in project.audio_sources.values_mut() {
+            let from = source.path.resolve(None).ok_or(SessionError::NoPath)?;
+            let name = auris_io::copy_into(&from, &audio)?;
+            source.path = AssetPath::inside(std::path::Path::new(auris_io::AUDIO_DIR).join(name));
+            source.byte_size = auris_io::byte_size(&from);
+        }
+        // Also refuse a destination created by a writer that does not use Auris's lock.
+        auris_io::stage_project(&document, &mut project)?
+            .publish_noclobber()
+            .map_err(|error| match error {
+                auris_io::IoError::ExportDestinationExists(path) => {
+                    SessionError::WouldReplace(path)
+                }
+                error => error.into(),
+            })?;
+        Ok(SaveReport {
+            document,
+            uncollected: Vec::new(),
+        })
+    }
+
     /// Compose and render on a worker without opening any realtime device.
     pub fn generate(
         idea: SongIdea,
@@ -875,6 +918,127 @@ mod tests {
         assert_eq!(
             spec.total_bars(),
             preset("chiptune").unwrap().spec().total_bars()
+        );
+    }
+
+    #[test]
+    fn concurrent_candidate_saves_refuse_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Concurrent.auris");
+        let barrier = Arc::new(std::sync::Barrier::new(16));
+        let audio = Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 480]], 48_000.0).unwrap());
+        let writers: Vec<_> = (0..16)
+            .map(|index| {
+                let barrier = Arc::clone(&barrier);
+                let chosen = chosen.clone();
+                let candidate = SongCandidate {
+                    idea: idea(),
+                    project: Project::new(format!("Draft {index}"), 48_000.0),
+                    audio: Arc::clone(&audio),
+                    _assets: None,
+                };
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    candidate.save_as(&chosen)
+                })
+            })
+            .collect();
+        let results: Vec<_> = writers
+            .into_iter()
+            .map(|writer| writer.join().unwrap())
+            .collect();
+        let successes = results.iter().filter(|result| result.is_ok()).count();
+        assert_eq!(
+            successes, 1,
+            "multiple saves replaced the same project: {results:?}"
+        );
+        for result in &results {
+            assert!(matches!(result, Ok(_) | Err(SessionError::WouldReplace(_))));
+        }
+        let winner = results.iter().position(Result::is_ok).unwrap();
+        let document = auris_io::document_in_folder(&chosen);
+        assert_eq!(
+            auris_io::load_project(&document).unwrap().name,
+            format!("Draft {winner}")
+        );
+    }
+
+    #[test]
+    fn candidate_save_waits_for_an_ordinary_save_to_publish() {
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Shared.auris");
+        let mut ordinary = Session::new(SessionOptions::headless()).unwrap();
+        ordinary.project.name = "Ordinary".into();
+        let staged = ordinary
+            .begin_save_as(&chosen)
+            .unwrap()
+            .run(&AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        let candidate = SongCandidate {
+            idea: idea(),
+            project: Project::new("Candidate", 48_000.0),
+            audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 480]], 48_000.0).unwrap()),
+            _assets: None,
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || sender.send(candidate.save_as(&chosen)).unwrap());
+        // The ordinary save holds the project lock until its staged document is published.
+        assert!(matches!(
+            receiver.recv_timeout(std::time::Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        let report = ordinary.continue_save(staged).unwrap().unwrap();
+        let saved = receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        worker.join().unwrap();
+        assert!(matches!(saved, Err(SessionError::WouldReplace(path)) if path == report.document));
+        assert_eq!(
+            auris_io::load_project(&report.document).unwrap().name,
+            "Ordinary"
+        );
+    }
+
+    #[test]
+    fn an_unchosen_candidate_saves_as_its_own_project_and_never_replaces_one() {
+        let assets = tempfile::tempdir().unwrap();
+        let file = assets.path().join("voice.wav");
+        let buffer = Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 4800]], 48_000.0).unwrap());
+        auris_io::write_wav(&file, &buffer, &Default::default()).unwrap();
+        let mut project = Project::new("Draft", 48_000.0);
+        let source =
+            project.add_audio_source("Voice", AssetPath::external(&file), 4800, 48_000.0, 1);
+        let candidate = SongCandidate {
+            idea: idea(),
+            project,
+            audio: buffer,
+            _assets: Some(assets),
+        };
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Second.auris");
+        let report = candidate.save_as(&chosen).unwrap();
+        assert_eq!(report.document, root.path().join("Second/Second.auris"));
+        // The draft's temporary directory goes with it; the saved folder must not need it.
+        drop(candidate);
+        let mut reopened = Session::new(SessionOptions::headless()).unwrap();
+        assert!(reopened.open(&report.document).unwrap().is_empty());
+        assert!(reopened.project.audio_sources[&source].path.is_inside());
+        assert!((reopened.bank.get(source).unwrap().peak() - 0.25).abs() < 0.001);
+
+        let other = SongCandidate {
+            idea: idea(),
+            project: Project::new("Other", 48_000.0),
+            audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.5; 480]], 48_000.0).unwrap()),
+            _assets: None,
+        };
+        assert!(matches!(
+            other.save_as(&chosen),
+            Err(SessionError::WouldReplace(path)) if path == report.document
+        ));
+        assert_eq!(
+            auris_io::load_project(&report.document).unwrap().name,
+            "Draft"
         );
     }
 

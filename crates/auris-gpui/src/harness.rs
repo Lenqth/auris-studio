@@ -841,10 +841,10 @@ mod tests {
     #[gpui::test]
     fn a_picked_model_survives_enter_and_is_applied(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
-        // Shown, not toggled: a toggle depends on the shared layout file's mood.
-        app.update(cx, |this, _| this.panels.show(crate::dock::Panel::Agent));
-        paint(&app, cx);
         app.update(cx, |this, _| {
+            // Submit before the first panel paint so this form regression does not also wait
+            // for asynchronous conversation-store initialization.
+            this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent = Default::default();
             this.settings.agent.url = "http://127.0.0.1:1".into();
             this.agent_chat.configuring = true;
@@ -864,6 +864,11 @@ mod tests {
                 this.agent_chat.chosen_model, "gpt-oss:20b",
                 "the pick outlives the send"
             );
+            assert_eq!(
+                this.settings_baseline.borrow().agent.model,
+                "gpt-oss:20b",
+                "the applied model was persisted before submission"
+            );
             assert!(
                 !matches!(
                     this.agent_chat.entries.last(),
@@ -874,17 +879,12 @@ mod tests {
                 "a complete form is not refused"
             );
         });
-        // Conversation storage is loaded asynchronously even before the first project save.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while app.read_with(cx, |this, _| !this.agent_chat.input.content().is_empty()) {
-            app.update(cx, |this, cx| this.drain_agent(cx));
-            assert!(
-                std::time::Instant::now() < deadline,
-                "the configured request was not sent after history loaded"
-            );
-            std::thread::yield_now();
-        }
         app.read_with(cx, |this, _| {
+            assert!(
+                this.agent_chat.input.content().is_empty(),
+                "the configured request was not submitted: {:?}",
+                this.agent_chat.entries
+            );
             assert!(
                 this.session.path().is_none(),
                 "sending does not require saving the score"

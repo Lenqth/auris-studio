@@ -119,6 +119,7 @@ strings! {
     WorkshopRecovering { en: "Waiting to recover", ja: "自動復旧を待っています" }
     WorkshopRecoveryCount { en: "Automatic recoveries", ja: "自動復旧" }
     WorkshopRecoveryLimit { en: "Automatic recovery limit reached. Resume recovery to try again from the saved progress with a fresh recovery budget.", ja: "自動復旧の上限に達しました。「途中から復旧」で保存済みの作業から再開し、自動復旧を再び3回まで試せます。" }
+    WorkshopSave { en: "Save as project…", ja: "プロジェクトとして保存…" }
     WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
