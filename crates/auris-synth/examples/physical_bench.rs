@@ -37,7 +37,15 @@ fn main() {
             })
             .collect();
         let context = ProcessContext::realtime(rate, frames, 0, 120.0, true);
-        instrument.process(&events, &mut buffer, &context);
+        // The block that strikes all 24 notes also prepares them; time it on its own.
+        let mut strikes = Vec::with_capacity(32);
+        for _ in 0..32 {
+            instrument.reset();
+            let started = Instant::now();
+            instrument.process(&events, &mut buffer, &context);
+            strikes.push(started.elapsed().as_secs_f64() * 1000.0);
+        }
+        strikes.sort_by(f64::total_cmp);
         let mut times = Vec::with_capacity(512);
         for _ in 0..512 {
             let started = Instant::now();
@@ -48,9 +56,11 @@ fn main() {
         let mean = times.iter().sum::<f64>() / times.len() as f64;
         times.sort_by(f64::total_cmp);
         println!(
-            "{model:?}: mean {mean:.3} ms, p99 {:.3} ms, {:.1}% of 5.333 ms callback budget",
+            "{model:?}: mean {mean:.3} ms, p99 {:.3} ms, {:.1}% of 5.333 ms callback budget; \
+             24-note strike block median {:.3} ms",
             times[506],
-            mean / (frames as f64 / rate * 1000.0) * 100.0
+            mean / (frames as f64 / rate * 1000.0) * 100.0,
+            strikes[16]
         );
     }
 }

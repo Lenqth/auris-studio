@@ -5,10 +5,13 @@ use std::f32::consts::{PI, TAU};
 use super::{Model, Settings};
 
 #[path = "piano.rs"]
-mod piano;
+pub(super) mod piano;
 use piano::Piano;
+pub(super) use piano::{PianoVoicing, VOICING};
 
 const MODES: usize = 32;
+/// Middle C, where the tuned bar's fundamental decays in exactly the Resonance Decay time.
+const MALLET_REFERENCE_HZ: f32 = 261.63;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Mode {
@@ -18,12 +21,14 @@ struct Mode {
     sine: f32,
     radius: f32,
     pickup: f32,
+    ratio: f32,
 }
 
 /// A damped modal expansion, excited by an initial displacement or velocity.
 #[derive(Clone, Debug)]
 pub(super) struct Modal {
     modes: [Mode; MODES],
+    fundamental: f32,
     piano: Option<Box<Piano>>,
 }
 
@@ -31,6 +36,7 @@ impl Default for Modal {
     fn default() -> Self {
         Self {
             modes: [Mode::default(); MODES],
+            fundamental: MALLET_REFERENCE_HZ,
             piano: None,
         }
     }
@@ -65,8 +71,44 @@ impl Modal {
         }
         0.0
     }
-    pub(super) fn prepare(&mut self, model: Model) {
-        self.piano = (model == Model::Piano).then(|| Box::new(Piano::default()));
+    pub(super) fn prepare(&mut self, model: Model, voicing: PianoVoicing) {
+        self.piano = (model == Model::Piano).then(|| {
+            let mut piano = Box::new(Piano::default());
+            piano.set_voicing(voicing);
+            piano
+        });
+    }
+
+    #[cfg(feature = "piano-calibration")]
+    pub(super) fn set_voicing(&mut self, voicing: PianoVoicing) {
+        if let Some(piano) = &mut self.piano {
+            piano.set_voicing(voicing);
+        }
+    }
+
+    /// Lowers a piano damper; `false` when no damper stops this note.
+    pub(super) fn damp(&mut self, rate: f32, settings: Settings) -> bool {
+        self.piano
+            .as_mut()
+            .is_some_and(|piano| piano.damp(rate, settings))
+    }
+
+    /// Lifts a lowered piano damper, letting a decaying note ring on.
+    pub(super) fn lift(&mut self, rate: f32, settings: Settings) {
+        if let Some(piano) = &mut self.piano {
+            piano.lift(rate, settings);
+        }
+    }
+
+    pub(super) fn is_damped(&self) -> bool {
+        self.piano.as_ref().is_some_and(|piano| piano.is_damped())
+    }
+
+    /// Frames a struck piano note may sound before its voice is released.
+    pub(super) fn lifetime(&self, rate: f32, settings: Settings) -> Option<usize> {
+        self.piano
+            .as_ref()
+            .map(|piano| piano.lifetime(rate, settings))
     }
 
     pub(super) fn excite(
@@ -88,13 +130,14 @@ impl Modal {
                     const RATIOS: [f32; 8] = [1.0, 2.01, 2.74, 3.01, 4.07, 5.43, 6.79, 8.21];
                     RATIOS.get(index).copied().unwrap_or(0.0)
                 }
-                // Free bar bending modes approach odd squares; the first ratios are measured
-                // from the roots of cos(x) cosh(x) = 1, not a harmonic oscillator preset.
+                // A marimba bar is undercut until its first overtones sit two octaves, and three
+                // octaves and a major third, above the fundamental: 4.00 and 9.9 times it on
+                // every Iowa marimba note. Higher modes keep a free bar's quadratic spacing.
                 Model::Mallet => match index {
                     0 => 1.0,
-                    1 => 2.756,
-                    2 => 5.404,
-                    _ => ((n + 0.5) / 1.506).powi(2),
+                    1 => 4.0,
+                    2 => 9.9,
+                    _ => 9.9 * ((n + 0.5) / 3.5).powi(2),
                 },
                 _ => n,
             };
@@ -103,6 +146,7 @@ impl Modal {
             if ratio == 0.0 || hz >= rate * 0.45 {
                 continue;
             }
+            mode.ratio = ratio;
             let angle = TAU * hz / rate;
             (mode.sine, mode.cosine) = angle.sin_cos();
             let hardness = (settings.hardness * (0.4 + 0.6 * velocity)).max(0.03);
@@ -116,6 +160,7 @@ impl Modal {
                 _ => 0.8 / n.sqrt(),
             };
         }
+        self.fundamental = frequency;
         self.update_loss(model, rate, settings);
     }
 
@@ -124,11 +169,14 @@ impl Modal {
             piano.update_loss(rate, settings);
             return;
         }
+        // Shorter, thinner bars and higher modes lose energy faster: on the Iowa marimba both
+        // follow about the 0.6th power of frequency, 25 dB/s at C3 to 55 dB/s at B4.
+        let register = (self.fundamental / MALLET_REFERENCE_HZ).max(0.01).powf(0.6);
         for (index, mode) in self.modes.iter_mut().enumerate() {
             let n = (index + 1) as f32;
             let loss = match model {
                 Model::Bell => 1.0 + n * 0.09,
-                Model::Mallet => 1.0 + n * n * 0.16,
+                Model::Mallet => register * mode.ratio.max(1.0).powf(0.6),
                 _ => 1.0 + n * n * 0.025,
             };
             mode.radius = (-6.907_755 * loss * (1.0 + 6.0 * settings.damping)
@@ -149,6 +197,11 @@ impl Modal {
             output += real * mode.pickup;
         }
         output
+    }
+
+    /// The piano's soundboard knock for the last sample; it bypasses string radiation.
+    pub(super) fn thump(&self) -> f32 {
+        self.piano.as_ref().map_or(0.0, |piano| piano.thump())
     }
 
     pub(super) fn energy(&self) -> f32 {

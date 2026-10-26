@@ -29,8 +29,10 @@ pub(super) fn native_sound(bank: i32, patch: i32) -> Option<(&'static str, Plugi
     }
     let model = match patch {
         0..=3 | 6..=7 => Model::Piano,
-        8 | 11 | 14 => Model::Bell,
-        9 | 10 | 12 | 13 => Model::Mallet,
+        // Glockenspiel and music box are untuned metal bars, which is what Bell was fitted to;
+        // vibraphone, marimba and xylophone bars are tuned, as Mallet's are.
+        8..=10 | 14 => Model::Bell,
+        11..=13 => Model::Mallet,
         24..=25 => Model::Guitar,
         26..=28 | 31 => Model::ElectricGuitar,
         32..=35 => Model::Bass,
@@ -48,9 +50,13 @@ pub(super) fn native_sound(bank: i32, patch: i32) -> Option<(&'static str, Plugi
             set("stiffness", 0.002);
             set("decay", 2.4);
         }
-        9 | 12 | 13 => {
-            set("hardness", 0.25);
-            set("decay", 1.4);
+        11 => {
+            set("hardness", 0.45);
+            set("decay", 6.0);
+        }
+        13 => {
+            set("hardness", 0.6);
+            set("decay", 0.6);
         }
         24 => {
             set("hardness", 0.25);

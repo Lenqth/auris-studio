@@ -14,12 +14,12 @@ playable, adjustable instruments rather than reproductions of particular recorde
 
 | Instrument | Model | Useful adjustments |
 | --- | --- | --- |
-| Piano | Finite hammer pulse and coupled unison stiff-string modes | Contact hardness, strike position, stiffness, pedal |
+| Piano | Felt hammer, bridge-coupled unison stiff strings, dampers and soundboard knock | Contact hardness, strike position, stiffness, release (dampers), pedal |
 | Guitar | Finite-width pluck, allpass-tuned string and bridge-motion output | Pick hardness, pluck position, damping, pickup blend |
 | Electric Guitar | Steel-string pickup DI, without acoustic-body radiation | Independent pick/pickup positions, pickup resonance, decay per octave |
 | Bass | Plucked string with lower body resonances | Finger/pick hardness, pluck position, resonance decay |
 | Bell | Damped, inharmonic shell modes | Beater hardness, excitation position, decay |
-| Mallet | Damped free-bar bending modes | Soft/hard beater, damping, short/long resonance |
+| Mallet | Bar tuned like a marimba's, overtones at four and about ten times the fundamental | Soft/hard beater, damping, short/long resonance |
 | Violin | Travelling-wave string with static/sliding bow friction | Bow speed, pressure, response time, contact position, expression, legato |
 | Clarinet | Nonlinear single reed coupled to a cylindrical-bore waveguide | Breath pressure, reed stiffness, breath noise, attack and release |
 | Hammered Dulcimer | Finite hammer pulse, stiff-string courses and passive bridge coupling | Hammer hardness, strike position, string decay, damping, stiffness and course detune |
@@ -27,8 +27,10 @@ playable, adjustable instruments rather than reproductions of particular recorde
 
 Fitted filter cascades colour the piano, guitar and violin; guitar and violin add six causal
 radiation resonances. Parallel body resonances colour bass, bell and mallet. The piano uses one,
-two or three strings by register, up to 64 partials,
-and a velocity-dependent finite hammer pulse with passive unison coupling. The
+two or three strings by register and up to 96 partials. Its bridge absorbs only the motion a
+unison's strings share, so a note first falls quickly and then rings on with the aftersound, as a
+grand's does; losses, hammer contact and level follow measured register curves from C1 to C8.
+The [whole-keyboard calibration](grand-piano-register.md) is the account. The
 violin models one bowed string, with a bounded friction approximation rather than a full bow,
 bridge and wooden-body simulation. The bell mode ratios describe a designed shell, not a specific
 manufactured bell. These choices keep the instruments small and their controls predictable.
@@ -83,7 +85,10 @@ their real-recording references and calibration limits.
 
 MIDI CC7 controls channel volume. CC11 controls expression and violin bow speed, with a
 `value^1.18` response on violin before smoothing; CC1 scales bow
-pressure. CC64 holds released piano strings until the pedal lifts. Note-off damps/releases a note,
+pressure. CC64 lifts every piano damper: released strings ring until the pedal lifts, and pressing
+it lets a note whose damper is already falling ring on. On the piano **Release** is the damper:
+the time it takes to remove 80 dB, longer in the bass, and keys above F6 have no damper, so they
+ring after release as on a grand. The soundboard's knock is never damped. Note-off damps/releases a note,
 all-notes-off releases the whole pool, and all-sound-off uses the shared de-click envelope.
 Pitch bends act on sounding strings/modes, so the existing slide and pitch-performance stages
 can play these instruments. The string/modal pool holds up to 24 voices and steals released/quiet voices first.
@@ -105,7 +110,8 @@ instrument = "auris.physical.guitar"
 
 The composer recognises native piano, dulcimer, guitar, bass, violin, clarinet and whistle IDs when choosing editable stroke,
 strum, mute, slide and pitch-performance stages. Existing GM family hints also resolve to these
-models: piano/electric piano, guitar, bass, bells, mallets, strings, clarinet (GM 71),
+models: piano/electric piano, guitar, bass, bells (including glockenspiel and music box),
+tuned bars (vibraphone, marimba, xylophone), strings, clarinet (GM 71),
 dulcimer (GM 15) and whistle (GM 78). A muted-guitar hint starts
 with more damping; picked/slap bass starts with harder contact; string pads start with gentler
 bow pressure and a longer release. These are starting parameters for Auris instruments, not GM

@@ -85,6 +85,8 @@ pub use noisedrum::NoiseDrum;
 pub use oscillator::{Oscillator, Waveform};
 pub use pack::SynthPack;
 pub use params::ParamBank;
+#[cfg(feature = "piano-calibration")]
+pub use physical::PianoVoicing;
 pub use physical::{Model, Physical};
 pub use render::{SegmentRenderer, render_segments, spread_to_all_channels};
 pub use tin_whistle::TinWhistle;
