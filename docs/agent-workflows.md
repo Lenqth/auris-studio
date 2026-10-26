@@ -433,7 +433,15 @@ and can author accompaniment or use a generation recipe. It completes the reques
 form before repeated local polishing, checks the actual score and rendered passages,
 and distinguishes those observations from listening preference.
 
-The editable source is `crates/auris-agent/src/prompts/composition.md`; the standard
+Musical knowledge lives in `crates/auris-agent/src/prompts/musical-design.md`, shared by
+both live prompt profiles, the startup song-direction planner and standalone lyric generation.
+It covers motif rhythm/development, phrase releases, harmonic colour, chorus register,
+prosody, arrangement, interludes, effects and interpreting component-specific feedback.
+The startup planner applies this guidance through its existing preset, tempo, key, density
+and lead controls; descriptions do not author exact notes, tensions or effect automation.
+Lyric generation applies it to words and phrase structure without claiming known pitches.
+
+Live editing instructions remain in `crates/auris-agent/src/prompts/composition.md`; the standard
 profile also includes `prompts/live-tools.md` for operation contracts. Shared vocal
 form, phrasing and performance guidance is appended by `default_system_prompt`.
 The experimental modular profile uses the same musical guidance with its workflow

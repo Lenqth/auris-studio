@@ -311,6 +311,9 @@ fn parse_command(
     }
 }
 
+/// Musical principles shared by live composition, startup directions and lyric writing.
+const MUSICAL_DESIGN_INSTRUCTIONS: &str = include_str!("prompts/musical-design.md");
+
 /// Built-in shared live-agent prompt for the active prompt profile.
 /// Settings displays this text when no replacement has been saved.
 pub fn default_system_prompt() -> String {
@@ -334,15 +337,17 @@ fn preamble() -> String {
 fn preamble_for_profile(modular: bool) -> String {
     if modular {
         return format!(
-            "{}\n{}{}",
+            "{}\n{}\n{}{}",
             include_str!("prompts/composition.md"),
+            MUSICAL_DESIGN_INSTRUCTIONS,
             toolbox::composition_workflows::COMMON,
             toolbox::composition_workflows::VOCAL_SONG_FORM
         );
     }
     let mut text = format!(
-        "{}\n{}",
+        "{}\n{}\n{}",
         include_str!("prompts/composition.md"),
+        MUSICAL_DESIGN_INSTRUCTIONS,
         include_str!("prompts/live-tools.md")
     );
     text.push_str(toolbox::MELODY_PHRASING_INSTRUCTIONS);
@@ -1373,6 +1378,34 @@ async fn converse(
 #[cfg(test)]
 mod tests {
     #[tokio::test]
+    async fn default_panel_request_sends_shared_musical_design() {
+        let (url, seen) = mock_server(vec![completion(
+            r#"{"role":"assistant","content":"Ready"}"#,
+            "stop",
+        )]);
+        let prefs = auris_session::AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            ..Default::default()
+        };
+        let Command::Run(options) = parse_args(&[], &|_| None, &prefs).unwrap() else {
+            panic!("run options expected");
+        };
+        let agent = build_agent(&options).unwrap();
+        converse(&agent, Message::user("Compose"), Vec::new(), 1, true, None)
+            .await
+            .unwrap();
+        let requests = seen.lock().unwrap();
+        let body: serde_json::Value = serde_json::from_str(&requests[0]).unwrap();
+        assert_eq!(
+            body["messages"][0]["content"],
+            serde_json::json!([{"type":"text", "text":default_system_prompt()}])
+        );
+        assert!(default_system_prompt().contains(MUSICAL_DESIGN_INSTRUCTIONS));
+    }
+
+    #[tokio::test]
     async fn custom_system_prompt_replaces_defaults_in_the_provider_request() {
         let custom = "二番から最後まで。\nKeep the motif and leave room for the voice.";
         let (url, seen) = mock_server(vec![completion(
@@ -1414,6 +1447,7 @@ mod tests {
         let modular = preamble_for_profile(true);
         let legacy = preamble_for_profile(false);
         for text in [&modular, &legacy] {
+            assert_eq!(text.matches(MUSICAL_DESIGN_INSTRUCTIONS).count(), 1);
             assert!(text.contains(toolbox::composition_workflows::VOCAL_SONG_FORM));
             for contract in [
                 "inspect_project",

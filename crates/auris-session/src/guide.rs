@@ -42,6 +42,10 @@
 //!
 //! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
 //! directions. The session validates each [`crate::SongIdea`] and an immutable [`crate::SongRequest`].
+//! Direction planning, standalone lyric generation and the live agent's default prompt share
+//! the agent's `prompts/musical-design.md` principles. Each retains its own operation/output
+//! contract: workshop directions select bounded preset controls, while live tools can author
+//! exact notes. A direction's description is not a note-level instruction to the composer.
 //! Explicit sources override arrangement defaults. Authored or separately generated lyrics become
 //! editable vocal notes, divided between selected singers or arranged in diatonic harmony.
 //! Candidate generation owns a headless session on one thread, including plugin lifecycles,
