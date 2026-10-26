@@ -10,16 +10,17 @@
 
 use auris_i18n::Key;
 // Distinguish Auris's parameter editor from the hosted plugin's own editor.
-use auris_session::HasWindowHandle;
 use auris_session::PluginWindow as HostedWindow;
 use auris_session::prelude::*;
 use gpui::{AnyElement, Pixels, div, prelude::*, px};
 
 use crate::app::AurisApp;
 use crate::theme::{Metrics, Theme};
+use crate::ui::context_menu::{ContextMenu, MenuCommand, MenuEntry};
 use crate::ui::icons::Icon;
 use crate::ui::plugin_editor::plugin_header;
 use crate::ui::widgets::chain_button;
+use crate::ui::widgets::{ButtonStyle, button};
 
 /// What an open plugin window is editing.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -135,6 +136,13 @@ fn close_after<T>(window: &mut Option<T>, stop_watching: impl FnOnce()) -> bool 
 impl AurisApp {
     /// Opens the editor for one plugin, replacing whatever was open.
     pub(crate) fn open_plugin_window(&mut self, subject: PluginSubject) {
+        if self
+            .plugin_window
+            .is_some_and(|editor| editor.subject == subject)
+        {
+            self.raise_auxiliary = Some(crate::auxiliary_window::Surface::Plugin);
+            return;
+        }
         self.close_physical_view();
         self.parameter_list = Default::default();
         self.plugin_window = Some(PluginWindow { subject });
@@ -148,24 +156,169 @@ impl AurisApp {
         close_after(&mut self.plugin_window, || session.stop_watching())
     }
 
-    /// Opens the plugin's own window, or takes it away if it is already up.
-    ///
-    /// The application's window is named to the session on the way past. This is the one moment a
-    /// `&Window` is in scope and the session needs it again later, from a tick where nothing is —
-    /// a plugin window that has to move to the other instance of its pair has to be told all over
-    /// again what to float above.
-    pub(crate) fn toggle_hosted_window(&mut self, subject: PluginSubject, window: &gpui::Window) {
-        // Through the trait, not the inherent method of the same name: gpui's own
-        // `window_handle` answers with its handle to *this view*, which is not a thing any other
-        // process has heard of.
-        let parent = HasWindowHandle::window_handle(window)
-            .ok()
-            .map(|handle| handle.as_raw());
-        self.session.set_plugin_window_parent(parent);
+    /// Opens the native editor directly, falling back to Auris's editor when none is offered.
+    pub(crate) fn show_plugin_editor(&mut self, subject: PluginSubject) {
+        if self.session.plugin_window_exists(subject.hosted_window()) {
+            self.show_hosted_window(subject);
+        } else {
+            self.open_plugin_window(subject);
+        }
+    }
 
+    /// Whether the primary editor action will bring an existing window to the front.
+    pub(crate) fn plugin_editor_is_open(&mut self, subject: PluginSubject) -> bool {
+        if self.session.plugin_window_exists(subject.hosted_window()) {
+            self.session.plugin_window_is_open(subject.hosted_window())
+        } else {
+            self.plugin_window
+                .is_some_and(|editor| editor.subject == subject)
+        }
+    }
+
+    /// The visible primary action shared by instrument and effect slots.
+    pub(crate) fn plugin_editor_button(
+        &mut self,
+        id: impl Into<gpui::ElementId>,
+        subject: PluginSubject,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let open = self.plugin_editor_is_open(subject);
+        crate::ui::widgets::bounded_button_enabled(
+            id,
+            self.t(if open {
+                Key::PluginRaiseEditor
+            } else {
+                Key::PluginOpenEditor
+            }),
+            ButtonStyle::Normal,
+            crate::ui::widgets::ButtonState::available(false, true),
+            self.theme.accent_soft,
+            &self.theme,
+            cx.listener(move |this, _, _, cx| {
+                this.show_plugin_editor(subject);
+                cx.notify();
+            }),
+        )
+        .flex_shrink_0()
+    }
+
+    /// A compact strip keeps the plugin's name above its full-width editor command.
+    pub(crate) fn compact_plugin_controls(
+        &mut self,
+        id: impl Into<gpui::ElementId>,
+        subject: PluginSubject,
+        name: String,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let id = id.into();
+        let menu_id = gpui::SharedString::from(format!("{id}-menu"));
+        let name_id = gpui::SharedString::from(format!("{id}-name"));
+        let row_id = id.clone();
+        div()
+            .debug_selector(move || format!("{row_id}-row"))
+            .flex()
+            .flex_col()
+            .gap_0p5()
+            .min_w_0()
+            .w_full()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .min_w_0()
+                    .child(
+                        div()
+                            .id(name_id)
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_xs()
+                            .child(name.clone())
+                            .tooltip(crate::ui::tooltip::keyed_tip(name.clone(), "", &self.theme)),
+                    )
+                    .child(self.plugin_menu_button(menu_id, subject, name, cx)),
+            )
+            .child(self.plugin_editor_button(id, subject, cx).w_full())
+            .into_any_element()
+    }
+
+    /// Secondary commands stay discoverable beside the editor action.
+    pub(crate) fn plugin_menu_button(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        subject: PluginSubject,
+        name: String,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let open = self.menu.as_ref().is_some_and(|menu| menu.entries.iter().any(|entry| {
+            matches!(entry, MenuEntry::Item(item) if item.command == MenuCommand::PluginParameters(subject))
+        }));
+        crate::ui::widgets::button_with_content(
+            id,
+            crate::ui::icons::icon(Icon::More, px(12.), self.theme.text),
+            ButtonStyle::Ghost,
+            crate::ui::widgets::ButtonState::available(open, true),
+            self.theme.accent_soft,
+            &self.theme,
+            Self::opens_menu(cx, move |this, at| match subject {
+                PluginSubject::Insert { track, slot } => {
+                    this.effect_menu(at, track, slot, name.clone())
+                }
+                PluginSubject::Instrument(_) => {
+                    let menu = ContextMenu::new(at, name.clone());
+                    this.plugin_window_menu_entries(menu, subject)
+                }
+            }),
+        )
+        .w(Metrics::CONTROL_HEIGHT)
+        .px_0()
+        .flex_shrink_0()
+        .tooltip(self.tip(Key::PluginActions, ""))
+    }
+
+    /// Adds parameter access and a separate close command to a plugin's menu.
+    pub(crate) fn plugin_window_menu_entries(
+        &mut self,
+        menu: ContextMenu,
+        subject: PluginSubject,
+    ) -> ContextMenu {
+        let menu = menu.item(
+            self.t(Key::PluginParameters),
+            MenuCommand::PluginParameters(subject),
+        );
+        if self.plugin_editor_is_open(subject) {
+            menu.item(
+                self.t(Key::PluginCloseEditor),
+                MenuCommand::ClosePluginEditor(subject),
+            )
+        } else {
+            menu
+        }
+    }
+
+    /// Closes the primary editor without changing the plugin's enabled state or parameters.
+    pub(crate) fn close_plugin_editor(&mut self, subject: PluginSubject) {
+        if self.session.plugin_window_exists(subject.hosted_window()) {
+            if let Err(error) = self
+                .session
+                .set_plugin_window_open(subject.hosted_window(), false)
+            {
+                let line = self.failure(Key::PluginCloseEditor, &error);
+                self.set_failed_status(line);
+            }
+        } else if self
+            .plugin_window
+            .is_some_and(|editor| editor.subject == subject)
+        {
+            self.close_plugin_window();
+        }
+    }
+
+    /// Opens the plugin's own window, or raises the existing editor without closing it.
+    pub(crate) fn show_hosted_window(&mut self, subject: PluginSubject) {
         let which = subject.hosted_window();
-        let open = !self.session.plugin_window_is_open(which);
-        if let Err(error) = self.session.set_plugin_window_open(which, open) {
+        if let Err(error) = self.session.set_plugin_window_open(which, true) {
             let line = self.failure(Key::CmdOpenPluginWindow, &error);
             self.set_failed_status(line);
         }
@@ -307,16 +460,24 @@ impl AurisApp {
                         // built-in in the application would be a button nobody pressed on the one
                         // plugin where it works.
                         .children(own_window.then(|| {
-                            chain_button(
+                            button(
                                 "pw-own",
-                                Icon::Window,
+                                self.t(
+                                    if self.session.plugin_window_is_open(subject.hosted_window()) {
+                                        Key::PluginRaiseEditor
+                                    } else {
+                                        Key::PluginOpenEditor
+                                    },
+                                ),
+                                ButtonStyle::Normal,
+                                false,
+                                theme.accent_soft,
                                 &theme,
-                                cx.listener(move |this, _, window: &mut gpui::Window, cx| {
-                                    this.toggle_hosted_window(subject, window);
+                                cx.listener(move |this, _, _, cx| {
+                                    this.show_hosted_window(subject);
                                     cx.notify();
                                 }),
                             )
-                            .tooltip(self.tip(Key::CmdOpenPluginWindow, ""))
                         }))
                         .child(
                             chain_button(
@@ -408,6 +569,10 @@ impl AurisApp {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "plugin_window_tests.rs"]
+mod interaction_tests;
 
 #[cfg(test)]
 mod tests {

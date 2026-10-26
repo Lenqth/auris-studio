@@ -1113,20 +1113,24 @@ impl AurisApp {
                     let label = self.effect_label(slot, &effect.effect_id.clone());
                     let enabled = effect.enabled;
                     let menu_label = label.clone();
+                    let subject = PluginSubject::Insert { track: owner, slot };
+                    let open = self.plugin_editor_is_open(subject);
                     card = card
+                        .child(div().truncate().child(label))
                         .child(node_button(
                             zoom,
                             SharedString::from(format!("graph-effect-open-{id}")),
-                            label,
+                            self.t(if open {
+                                Key::PluginRaiseEditor
+                            } else {
+                                Key::PluginOpenEditor
+                            }),
                             ButtonStyle::Ghost,
                             false,
                             theme.accent_soft,
                             &theme,
                             cx.listener(move |this, _, _, cx| {
-                                this.open_plugin_window(PluginSubject::Insert {
-                                    track: owner,
-                                    slot,
-                                });
+                                this.show_plugin_editor(subject);
                                 cx.notify();
                             }),
                         ))

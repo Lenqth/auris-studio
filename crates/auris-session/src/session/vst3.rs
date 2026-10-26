@@ -127,6 +127,16 @@ impl Vst3Plugins {
         let mut dirty = false;
         let mut rebuild = false;
         let mut poll_error = None;
+        // Native close requests need teardown even after the window reports itself closed.
+        // Service every editor before source polling so one plugin's failure cannot strand
+        // another plugin's window, and never hold its controller lock during native callbacks.
+        for slot in self.slots.values_mut().chain(self.instruments.values_mut()) {
+            if let Err(error) = slot.plugin.service_gui()
+                && poll_error.is_none()
+            {
+                poll_error = Some(error);
+            }
+        }
         for (id, slot) in &mut self.slots {
             let captured = if wait_for_editor {
                 let (changes, state) = slot.plugin.take_source_changes_for_save()?;
@@ -732,6 +742,56 @@ impl Session {
 mod tests {
     use super::*;
     use auris_core::AssetPath;
+
+    #[test]
+    fn same_named_plugin_files_keep_their_format_and_identity_after_save_and_load() {
+        let scratch = tempfile::tempdir().unwrap();
+        let clap_path = scratch.path().join("Twin.clap");
+        let vst3_path = scratch.path().join("Twin.vst3");
+        let clap_id = format!("{}00000000000000000000000000000001", auris_clap::ID_PREFIX);
+        let vst3_id = format!("{}00000000000000000000000000000001", auris_vst3::ID_PREFIX);
+        let mut project = Project::new("Same names", 48_000.0);
+        let clap_track = project.add_instrument_track("Twin", &clap_id);
+        let vst3_track = project.add_instrument_track("Twin", &vst3_id);
+        project.set_hosted_instrument(clap_track, &clap_id, AssetPath::external(&clap_path));
+        project.set_hosted_instrument(vst3_track, &vst3_id, AssetPath::external(&vst3_path));
+        let clap_effect = project
+            .add_hosted_effect(None, &clap_id, AssetPath::external(&clap_path))
+            .unwrap();
+        let vst3_effect = project
+            .add_hosted_effect(None, &vst3_id, AssetPath::external(&vst3_path))
+            .unwrap();
+
+        let path = scratch.path().join("Song.auris");
+        auris_io::save_project(&path, &mut project).unwrap();
+        let loaded = auris_io::load_project(&path).unwrap();
+        for (track, id, file, format) in [
+            (clap_track, &clap_id, &clap_path, crate::PluginFormat::Clap),
+            (vst3_track, &vst3_id, &vst3_path, crate::PluginFormat::Vst3),
+        ] {
+            let instrument = loaded.track(track).unwrap().kind.as_instrument().unwrap();
+            assert_eq!(&instrument.instrument_id, id);
+            assert_eq!(instrument.file, Some(AssetPath::external(file)));
+            assert_eq!(crate::PluginFormat::from_plugin_id(id), Some(format));
+        }
+        // The VST3 host must never claim the identically named CLAP instrument or insert.
+        let instruments = instrument_requests(&loaded);
+        assert_eq!(instruments.len(), 1);
+        assert_eq!(instruments[&vst3_track].file, vst3_path);
+        assert!(!instruments.contains_key(&clap_track));
+        let effects = effect_requests(&loaded);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[&vst3_effect].file, vst3_path);
+        assert!(!effects.contains_key(&clap_effect));
+        let clap_slot = loaded
+            .master
+            .effects
+            .iter()
+            .find(|slot| slot.id == clap_effect)
+            .unwrap();
+        assert_eq!(clap_slot.effect_id, clap_id);
+        assert_eq!(clap_slot.file, Some(AssetPath::external(clap_path)));
+    }
 
     #[test]
     fn a_network_plugin_named_by_a_document_is_not_loaded_automatically() {

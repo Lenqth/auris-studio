@@ -1075,3 +1075,93 @@ fn plugin_folder_removal_names_the_folder_and_requires_confirmation(cx: &mut Tes
         )
     });
 }
+
+#[gpui::test]
+fn same_named_clap_and_vst3_choices_stay_distinct_in_search_and_selection(cx: &mut TestAppContext) {
+    let (app, cx) = open(cx);
+    let clap = std::env::temp_dir().join("Twin.clap");
+    let vst3 = std::env::temp_dir().join("Twin.vst3");
+    let identity = "00000000000000000000000000000001";
+    app.update(cx, |this, _| {
+        prepare_library(this);
+        this.clap_files = Some(std::sync::Arc::from(vec![clap.clone()]));
+        this.vst3_files = Some(std::sync::Arc::from(vec![vst3.clone()]));
+        this.clap_contents.insert(
+            clap.clone(),
+            std::sync::Arc::from(vec![auris_session::ClapPluginInfo {
+                clap_id: identity.into(),
+                name: "Twin".into(),
+                vendor: "Test".into(),
+                description: String::new(),
+                version: "1".into(),
+                kind: PluginKind::Instrument,
+                category: PluginCategory::Synth,
+            }]),
+        );
+        this.vst3_contents.insert(
+            vst3.clone(),
+            std::sync::Arc::from(vec![auris_session::Vst3PluginInfo {
+                class_id: identity.into(),
+                name: "Twin".into(),
+                vendor: "Test".into(),
+                version: "1".into(),
+                kind: PluginKind::Instrument,
+                category: PluginCategory::Synth,
+                has_gui: false,
+            }]),
+        );
+        this.open_song_sheet();
+    });
+
+    for (path, branch, selector, expected) in [
+        (
+            &clap,
+            Branch::PluginFile(0),
+            "song-lib-clap:00000000000000000000000000000001",
+            PartSource::Clap {
+                path: clap.clone(),
+                plugin_id: identity.into(),
+            },
+        ),
+        (
+            &vst3,
+            Branch::PluginFile(1),
+            "song-lib-vst3:00000000000000000000000000000001",
+            PartSource::Vst3 {
+                path: vst3.clone(),
+                class_id: identity.into(),
+            },
+        ),
+    ] {
+        app.update(cx, |this, cx| {
+            this.open_song_library(0, cx);
+            let browser = this.song_library.as_mut().unwrap();
+            browser.tree.set_open(Branch::Instruments, false);
+            browser.tree.set_open(Branch::SoundFonts, false);
+            browser.search = TextField::new("Twin");
+            assert_eq!(
+                this.search_rows(LibraryTarget::SongPart, "Twin", cx).len(),
+                2
+            );
+        });
+        paint(&app, cx);
+        for file in [&clap, &vst3] {
+            let format_selector =
+                Box::leak(format!("song-lib-format-{}", file.display()).into_boxed_str());
+            assert!(cx.debug_bounds(format_selector).is_some());
+        }
+        let file_selector = Box::leak(format!("song-lib-{}", path.display()).into_boxed_str());
+        click(file_selector, cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.song_library.as_ref().unwrap().tree.is_open(branch));
+        });
+        click(selector, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_sheet.as_ref().unwrap().parts[0].source,
+                Some(expected)
+            );
+        });
+    }
+}

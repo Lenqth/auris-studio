@@ -384,6 +384,28 @@ impl ClapPlugin {
         self.gui_open
     }
 
+    /// Raises an open editor in response to a user action, without recreating its GUI.
+    /// Floating editors receive CLAP's show request; embedded editors raise their container.
+    pub fn raise_gui(&mut self) -> Result<(), ClapError> {
+        if !self.gui_open {
+            return Ok(());
+        }
+        if let Some(container) = &self.container {
+            container.show();
+        } else if let Some(gui) = self
+            .instance
+            .plugin_shared_handle()
+            .get_extension::<PluginGui>()
+        {
+            gui.show(&self.instance.plugin_handle())
+                .map_err(|error| ClapError::Gui {
+                    id: self.info.clap_id.clone(),
+                    reason: error.to_string(),
+                })?;
+        }
+        Ok(())
+    }
+
     /// Opens the plugin's own window, above `parent`.
     ///
     /// Opening one that is already open does nothing, so a caller may treat this as "make sure it

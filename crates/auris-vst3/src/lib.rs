@@ -772,17 +772,42 @@ impl Vst3Plugin {
             .as_ref()
             .is_some_and(vst3_host::PluginWindow::is_open)
     }
-    /// Opens or closes the plugin's standalone native editor.
+
+    /// Services native close, resize and DPI requests on the thread that opened the editor.
+    ///
+    /// Call periodically even when [`Self::gui_is_open`] is false: a title-bar close request
+    /// clears that logical state before the editor is detached and its native window destroyed.
+    pub fn service_gui(&mut self) -> Result<(), Vst3Error> {
+        if self
+            .window
+            .as_ref()
+            .is_some_and(vst3_host::PluginWindow::closed_by_user)
+        {
+            self.window = None;
+        }
+        if let Some(window) = &self.window {
+            window.service_platform_events()?;
+        }
+        Ok(())
+    }
+
+    /// Opens or closes the plugin's native editor, raising an already-open one on request.
     pub fn set_gui_open(&mut self, open: bool) -> Result<(), Vst3Error> {
         if open {
             if self.gui_is_open() {
+                if let Some(window) = &self.window {
+                    window.bring_to_front();
+                }
                 return Ok(());
             }
+            // A dismissed editor may still await the next poll. Detach it before attaching a
+            // replacement to the same controller, rather than dropping it after the new open.
+            self.window = None;
             let mut window = vst3_host::PluginWindow::new(Arc::clone(&self.shared.plugin));
             window.open()?;
             self.window = Some(window);
-        } else if let Some(mut window) = self.window.take() {
-            window.close();
+        } else {
+            self.window = None;
         }
         Ok(())
     }
