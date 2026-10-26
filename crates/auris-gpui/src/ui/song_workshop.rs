@@ -834,6 +834,35 @@ mod tests {
     }
 
     #[gpui::test]
+    fn a_sheet_left_behind_the_chooser_does_not_take_the_workshop_text(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |app, cx| {
+                // What the recovery offer at launch leaves: a question with no field, open
+                // underneath a chooser that draws nothing of it.
+                app.open_prompt(crate::ui::prompt::Prompt::ask(
+                    "Remove",
+                    crate::ui::prompt::Question::RemovePluginPath("plugins".into()),
+                ));
+                app.show_project_chooser(window, cx);
+                app.open_song_workshop(window, cx);
+            })
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-brief", cx);
+        cx.simulate_input("夜の雨");
+        app.read_with(cx, |app, _| {
+            assert_eq!(
+                app.song_workshop.as_ref().unwrap().brief.content(),
+                "夜の雨"
+            );
+            assert!(app.prompt.is_some());
+        });
+    }
+
+    #[gpui::test]
     fn workshop_model_selection_is_local_and_duration_supports_keyboard(
         cx: &mut gpui::TestAppContext,
     ) {
