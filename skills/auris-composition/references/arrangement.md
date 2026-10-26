@@ -1,6 +1,6 @@
 # Arrangement after composition
 
-Use this pass for complete songs and instrumental cues after the core melody, lyrics where applicable, harmony, and form exist. Composing and arranging may overlap, but revisit the actual generated score before final synthesis/export. A preset's track count, automatic balance, or successful render does not establish an intentional arrangement. Scale the work to the brief; do not expand a local edit or a short demo into a full production.
+Use this pass for complete songs and instrumental cues after the core melody, lyrics where applicable, harmony, and form exist. Composing and arranging may overlap, but revisit the actual score before final synthesis/export. Author counterlines, distinctive bass, interludes and fills note by note; reserve writers for plain chord/pad backing, simple arpeggios and basic drum pulses. The CLI specification examples below apply to an explicit automatic-generation request. A preset's track count, automatic balance, or successful render does not establish an intentional arrangement. Scale the work to the brief; do not expand a local edit or a short demo into a full production.
 
 ## Establish what the arrangement must serve
 
@@ -8,7 +8,11 @@ Save a baseline project/specification and a short preview when available. Inspec
 
 For each proposed change, name its purpose and range: for example, leave space for verse lyrics, make the refrain open up, or prepare the loop return. Keep recognizable hooks, authored melody/lyrics, and intentional harmonic tensions. Reharmonization or replacing the main theme is a separate creative choice, not an automatic consequence of arranging.
 
+Separate weight, subdivision, attack grid, roughness and density instead of deriving all five from a genre name. If the user asks for simple on-beat backing, do not substitute a stereotypical off-beat bass pattern or quantize the singer and solo with the drums. Keep the user's latest hand edits as the protected baseline. Add complementary roles only in sections that need them: for example a sub, midrange bass articulation, octave support or later harmony can provide thickness without continuously stacking every layer. Compare at similar loudness; greater LUFS or band energy does not prove a better arrangement.
+
 ## Choose techniques that solve the actual problem
+
+Read [arrangement-design.md](arrangement-design.md) when selecting an ensemble, writing bass/inner voices or an interlude, or deciding what an effect should contribute. Use [melody-design.md](melody-design.md) for an authorized foreground rewrite; the arrangement pass itself preserves the authored lead.
 
 ### Section contrast and subtraction
 
@@ -59,9 +63,15 @@ Inspect `discover_tools`/`tool_help` for the actual host and obtain current IDs/
 - Read `inspect_performance` before `set_performance`. Change only intended settings, read back effective results and unsupported/bypassed reasons, then render the affected phrase. Use actual parameter metadata for instrument controls and automation; do not translate a tutorial's MIDI controls by name alone.
 - Balance levels, panning, and sends after the parts work together. Discover `mixer_graph`, `automation`, or other advertised mixing tools as needed. Avoid using normalization, widening, or effects as a substitute for resolving conflicting parts. For vocals, follow [vocals.md](vocals.md); refresh synthesis when score/performance changes make a take stale.
 
+For a small mix change, audition the affected range and its dependent routing first. A kick change can affect a sidechain destination; shared nonlinear processing can invalidate an apparently untouched bus. Do not re-synthesize an unchanged singer merely because a fader moved. Keep the final full-song verification even when intermediate checks use short ranges.
+
 ## Review before delivery
 
 Inspect the opening, contrasting section, later repeat, transitions, and ending/loop return. Compare the same ranges before and after, at comparable playback loudness where available. Preserve the baseline and adopt changes for the stated musical purpose, not because there are more notes, effects, or a larger waveform. A no-change decision needs specific evidence, not just a successful tool call.
+
+Keep component preferences separate when a listener favors one candidate's melody or vocal and another candidate's backing. Do not convert that into an overall winner or infer unreported naturalness, memorability, or breathing ratings. If a combined candidate is requested, retain the favored foreground and check the backing against its actual harmony, phrasing, register, and timing before adoption; independently preferred parts are not automatically compatible.
+
+Treat a liked backing's pulse, voicing, bass movement and density as the baseline during a melody revision. Add an answering fill, syncopation, layer or effect only for a named problem or section function; theoretical sophistication alone is not a reason. For a fair local comparison, keep compatible backing fixed while changing the melody, or protect the melody while changing backing, and then check their interaction in the full mix. If the new melody requires a harmonic repair, identify that dependency instead of claiming that only the melody changed. Do not infer that all backing should be simpler from a few listener preferences.
 
 Fix the most consequential issues first; after at most two local attempts per issue, report unresolved limitations unless further exploration is requested. Finish with the full render and measurements in [delivery.md](delivery.md). Record what was changed or deliberately retained, which passages were checked, and what remains uncertain. Without actual listening, describe note/structure checks and audio measurements accurately; do not claim that clarity, expression, or seamless looping has been heard.
 

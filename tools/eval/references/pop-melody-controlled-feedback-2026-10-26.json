@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "experiment": "pop-melody-controlled-2026-10-26",
+  "guidance_revisions": {
+    "before": "64db99d0",
+    "after": "26e36832"
+  },
+  "evidence_status": "exposed_development",
+  "submitted_ratings": {
+    "schema_version": 1,
+    "experiment": "pop-melody-controlled-2026-10-26",
+    "manifest_sha256": "c9e9c5b6648f207d488d8da354dde68e476e2d50dff030ef6173e56fae8ec410",
+    "ratings": {
+      "pair-01": {
+        "rhythm": "B",
+        "motif": "tie",
+        "chorus_change": "tie",
+        "naturalness": "tie",
+        "breathing": "B"
+      },
+      "pair-02": {
+        "rhythm": "tie",
+        "motif": "tie",
+        "chorus_change": "A",
+        "naturalness": "A",
+        "breathing": "B"
+      }
+    },
+    "comments": {
+      "pair-01": "",
+      "pair-02": ""
+    }
+  },
+  "identity": {
+    "verified": true,
+    "manifest_file_sha256": "087b332d8cde1e8363953afdc3de3b270cf43f64a480260f4322b830d1969e83",
+    "manifest_lf_sha256": "c9e9c5b6648f207d488d8da354dde68e476e2d50dff030ef6173e56fae8ec410",
+    "binding": "The original page hashed UTF-8 LF text before Windows wrote CRLF. Only CRLF-to-LF normalization was used; all nine audio hashes also match.",
+    "verified_assets": {
+      "listening/common-backing.wav": {
+        "bytes": 14811528,
+        "sha256": "81cb3852095a970601efbdbbebef449ce072291d556df78b2c59bd5a1a511b12"
+      },
+      "listening/pair-01/A/foreground.wav": {
+        "bytes": 14811528,
+        "sha256": "1c3c72400cd32ab4d14a2334a4177694ad1b31d243df8c53a83d3c80e22199af"
+      },
+      "listening/pair-01/A/mix.wav": {
+        "bytes": 14811528,
+        "sha256": "39f0c4a837375acc3e9a85d52dbc9812657e193f43f316473517237457d0f1a0"
+      },
+      "listening/pair-01/B/foreground.wav": {
+        "bytes": 14811528,
+        "sha256": "409d1e5e2af3e5d51aebf3a998b703d71b847cacc3a7d2127d758f72f0b2c4d7"
+      },
+      "listening/pair-01/B/mix.wav": {
+        "bytes": 14811528,
+        "sha256": "5e792f0fd23d7acabd3cd62dd1a10d7c74e93d70d341ea768a63f7dd11022341"
+      },
+      "listening/pair-02/A/foreground.wav": {
+        "bytes": 14811528,
+        "sha256": "f9756dacc93d03e87b24fe87e68533bdc1faa3d03c94682030c9fc0f2ce3290d"
+      },
+      "listening/pair-02/A/mix.wav": {
+        "bytes": 14811528,
+        "sha256": "ff48299208b2d18427b34c2681967c36d5f7c982eaa804758d91e699c4d93efd"
+      },
+      "listening/pair-02/B/foreground.wav": {
+        "bytes": 14811528,
+        "sha256": "45df099928d4dc68e156c9637250e4a9d83df301ea3ba92a49c073ec5d5b3810"
+      },
+      "listening/pair-02/B/mix.wav": {
+        "bytes": 14811528,
+        "sha256": "7f76805ab674f4ada6481d6dc53b11f8f96b74162076cf6369b4bf057bf16d41"
+      }
+    }
+  },
+  "labels": {
+    "pair-01": {
+      "B": "before",
+      "A": "after"
+    },
+    "pair-02": {
+      "A": "before",
+      "B": "after"
+    }
+  },
+  "decoded_ratings": {
+    "pair-01": {
+      "rhythm": "before",
+      "motif": "tie",
+      "chorus_change": "tie",
+      "naturalness": "tie",
+      "breathing": "before"
+    },
+    "pair-02": {
+      "rhythm": "tie",
+      "motif": "tie",
+      "chorus_change": "before",
+      "naturalness": "before",
+      "breathing": "after"
+    }
+  },
+  "per_axis_counts": {
+    "rhythm": {
+      "before": 1,
+      "after": 0,
+      "tie": 1,
+      "cannot_judge": 0,
+      "unrated": 0
+    },
+    "motif": {
+      "before": 0,
+      "after": 0,
+      "tie": 2,
+      "cannot_judge": 0,
+      "unrated": 0
+    },
+    "chorus_change": {
+      "before": 1,
+      "after": 0,
+      "tie": 1,
+      "cannot_judge": 0,
+      "unrated": 0
+    },
+    "naturalness": {
+      "before": 1,
+      "after": 0,
+      "tie": 1,
+      "cannot_judge": 0,
+      "unrated": 0
+    },
+    "breathing": {
+      "before": 1,
+      "after": 1,
+      "tie": 0,
+      "cannot_judge": 0,
+      "unrated": 0
+    }
+  },
+  "overall_preference": null,
+  "limitations": [
+    "One listener, one fixed lyric/backing/starting melody, two repetitions.",
+    "Axis ratings within a pair are not independent votes; no summed win rate.",
+    "No clear improvement detected; no general inferiority or equivalence established.",
+    "Motif preference is not an objective delayed-recall measurement.",
+    "Several melody interventions changed together; individual causes are unproven.",
+    "Shared gain preserves backing level; melodic changes can still change vocal loudness."
+  ]
+}

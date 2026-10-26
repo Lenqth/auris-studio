@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "experiment": "songeval-reference-2026-10-26",
+  "selection_rule": "Convenience sample selected by fixed known-title patterns from a read-only personal NAS; no selection by SongEval score.",
+  "conversion": {
+    "tool": "ffmpeg N-125365-g9a01c1cb6a-20260630",
+    "argv": "ffmpeg -v error -y -ss 30 -t 51.4285625 -i INPUT -ar 44100 -ac 2 OUTPUT.wav",
+    "requested_start_seconds": 30.0,
+    "requested_duration_seconds": 51.4285625,
+    "observed_duration_seconds": 51.4285714285714,
+    "observed_sample_rate_hz": 44100,
+    "observed_channels": 2
+  },
+  "original_sources": [
+    {
+      "title": "メルティランドナイトメア",
+      "youtube_id": "ZEy36W1xX8c",
+      "url": "https://www.youtube.com/watch?v=ZEy36W1xX8c",
+      "bytes": 4476957,
+      "sha256": "14807a20a0723bd015249ccc5ebefbf57484cba67e2cff38d801c1f9fa888645",
+      "duration_seconds": 269.839093,
+      "sample_rate_hz": 44100,
+      "channels": 2
+    },
+    {
+      "title": "ただ君に晴れ",
+      "youtube_id": "-VKIqrvVOpo",
+      "url": "https://www.youtube.com/watch?v=-VKIqrvVOpo",
+      "bytes": 2975358,
+      "sha256": "75f828b0f51822741e3cb92b8cd4673efce7bff48e58eb54544bd629312e51f8",
+      "duration_seconds": 199.78449,
+      "sample_rate_hz": 44100,
+      "channels": 2
+    },
+    {
+      "title": "Lucky ME",
+      "youtube_id": "pD9O4fPCa0Q",
+      "url": "https://www.youtube.com/watch?v=pD9O4fPCa0Q",
+      "bytes": 4511898,
+      "sha256": "c14c3fc2ad830a13d35d42d5e91e54b0735cf6d00ca5fc1cc4d3fe46e5e3c587",
+      "duration_seconds": 278.453696,
+      "sample_rate_hz": 44100,
+      "channels": 2
+    },
+    {
+      "title": "Decision",
+      "youtube_id": "i8stuq8NKQE",
+      "url": "https://www.youtube.com/watch?v=i8stuq8NKQE",
+      "bytes": 1786221,
+      "sha256": "98c16e32c89fe5706737fb10eaa19ef844398306da48692e9ab9b8fe1ef30108",
+      "duration_seconds": 116.610612,
+      "sample_rate_hz": 44100,
+      "channels": 2
+    }
+  ],
+  "yt_dlp_trial": {
+    "command": "yt-dlp --no-playlist --extract-audio --audio-format wav --audio-quality 0 --paths yt-dlp --output yorushika-official.%(ext)s https://www.youtube.com/watch?v=-VKIqrvVOpo",
+    "version": "2026.08.19",
+    "status": "downloaded",
+    "output_sha256": "60dff252dc6bf0056cca255d4fbc0dcca56a68f67a2372c8d683dfd72c85118",
+    "output_duration_seconds": 199.819333,
+    "output_sample_rate_hz": 48000,
+    "output_channels": 2,
+    "auth_or_cookie_bypass": false
+  },
+  "verified_report_sha256": "ed79d82335d4aae0b5ada907bbacbf238742a3207fbca722228207d41045720d",
+  "ffmpeg_sha256": "b2663834d9162f6ee431e7d864d8afd7ac385ec289de70463af67beab6f2257e",
+  "youtube_public_metadata": {
+    "id": "-VKIqrvVOpo",
+    "title": "ヨルシカ - ただ君に晴れ (MUSIC VIDEO)",
+    "channel": "ヨルシカ / n-buna Official",
+    "channel_id": "UCRIgIJQWuBJ0Cv_VlU3USNA",
+    "channel_url": "https://www.youtube.com/channel/UCRIgIJQWuBJ0Cv_VlU3USNA",
+    "uploader": "ヨルシカ / n-buna Official",
+    "uploader_id": "@nbuna",
+    "webpage_url": "https://www.youtube.com/watch?v=-VKIqrvVOpo",
+    "duration": 200,
+    "upload_date": "20180504"
+  },
+  "additional_window_policy": "Post-hoc within-track sensitivity check on the NAS Yorushika recording; fixed first and center windows, not a holdout.",
+  "source_unchanged_after_verification": true
+}

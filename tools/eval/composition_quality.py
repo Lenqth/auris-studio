@@ -44,10 +44,48 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+PROMPT_CONDITION_KEYS = {
+    "name",
+    "source_commit",
+    "expected_prefix",
+    "replacement_prefix",
+    "skill_context",
+}
+
+
+def prompt_condition(path: Path) -> tuple[dict[str, str], bytes, str]:
+    """Validate and freeze an optional before/after prompt condition file."""
+    payload = path.read_bytes()
+    value = json.loads(payload)
+    if not isinstance(value, dict) or set(value) != PROMPT_CONDITION_KEYS:
+        raise ValueError(
+            "Prompt condition must contain exactly: "
+            + ", ".join(sorted(PROMPT_CONDITION_KEYS))
+        )
+    if not all(isinstance(item, str) for item in value.values()):
+        raise ValueError("Prompt condition values must all be strings")
+    for key in ("expected_prefix", "replacement_prefix"):
+        if not value[key]:
+            raise ValueError(f"Prompt condition {key} must be nonempty")
+    return value, payload, hashlib.sha256(payload).hexdigest()
+
+
 def manifest(path: Path) -> dict:
     value = read_json(path)
     if value.get("schema_version") != 1 or value.get("axes") != AXES:
         raise ValueError("Unsupported manifest or evaluation axes")
+    rubric = value.get("listening_rubric")
+    if rubric is not None:
+        if not isinstance(rubric, dict) or set(rubric) - set(AXES):
+            raise ValueError("Listening rubric keys must be evaluation axes")
+        for axis, questions in rubric.items():
+            if not isinstance(questions, list) or not questions or not all(
+                isinstance(question, str) and question.strip()
+                for question in questions
+            ):
+                raise ValueError(
+                    f"Listening rubric for {axis} needs nonempty string questions"
+                )
     cases = value["cases"]
     ids = [case["id"] for case in cases]
     if len(ids) != len(set(ids)):
@@ -86,8 +124,54 @@ def frozen_source(
     } | {"source_reference_sha256": hashlib.sha256(payload).hexdigest()}
 
 
+def freeze_seed_project(source: Path, destination: Path) -> dict[str, object]:
+    """Copy a project document and its project-local Audio directory for a trial suite.
+
+    The original is never opened for writing by the harness.  The deliberately narrow copy
+    excludes unrelated siblings; references to external assets in the project JSON remain
+    references and must be audited/resolved in the same environment separately.
+    """
+    if source.is_symlink() or source.parent.is_symlink():
+        raise ValueError("--seed-project must not use a symlink")
+    source = source.resolve(strict=True)
+    if source.suffix.lower() != ".auris" or not source.is_file():
+        raise ValueError("--seed-project must name an existing .auris file")
+    if source.parent.name != source.stem:
+        raise ValueError("--seed-project must be in the project-named folder")
+    audio = source.parent / "Audio"
+    if audio.exists() and (not audio.is_dir() or audio.is_symlink()):
+        raise ValueError("Seed project Audio must be a real directory")
+    if audio.exists() and any(path.is_symlink() for path in audio.rglob("*")):
+        raise ValueError("Seed project Audio must not contain symlinks")
+    destination.mkdir(parents=True)
+    frozen = destination / source.stem
+    frozen.mkdir()
+    frozen_file = frozen / source.name
+    shutil.copy2(source, frozen_file)
+    if audio.exists():
+        shutil.copytree(audio, frozen / "Audio")
+    files = {
+        str(path.relative_to(destination)).replace("\\", "/"): digest(path)
+        for path in sorted(destination.rglob("*"))
+        if path.is_file()
+    }
+    return {
+        "source": str(source),
+        "source_sha256": digest(source),
+        "frozen_root": str(destination.resolve()),
+        "files": files,
+    }
+
+
 def run(args) -> None:
     suite = manifest(args.manifest)
+    condition = None
+    condition_payload = None
+    condition_sha256 = None
+    if args.prompt_condition is not None:
+        condition, condition_payload, condition_sha256 = prompt_condition(
+            args.prompt_condition.resolve(strict=True)
+        )
     if not 1 <= args.repetitions <= 20 or not 1 <= args.timeout <= 3600:
         raise ValueError("Use 1..20 repetitions and 1..3600 seconds per turn")
     if not 8192 <= args.context_tokens <= 262144:
@@ -95,6 +179,16 @@ def run(args) -> None:
     eligible = {case["id"] for case in suite["cases"] if case["split"] == args.split}
     if args.case and not set(args.case) <= eligible:
         raise ValueError("Requested case is not in the selected split")
+    selected_cases = [
+        case
+        for case in suite["cases"]
+        if case["split"] == args.split
+        and (not args.case or case["id"] in args.case)
+    ]
+    if args.seed_project is not None and any(
+        case["fixture"] != "blank" for case in selected_cases
+    ):
+        raise ValueError("--seed-project currently supports only blank fixtures")
     executable = args.executable.resolve(strict=True)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -106,6 +200,11 @@ def run(args) -> None:
     for folder in [executable.parent.parent, executable.parent]:
         for source in folder.glob("*.dll"):
             shutil.copy2(source, frozen / source.name)
+    seed_provenance = None
+    frozen_seed = None
+    if args.seed_project is not None:
+        frozen_seed = output / "seed-project"
+        seed_provenance = freeze_seed_project(args.seed_project, frozen_seed)
     provenance = {
         "schema_version": 1,
         "manifest": suite,
@@ -156,6 +255,13 @@ def run(args) -> None:
         "quality_status": "unscored; transport and structural measurements are not musical preference",
         "trials": [],
     }
+    if seed_provenance is not None:
+        provenance["seed_project"] = seed_provenance
+        (output / "input-projects").mkdir()
+    if condition is not None:
+        provenance["prompt_condition"] = condition
+        provenance["prompt_condition_sha256"] = condition_sha256
+        (output / "prompt-condition.json").write_bytes(condition_payload)
     if getattr(args, "source_suite", None):
         provenance.update(
             frozen_source(
@@ -180,6 +286,17 @@ def run(args) -> None:
                 ],
                 "output": str(destination),
             }
+            if frozen_seed is not None:
+                input_root = output / "input-projects" / trial_id
+                shutil.copytree(frozen_seed, input_root)
+                config["seed_project"] = str(
+                    (input_root / args.seed_project.stem / args.seed_project.name).resolve()
+                )
+            if condition is not None:
+                config["prompt_condition"] = {
+                    key: condition[key]
+                    for key in ("expected_prefix", "replacement_prefix", "skill_context")
+                }
             config_path = output / f"{trial_id}.config.json"
             if provenance["backend"] != "codex":
                 config["backend"] = provenance["backend"]
@@ -218,6 +335,14 @@ def run(args) -> None:
                 for p in sorted(destination.rglob("*"))
                 if p.is_file()
             }
+            if frozen_seed is not None:
+                frozen_files = {
+                    str(path.relative_to(frozen_seed)).replace("\\", "/"): digest(path)
+                    for path in sorted(frozen_seed.rglob("*"))
+                    if path.is_file()
+                }
+                if frozen_files != seed_provenance["files"]:
+                    raise ValueError("Frozen seed project changed during trial")
             provenance["trials"].append(
                 {
                     "id": trial_id,
@@ -308,6 +433,8 @@ def pairs(before: Path, after: Path, seed: int) -> list[dict]:
 def blind(args) -> None:
     comparisons = pairs(args.before, args.after, args.seed)
     args.output.mkdir(parents=True, exist_ok=False)
+    suite = read_json(args.before / "suite.json")
+    rubric = suite["manifest"].get("listening_rubric", {})
     sections = []
     failed = sum(pair["status"] != "ready" for pair in comparisons)
     for index, pair in enumerate(comparisons, 1):
@@ -320,11 +447,21 @@ def blind(args) -> None:
             shutil.copy2(source["path"], args.output / filename)
             players.append(f'<p>{label} <audio controls src="{filename}"></audio></p>')
         questions = "".join(
-            f'<label>{axis} <select data-axis="{axis}"><option value="">Unrated</option>'
+            f'<label><span class="axis">{html.escape(axis)}</span>'
+            + (
+                "<ul>"
+                + "".join(
+                    f"<li>{html.escape(question)}</li>"
+                    for question in rubric.get(axis, [])
+                )
+                + "</ul>"
+                if rubric.get(axis)
+                else ""
+            )
+            + f' <select data-axis="{html.escape(axis, quote=True)}"><option value="">Unrated</option>'
             "<option>A</option><option>B</option><option>tie</option><option>cannot_judge</option></select></label> "
             for axis in AXES
         )
-        suite = read_json(args.before / "suite.json")
         case = next(
             c
             for c in suite["manifest"]["cases"]
@@ -375,6 +512,16 @@ def main() -> None:
         "--source-suite",
         type=Path,
         help="Previous suite binding an identical frozen runtime to its original source",
+    )
+    runner.add_argument(
+        "--seed-project",
+        type=Path,
+        help="Read-only source .auris project to freeze and use as every trial's initial state",
+    )
+    runner.add_argument(
+        "--prompt-condition",
+        type=Path,
+        help="JSON file freezing the before/after prompt condition and its provenance",
     )
     runner.add_argument(
         "--split", choices=["development", "holdout"], default="development"

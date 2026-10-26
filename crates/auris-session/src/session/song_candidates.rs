@@ -106,6 +106,18 @@ pub struct SongSinger {
     pub speaker: Option<String>,
 }
 
+impl SongSinger {
+    fn track_name(&self) -> String {
+        self.speaker
+            .as_ref()
+            .filter(|speaker| *speaker != &self.name)
+            .map_or_else(
+                || self.name.clone(),
+                |speaker| format!("{} — {speaker}", self.name),
+            )
+    }
+}
+
 /// How multiple voices share the score.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SongSinging {
@@ -149,6 +161,84 @@ pub struct SongRequest {
 }
 
 impl SongRequest {
+    /// Prepare an isolated, note-free document with the user's exact sound and voice choices.
+    /// The agent supplies the form, chords, notes and mix; no composition writer runs here.
+    pub fn authoring_session(&self, idea: &SongIdea) -> Result<Session, String> {
+        self.validate()?;
+        idea.validate()?;
+        let mut session = Session::new(
+            SessionOptions::headless()
+                .with_balance(false)
+                .with_plugin_paths(self.plugin_paths.clone()),
+        )
+        .map_err(|e| e.to_string())?;
+        let mut project = Project::new(&idea.title, session.project.sample_rate);
+        let mut hosted = Vec::new();
+        for choice in &self.sources {
+            let source = session
+                .prepare_composed_source(choice.source.as_ref())
+                .map_err(|e| e.to_string())?;
+            let instrument = source.as_ref().map_or_else(
+                || choice.instrument.clone(),
+                |source| source.instrument_id(),
+            );
+            if source.is_none() && !session.registry.has_instrument(&instrument) {
+                return Err(format!("Unavailable instrument: {instrument}"));
+            }
+            let track = if choice.role == "drums" {
+                project.add_drum_track(&choice.role, &instrument)
+            } else {
+                project.add_instrument_track(&choice.role, &instrument)
+            };
+            if let Some(source) = source
+                && let Some(source) = session.install_composed_source(&mut project, track, source)
+            {
+                hosted.push((track, source));
+            }
+        }
+        for (track, source) in hosted {
+            session.install_composed_hosted_source(track, source);
+        }
+        session.replace_project(project);
+        session.install_library_fonts();
+        let drums: Vec<_> = session
+            .project
+            .tracks
+            .iter()
+            .filter(|track| track.kind.is_drum())
+            .map(|track| track.id)
+            .collect();
+        for track in drums {
+            if let Some(map) = session.suggested_drum_map(track) {
+                session
+                    .set_drum_map(track, map)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        session.set_tempo_at(auris_core::Ticks::ZERO, idea.tempo);
+        session.set_key(
+            auris_core::Ticks::ZERO,
+            auris_core::theory::key::Key::parse(&idea.key).ok_or("Invalid key")?,
+        );
+        if !self.singers.is_empty()
+            && let Some(dictionary) = &self.japanese_dictionary
+        {
+            session
+                .set_japanese_dictionary(Some(dictionary))
+                .map_err(|e| e.to_string())?;
+        }
+        for singer in &self.singers {
+            let track = session.add_singer_track(singer.track_name());
+            session
+                .set_singer_voice(track, Some(&singer.path))
+                .map_err(|e| e.to_string())?;
+            session
+                .set_singer_speaker(track, singer.speaker.as_deref())
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(session)
+    }
+
     /// Reject inconsistent controls before starting any model or render work.
     pub fn validate(&self) -> Result<(), String> {
         if self.seconds.is_some_and(|s| !(30..=300).contains(&s)) {
@@ -454,6 +544,18 @@ impl SongCandidate {
                     .ok_or("Stale vocal render")?;
             }
         }
+        Self::from_authored_session(idea, brief, &mut session, cancel, progress)
+    }
+
+    /// Retain and render the exact authored document for audition and later adoption.
+    /// Does not generate notes, substitute instruments or rebalance the mix.
+    pub fn from_authored_session(
+        idea: SongIdea,
+        brief: &str,
+        session: &mut Session,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(&str),
+    ) -> Result<Self, String> {
         session.collect_hosted_state().map_err(|e| e.to_string())?;
         let mut project = session.project().clone();
         project.creation_brief = Some(format!(
@@ -518,14 +620,7 @@ impl Session {
         let clips = original.kind.note_clips().ok_or("No vocal clips")?.to_vec();
         self.project.remove_track(original.id);
         for (index, voice) in request.singers.iter().enumerate() {
-            let name = voice
-                .speaker
-                .as_ref()
-                .filter(|name| *name != &voice.name)
-                .map_or_else(
-                    || voice.name.clone(),
-                    |speaker| format!("{} — {speaker}", voice.name),
-                );
+            let name = voice.track_name();
             let track = self.project.add_singer_track(&name, auris_synth::Vocal::ID);
             for (position, clip) in clips.iter().enumerate() {
                 let together = request.singing == SongSinging::Harmony
@@ -674,6 +769,44 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authoring_starts_with_exact_sounds_and_voices_but_no_generated_score() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut request = vocal_request(folder.path(), SongSinging::Alternate);
+        for singer in &mut request.singers {
+            singer.name = "Shared voice".into();
+        }
+        request.sources.push(SongSourceChoice {
+            role: "chords".into(),
+            instrument: "auris.physical.piano".into(),
+            source: None,
+        });
+        let session = request.authoring_session(&idea()).unwrap();
+        assert_eq!(session.project().tracks.len(), 3);
+        assert_eq!(session.project().tracks[1].name, "Shared voice — First");
+        assert_eq!(session.project().tracks[2].name, "Shared voice — Second");
+        assert_eq!(
+            session.project().tracks[0]
+                .kind
+                .as_instrument()
+                .unwrap()
+                .instrument_id,
+            "auris.physical.piano"
+        );
+        assert!(
+            session.project().tracks.iter().all(|track| track
+                .kind
+                .note_clips()
+                .unwrap()
+                .is_empty())
+        );
+        assert!(session.project().song_spec.is_none());
+        assert!(session.project().audio_sources.is_empty());
+        for track in &session.project().tracks[1..] {
+            assert!(track.kind.as_singer().unwrap().voice.is_some());
+        }
+    }
 
     fn vocal_request(folder: &std::path::Path, singing: SongSinging) -> SongRequest {
         let path = folder.join("test.voicevox.json");

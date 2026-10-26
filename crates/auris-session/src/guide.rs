@@ -42,10 +42,18 @@
 //!
 //! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
 //! directions. The session validates each [`crate::SongIdea`] and an immutable [`crate::SongRequest`].
-//! Explicit sources override arrangement defaults. Authored or separately generated lyrics become
-//! editable vocal notes, divided between selected singers or arranged in diatonic harmony.
-//! Candidate generation owns a headless session on one thread, including plugin lifecycles,
-//! and synthesizes vocals before rendering offline into a [`crate::SongCandidate`].
+//! Direction planning, standalone lyric generation and the live agent's default prompt share
+//! the agent's `prompts/musical-design.md` principles. Each retains its own operation/output
+//! contract: the planner chooses directions, then each candidate runs a separate tool-using
+//! agent with the same resolved composition prompt as the panel. [`crate::SongRequest::authoring_session`]
+//! prepares selected sources and singers without notes. The agent writes section harmony,
+//! expressive notes, arrangement and mix; only mechanical backing may use phrase writers.
+//! The candidate host owns the headless session and plugin lifecycles on one thread, executes
+//! cancellable tool jobs and retains explicit permission denials. Note replacement is authorized
+//! only inside this new candidate; external processes and file output are not required.
+//! Authored notes, mixer review, current vocal takes and full current-mix inspection are checked
+//! before rendering into a [`crate::SongCandidate`]. A failed agent never silently falls back to
+//! automatic composition. These checks establish completion evidence, not musical quality.
 //! Each candidate retains its editable document, audition audio and a temporary vocal asset
 //! directory. Adoption copies those assets into the destination project before committing
 //! that exact document as one undoable edit;
