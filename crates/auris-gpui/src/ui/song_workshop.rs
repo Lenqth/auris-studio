@@ -244,12 +244,21 @@ impl AurisApp {
     }
 
     fn adopt_song_candidate(&mut self, index: usize, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(s) = &self.song_workshop
+        let selection_request = self.t(Key::WorkshopSelectionRequest).to_string();
+        if let Some(s) = &mut self.song_workshop
             && let Some(snapshot) = &s.snapshot
             && let Some(round) = s.view_round.and_then(|i| snapshot.document.rounds.get(i))
             && let Some(candidate) = round.candidates.get(index)
         {
-            s.send(Command::Select(candidate.id));
+            let message = selection_request.replace("{song}", &candidate.direction.title);
+            if s.send(Command::Select(
+                candidate.id,
+                Box::new(s.preferences.clone()),
+                message,
+            )) {
+                s.submitted = true;
+                s.scroll.scroll_to_bottom();
+            }
         }
         cx.notify();
     }

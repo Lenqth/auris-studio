@@ -20,6 +20,11 @@ to one candidate or the entire batch. Regenerating a completed candidate creates
 earlier results available. Selecting **Continue with this song** establishes the
 exact score for the next request without closing the conversation. Ask for revisions
 or new alternatives from that score. Earlier comparisons remain in the transcript.
+Selection appears in the chat immediately while the director prepares three to five
+numbered arrangement or improvement suggestions. Choose an option in the message box
+or describe another change. Suggestions alone do not launch another production batch.
+The choice is recorded automatically when **Use my preferences** is enabled, before
+requesting the director's response, so a provider failure does not lose the choice.
 Explicitly protected note tracks are checked before a descendant is published.
 
 **Open editor** adopts the selected document as an undoable edit and opens a normal
@@ -36,8 +41,8 @@ keeps existing records but neither records new votes nor includes them in prompt
 
 A choice is weak, contextual evidence. It does not prove why a song was preferred,
 and an unselected song is not automatically disliked. Re-selecting within the same
-comparison replaces its vote. A retry with only one alternative does not create a
-comparative preference. Current explicit instructions take priority, and the director
+comparison replaces its vote. A choice with only one alternative is recorded as an
+individual choice, not a comparative preference. Current explicit instructions take priority, and the director
 is asked to retain an exploratory alternative. This is prompt personalization using
 recorded choices, not model-weight training or a claim of measured musical improvement.
 

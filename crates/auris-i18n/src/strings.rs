@@ -114,6 +114,7 @@ strings! {
     WorkshopListen { en: "Listen", ja: "試聴" }
     WorkshopStop { en: "Stop", ja: "停止" }
     WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopSelectionRequest { en: "Continue with “{song}”. Suggest some arrangement and improvement options.", ja: "「{song}」で続けます。追加の編曲や改良の選択肢を提案してください。" }
     WorkshopRecover { en: "Resume recovery", ja: "途中から復旧" }
     WorkshopRecovering { en: "Waiting to recover", ja: "自動復旧を待っています" }
     WorkshopRecoveryCount { en: "Automatic recoveries", ja: "自動復旧" }

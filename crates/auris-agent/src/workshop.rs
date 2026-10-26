@@ -24,7 +24,7 @@ pub enum Command {
     /// Submit one natural-language message with model settings captured at submission.
     Send(String, Box<AgentPreferences>),
     /// Choose an exact completed candidate without closing the conversation.
-    Select(u64),
+    Select(u64, Box<AgentPreferences>, String),
     /// Retry only this candidate in a new artifact directory.
     Retry(u64),
     /// Continue an unfinished candidate from its checkpoint with a fresh recovery budget.
@@ -236,6 +236,7 @@ struct Owner {
     events: mpsc::Sender<Snapshot>,
     planner: Option<crate::song_ideas::SongPlanner>,
     planned_parent: Option<u64>,
+    selection_followup: bool,
     prefs: AgentPreferences,
     jobs: BTreeMap<u64, Arc<AtomicBool>>,
     job_sender: mpsc::Sender<JobEvent>,
@@ -291,6 +292,7 @@ impl Owner {
             events,
             planner: None,
             planned_parent: None,
+            selection_followup: false,
             jobs: BTreeMap::new(),
             job_sender,
             job_receiver,
@@ -338,7 +340,7 @@ impl Owner {
                             user: false,
                             text: answer.reply,
                         });
-                        if !answer.directions.is_empty() {
+                        if !self.selection_followup && !answer.directions.is_empty() {
                             let mut candidates = Vec::new();
                             for direction in answer.directions {
                                 self.snapshot.document.next_id += 1;
@@ -443,6 +445,7 @@ impl Owner {
                     return;
                 }
                 self.prefs = *prefs;
+                self.selection_followup = false;
                 self.planned_parent = self.snapshot.document.selected;
                 self.snapshot.error = None;
                 match auris_session::workshop::load_preferences() {
@@ -472,14 +475,22 @@ impl Owner {
                     Err(e) => self.snapshot.error = Some(e),
                 }
             }
-            Command::Select(id) if self.snapshot.candidates.contains_key(&id) => {
+            Command::Select(id, prefs, message) if self.snapshot.candidates.contains_key(&id) => {
+                if self.selection_followup
+                    && self.planner.is_some()
+                    && self.snapshot.document.selected == Some(id)
+                {
+                    return;
+                }
+                self.planner = None;
+                self.snapshot.error = None;
                 self.snapshot.document.selected = Some(id);
                 if let Some(round) = self
                     .snapshot
                     .document
                     .rounds
                     .iter()
-                    .find(|r| r.candidates.len() > 1 && r.candidates.iter().any(|c| c.id == id))
+                    .find(|r| r.candidates.iter().any(|c| c.id == id))
                 {
                     let chosen = round
                         .candidates
@@ -514,6 +525,33 @@ impl Owner {
                         Ok(p) => self.snapshot.preferences = p,
                         Err(e) => self.snapshot.error = Some(e),
                     }
+                }
+                self.prefs = *prefs;
+                self.selection_followup = true;
+                self.planned_parent = Some(id);
+                self.snapshot.document.messages.push(Message {
+                    user: true,
+                    text: message,
+                });
+                let selected = self
+                    .snapshot
+                    .document
+                    .rounds
+                    .iter()
+                    .flat_map(|r| &r.candidates)
+                    .find(|c| c.id == id);
+                let recorded = self.snapshot.preferences.enabled && self.snapshot.error.is_none();
+                let prompt = json!({
+                    "event":"candidate_selected",
+                    "conversation":self.snapshot.document.messages,
+                    "selected":selected,
+                    "selected_score":self.snapshot.candidates[&id].workshop_outline(),
+                    "preference_recorded":recorded,
+                    "instruction":"Acknowledge the selected song and propose 3 to 5 concrete, distinct arrangement or improvement options in a numbered list in reply, grounded in this song and the conversation. Ask which option to pursue and invite a custom request. Mention preference recording only if preference_recorded is true. Return an empty directions array; selection requests suggestions, not another production batch. Do not claim to have listened."
+                }).to_string();
+                match crate::song_ideas::SongPlanner::conversation(self.prefs.clone(), prompt) {
+                    Ok(planner) => self.planner = Some(planner),
+                    Err(e) => self.snapshot.error = Some(e),
                 }
             }
             Command::Recover(id, prefs)
@@ -1139,6 +1177,118 @@ mod tests {
             },
         }
     }
+    #[test]
+    fn selection_records_preference_and_replies_without_composing() {
+        const CHILD: &str = "AURIS_SELECTION_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let config = tempfile::tempdir().unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "workshop::tests::selection_records_preference_and_replies_without_composing",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .env(auris_session::CONFIG_DIR_VAR, config.path())
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(dir.path().into());
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        let cancel = AtomicBool::new(false);
+        execute(
+            &mut session,
+            json!({"action":"add_track","name":"Kit","kind":"drum"}),
+            &Settings::default(),
+            &cancel,
+        )
+        .unwrap();
+        execute(&mut session, json!({"action":"generate_phrase","track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}), &Settings::default(), &cancel).unwrap();
+        let song = session
+            .finish_workshop_candidate(
+                &store.candidate_path(1),
+                idea(&assignment().direction),
+                &cancel,
+            )
+            .unwrap();
+        // Even an over-eager director must not launch another batch on selection.
+        let directions: Vec<_> = (0..3)
+            .map(|i| Direction {
+                title: format!("Option {i}"),
+                ..assignment().direction
+            })
+            .collect();
+        let reply = "Selected. 1. Add bass. 2. Vary the drums. 3. Build a chorus. Which next?";
+        let answer = json!({"role":"assistant","content":json!({"reply":reply,"directions":directions}).to_string()}).to_string();
+        let (url, requests) =
+            crate::tests::mock_server(vec![crate::tests::completion(&answer, "stop")]);
+        let prefs = AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            ..Default::default()
+        };
+        let (events, snapshots) = mpsc::channel();
+        let mut owner = Owner::new(store, Settings::default(), events);
+        let mut selected = assignment();
+        selected.ready = true;
+        owner.snapshot.document.rounds.push(Round {
+            after_message: 0,
+            candidates: vec![selected.clone(), Candidate { id: 2, ..selected }],
+        });
+        owner.snapshot.candidates.insert(1, Arc::new(song));
+        owner.command(Command::Select(
+            1,
+            Box::new(prefs.clone()),
+            "Continue with Test".into(),
+        ));
+        owner.command(Command::Select(
+            1,
+            Box::new(prefs),
+            "Duplicate click".into(),
+        ));
+        assert_eq!(owner.snapshot.document.messages.len(), 1);
+        let saved = auris_session::workshop::load_preferences().unwrap();
+        assert_eq!(saved.selections.len(), 1);
+        assert_eq!(saved.selections[0].candidate, 1);
+        let (commands, receiver) = mpsc::channel();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop = stopped.clone();
+        let thread = std::thread::spawn(move || owner.run(receiver, stop));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let snapshot = snapshots
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .unwrap();
+            if snapshot
+                .document
+                .messages
+                .last()
+                .is_some_and(|m| !m.user && m.text == reply)
+            {
+                assert_eq!(snapshot.document.selected, Some(1));
+                assert_eq!(snapshot.document.rounds.len(), 1);
+                assert!(snapshot.progress.is_empty());
+                break;
+            }
+            assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
+        }
+        stopped.store(true, Ordering::Release);
+        drop(commands);
+        thread.join().unwrap();
+        let request = &requests.lock().unwrap()[0];
+        assert!(request.contains("candidate_selected"));
+        assert!(request.contains("preference_recorded"));
+    }
+
     #[test]
     fn automatic_recovery_is_bounded_and_preserves_failure_context() {
         let (sender, receiver) = mpsc::channel();
