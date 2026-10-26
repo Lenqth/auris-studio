@@ -1035,7 +1035,7 @@ pub(crate) struct ClaimDisclosureActivation;
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = auris_slider, no_json)]
 pub(crate) struct AdjustSlider {
-    key: &'static str,
+    pub(crate) key: &'static str,
 }
 
 /// Bindings installed independently of the editable application keymap.
@@ -1081,7 +1081,7 @@ fn slider_fraction_after_key_with_step(fraction: f32, key: &str, step: f32) -> O
     (next != fraction).then_some(next)
 }
 
-fn slider_fraction_after_key(fraction: f32, key: &str) -> Option<f32> {
+pub(crate) fn slider_fraction_after_key(fraction: f32, key: &str) -> Option<f32> {
     slider_fraction_after_key_with_step(fraction, key, SLIDER_PERCENT_STEP)
 }
 

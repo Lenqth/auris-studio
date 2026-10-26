@@ -19,6 +19,10 @@ pub enum Icon {
     Play,
     /// Pause playback.
     Pause,
+    /// Audible preview output.
+    Volume,
+    /// Muted preview output.
+    VolumeMuted,
     /// Stop playback and rewind.
     Stop,
     /// Start recording a take.
@@ -153,6 +157,45 @@ pub fn paint_icon(window: &mut Window, bounds: Bounds<Pixels>, icon: Icon, color
     };
 
     match icon {
+        Icon::Volume | Icon::VolumeMuted => {
+            let mut speaker = PathBuilder::fill();
+            for (i, (x, y)) in [
+                (0.12, 0.38),
+                (0.30, 0.38),
+                (0.50, 0.20),
+                (0.50, 0.80),
+                (0.30, 0.62),
+                (0.12, 0.62),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if i == 0 {
+                    speaker.move_to(at(x, y));
+                } else {
+                    speaker.line_to(at(x, y));
+                }
+            }
+            speaker.close();
+            if let Ok(path) = speaker.build() {
+                window.paint_path(path, color);
+            }
+            let mut waves = PathBuilder::stroke(px((side * 0.075).max(1.0)));
+            if icon == Icon::VolumeMuted {
+                waves.move_to(at(0.64, 0.37));
+                waves.line_to(at(0.88, 0.63));
+                waves.move_to(at(0.64, 0.63));
+                waves.line_to(at(0.88, 0.37));
+            } else {
+                waves.move_to(at(0.63, 0.33));
+                waves.curve_to(at(0.63, 0.67), at(0.86, 0.50));
+                waves.move_to(at(0.74, 0.19));
+                waves.curve_to(at(0.74, 0.81), at(1.04, 0.50));
+            }
+            if let Ok(path) = waves.build() {
+                window.paint_path(path, color);
+            }
+        }
         Icon::More => {
             for x in [0.22, 0.5, 0.78] {
                 knob(window, x, 0.5, 0.13, 0.13);

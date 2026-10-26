@@ -112,7 +112,7 @@ pub use auris_dsp::drum_analysis::{AcousticCharacter, DrumAcoustics, DrumSpectru
 /// Workspace-owned engine error variants exposed for frontend localisation.
 pub use auris_engine::EngineError;
 /// Completion status and cancellation of a queued or playing output audition.
-pub use auris_engine::OutputPreviewStatus;
+pub use auris_engine::{OutputPreviewOptions, OutputPreviewStatus};
 /// Workspace-owned file error variants exposed for frontend localisation.
 pub use auris_io::IoError;
 pub use error::SessionError;

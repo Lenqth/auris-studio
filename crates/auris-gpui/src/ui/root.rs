@@ -1446,6 +1446,9 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.move_audio_player(event, cx) {
+            return;
+        }
         if self.compose_progress.is_some() {
             return;
         }
@@ -2041,6 +2044,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.audio_player_drag = None;
         let reordered = match &self.drag {
             Some(Drag::DrumLaneReorder { track, .. }) => Some(*track),
             _ => None,

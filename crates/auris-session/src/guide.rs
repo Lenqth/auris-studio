@@ -1766,6 +1766,12 @@ pub mod composition {
     //! conversion and uniform level adjustment, then PCM directly at the device output. This
     //! bypasses the project graph so an already rendered mix is not processed twice. The callback
     //! retains finished PCM until replacement and returns old buffers for destruction off-thread.
+    //! The same output path plays chord auditions. Each request exposes its own callback clock,
+    //! pause, seek and volume controls through [`OutputPreviewStatus`](crate::OutputPreviewStatus).
+    //! These use atomics, never callback locks or allocations, and do not edit the document mixer.
+    //! Initial position and volume are queued together with PCM, including muted starts. Completion,
+    //! cancellation and device loss remain terminal; replay queues a fresh request. Both desktop
+    //! preview surfaces compose the same player with keyboard-operable seek and volume sliders.
     //!
     //! # Two stages
     //!

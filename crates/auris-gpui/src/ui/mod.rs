@@ -8,6 +8,7 @@ pub mod agent_chat;
 mod agent_markdown;
 pub mod analyser;
 pub mod arrangement;
+pub(crate) mod audio_player;
 pub mod automation;
 pub mod commands;
 mod compose_job;

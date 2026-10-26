@@ -312,6 +312,12 @@ strings! {
     // command label, and it says what arming *does* because "arm" is jargon in both languages.
     ArmTrack { en: "Record Onto This Track", ja: "このトラックに録音" }
     Volume { en: "Vol", ja: "音量" }
+    PreviewPlay { en: "Play preview", ja: "試聴を再生" }
+    PreviewPause { en: "Pause preview", ja: "試聴を一時停止" }
+    PreviewSeek { en: "Playback position", ja: "再生位置" }
+    PreviewVolume { en: "Preview volume", ja: "試聴の音量" }
+    PreviewMute { en: "Mute preview", ja: "試聴をミュート" }
+    PreviewUnmute { en: "Unmute preview", ja: "試聴のミュートを解除" }
     Pan { en: "Pan", ja: "パン" }
     TrackKindInstrument { en: "Instrument", ja: "ソフト音源" }
     TrackKindDrum { en: "Drums", ja: "ドラム" }

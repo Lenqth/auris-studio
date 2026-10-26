@@ -71,12 +71,21 @@ impl Session {
         &mut self,
         audio: Arc<AudioBuffer>,
     ) -> Result<OutputPreviewStatus, SessionError> {
+        self.play_output_preview_with(audio, auris_engine::OutputPreviewOptions::default())
+    }
+
+    /// Plays prepared PCM with position and volume configured before the first audio block.
+    pub fn play_output_preview_with(
+        &mut self,
+        audio: Arc<AudioBuffer>,
+        options: auris_engine::OutputPreviewOptions,
+    ) -> Result<OutputPreviewStatus, SessionError> {
         if audio.sample_rate() != self.sample_rate() || audio.frame_count() == 0 {
             return Err(SessionError::OutputPreview(
                 "the output rate changed; prepare the audition again".into(),
             ));
         }
-        Ok(self.engine.play_output_preview(audio)?)
+        Ok(self.engine.play_output_preview_with(audio, options)?)
     }
 
     /// Stops finished-audio audition while keeping the document and playhead untouched.
