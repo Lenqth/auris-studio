@@ -234,6 +234,22 @@ pub struct MidiTrack {
     pub controllers: BTreeMap<u8, Vec<CurvePoint>>,
 }
 
+impl MidiTrack {
+    /// Last note release or performance-curve point, in absolute song ticks.
+    ///
+    /// A piano part can keep ringing under the sustain pedal after every key is released.
+    /// Keeping its later controller events prevents a clip boundary from releasing it early.
+    pub fn end(&self) -> Ticks {
+        self.notes
+            .iter()
+            .map(Note::end)
+            .chain(self.bend.iter().map(|point| point.at))
+            .chain(self.controllers.values().flatten().map(|point| point.at))
+            .max()
+            .unwrap_or(Ticks::ZERO)
+    }
+}
+
 /// Everything a Standard MIDI File said, in this application's units.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MidiImport {
@@ -246,12 +262,11 @@ pub struct MidiImport {
 }
 
 impl MidiImport {
-    /// Position just past the last note in the file.
+    /// Last note release or performance-curve point across the imported tracks.
     pub fn end(&self) -> Ticks {
         self.tracks
             .iter()
-            .flat_map(|track| track.notes.iter())
-            .map(|note| note.end())
+            .map(MidiTrack::end)
             .max()
             .unwrap_or(Ticks::ZERO)
     }
@@ -2727,6 +2742,28 @@ mod tests {
 
     /// Controller 64, the sustain pedal.
     const SUSTAIN: u8 = 64;
+
+    #[test]
+    fn imported_end_includes_the_pedal_release_after_the_last_note() {
+        let imported = metrical(vec![vec![
+            note_on(0, 60, 100),
+            event(0, controller_message(u4::new(0), SUSTAIN, 1.0)),
+            note_off(480, 60),
+            event(2160, controller_message(u4::new(0), SUSTAIN, 0.0)),
+        ]]);
+        assert_eq!(imported.tracks[0].notes[0].end(), Ticks::QUARTER);
+        assert_eq!(imported.end(), Ticks::from_beats(5.5));
+    }
+
+    #[test]
+    fn imported_end_includes_pitch_bend_after_the_last_note() {
+        let imported = metrical(vec![vec![
+            note_on(0, 60, 100),
+            note_off(480, 60),
+            event(480, pitch_bend().kind),
+        ]]);
+        assert_eq!(imported.end(), Ticks::from_beats(2.0));
+    }
 
     #[test]
     fn imported_sustain_holds_until_each_authored_pedal_change() {

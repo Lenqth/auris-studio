@@ -41,7 +41,6 @@ pub(crate) fn definitions() -> Vec<ToolDefinition> {
                     | "search_documentation"
                     | "export_audio_attachment"
                     | "read_report"
-                    | "transcribe_audio"
             )
         })
         .map(|tool| {

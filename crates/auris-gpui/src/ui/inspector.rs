@@ -20,7 +20,7 @@ use crate::ui::plugin_editor::{
 };
 use crate::ui::plugin_window::PluginSubject;
 use crate::ui::scrollbars::ScrollPanel;
-use crate::ui::widgets::{bounded_picker_label, chain_button, disclosure};
+use crate::ui::widgets::{bounded_picker_label, disclosure};
 
 /// Scroll and keyboard identity for the current large plugin parameter list.
 #[derive(Default)]
@@ -99,8 +99,7 @@ pub(crate) fn insert_rows(chain: &[(EffectSlotId, String, bool)]) -> Vec<Insert>
 ///
 /// `over` is the slot the pointer has entered, or `None` for the empty slot at the end of the
 /// list, which stands for the end of the chain. A *delta* rather than an index because that is
-/// what `Session::move_effect` takes, and it takes one because the two chevrons beside each row
-/// were the first thing to ask it.
+/// what `Session::move_effect` takes for both drag gestures and menu commands.
 ///
 /// `None` when nothing should happen: the pointer is over the row it set off from, or over a row
 /// belonging to some other strip — the mixer draws a chain per channel, and a drag that wandered
@@ -422,17 +421,27 @@ impl AurisApp {
 
         if let Some(instrument_id) = instrument_id {
             let name = self.instrument_label(track_id, &instrument_id);
+            let subject = PluginSubject::Instrument(track_id);
             sound_rows.push(
-                self.command_row(
-                    "inst-open",
-                    Key::Instrument,
-                    name,
-                    cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                        this.open_plugin_window(PluginSubject::Instrument(track_id));
-                        cx.notify();
-                    }),
-                )
-                .into_any_element(),
+                div()
+                    .debug_selector(|| "instrument-editor-row".into())
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .min_w_0()
+                    .child(
+                        div()
+                            .id("inst-name")
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_xs()
+                            .child(name.clone())
+                            .tooltip(crate::ui::tooltip::keyed_tip(name.clone(), "", &theme)),
+                    )
+                    .child(self.plugin_editor_button("inst-open", subject, cx))
+                    .child(self.plugin_menu_button("inst-menu", subject, name, cx))
+                    .into_any_element(),
             );
             sound_rows.push(
                 crate::ui::widgets::bounded_button_enabled(
@@ -513,18 +522,18 @@ impl AurisApp {
             let slot_index = insert_element_key(Some(slot_id));
             let name = self.effect_label(slot_id, &effect_id);
             let menu_name = name.clone();
+            let subject = PluginSubject::Insert {
+                track: Some(track_id),
+                slot: slot_id,
+            };
 
             // One row per insert, and its parameters live in the plugin editor rather than
             // underneath it. Expanding every effect in place pushed the rest of the chain down
             // the panel, so a four-effect strip could not be read without scrolling — and the
             // slot you were about to reach for kept moving.
-            //
-            // The reorder and remove buttons stay visible here, unlike on the mixer's 128px
-            // strips where the same row has room for none of them. Losing them to the right-click
-            // menu everywhere would be a real reduction in discoverability, and this panel has
-            // the width to keep them.
             insert_controls.push(
                 div()
+                    .debug_selector(move || format!("insert-editor-row-{slot_index}"))
                     .flex()
                     .items_center()
                     .gap_1()
@@ -537,9 +546,8 @@ impl AurisApp {
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                            // The fallback grab: a press that landed on one of the chevrons has
-                            // claimed the gesture already, and this runs after it because a
-                            // parent's handler bubbles last.
+                            // Row controls handle their press first; the parent can begin a
+                            // reorder only when no other drag has claimed the gesture.
                             if this.drag.is_none() {
                                 this.begin_drag(Drag::EffectReorder {
                                     track: Some(track_id),
@@ -566,57 +574,41 @@ impl AurisApp {
                             cx.notify();
                         }),
                     )
-                    .child(div().flex_1().min_w_0().child(crate::ui::widgets::button(
-                        ("insert-open", slot_index),
-                        name,
-                        crate::ui::widgets::ButtonStyle::Ghost,
-                        enabled,
-                        theme.accent_soft,
-                        &theme,
-                        cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            this.open_plugin_window(PluginSubject::Insert {
-                                track: Some(track_id),
-                                slot: slot_id,
-                            });
-                            cx.notify();
-                        }),
-                    )))
                     .child(
-                        chain_button(
-                            ("fx-up", slot_index),
-                            Icon::ChevronUp,
+                        crate::ui::widgets::button(
+                            ("fx-enabled", slot_index),
+                            self.t(if enabled { Key::ValueOn } else { Key::ValueOff }),
+                            crate::ui::widgets::ButtonStyle::Ghost,
+                            enabled,
+                            theme.accent_soft,
                             &theme,
                             cx.listener(move |this, _, _, cx| {
-                                this.move_effect(Some(track_id), slot_id, -1);
+                                this.toggle_effect(Some(track_id), slot_id);
                                 cx.notify();
                             }),
                         )
-                        .tooltip(self.tip(Key::MenuMoveUp, "")),
+                        .flex_shrink_0()
+                        .tooltip(self.tip(
+                            if enabled {
+                                Key::MenuEnabled
+                            } else {
+                                Key::PluginBypassed
+                            },
+                            "",
+                        )),
                     )
                     .child(
-                        chain_button(
-                            ("fx-down", slot_index),
-                            Icon::ChevronDown,
-                            &theme,
-                            cx.listener(move |this, _, _, cx| {
-                                this.move_effect(Some(track_id), slot_id, 1);
-                                cx.notify();
-                            }),
-                        )
-                        .tooltip(self.tip(Key::MenuMoveDown, "")),
+                        div()
+                            .id(("insert-name", slot_index))
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_xs()
+                            .child(name.clone())
+                            .tooltip(crate::ui::tooltip::keyed_tip(name.clone(), "", &theme)),
                     )
-                    .child(
-                        chain_button(
-                            ("fx-remove", slot_index),
-                            Icon::Cross,
-                            &theme,
-                            cx.listener(move |this, _, _, cx| {
-                                this.remove_effect(slot_id);
-                                cx.notify();
-                            }),
-                        )
-                        .tooltip(self.tip(Key::MenuRemove, "")),
-                    )
+                    .child(self.plugin_editor_button(("insert-open", slot_index), subject, cx))
+                    .child(self.plugin_menu_button(("insert-menu", slot_index), subject, name, cx))
                     .into_any_element(),
             );
         }

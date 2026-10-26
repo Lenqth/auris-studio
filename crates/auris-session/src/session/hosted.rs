@@ -509,8 +509,20 @@ impl HostedPlugins {
                 reason: "nothing hosted is here".into(),
             });
         };
+        let was_open = slot.plugin_mut().is_some_and(|plugin| plugin.gui_is_open());
         slot.editor = open;
-        slot.settle_editor(parent)
+        if let Err(error) = slot.settle_editor(parent) {
+            slot.editor = false;
+            return Err(error);
+        }
+        // Settling also runs on every tick. Only an explicit open request may take focus.
+        if open
+            && was_open
+            && let Some(plugin) = slot.plugin_mut()
+        {
+            plugin.raise_gui()?;
+        }
+        Ok(())
     }
 
     /// Runs every hosted plugin's clocks and keeps its window where the slot says.
@@ -1061,6 +1073,7 @@ impl Session {
     /// Not an undoable edit and not part of the document: which windows are open is a fact about
     /// this sitting, like which panel is showing. A project that reopened four plugin windows
     /// because it was saved with four open would be a project that took over the screen.
+    /// An explicit open request also raises an existing editor, preserving its current view.
     pub fn set_plugin_window_open(
         &mut self,
         which: PluginWindow,
@@ -1933,6 +1946,167 @@ mod tests {
     }
 
     #[test]
+    fn agent_hosted_controls_change_rendered_audio_and_undo_as_one_batch() {
+        use crate::live_agent::{Command, InstrumentControl};
+
+        let (mut session, file) = session_with_instrument();
+        let effect_file = PathBuf::from("/auris/testkit/test-gain.clap");
+        session
+            .hosted
+            .libraries
+            .insert(effect_file.clone(), fixture_library());
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Note", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        session
+            .add_note(
+                clip,
+                auris_core::Note::new(60, Ticks::ZERO, Ticks::QUARTER * 3),
+            )
+            .unwrap();
+        session
+            .set_hosted_instrument(track, &file, TONE_ID)
+            .unwrap();
+        let slot = session
+            .add_hosted_effect(Some(track), &effect_file, FIXTURE_ID)
+            .unwrap();
+        let render = |session: &mut super::Session| {
+            session
+                .render_job()
+                .render(
+                    &auris_engine::OfflineOptions::whole_project(),
+                    &mut auris_engine::RenderProgress::default(),
+                )
+                .unwrap()
+                .channel_rms(0)
+        };
+        let original = render(&mut session);
+        session.forget_history();
+        let before = session.project().clone();
+        let instrument_key = session.instrument_descriptors(track)[0].key.to_string();
+        let edit = || Command::SetInstrumentParams {
+            edits: vec![InstrumentControl {
+                track: track.0,
+                param: instrument_key.clone(),
+                value: 0.5,
+            }],
+        };
+        session.agent_command(edit()).unwrap();
+        session.agent_command(edit()).unwrap();
+        assert!((render(&mut session) / original - 0.5).abs() < 1e-4);
+        session.undo().unwrap();
+        assert_eq!(session.project(), &before);
+        assert!(session.undo().is_none());
+        let effect_key = session.effect_descriptors(slot)[0].key.to_string();
+        let edit = || Command::MixerGraph {
+            operation: crate::mixer_graph::commands::GraphAction::SetParameter {
+                node: format!("effect:{}", slot.0),
+                param: effect_key.clone(),
+                value: 0.25,
+            },
+        };
+        session.agent_command(edit()).unwrap();
+        session.agent_command(edit()).unwrap();
+        assert!((render(&mut session) / original - 0.25).abs() < 1e-4);
+        session.undo().unwrap();
+        assert_eq!(session.project(), &before);
+        assert!(session.undo().is_none());
+    }
+
+    #[test]
+    fn agent_instrument_batch_refuses_read_only_controls_before_any_edit() {
+        use crate::live_agent::{Command, InstrumentControl};
+
+        let (mut session, file) = session_with_instrument();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        session
+            .set_hosted_instrument(track, &file, TONE_ID)
+            .unwrap();
+        session.forget_history();
+        let before = session.project().clone();
+        let descriptors = session.instrument_descriptors(track);
+        let read: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_command(Command::InspectInstrument {
+                    track: track.0,
+                    offset: 0,
+                })
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read["parameters"][1]["read_only"], true);
+        assert_eq!(read["parameters"][0]["read_only"], false);
+        assert_eq!(read["parameters"][0]["value_domain"], "native");
+        let result = session.agent_command(Command::SetInstrumentParams {
+            edits: vec![
+                InstrumentControl {
+                    track: track.0,
+                    param: descriptors[0].key.to_string(),
+                    value: 0.25,
+                },
+                InstrumentControl {
+                    track: track.0,
+                    param: descriptors[1].key.to_string(),
+                    value: 12.0,
+                },
+            ],
+        });
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|error| error.contains("read-only")),
+            "{result:?}"
+        );
+        assert_eq!(session.project(), &before);
+        assert!(session.undo().is_none());
+        let target = crate::ParamTarget::Instrument {
+            track,
+            param: descriptors[1].id,
+        };
+        session.set_param(target, 12.0);
+        assert!(!session.set_automation_point(target, Ticks::ZERO, 12.0));
+        assert_eq!(session.project(), &before);
+    }
+
+    #[test]
+    fn agent_effect_refuses_read_only_controls_without_history() {
+        let (mut session, file) = session_with_fixture();
+        let slot = session.add_hosted_effect(None, &file, FIXTURE_ID).unwrap();
+        let descriptors = session.effect_descriptors(slot);
+        session.forget_history();
+        let before = session.project().clone();
+        let read: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_command(crate::live_agent::Command::MixerGraph {
+                    operation: crate::mixer_graph::commands::GraphAction::Parameters {
+                        node: format!("effect:{}", slot.0),
+                        offset: 0,
+                        limit: None,
+                    },
+                })
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(read["parameters"][1]["read_only"], true);
+        let result = session.agent_command(crate::live_agent::Command::MixerGraph {
+            operation: crate::mixer_graph::commands::GraphAction::SetParameter {
+                node: format!("effect:{}", slot.0),
+                param: descriptors[1].key.to_string(),
+                value: 1.0,
+            },
+        });
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|error| error.contains("read-only")),
+            "{result:?}"
+        );
+        assert_eq!(session.project(), &before);
+        assert!(session.undo().is_none());
+    }
+
+    #[test]
     fn a_native_plugin_edit_invalidates_rendered_spectrogram_revision() {
         for instrument in [false, true] {
             let (mut session, file) = if instrument {
@@ -2570,6 +2744,38 @@ mod tests {
             .set_plugin_window_open(which, false)
             .expect("closes");
         assert!(!session.plugin_window_is_open(which));
+    }
+
+    #[test]
+    fn only_an_explicit_open_request_raises_an_existing_clap_editor() {
+        use auris_clap::testkit::gui_step;
+        let (mut session, file) = session_with_fixture();
+        let slot = session.add_hosted_effect(None, &file, FIXTURE_ID).unwrap();
+        let which = PluginWindow::Effect(slot);
+        session.set_plugin_window_open(which, true).unwrap();
+        session.poll();
+        let calls = session
+            .hosted
+            .window_slot(which)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .value(ParamId(3))
+            .unwrap() as u32;
+        assert_eq!(calls & gui_step::RAISED, 0, "polling must not steal focus");
+
+        session.set_plugin_window_open(which, true).unwrap();
+        let calls = session
+            .hosted
+            .window_slot(which)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .value(ParamId(3))
+            .unwrap() as u32;
+        assert_ne!(calls & gui_step::RAISED, 0);
+        assert_eq!(calls & (gui_step::HIDDEN | gui_step::DESTROYED), 0);
+        assert!(session.plugin_window_is_open(which));
     }
 
     #[test]

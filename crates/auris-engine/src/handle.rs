@@ -69,7 +69,7 @@ pub(crate) fn take_stream_notices(cell: &AtomicU32) -> StreamNotices {
     }
 }
 
-/// Status and cancellation for one queued or playing output audition.
+/// Status and controls for one queued, paused or playing output audition.
 ///
 /// Each request owns its own status, so completion of an older audition cannot clear a newer
 /// request that the audio callback has not received yet. Device loss also makes it inactive.
@@ -77,10 +77,84 @@ pub(crate) fn take_stream_notices(cell: &AtomicU32) -> StreamNotices {
 pub struct OutputPreviewStatus {
     active: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
+    pub(crate) controls: Arc<OutputPreviewControls>,
+    frames: u64,
+    sample_rate: f64,
+}
+
+/// Initial audition controls, applied before the audio callback receives the request.
+#[derive(Clone, Copy, Debug)]
+pub struct OutputPreviewOptions {
+    /// Starting position in seconds, clamped to the buffer's duration.
+    pub position_seconds: f64,
+    /// Linear audition-only volume in 0..=1; zero is muted.
+    pub volume: f32,
+}
+
+impl Default for OutputPreviewOptions {
+    fn default() -> Self {
+        Self {
+            position_seconds: 0.0,
+            volume: 1.0,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct OutputPreviewControls {
+    pub(crate) paused: AtomicBool,
+    pub(crate) position: AtomicU64,
+    pub(crate) seek: AtomicU64,
+    pub(crate) volume: AtomicU32,
 }
 
 impl OutputPreviewStatus {
-    /// Whether this audition is queued or playing on a live output device.
+    /// Whether playback is advancing on a live device.
+    pub fn is_playing(&self) -> bool {
+        self.is_active() && !self.controls.paused.load(Ordering::Relaxed)
+    }
+
+    /// Pauses or resumes this request without losing its position.
+    pub fn set_paused(&self, paused: bool) {
+        self.controls.paused.store(paused, Ordering::Relaxed);
+    }
+
+    /// Current position in seconds, including a seek waiting for the callback.
+    pub fn position_seconds(&self) -> f64 {
+        let seek = self.controls.seek.load(Ordering::Relaxed);
+        let frame = if seek == u64::MAX {
+            self.controls.position.load(Ordering::Relaxed)
+        } else {
+            seek
+        };
+        frame as f64 / self.sample_rate
+    }
+
+    /// Duration of the prepared audio in seconds.
+    pub fn duration_seconds(&self) -> f64 {
+        self.frames as f64 / self.sample_rate
+    }
+
+    /// Seeks within this request. Seeking never revives a cancelled or completed request.
+    pub fn seek_seconds(&self, seconds: f64) {
+        if seconds.is_finite() {
+            let frame = (seconds.max(0.0) * self.sample_rate).round() as u64;
+            self.controls
+                .seek
+                .store(frame.min(self.frames), Ordering::Relaxed);
+        }
+    }
+
+    /// Sets audition-only linear volume in 0..=1; zero mutes the output.
+    pub fn set_volume(&self, volume: f32) {
+        if volume.is_finite() {
+            self.controls
+                .volume
+                .store(volume.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        }
+    }
+
+    /// Whether this audition is queued, paused or playing on a live output device.
     pub fn is_active(&self) -> bool {
         self.active.load(Ordering::Relaxed) && self.running.load(Ordering::Relaxed)
     }
@@ -116,11 +190,19 @@ pub struct OutputPreviewRequest {
 impl OutputPreviewRequest {
     pub(crate) fn new(buffer: Arc<auris_core::AudioBuffer>, running: Arc<AtomicBool>) -> Self {
         Self {
-            buffer,
             status: OutputPreviewStatus {
                 active: Arc::new(AtomicBool::new(true)),
                 running,
+                frames: buffer.frame_count() as u64,
+                sample_rate: buffer.sample_rate(),
+                controls: Arc::new(OutputPreviewControls {
+                    paused: AtomicBool::new(false),
+                    position: AtomicU64::new(0),
+                    seek: AtomicU64::new(u64::MAX),
+                    volume: AtomicU32::new(1.0f32.to_bits()),
+                }),
             },
+            buffer,
         }
     }
 }
@@ -176,8 +258,19 @@ impl EngineHandle {
         &self,
         buffer: Arc<auris_core::AudioBuffer>,
     ) -> Result<OutputPreviewStatus, EngineError> {
+        self.play_output_preview_with(buffer, OutputPreviewOptions::default())
+    }
+
+    /// Queues PCM with its initial position and volume already applied.
+    pub fn play_output_preview_with(
+        &self,
+        buffer: Arc<auris_core::AudioBuffer>,
+        options: OutputPreviewOptions,
+    ) -> Result<OutputPreviewStatus, EngineError> {
         let request = OutputPreviewRequest::new(buffer, Arc::clone(&self.running));
         let status = request.status.clone();
+        status.seek_seconds(options.position_seconds);
+        status.set_volume(options.volume);
         self.send(EngineCommand::PlayOutputPreview(request))?;
         Ok(status)
     }

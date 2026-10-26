@@ -137,6 +137,8 @@ pub mod gui_step {
     pub const PARENTED: u32 = 128;
     /// The embedded parent window was still valid when the plugin's `destroy` callback ran.
     pub const PARENT_ALIVE_ON_DESTROY: u32 = 256;
+    /// `show` was requested again without a new GUI lifecycle.
+    pub const RAISED: u32 = 512;
 }
 
 /// How many input ports the fixture declares: a main one and a sidechain.
@@ -273,7 +275,10 @@ impl PluginGuiImpl for MainThread<'_> {
     }
 
     fn show(&self) -> Result<(), PluginError> {
-        self.gui_did(gui_step::SHOWN);
+        let previous = self.shared.gui.fetch_or(gui_step::SHOWN, Ordering::Relaxed);
+        if previous & gui_step::SHOWN != 0 {
+            self.gui_did(gui_step::RAISED);
+        }
         Ok(())
     }
 

@@ -211,9 +211,12 @@ text editors belong to the window that opened them. Each panel is rendered in on
 which also keeps its recorded gesture coordinates and text-input handlers unambiguous.
 
 The project, Settings and voice setup windows share GPUI title-bar chrome in
-`crates/auris-gpui/src/titlebar.rs`. Window options keep the native frame transparent, and each
-view supplies content from its current theme. Interactive controls must remain beside dedicated
-drag regions: on Windows, a parent drag hitbox would intercept its children's input. Native
+`crates/auris-gpui/src/titlebar.rs`. Its shared window options keep the native frame transparent
+on macOS and Windows, and request client decorations on Linux; `appears_transparent` alone has
+no effect on Linux. Each view supplies content from its current theme. Linux window roots add
+resize targets at their edges and corners when the compositor accepts client decorations,
+excluding tiled edges and maximized/fullscreen windows. Interactive controls must remain beside
+dedicated drag regions: on Windows, a parent drag hitbox would intercept its children's input. Native
 window-control hitboxes retain Snap and maximize/restore behavior. The close button invokes the
 main window's unsaved-document guard. Drag regions occlude ancestor focus handlers so those
 handlers cannot prevent the native window-move action.
@@ -222,7 +225,7 @@ The layout takes its project identity from [Zed's title bar](https://github.com/
 and its centered transport readouts from [Logic Pro's control bar](https://support.apple.com/en-euro/guide/logicpro/lgcp5bdd6d9d/mac).
 When changing the title-bar height, include it in `AurisApp::chrome_height` so dock sizing and
 initial timeline coordinates agree with the view tree. Check native dragging, resizing and
-window controls on both platforms; the headless harness exercises the application controls.
+window controls on each platform; the headless harness exercises the application controls.
 
 `crates/auris-gpui/src/harness.rs` opens the whole application in a window with no display, no
 GPU and no audio device behind it, and drives it from `cargo test`. gpui ships the platform that

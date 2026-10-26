@@ -140,6 +140,27 @@ The symbolic ruler is unchanged. A separate eight-second, four-hit snare diagnos
 and MuQ-MuLan positive cosine by +0.00089. Conditions and excerpt positions match. These mixed
 isolated-hit scores do not establish improved song preference or perceived timbre.
 
+## Tuned marimba bars
+
+The 2026-10-26 revision corrects Mallet's mode topology, which the spectral fit above could not:
+its bar used a free bar's bending ratios, 1 : 2.756 : 5.404. A marimba bar is undercut until its
+first overtones sit two octaves, and three octaves and a major third, above the fundamental.
+All 36 notes of the yarn-mallet captures `Marimba.yarn.{mf,ff}.C4B4.aif` and
+`Marimba.yarn.mf.C3B3.aif` show their first overtone at 3.99–4.01 times the fundamental and the
+next at 9.5–10.3 times. Mallet now uses 1 : 4.0 : 9.9, with higher modes on a free bar's quadratic
+spacing above the third.
+
+The same notes also measure loss. Over 50–600 ms the fundamental falls at about 25 dB/s near C3,
+40 dB/s near C4 and 55 dB/s near B4; the 4x mode at about 95 dB/s, the 10x mode faster still.
+The factory decay, fitted at 4.859 s against these recordings, rang every fundamental at a fixed
+14 dB/s. Both now follow the 0.6th power of frequency, and Resonance Decay is the fundamental's
+T60 at middle C: 1.5 s by default. The model's fundamental falls at 26/40/58 dB/s at C3/C4/B4,
+its overtones sit at 4.00x and 9.90x, and at mf their levels stay within the spread the
+recordings show across neighbouring notes (4x: -36 to -49 dB here, -12 to -68 dB recorded).
+Contact, position, radiation and normalization keep their fitted values; the held-out mel study
+above was not repeated. General MIDI glockenspiel and music box now choose Bell, which was
+fitted to orchestral bells; vibraphone, marimba and xylophone choose Mallet.
+
 ## Held-out production results
 
 These are final actual 48 kHz Rust renders; lower distance is better.
@@ -162,7 +183,8 @@ All ten paired mean-delta intervals lie below zero. Bass's RMS-envelope error wo
 Its tail-phase mel error also rises from 0.057956 to 0.064503, while attack and body improve.
 Snare envelope error is almost unchanged at 11.39→11.40 dB. Open hat and ride still have large
 envelope errors of 42.35 and 35.70 dB: their late recorded tails are not closely reproduced.
-Bell's mode topology remains a compact struck shell and Mallet a free bar; spectral fitting
+Bell's mode topology remains a compact struck shell, and Mallet was a free bar until the
+tuning above; spectral fitting
 does not reconstruct their recorded mechanics. Per-note phases, intervals and secondary
 measurements are retained in `tools/eval/references/physical-pack-validation.json`.
 

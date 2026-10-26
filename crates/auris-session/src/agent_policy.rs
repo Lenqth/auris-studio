@@ -128,8 +128,9 @@ const RETIRED_OPERATIONS: &[(&str, &[&str])] = &[
     ),
     (
         "edit_project.create_piano_cover",
-        &["transcribe_audio", "edit_project.import_transcription"],
+        &["edit_project.import_transcription"],
     ),
+    ("transcribe_audio", &[]),
     ("list_instruments", &["search_instruments"]),
     ("similar_instruments", &["search_instruments"]),
 ];
@@ -204,7 +205,6 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.set_singer_voice",
     "edit_project.write_lyrics",
     "edit_project.sing",
-    "transcribe_audio",
     "read_report",
     "edit_project.import_transcription",
     "export_audio_attachment",
@@ -327,8 +327,6 @@ impl Operation {
                 // decides that from the path the CLI asked for, and says so here; anything
                 // else — another project, a home directory's keys — asks like a network call.
                 confirm: matches!(tool, "search_internet" | "cli_command" | "cli_file_change")
-                    || (tool == "transcribe_audio"
-                        && (args["path"].is_string() || args["backend"]["model"].is_string()))
                     || (tool == "cli_file_read" && args["within_project"] != true),
             })
         } else {
@@ -547,11 +545,12 @@ mod tests {
     fn all_retired_rules_migrate_without_widening_grants_or_losing_denials() {
         for (retired, successors) in RETIRED_OPERATIONS {
             assert!(!OPERATIONS.contains(retired));
-            assert!(!successors.is_empty());
+            let mut deny = vec![*retired];
+            deny.extend(successors.iter().take(1).copied());
             let policy: Policy = serde_json::from_value(serde_json::json!({
                 "mode":"bypass",
                 "allow":[retired, "edit_project.listen"],
-                "deny":[retired, successors[0]]
+                "deny":deny
             }))
             .unwrap();
             assert_eq!(policy.allow, ["edit_project.listen"], "{retired}");

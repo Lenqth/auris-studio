@@ -1,5 +1,6 @@
 //! New-song directions, isolated generation, audition and exact adoption.
 
+use super::audio_player::{PlayerState, PlayerTarget};
 use super::text_field::{KeyEffect, TextField};
 use super::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled};
 use crate::app::{AurisApp, Pane};
@@ -54,16 +55,13 @@ pub(crate) struct SongWorkshop {
     error: Option<String>,
     captured_brief: String,
     preview_serial: u64,
-    preview: Option<(usize, auris_session::OutputPreviewStatus)>,
+    pub(crate) players: [PlayerState; 3],
     preparing: Option<usize>,
 }
 
 impl Drop for SongWorkshop {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
-        if let Some((_, status)) = &self.preview {
-            status.stop();
-        }
     }
 }
 
@@ -79,8 +77,8 @@ impl SongWorkshop {
         self.pending = [false; 3];
         self.preview_serial = self.preview_serial.wrapping_add(1);
         self.preparing = None;
-        if let Some((_, status)) = self.preview.take() {
-            status.stop();
+        for player in &mut self.players {
+            player.stop();
         }
     }
     fn generate(&mut self, indices: Vec<usize>) {
@@ -94,6 +92,7 @@ impl SongWorkshop {
         let preferences = self.preferences.clone();
         let (sender, receiver) = mpsc::channel();
         for &index in &indices {
+            self.players[index].reset_audio();
             self.pending[index] = true;
             self.progress[index] = String::new();
             self.errors[index] = None;
@@ -223,7 +222,7 @@ impl AurisApp {
             error: None,
             captured_brief: String::new(),
             preview_serial: 0,
-            preview: None,
+            players: std::array::from_fn(|_| PlayerState::default()),
             preparing: None,
         });
         cx.notify();
@@ -367,7 +366,7 @@ impl AurisApp {
         }
     }
 
-    fn preview_song_candidate(&mut self, index: usize, cx: &mut Context<Self>) {
+    pub(crate) fn preview_song_candidate(&mut self, index: usize, cx: &mut Context<Self>) {
         if !self.acquire_audio(cx) {
             return;
         }
@@ -378,8 +377,8 @@ impl AurisApp {
             return;
         };
         let audio = candidate.audio.clone();
-        if let Some((_, status)) = state.preview.take() {
-            status.stop();
+        for player in &mut state.players {
+            player.stop();
         }
         state.preview_serial = state.preview_serial.wrapping_add(1);
         let serial = state.preview_serial;
@@ -402,8 +401,11 @@ impl AurisApp {
                 if this.session.audio_suspended() {
                     return;
                 }
-                match prepared.and_then(|audio| this.session.play_output_preview(audio)) {
-                    Ok(status) => state.preview = Some((index, status)),
+                match prepared.and_then(|audio| {
+                    let options = state.players[index].options(audio.duration_seconds());
+                    this.session.play_output_preview_with(audio, options)
+                }) {
+                    Ok(status) => state.players[index].start(status),
                     Err(error) => state.error = Some(error.to_string()),
                 }
                 cx.notify();
@@ -478,13 +480,9 @@ impl AurisApp {
             let mut cards = div().flex().flex_wrap().gap_3();
             for (index, idea) in ideas.iter().enumerate() {
                 let ready = state.candidates[index].is_some();
-                let playing = state
-                    .preview
-                    .as_ref()
-                    .is_some_and(|(i, s)| *i == index && s.is_active());
                 let mut card = div()
                     .flex_1()
-                    .min_w(gpui::rems(16.0))
+                    .min_w(gpui::rems(22.0))
                     .p_4()
                     .border_1()
                     .border_color(theme.border)
@@ -503,12 +501,7 @@ impl AurisApp {
                         idea.preset, idea.tempo, idea.key
                     )));
                 if let Some(candidate) = &state.candidates[index] {
-                    let seconds = (candidate.audio.frame_count() as f64
-                        / candidate.audio.sample_rate())
-                    .round() as u32;
-                    card = card
-                        .child(format!("{}:{:02}", seconds / 60, seconds % 60))
-                        .child(candidate.part_names().join(" · "));
+                    card = card.child(candidate.part_names().join(" · "));
                 }
                 if state.pending[index] {
                     card = card.child(self.t(match state.progress[index].as_str() {
@@ -524,62 +517,50 @@ impl AurisApp {
                 if let Some(error) = &state.errors[index] {
                     card = card.child(div().text_color(theme.danger).child(error.clone()));
                 }
-                card = card.child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_2()
-                        .child(button_enabled(
-                            ("song-preview", index),
-                            self.t(if playing {
-                                Key::WorkshopStop
-                            } else {
-                                Key::WorkshopListen
-                            }),
-                            ButtonStyle::Normal,
-                            enabled(ready && state.preparing.is_none()),
-                            theme.accent,
-                            &theme,
-                            cx.listener(move |this, _, _, cx| {
-                                if playing {
-                                    if let Some(s) = &mut this.song_workshop
-                                        && let Some((_, p)) = s.preview.take()
-                                    {
-                                        p.stop();
+                card = card
+                    .child(
+                        self.render_audio_player(
+                            PlayerTarget::Workshop(index),
+                            state.candidates[index]
+                                .as_ref()
+                                .map_or(0.0, |c| c.audio.duration_seconds()),
+                            ready && !state.pending[index] && state.preparing.is_none(),
+                            state.preparing == Some(index),
+                            cx,
+                        ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_2()
+                            .child(button_enabled(
+                                ("song-retry", index),
+                                self.t(Key::WorkshopRetry),
+                                ButtonStyle::Normal,
+                                enabled(!busy),
+                                theme.accent,
+                                &theme,
+                                cx.listener(move |this, _, _, cx| {
+                                    if let Some(s) = &mut this.song_workshop {
+                                        s.stop();
+                                        s.generate(vec![index]);
                                     }
-                                } else {
-                                    this.preview_song_candidate(index, cx);
-                                }
-                                cx.notify();
-                            }),
-                        ))
-                        .child(button_enabled(
-                            ("song-retry", index),
-                            self.t(Key::WorkshopRetry),
-                            ButtonStyle::Normal,
-                            enabled(!busy),
-                            theme.accent,
-                            &theme,
-                            cx.listener(move |this, _, _, cx| {
-                                if let Some(s) = &mut this.song_workshop {
-                                    s.stop();
-                                    s.generate(vec![index]);
-                                }
-                                cx.notify();
-                            }),
-                        ))
-                        .child(button_enabled(
-                            ("song-adopt", index),
-                            self.t(Key::WorkshopAdopt),
-                            ButtonStyle::Primary,
-                            enabled(ready && !state.pending[index]),
-                            theme.accent,
-                            &theme,
-                            cx.listener(move |this, _, window, cx| {
-                                this.adopt_song_candidate(index, window, cx)
-                            }),
-                        )),
-                );
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(button_enabled(
+                                ("song-adopt", index),
+                                self.t(Key::WorkshopAdopt),
+                                ButtonStyle::Primary,
+                                enabled(ready && !state.pending[index]),
+                                theme.accent,
+                                &theme,
+                                cx.listener(move |this, _, window, cx| {
+                                    this.adopt_song_candidate(index, window, cx)
+                                }),
+                            )),
+                    );
                 cards = cards.child(card);
             }
             body = body.child(cards);
@@ -603,6 +584,7 @@ impl AurisApp {
                         && s.step > 0
                         && !s.busy()
                     {
+                        s.stop();
                         s.step = if s.step == 2 && !s.vocals {
                             0
                         } else {
@@ -662,6 +644,7 @@ impl AurisApp {
                 }),
             ));
         div()
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -672,6 +655,9 @@ impl AurisApp {
             .track_focus(&self.focus)
             .key_context(crate::actions::KEY_CONTEXT)
             .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                if this.move_audio_player(event, cx) {
+                    return;
+                }
                 if let Some(s) = &mut this.song_workshop
                     && let Some((x, seconds)) = s.drag_length
                 {
@@ -689,6 +675,16 @@ impl AurisApp {
             .on_mouse_up(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, _| {
+                    this.audio_player_drag = None;
+                    if let Some(s) = &mut this.song_workshop {
+                        s.drag_length = None;
+                    }
+                }),
+            )
+            .on_mouse_up_out(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, _| {
+                    this.audio_player_drag = None;
                     if let Some(s) = &mut this.song_workshop {
                         s.drag_length = None;
                     }
@@ -724,12 +720,67 @@ impl AurisApp {
             .child(footer)
             .children(library)
             .children(menu)
+            .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }
 
 #[cfg(test)]
 mod tests {
+
+    #[gpui::test]
+    fn candidate_players_share_seek_volume_and_back_cancels_preparation(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use super::*;
+        use crate::harness::{click, open, paint};
+        let (app, cx) = open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        let idea = SongIdea {
+            title: "Preview".into(),
+            description: "Player controls".into(),
+            preset: "chiptune".into(),
+            tempo: 120.0,
+            key: "C major".into(),
+            density: 0.4,
+            lead: "piano".into(),
+        };
+        let candidate =
+            SongCandidate::generate(idea.clone(), "", 30, 42, &AtomicBool::new(false)).unwrap();
+        let duration = candidate.audio.duration_seconds();
+        app.update(cx, |this, _| {
+            let state = this.song_workshop.as_mut().unwrap();
+            state.step = 3;
+            state.ideas = Some(std::array::from_fn(|_| idea.clone()));
+            state.candidates[0] = Some(candidate);
+            state.model_receiver = None;
+        });
+        paint(&app, cx);
+        click("song-preview-0-seek", cx);
+        cx.simulate_keystrokes("end");
+        click("song-preview-0-volume", cx);
+        cx.simulate_keystrokes("home");
+        cx.simulate_keystrokes("pageup");
+        app.read_with(cx, |this, _| {
+            let state = this.song_workshop.as_ref().unwrap();
+            assert_eq!(state.players[0].options(duration).position_seconds, 0.0);
+            assert!((state.players[0].options(duration).volume - 0.1).abs() < 1e-6);
+            assert_eq!(state.players[1].options(duration).volume, 1.0);
+        });
+        click("song-preview-0-play", cx);
+        click("song-back", cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let state = this.song_workshop.as_ref().unwrap();
+            assert!(state.preparing.is_none());
+            assert_eq!(state.step, 2);
+        });
+    }
 
     #[gpui::test]
     fn workshop_fields_modes_and_source_picker_preserve_the_draft(cx: &mut gpui::TestAppContext) {

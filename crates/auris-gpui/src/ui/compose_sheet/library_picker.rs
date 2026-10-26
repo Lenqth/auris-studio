@@ -316,13 +316,13 @@ impl AurisApp {
                 .get(path)
                 .and_then(|plugins| plugins.iter().find(|plugin| &plugin.clap_id == plugin_id))
                 .map(|plugin| format!("{} · CLAP", plugin.name))
-                .unwrap_or_else(|| format!("{} · {plugin_id}", source_file_name(path))),
+                .unwrap_or_else(|| format!("{} · CLAP · {plugin_id}", source_file_name(path))),
             PartSource::Vst3 { path, class_id } => self
                 .vst3_contents
                 .get(path)
                 .and_then(|plugins| plugins.iter().find(|plugin| &plugin.class_id == class_id))
                 .map(|plugin| format!("{} · VST3", plugin.name))
-                .unwrap_or_else(|| format!("{} · {class_id}", source_file_name(path))),
+                .unwrap_or_else(|| format!("{} · VST3 · {class_id}", source_file_name(path))),
         }
     }
 }

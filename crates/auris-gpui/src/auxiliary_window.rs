@@ -119,14 +119,13 @@ fn open_surface(app: WeakEntity<AurisApp>, surface: Surface, cx: &mut App) {
     let opened = cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(titlebar::options(title)),
             window_min_size: Some(match surface {
                 Surface::Typing => size(px(640.), px(340.)),
                 Surface::Visualizer => size(px(480.), px(520.)),
                 _ => size(px(320.), px(240.)),
             }),
             focus: true,
-            ..Default::default()
+            ..titlebar::options(title)
         },
         |window, cx| {
             // Register before the first draw so focus can resolve this window's panel.
@@ -277,7 +276,9 @@ impl AurisApp {
         if let Some(surface) = self.raise_auxiliary.take()
             && let Some(handle) = self.auxiliary_windows.get(&surface)
         {
-            let _ = handle.update(cx, |_, window, _| window.activate_window());
+            let _ = handle.update(cx, |_, window, cx| {
+                crate::termination::activate(window, cx);
+            });
         }
     }
 
@@ -404,6 +405,7 @@ impl Render for AuxiliaryWindow {
                         .child(content),
                 )
                 .children(overlays)
+                .children(titlebar::resize_handles(window))
                 .into_any_element()
         });
         result.unwrap_or_else(|_| {

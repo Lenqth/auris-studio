@@ -69,6 +69,7 @@ const DEFAULT_SAMPLE_RATE: f64 = 48_000.0;
 /// that way: a hosted CLAP plugin is two objects, and the half that answers questions has to stay
 /// on the main thread while only the half that renders belongs in a graph. The caller that owns
 /// the other half builds those and leaves them here.
+/// The graph calls [`Effect::prepare`] before using each effect, including caller-built ones.
 ///
 /// Building **takes** each effect it uses, so a map that still holds entries afterwards names
 /// slots that are no longer in the project — which is how the caller finds out that a hosted

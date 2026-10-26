@@ -108,6 +108,16 @@ struct DrawnDocks {
 
 impl Render for AurisApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Editors belong to the project window, which outlives them, rather than to the
+        // optional parameter window from which they can also be opened.
+        // GPUI's display-free test windows deliberately have no native handle.
+        if !cfg!(test) {
+            self.session.set_plugin_window_parent(
+                auris_session::HasWindowHandle::window_handle(window)
+                    .ok()
+                    .map(|handle| handle.as_raw()),
+            );
+        }
         self.event_window
             .get_or_insert(window.window_handle().window_id());
         self.singer_portraits.release_images(window);
@@ -277,6 +287,7 @@ impl Render for AurisApp {
             .child(status)
             .child(drop_ring)
             .children(overlays)
+            .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }
@@ -508,20 +519,8 @@ impl AurisApp {
                     ))
                     .on_action(Self::window_listener(
                         cx,
-                        |this, _: &actions::TranscribeSelectedAudio, _, cx| {
-                            this.open_analysis_command(AnalysisCommand::Transcribe, cx)
-                        },
-                    ))
-                    .on_action(Self::window_listener(
-                        cx,
                         |this, _: &actions::AnalyzeSelectedInstruments, _, cx| {
                             this.open_analysis_command(AnalysisCommand::Instruments, cx)
-                        },
-                    ))
-                    .on_action(Self::window_listener(
-                        cx,
-                        |this, _: &actions::TranscribeSelectedMixture, _, cx| {
-                            this.open_analysis_command(AnalysisCommand::Mixture, cx)
                         },
                     ))
                     .on_action(Self::window_listener(
@@ -1435,6 +1434,9 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.move_audio_player(event, cx) {
+            return;
+        }
         if self.compose_progress.is_some() {
             return;
         }
@@ -2030,6 +2032,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.audio_player_drag = None;
         let reordered = match &self.drag {
             Some(Drag::DrumLaneReorder { track, .. }) => Some(*track),
             _ => None,

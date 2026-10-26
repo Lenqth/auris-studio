@@ -155,6 +155,19 @@ impl AurisApp {
         } else {
             None
         };
+        // Short windows scroll the audition alongside the fields, keeping the editor usable.
+        // The focus region reveals it again when Tab reaches one of its controls.
+        let preview = self.render_chord_preview(&spec, cx).into_any_element();
+        let (scrolling_preview, fixed_preview) = if viewport.height < window.rem_size() * 40.0 {
+            let index = focus_region;
+            focus_region += 1;
+            (
+                Some(self.song_focus_region(preview, index, false, cx)),
+                None,
+            )
+        } else {
+            (None, Some(preview))
+        };
         let song_rows = self.song_rows(&dials, cx);
         let song_rows = self.song_focus_regions(song_rows, &mut focus_region, false, cx);
         let lyrics_rows = self.song_lyrics_rows(&dials, &scroll, cx);
@@ -290,6 +303,7 @@ impl AurisApp {
                                                 .flex()
                                                 .flex_col()
                                                 .gap_3()
+                                                .children(scrolling_preview)
                                                 .child(
                                                     div()
                                                         .text_xs()
@@ -389,7 +403,7 @@ impl AurisApp {
                                 ),
                         )
                         .child(divider(&theme))
-                        .child(self.render_chord_preview(&spec, cx))
+                        .children(fixed_preview)
                         .child(
                             div()
                                 .flex()

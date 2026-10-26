@@ -1505,6 +1505,7 @@ impl Render for VoiceSetupWindow {
         };
         div()
             .id("voice-setup-root")
+            .relative()
             .key_context("AurisVoiceSetup")
             .track_focus(&self.focus)
             .flex()
@@ -1552,6 +1553,7 @@ impl Render for VoiceSetupWindow {
                     })
                     .child(self.status.clone()),
             )
+            .children(titlebar::resize_handles(window))
     }
 }
 
@@ -1582,10 +1584,9 @@ impl AurisApp {
         let opened: Result<WindowHandle<VoiceSetupWindow>, _> = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(titlebar::options(self.t(Key::VoiceSetupTitle))),
                 window_min_size: Some(size(px(480.0), px(360.0))),
                 focus: true,
-                ..Default::default()
+                ..titlebar::options(self.t(Key::VoiceSetupTitle))
             },
             |_, cx| cx.new(|cx| VoiceSetupWindow::new(app, theme, language, tab, cx)),
         );

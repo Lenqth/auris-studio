@@ -105,6 +105,19 @@ pub enum PluginFormat {
     Vst3,
 }
 
+impl PluginFormat {
+    /// Identifies a hosted plugin by its stored Auris id, independently of its display name.
+    pub fn from_plugin_id(id: &str) -> Option<Self> {
+        if id.starts_with(auris_clap::ID_PREFIX) {
+            Some(Self::Clap)
+        } else if id.starts_with(auris_vst3::ID_PREFIX) {
+            Some(Self::Vst3)
+        } else {
+            None
+        }
+    }
+}
+
 /// A bounded inventory of installed CLAP and VST3 files.
 #[derive(Clone, Debug)]
 pub struct PluginDiscoveryJob {

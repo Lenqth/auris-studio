@@ -8,7 +8,7 @@
 
 use auris_i18n::{Key, Language, audio, messages};
 use auris_session::prelude::*;
-use auris_session::{CoreError, Edit, EngineError, IoError, SessionError};
+use auris_session::{CoreError, Edit, EngineError, IoError, PluginFormat, SessionError};
 
 use crate::app::AurisApp;
 
@@ -41,14 +41,20 @@ impl AurisApp {
     /// showed until this existed. The plugin's own name is not translated: nobody here wrote it,
     /// and a translation table cannot know what is in a file that was installed yesterday.
     pub(crate) fn effect_label(&self, slot: EffectSlotId, effect_id: &str) -> String {
-        hosted_label(self.session.hosted_name(slot), self.plugin_label(effect_id))
+        plugin_label_with_format(
+            hosted_label(self.session.hosted_name(slot), self.plugin_label(effect_id)),
+            PluginFormat::from_plugin_id(effect_id),
+        )
     }
 
     /// The name to draw for whatever plays a track, for the same reasons.
     pub(crate) fn instrument_label(&self, track: TrackId, instrument_id: &str) -> String {
-        hosted_label(
-            self.session.hosted_instrument_name(track),
-            self.plugin_label(instrument_id),
+        plugin_label_with_format(
+            hosted_label(
+                self.session.hosted_instrument_name(track),
+                self.plugin_label(instrument_id),
+            ),
+            PluginFormat::from_plugin_id(instrument_id),
         )
     }
 
@@ -757,11 +763,45 @@ pub(crate) fn hosted_label(hosted: Option<&str>, from_registry: String) -> Strin
     }
 }
 
+/// Standard format names stay the same in every locale.
+pub(crate) fn plugin_format_label(format: PluginFormat) -> &'static str {
+    match format {
+        PluginFormat::Clap => "CLAP",
+        PluginFormat::Vst3 => "VST3",
+    }
+}
+
+fn plugin_label_with_format(name: String, format: Option<PluginFormat>) -> String {
+    match format {
+        Some(format) => format!("{name} · {}", plugin_format_label(format)),
+        None => name,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use auris_i18n::audio;
     use auris_session::plugin_catalogue;
+
+    #[test]
+    fn identically_named_hosted_plugins_keep_their_format_in_slot_labels() {
+        assert_eq!(
+            plugin_label_with_format("Twin".into(), PluginFormat::from_plugin_id("clap:shared")),
+            "Twin · CLAP"
+        );
+        assert_eq!(
+            plugin_label_with_format("Twin".into(), PluginFormat::from_plugin_id("vst3:shared")),
+            "Twin · VST3"
+        );
+        assert_eq!(
+            plugin_label_with_format(
+                "Reverb".into(),
+                PluginFormat::from_plugin_id("auris.fx.reverb")
+            ),
+            "Reverb"
+        );
+    }
 
     #[test]
     fn workspace_owned_error_details_are_japanese() {

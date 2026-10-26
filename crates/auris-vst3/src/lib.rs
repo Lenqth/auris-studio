@@ -772,17 +772,42 @@ impl Vst3Plugin {
             .as_ref()
             .is_some_and(vst3_host::PluginWindow::is_open)
     }
-    /// Opens or closes the plugin's standalone native editor.
+
+    /// Services native close, resize and DPI requests on the thread that opened the editor.
+    ///
+    /// Call periodically even when [`Self::gui_is_open`] is false: a title-bar close request
+    /// clears that logical state before the editor is detached and its native window destroyed.
+    pub fn service_gui(&mut self) -> Result<(), Vst3Error> {
+        if self
+            .window
+            .as_ref()
+            .is_some_and(vst3_host::PluginWindow::closed_by_user)
+        {
+            self.window = None;
+        }
+        if let Some(window) = &self.window {
+            window.service_platform_events()?;
+        }
+        Ok(())
+    }
+
+    /// Opens or closes the plugin's native editor, raising an already-open one on request.
     pub fn set_gui_open(&mut self, open: bool) -> Result<(), Vst3Error> {
         if open {
             if self.gui_is_open() {
+                if let Some(window) = &self.window {
+                    window.bring_to_front();
+                }
                 return Ok(());
             }
+            // A dismissed editor may still await the next poll. Detach it before attaching a
+            // replacement to the same controller, rather than dropping it after the new open.
+            self.window = None;
             let mut window = vst3_host::PluginWindow::new(Arc::clone(&self.shared.plugin));
             window.open()?;
             self.window = Some(window);
-        } else if let Some(mut window) = self.window.take() {
-            window.close();
+        } else {
+            self.window = None;
         }
         Ok(())
     }
@@ -1431,6 +1456,7 @@ fn describe_parameters(raw: &[Parameter]) -> (Vec<ParamDescriptor>, Vec<u32>) {
             curve: auris_core::param::ParamValueCurve::Linear,
             steps: (parameter.step_count > 0).then_some(parameter.step_count as u32 + 1),
             choices: Cow::Owned(Vec::new()),
+            read_only: parameter.is_read_only,
         };
         if parameter.is_boolean() {
             descriptor.unit = ParamUnit::Toggle;
@@ -1604,6 +1630,30 @@ fn deliver(channels: &[Vec<f32>], target: &mut AudioBuffer, frames: usize, overw
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parameter_descriptors_preserve_read_only_and_discrete_metadata() {
+        let raw = Parameter {
+            id: 99,
+            name: "Meter".into(),
+            value: 0.5,
+            min: 0.0,
+            max: 1.0,
+            default: 0.5,
+            unit: "dB".into(),
+            step_count: 4,
+            can_automate: false,
+            is_read_only: true,
+            is_bypass: false,
+            flags: 0,
+        };
+        let (descriptors, ids) = describe_parameters(&[raw]);
+        assert_eq!(ids, [99]);
+        assert!(descriptors[0].read_only);
+        assert_eq!(descriptors[0].steps, Some(5));
+        assert_eq!(descriptors[0].min, 0.0);
+        assert_eq!(descriptors[0].max, 1.0);
+    }
 
     #[test]
     fn an_editor_change_moves_only_the_parameter_it_changed() {

@@ -6,7 +6,7 @@ use clack_extensions::gui::GuiSize;
 use objc2::MainThreadOnly;
 use objc2::rc::Retained;
 use objc2_app_kit::{
-    NSBackingStoreType, NSView, NSWindow, NSWindowOrderingMode, NSWindowStyleMask,
+    NSApplication, NSBackingStoreType, NSView, NSWindow, NSWindowOrderingMode, NSWindowStyleMask,
 };
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{AppKitWindowHandle, RawWindowHandle};
@@ -96,14 +96,20 @@ impl ContainerWindow for HostWindow {
 
     fn show(&self) {
         self.shown.set(true);
+        if self.window.isMiniaturized() {
+            self.window.deminiaturize(None);
+        }
         self.window.makeKeyAndOrderFront(None);
     }
 
     fn was_closed(&self) -> bool {
         // No delegate, deliberately. Closing a window whose `releasedWhenClosed` is false orders
-        // it out and leaves it standing, so "not visible any more" *is* the report — and it comes
-        // without a subclass, an ivar and a lifetime to reason about.
-        self.shown.get() && !self.window.isVisible()
+        // it out and leaves it standing. Minimized windows and a hidden application also become
+        // invisible, but must keep their editor alive so the next explicit open can restore it.
+        self.shown.get()
+            && !self.window.isVisible()
+            && !self.window.isMiniaturized()
+            && !NSApplication::sharedApplication(self.window.mtm()).isHidden()
     }
 }
 

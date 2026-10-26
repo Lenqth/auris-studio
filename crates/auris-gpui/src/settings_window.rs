@@ -2084,6 +2084,7 @@ impl Render for SettingsWindow {
                     .child(status),
             )
             .children(dropdown)
+            .children(titlebar::resize_handles(window))
     }
 }
 

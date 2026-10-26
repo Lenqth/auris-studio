@@ -101,21 +101,14 @@ pub enum MenuCommand {
     },
     /// Recognize written chords on one track, or across all pitched tracks.
     AnalyzeChords(Option<TrackId>),
-    /// Analyze the trimmed source of an audio clip, optionally extracting a monophonic draft.
-    AnalyzeAudio {
-        /// Source clip to inspect.
-        clip: ClipId,
-        /// Include isolated monophonic note extraction.
-        transcribe: bool,
-    },
+    /// Analyze tempo and chords in the trimmed source of an audio clip.
+    AnalyzeAudio(ClipId),
     /// Cancel an offline CPU analysis.
     CancelMusicAnalysis,
     /// Display the current draft with its alternatives.
     ViewMusicAnalysis,
     /// Choose a local model and estimate instruments in the audio clip.
     AnalyzeInstruments(ClipId),
-    /// Ask for noncommercial acknowledgement before optional mixture transcription.
-    TranscribeMixture(ClipId),
     /// Explicitly accept supported chord intervals.
     ApplyMusicChords,
     /// Accept one alternative in the symbolic chord report.
@@ -125,8 +118,6 @@ pub enum MenuCommand {
         /// Alternative within that interval.
         candidate: usize,
     },
-    /// Add transcribed notes on a new instrument track.
-    CreateTranscriptionTrack,
     /// Adopt a candidate as the analyzed clip's source BPM.
     ApplyMusicTempo(usize),
     /// Measure this instrument using rendered audio, without changing its notes.
@@ -516,6 +507,10 @@ pub enum MenuCommand {
         start: Ticks,
     },
 
+    /// Opens Auris's parameter editor for this exact plugin slot.
+    PluginParameters(crate::ui::plugin_window::PluginSubject),
+    /// Closes this plugin's primary editor without toggling its audio.
+    ClosePluginEditor(crate::ui::plugin_window::PluginSubject),
     /// Bypass or re-enable an effect.
     ToggleEffect {
         /// Track owning the chain, or `None` for the master bus.
@@ -924,23 +919,19 @@ impl AurisApp {
                 self.session.end_transaction();
             }
             MenuCommand::AnalyzeChords(track) => self.begin_chord_analysis(track, cx),
-            MenuCommand::AnalyzeAudio { clip, transcribe } => {
-                self.begin_audio_analysis(clip, transcribe, cx)
-            }
+            MenuCommand::AnalyzeAudio(clip) => self.begin_audio_analysis(clip, cx),
             MenuCommand::CancelMusicAnalysis => {
                 self.music_analysis.cancel_requested();
                 self.set_status(self.t(Key::AnalysisCancelled));
             }
             MenuCommand::ViewMusicAnalysis => self.view_music_analysis(),
             MenuCommand::AnalyzeInstruments(clip) => self.choose_instrument_model(clip, cx),
-            MenuCommand::TranscribeMixture(clip) => self.request_mixture_transcription(clip),
-            MenuCommand::ApplyMusicChords => self.accept_music_analysis(None, false, None),
+            MenuCommand::ApplyMusicChords => self.accept_music_analysis(None, None),
             MenuCommand::ApplyMusicCandidate { segment, candidate } => {
-                self.accept_music_analysis(Some((segment, candidate)), false, None)
+                self.accept_music_analysis(Some((segment, candidate)), None)
             }
-            MenuCommand::CreateTranscriptionTrack => self.accept_music_analysis(None, true, None),
             MenuCommand::ApplyMusicTempo(candidate) => {
-                self.accept_music_analysis(None, false, Some(candidate))
+                self.accept_music_analysis(None, Some(candidate))
             }
             MenuCommand::AnalyzeDrums(track) => self.begin_drum_analysis(track, cx),
             MenuCommand::ApplyDrumMap(track) => self.apply_measured_drums(track, true),
@@ -1558,6 +1549,8 @@ impl AurisApp {
             }
 
             MenuCommand::ToggleEffect { track, slot } => self.toggle_effect(track, slot),
+            MenuCommand::PluginParameters(subject) => self.open_plugin_window(subject),
+            MenuCommand::ClosePluginEditor(subject) => self.close_plugin_editor(subject),
             MenuCommand::MoveEffect { track, slot, delta } => self.move_effect(track, slot, delta),
             MenuCommand::RemoveEffect(slot) => self.remove_effect(slot),
             MenuCommand::ShowEffectPicker { track, at } => {

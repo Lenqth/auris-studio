@@ -1647,6 +1647,7 @@ pub struct AurisApp {
     /// is pressed, which is what lets a whole song be set up and then thrown away.
     pub(crate) song_sheet: Option<crate::ui::compose_sheet::SongDials>,
     pub(crate) song_preview: crate::ui::compose_sheet::preview::SongPreviewState,
+    pub(crate) audio_player_drag: Option<crate::ui::audio_player::PlayerDrag>,
     /// Modal progress while a song is written, prepared and balanced.
     pub(crate) compose_progress: Option<crate::ui::compose_progress::ComposeProgressState>,
     /// Independent composition-search settings, worker control, and exact retained result.
@@ -2184,6 +2185,7 @@ impl AurisApp {
             sung_geometry_revision: 0,
             song_sheet: None,
             song_preview: Default::default(),
+            audio_player_drag: None,
             compose_progress: None,
             composition_search: Default::default(),
             song_library: None,
@@ -3492,10 +3494,9 @@ impl AurisApp {
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(crate::titlebar::options(self.t(Key::Settings))),
                 window_min_size: Some(size(px(480.0), px(360.0))),
                 focus: true,
-                ..Default::default()
+                ..crate::titlebar::options(self.t(Key::Settings))
             },
             |_, cx| {
                 cx.new(|cx| {

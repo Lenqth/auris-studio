@@ -56,7 +56,7 @@ pub mod audio_attachment {
     /// Stable live tool name.
     pub const NAME: &str = "export_audio_attachment";
     /// Guidance shared by all live transports.
-    pub const DESCRIPTION: &str = "Get a separate local analysis copy of an attached original audio file. Supply attachment_id, never a source path. Returns an absolute audio_path, original byte SHA-256 and size without resampling or changing channels. Use local analysis code/tools when the model cannot hear audio. No project edit, automatic model download or audio upload. One current copy per attachment; re-export replaces the previous path, and conversation expiry removes it. Do not modify the returned copy or claim listening from file delivery alone. Use import_transcription for the resulting note JSON; transcribe_audio recognizes it with an explicit backend before import_transcription accepts the result.";
+    pub const DESCRIPTION: &str = "Get a separate local analysis copy of an attached original audio file. Supply attachment_id, never a source path. Returns an absolute audio_path, original byte SHA-256 and size without resampling or changing channels. Use local analysis code/tools when the model cannot hear audio. No project edit, automatic model download or audio upload. One current copy per attachment; re-export replaces the previous path, and conversation expiry removes it. Do not modify the returned copy or claim listening from file delivery alone. Use import_transcription for externally prepared note JSON.";
     /// An existing conversation-local source identity.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     #[serde(deny_unknown_fields)]
@@ -71,16 +71,14 @@ pub mod transcription_import {
     /// Stable live tool name.
     pub const NAME: &str = "import_transcription";
     /// Tool instructions shared by native APIs, Codex and Claude Code.
-    pub const DESCRIPTION: &str = "Explicitly accept an existing note draft as new editable tracks. Supply exactly one of draft_id from transcribe_audio, transcription (inline external piano NoteTranscription), or path (absolute local JSON external piano NoteTranscription, up to 32 MiB). External JSON contains source:{method, optional model/artifact_sha256/audio_sha256}, seconds, notes:[{pitch,start,end,strength}], optional limitations. Piano pitch 21..108, strength 0..1, finite positive source duration up to ten minutes and 1..200000 notes. Times are source seconds; at_tick is an absolute insertion tick (defaults to 0). Provenance claims do not verify musical accuracy. Existing music/tempo and overlapping notes are preserved; review with read_notes/inspect_audio. Draft IDs expire after 30 minutes, restart or bounded-cache eviction.";
+    pub const DESCRIPTION: &str = "Explicitly accept an existing note draft as new editable tracks. Supply exactly one of transcription (inline external piano NoteTranscription) or path (absolute local JSON external piano NoteTranscription, up to 32 MiB). External JSON contains source:{method, optional model/artifact_sha256/audio_sha256}, seconds, notes:[{pitch,start,end,strength}], optional limitations. Piano pitch 21..108, strength 0..1, finite positive source duration up to ten minutes and 1..200000 notes. Times are source seconds; at_tick is an absolute insertion tick (defaults to 0). Provenance claims do not verify musical accuracy. Existing music/tempo and overlapping notes are preserved; review with read_notes/inspect_audio.";
     /// Exactly one immutable recognized draft or explicitly claimed external piano draft.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     #[serde(deny_unknown_fields)]
     pub struct Args {
-        /// Opaque draft_id returned by transcribe_audio; omit transcription/path.
-        pub draft_id: Option<String>,
-        /// Inline external piano note draft; omit draft_id/path.
+        /// Inline external piano note draft; omit path.
         pub transcription: Option<auris_session::NoteTranscription>,
-        /// Absolute local JSON NoteTranscription file, up to 32 MiB; omit draft_id/transcription.
+        /// Absolute local JSON NoteTranscription file, up to 32 MiB; omit transcription.
         pub path: Option<String>,
         /// Optional new piano track/clip name, up to 256 bytes.
         pub name: Option<String>,
@@ -90,17 +88,8 @@ pub mod transcription_import {
     impl Args {
         /// Reject ambiguous sources and invalid insertion metadata before file authorization.
         pub fn validate(&self) -> Result<(), String> {
-            if [
-                self.draft_id.is_some(),
-                self.transcription.is_some(),
-                self.path.is_some(),
-            ]
-            .into_iter()
-            .filter(|present| *present)
-            .count()
-                != 1
-            {
-                return Err("Supply exactly one of draft_id, transcription or path".into());
+            if self.transcription.is_some() == self.path.is_some() {
+                return Err("Supply exactly one of transcription or path".into());
             }
             if self
                 .name
@@ -123,21 +112,18 @@ pub mod transcription_import {
             if name.trim().is_empty() || name.len() > 256 || at_tick < 0 {
                 return Err("Use a nonempty name up to 256 bytes and nonnegative at_tick".into());
             }
-            let draft = match (self.draft_id, self.transcription, self.path) {
-                (Some(id), None, None) => {
-                    crate::transcription_tools::resolve(&id)?.as_ref().clone()
-                }
-                (None, Some(transcription), None) => {
+            let draft = match (self.transcription, self.path) {
+                (Some(transcription), None) => {
                     auris_session::TranscriptionDraft::Piano { transcription }
                 }
-                (None, None, Some(path)) => auris_session::TranscriptionDraft::Piano {
+                (None, Some(path)) => auris_session::TranscriptionDraft::Piano {
                     transcription: auris_session::read_transcription_file(
                         std::path::Path::new(&path),
                         control,
                     )
                     .map_err(|e| e.to_string())?,
                 },
-                _ => return Err("Supply exactly one of draft_id, transcription or path".into()),
+                _ => return Err("Supply exactly one of transcription or path".into()),
             };
             draft.validate()?;
             Ok(auris_session::live_agent::Command::ImportTranscription {
@@ -210,11 +196,6 @@ fn definitions_with_arrangement(arrangement_enabled: bool) -> Vec<Definition> {
         description: audio_attachment::DESCRIPTION.into(),
         parameters: super::parameter_schema::<audio_attachment::Args>(),
     });
-    tools.push(Definition {
-        name: crate::transcription_tools::NAME.into(),
-        description: crate::transcription_tools::DESCRIPTION.into(),
-        parameters: super::parameter_schema::<crate::transcription_tools::Args>(),
-    });
     tools.extend(super::runtime::live_references());
     tools.push(Definition {
         name: production_record::NAME.into(),
@@ -248,10 +229,7 @@ pub fn command(tool: &str, args: &Value) -> Result<Option<Command>, String> {
         || super::runtime::live_references()
             .iter()
             .any(|definition| definition.name == tool)
-        || matches!(
-            tool,
-            transcription_import::NAME | audio_attachment::NAME | crate::transcription_tools::NAME
-        )
+        || matches!(tool, transcription_import::NAME | audio_attachment::NAME)
     {
         return Ok(None);
     }
@@ -590,21 +568,26 @@ mod tests {
     }
 
     #[test]
-    fn transcription_schema_is_read_only_and_legacy_shortcut_is_absent() {
-        assert!(!definitions().iter().any(|d| d.name == "create_piano_cover"));
+    fn automatic_transcription_is_absent_and_import_accepts_external_notes_only() {
+        assert!(
+            !definitions()
+                .iter()
+                .any(|d| matches!(d.name.as_str(), "transcribe_audio" | "create_piano_cover"))
+        );
         let definition = definitions()
             .into_iter()
-            .find(|d| d.name == crate::transcription_tools::NAME)
+            .find(|d| d.name == transcription_import::NAME)
             .unwrap();
-        assert!(definition.parameters["properties"].get("backend").is_some());
-        assert!(definition.parameters["properties"].get("project").is_none());
         assert!(
-            command(
-                "create_piano_cover",
-                &serde_json::json!({"attachment":"missing"})
+            definition.parameters["properties"]
+                .get("draft_id")
+                .is_none()
+        );
+        assert!(
+            serde_json::from_value::<transcription_import::Args>(
+                serde_json::json!({"draft_id":"old-draft"})
             )
-            .unwrap()
-            .is_none()
+            .is_err()
         );
     }
 

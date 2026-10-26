@@ -105,9 +105,8 @@ pub(crate) fn create(cx: &mut App) -> Result<WindowHandle<AurisApp>, String> {
             WindowOptions {
                 window_bounds: Some(crate::opening_window_bounds(remembered, cx)),
                 window_min_size: Some(size(px(640.0), px(480.0))),
-                titlebar: Some(crate::titlebar::options("Auris Studio")),
                 focus: true,
-                ..Default::default()
+                ..crate::titlebar::options("Auris Studio")
             },
             |_, cx| cx.new(AurisApp::new),
         )

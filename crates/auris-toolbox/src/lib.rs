@@ -49,7 +49,6 @@ mod project_files;
 mod recognition;
 mod reports;
 mod saved_listening;
-pub mod transcription_tools;
 pub use reports::read_report;
 pub mod plugin_paths;
 mod sound_search;
@@ -119,7 +118,7 @@ For ordinary authored composition, create_project starts empty. setup_tracks cre
 add_track requires kind instrument, drum, singer, audio or bus and the intended exact name.
 search_instruments accepts request with mode text and query, similar and reference id, or bounded browse.
 Copy returned sound IDs into set_instrument sound_id. Sound IDs expire after refresh/library changes.
-Use inspect_instrument for native control keys/ranges; set_instrument_params applies a bounded batch.
+Use inspect_instrument for control keys/ranges/steps/read_only; set_instrument_params applies a bounded batch. VST3 uses normalized 0..1 values, never Hz/dB from display_unit; CLAP uses native ranges. For steps=N>1, valid values are min+i*(max-min)/(N-1), i=0..N-1. Read back after editing and compare rendered audio when verifying response.
 For generated music, check_spec validates syntax/settings; diagnose_song checks lyric readings, phrase counts,
 mora counts, closures and fixed-bar capacity before compose. analyze_lyrics shows source-located readings.
 Explicit analysis readings are diagnostic-only. repair_lyrics applies a reading to existing note slots.

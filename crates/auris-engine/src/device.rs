@@ -799,6 +799,18 @@ impl OutputPreview {
     fn fill(&mut self, out: &mut AudioBuffer) {
         out.clear();
         let buffer = &self.request.buffer;
+        let controls = &self.request.status.controls;
+        let seek = controls.seek.swap(u64::MAX, Ordering::Relaxed);
+        if seek != u64::MAX {
+            self.position = (seek as usize).min(buffer.frame_count());
+            controls
+                .position
+                .store(self.position as u64, Ordering::Relaxed);
+        }
+        if controls.paused.load(Ordering::Relaxed) {
+            return;
+        }
+        let volume = f32::from_bits(controls.volume.load(Ordering::Relaxed));
         let count = out.frame_count().min(buffer.frame_count() - self.position);
         for channel in 0..out.channel_count().min(2) {
             let source = if buffer.channel_count() == 1 {
@@ -814,10 +826,17 @@ impl OutputPreview {
                 } else {
                     buffer.sample(source, self.position + frame)
                 };
-                out.channel_mut(channel)[frame] = if value.is_finite() { value } else { 0.0 };
+                out.channel_mut(channel)[frame] = if value.is_finite() {
+                    value * volume
+                } else {
+                    0.0
+                };
             }
         }
         self.position += count;
+        controls
+            .position
+            .store(self.position as u64, Ordering::Relaxed);
         if self.position == buffer.frame_count() {
             self.request.status.finish();
         }
@@ -1875,6 +1894,99 @@ mod tests {
             engine.fill(&mut data);
             assert!(data.iter().all(|sample| *sample == 0.0));
         }
+    }
+
+    #[test]
+    fn output_preview_initial_controls_are_applied_before_the_first_block() {
+        let (device, handle) = start_silent(&AudioSettings::default());
+        let rate = handle.sample_rate();
+        let buffer = Arc::new(AudioBuffer::from_planar(vec![vec![0.5; 128]], rate).unwrap());
+        let status = handle
+            .play_output_preview_with(
+                buffer,
+                crate::OutputPreviewOptions {
+                    position_seconds: 32.0 / rate,
+                    volume: 0.0,
+                },
+            )
+            .unwrap();
+        let EngineCommand::PlayOutputPreview(request) =
+            device.idle_commands.as_ref().unwrap().try_recv().unwrap()
+        else {
+            panic!("expected a prepared preview");
+        };
+        let mut preview = OutputPreview {
+            request,
+            position: 0,
+        };
+        let mut out = AudioBuffer::stereo(8, rate);
+        preview.fill(&mut out);
+        assert_eq!(
+            out.peak(),
+            0.0,
+            "muted starts must not leak an initial block"
+        );
+        assert_eq!(status.position_seconds(), 40.0 / rate);
+        status.set_volume(0.5);
+        status.seek_seconds(-1.0);
+        preview.fill(&mut out);
+        assert_eq!(out.peak(), 0.25);
+        assert_eq!(status.position_seconds(), 8.0 / rate);
+        status.set_volume(f32::NAN);
+        status.seek_seconds(f64::NAN);
+        preview.fill(&mut out);
+        assert_eq!(out.peak(), 0.25);
+        assert_eq!(status.position_seconds(), 16.0 / rate);
+    }
+
+    #[test]
+    fn output_preview_pause_seek_volume_and_completion_use_the_audio_clock() {
+        let (mut engine, commands, _retired, _meters, playhead) = engine();
+        let audio = Arc::new(
+            AudioBuffer::from_planar(
+                vec![(0..128).map(|n| n as f32 / 128.0).collect()],
+                SAMPLE_RATE,
+            )
+            .unwrap(),
+        );
+        let request = preview_request(audio);
+        let status = request.status.clone();
+        commands
+            .send(EngineCommand::PlayOutputPreview(request))
+            .unwrap();
+        let mut out = [0.0_f32; 16];
+        engine.fill(&mut out);
+        assert_eq!(status.position_seconds(), 8.0 / SAMPLE_RATE);
+        status.set_paused(true);
+        engine.fill(&mut out);
+        assert_eq!(out, [0.0; 16]);
+        assert_eq!(status.position_seconds(), 8.0 / SAMPLE_RATE);
+        assert!(status.is_active());
+        assert!(!status.is_playing());
+        status.seek_seconds(32.0 / SAMPLE_RATE);
+        engine.fill(&mut out);
+        assert_eq!(status.position_seconds(), 32.0 / SAMPLE_RATE);
+        status.set_volume(0.5);
+        status.set_paused(false);
+        engine.fill(&mut out);
+        assert_eq!(out[0], 0.125);
+        assert_eq!(status.position_seconds(), 40.0 / SAMPLE_RATE);
+        status.set_volume(0.0);
+        engine.fill(&mut out);
+        assert_eq!(out, [0.0; 16]);
+        assert_eq!(status.position_seconds(), 48.0 / SAMPLE_RATE);
+        status.seek_seconds(200.0);
+        engine.fill(&mut out);
+        assert_eq!(status.position_seconds(), status.duration_seconds());
+        assert!(!status.is_active());
+        status.seek_seconds(0.0);
+        status.set_paused(false);
+        engine.fill(&mut out);
+        assert!(
+            !status.is_active(),
+            "a finished or stopped request cannot restart itself"
+        );
+        assert_eq!(playhead.load(Ordering::Relaxed), 0);
     }
 
     #[test]

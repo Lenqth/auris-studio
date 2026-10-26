@@ -2,6 +2,7 @@
 
 use super::{lyrics::section_label, song_spec};
 use crate::app::AurisApp;
+use crate::ui::audio_player::{PlayerState, PlayerTarget};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::widgets::{ButtonStyle, button};
 use auris_i18n::Key;
@@ -11,7 +12,6 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::{Duration, Instant};
 
 #[derive(Default)]
 pub(crate) struct SongPreviewState {
@@ -23,7 +23,7 @@ pub(crate) struct SongPreviewState {
     cancel: Arc<AtomicBool>,
     running: bool,
     ready: Option<ChordPreview>,
-    playing_until: Option<Instant>,
+    pub(crate) player: PlayerState,
     message: Option<String>,
 }
 
@@ -33,13 +33,10 @@ impl AurisApp {
         let state = &mut self.song_preview;
         state.cancel.store(true, Ordering::Relaxed);
         state.generation = state.generation.wrapping_add(1);
-        if state.source.is_some() {
-            self.session.stop_chord_preview();
-        }
+        state.player.reset_audio();
         state.source = None;
         state.ready = None;
         state.running = false;
-        state.playing_until = None;
         state.message = None;
     }
 
@@ -53,13 +50,6 @@ impl AurisApp {
             {
                 self.clear_chord_preview();
             }
-        }
-        if self
-            .song_preview
-            .playing_until
-            .is_some_and(|until| Instant::now() >= until)
-        {
-            self.song_preview.playing_until = None;
         }
     }
 
@@ -83,12 +73,12 @@ impl AurisApp {
             return;
         }
         if let Some(preview) = &self.song_preview.ready {
-            match self.session.play_chord_preview(preview) {
-                Ok(()) => {
-                    self.song_preview.playing_until = Some(
-                        Instant::now() + Duration::from_secs_f64(preview.buffer.duration_seconds()),
-                    )
-                }
+            let options = self
+                .song_preview
+                .player
+                .options(preview.buffer.duration_seconds());
+            match self.session.play_chord_preview_with(preview, options) {
+                Ok(status) => self.song_preview.player.start(status),
                 Err(error) => {
                     self.song_preview.message =
                         Some(format!("{}: {error}", self.t(Key::SongPreviewFailed)))
@@ -102,14 +92,8 @@ impl AurisApp {
         if self.compose_progress.is_some() {
             return;
         }
-        if !alternative && (self.song_preview.running || self.song_preview.playing_until.is_some())
-        {
-            if self.song_preview.running {
-                self.clear_chord_preview();
-            } else {
-                self.session.stop_chord_preview();
-                self.song_preview.playing_until = None;
-            }
+        if !alternative && self.song_preview.running {
+            self.clear_chord_preview();
             cx.notify();
             return;
         }
@@ -213,7 +197,6 @@ impl AurisApp {
             .as_deref()
             .map(|s| section_label(self, s))
             .unwrap_or_default();
-        let busy = self.song_preview.running || self.song_preview.playing_until.is_some();
         let mut row = div()
             .flex()
             .flex_wrap()
@@ -242,19 +225,6 @@ impl AurisApp {
                     }
                     menu
                 }),
-            ))
-            .child(button(
-                "song-preview-play",
-                self.t(if busy {
-                    Key::SongPreviewStop
-                } else {
-                    Key::SongPreviewPlay
-                }),
-                ButtonStyle::Normal,
-                busy,
-                theme.accent,
-                theme,
-                cx.listener(|this, _, _, cx| this.preview_song_chords(false, cx)),
             ))
             .child(button(
                 "song-preview-another",
@@ -296,6 +266,18 @@ impl AurisApp {
             .flex_col()
             .flex_shrink_0()
             .gap_1()
+            .child(
+                self.render_audio_player(
+                    PlayerTarget::Chords,
+                    self.song_preview
+                        .ready
+                        .as_ref()
+                        .map_or(0.0, |p| p.buffer.duration_seconds()),
+                    !self.song_preview.running && self.compose_progress.is_none(),
+                    self.song_preview.running,
+                    cx,
+                ),
+            )
             .child(row)
             .child(div().text_xs().text_color(theme.text_muted).child(text))
     }
@@ -312,7 +294,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn audition_stop_adopt_and_create_keep_the_heard_chords(cx: &mut TestAppContext) {
+    fn audition_replay_adopt_and_create_keep_the_heard_chords(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         let before = app.update(cx, |this, _| {
             this.song_sheet = Some(super::super::song_dials(&request()));
@@ -324,7 +306,6 @@ mod tests {
         let names = app.read_with(cx, |this, _| {
             assert_eq!(this.project(), &before);
             assert!(!this.session.can_undo());
-            assert!(this.song_preview.playing_until.is_some());
             this.song_preview
                 .ready
                 .as_ref()
@@ -335,10 +316,9 @@ mod tests {
         click("song-preview-play", cx);
         paint(&app, cx);
         app.read_with(cx, |this, _| {
-            assert!(this.song_preview.playing_until.is_none());
             assert!(
                 this.song_preview.ready.is_some(),
-                "stopping must retain the candidate"
+                "replaying must retain the candidate"
             );
         });
         click("song-preview-adopt", cx);
@@ -414,6 +394,9 @@ mod tests {
                 for selector in [
                     "song-preview-section",
                     "song-preview-play",
+                    "chord-player-seek",
+                    "chord-player-mute",
+                    "chord-player-volume",
                     "song-preview-another",
                     "song-sheet-write",
                 ] {

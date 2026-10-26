@@ -265,7 +265,19 @@ impl ChordPreview {
 
 impl Session {
     /// Plays a rendered audition without creating tracks or using the document's mixer.
-    pub fn play_chord_preview(&mut self, preview: &ChordPreview) -> Result<(), String> {
+    pub fn play_chord_preview(
+        &mut self,
+        preview: &ChordPreview,
+    ) -> Result<auris_engine::OutputPreviewStatus, String> {
+        self.play_chord_preview_with(preview, auris_engine::OutputPreviewOptions::default())
+    }
+
+    /// Plays a chord audition with its initial position and independent volume.
+    pub fn play_chord_preview_with(
+        &mut self,
+        preview: &ChordPreview,
+        options: auris_engine::OutputPreviewOptions,
+    ) -> Result<auris_engine::OutputPreviewStatus, String> {
         if self.is_recording() {
             return Err("stop recording before auditioning chords".into());
         }
@@ -273,15 +285,13 @@ impl Session {
             return Err("the audio rate changed; render the preview again".into());
         }
         self.engine
-            .send(auris_engine::EngineCommand::PlayPreview(Arc::clone(
-                &preview.buffer,
-            )))
+            .play_output_preview_with(Arc::clone(&preview.buffer), options)
             .map_err(|e| e.to_string())
     }
 
     /// Stops the independent audition without editing the document or moving its playhead.
     pub fn stop_chord_preview(&self) {
-        self.send(auris_engine::EngineCommand::StopPreview);
+        self.send(auris_engine::EngineCommand::StopOutputPreview);
     }
 }
 

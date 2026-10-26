@@ -70,6 +70,7 @@ impl Render for RhythmWindow {
             }));
         div()
             .id("rhythm-window")
+            .relative()
             .size_full()
             .min_w_0()
             .overflow_hidden()
@@ -109,6 +110,7 @@ impl Render for RhythmWindow {
                     .p_3()
                     .child(content),
             )
+            .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }
@@ -151,10 +153,9 @@ impl AurisApp {
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(crate::titlebar::options(self.t(Key::PartRhythm))),
                 window_min_size: Some(size(px(480.0), px(260.0))),
                 focus: true,
-                ..Default::default()
+                ..crate::titlebar::options(self.t(Key::PartRhythm))
             },
             |_, cx| {
                 cx.new(|cx| RhythmWindow {

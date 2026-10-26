@@ -19,6 +19,7 @@
 use std::collections::{HashMap, HashSet};
 
 use auris_i18n::{Key, messages};
+use auris_session::PluginFormat;
 use gpui::MouseButton;
 
 use crate::ui::icons::icon;
@@ -318,6 +319,16 @@ pub(crate) struct LibraryPlugin {
     pub(crate) name: String,
     /// One-line summary shown under the name.
     pub(crate) description: String,
+    /// Native format, kept visible even when the name or description is truncated.
+    pub(crate) format: Option<PluginFormat>,
+}
+
+fn plugin_file_detail(format: PluginFormat, count: Option<usize>) -> String {
+    let label = crate::i18n::plugin_format_label(format);
+    match count {
+        Some(count) => format!("{label} · {count}"),
+        None => label.to_string(),
+    }
 }
 
 /// Plugins under the category they belong to, in [`PluginCategory::ALL`] order.
@@ -1110,6 +1121,7 @@ impl AurisApp {
                         id: descriptor.id.to_string(),
                         name: descriptor.name.to_string(),
                         description: descriptor.description.to_string(),
+                        format: None,
                     },
                     descriptor.category,
                 )
@@ -1127,6 +1139,7 @@ impl AurisApp {
                         id: descriptor.id.to_string(),
                         name: descriptor.name.to_string(),
                         description: descriptor.description.to_string(),
+                        format: None,
                     },
                     descriptor.category,
                 )
@@ -1233,6 +1246,7 @@ impl AurisApp {
                             id: file.display().to_string(),
                             name,
                             description: file.display().to_string(),
+                            format: Some(PluginFormat::Clap),
                         },
                         LibraryRole::File,
                         PluginCategory::Utility,
@@ -1255,6 +1269,7 @@ impl AurisApp {
                             id: file.display().to_string(),
                             name,
                             description: file.display().to_string(),
+                            format: Some(PluginFormat::Vst3),
                         },
                         LibraryRole::File,
                         PluginCategory::Utility,
@@ -1648,10 +1663,7 @@ impl AurisApp {
                     true,
                     None,
                     name,
-                    match open {
-                        true => listed.len().to_string(),
-                        false => String::new(),
-                    },
+                    plugin_file_detail(PluginFormat::Clap, open.then_some(listed.len())),
                     self.row_style(theme.text, None),
                     cx.listener(move |this, _: &MouseDownEvent, _, cx| {
                         if open {
@@ -1700,6 +1712,7 @@ impl AurisApp {
                         // usually empty, and whose plugin it is answers the question a list of
                         // unfamiliar names actually raises.
                         description: info.vendor.clone(),
+                        format: Some(PluginFormat::Clap),
                     },
                     // The same icons the built-ins get, so a row reads as a sound or as a
                     // treatment before its name has been read.
@@ -1786,11 +1799,7 @@ impl AurisApp {
                     true,
                     None,
                     name,
-                    if open {
-                        listed.len().to_string()
-                    } else {
-                        String::new()
-                    },
+                    plugin_file_detail(PluginFormat::Vst3, open.then_some(listed.len())),
                     self.row_style(theme.text, None),
                     cx.listener(move |this, _: &MouseDownEvent, _, cx| {
                         if open {
@@ -1835,6 +1844,7 @@ impl AurisApp {
                         id: info.auris_id(),
                         name: info.name.clone(),
                         description: info.vendor.clone(),
+                        format: Some(PluginFormat::Vst3),
                     },
                     match kind {
                         PluginKind::Instrument => LibraryRole::Instrument,
@@ -2172,6 +2182,7 @@ impl AurisApp {
                         id: d.id.to_string(),
                         name: d.name.to_string(),
                         description: d.description.to_string(),
+                        format: None,
                     },
                 )
             })
@@ -2398,6 +2409,7 @@ impl AurisApp {
                         id: d.id.to_string(),
                         name: d.name.to_string(),
                         description: d.description.to_string(),
+                        format: None,
                     },
                 )
             })
@@ -2848,7 +2860,12 @@ impl AurisApp {
             self.t(Key::LibraryNeedsInstrumentTrack)
         };
         let tooltip = crate::ui::tooltip::keyed_tip(
-            format!("{name} · {description} {target_hint}"),
+            format!(
+                "{name} · {}{description} {target_hint}",
+                plugin.format.map_or_else(String::new, |format| {
+                    format!("{} · ", crate::i18n::plugin_format_label(format))
+                }),
+            ),
             "",
             &theme,
         );
@@ -2905,6 +2922,19 @@ impl AurisApp {
                         )
                     }),
             )
+            .when_some(plugin.format, |this, format| {
+                this.child(
+                    div()
+                        .debug_selector({
+                            let id = plugin.id.clone();
+                            move || target.selector(&format!("lib-format-{id}"))
+                        })
+                        .flex_shrink_0()
+                        .text_xs()
+                        .text_color(theme.text_muted)
+                        .child(crate::i18n::plugin_format_label(format)),
+                )
+            })
             .when(selected, |this| {
                 this.child(
                     div()
@@ -3148,6 +3178,7 @@ mod tests {
             id: id.to_string(),
             name: id.to_string(),
             description: String::new(),
+            format: None,
         }
     }
 

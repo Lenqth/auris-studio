@@ -31,7 +31,7 @@ struct Rpc {
     deferred: VecDeque<Value>,
 }
 
-fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
+pub(crate) fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.codex_path.trim().is_empty() {
         let path = PathBuf::from(prefs.codex_path.trim());
         if cfg!(windows)
@@ -821,7 +821,7 @@ mod tests {
 
     /// Real MCP HTTP traffic and real session commands, with a scripted Codex RPC peer.
     #[tokio::test]
-    async fn codex_mcp_transcribes_an_attachment_and_undo_restores_the_unsaved_song() {
+    async fn codex_mcp_imports_external_notes_and_undo_restores_the_unsaved_song() {
         tokio::time::timeout(Duration::from_secs(10), async {
             let (bridge, commands, events) = crate::worker::test_bridge();
             let mcp = LiveMcp::start(ToolHost::new(bridge.clone())).await.unwrap();
@@ -847,16 +847,14 @@ mod tests {
                 reply(&mut writer, json!({"id":request["id"],"result":{"thread":{"id":"thread"}}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "mcpServerStatus/list");
-                reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"transcribe_audio":{},"import_transcription":{}}}]}})).await;
+                reply(&mut writer, json!({"id":request["id"],"result":{"data":[{"name":"auris_live","tools":{"import_transcription":{}}}]}})).await;
                 let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
                 assert_eq!(request["method"], "turn/start");
                 let checkpoint = memory::Memory::load(&history).unwrap();
                 assert_eq!(checkpoint.turns.last().unwrap().user, "Add a track");
                 assert!(checkpoint.turns.last().unwrap().answer.contains("no final answer was recorded"));
                 assert!(request["params"]["input"][1]["text"].as_str().unwrap().contains("local CPU audio measurements"));
-                let metadata: Value = serde_json::from_str(request["params"]["input"][1]["text"].as_str().unwrap().lines().nth(1).unwrap()).unwrap();
-                // Replacing the user's file after submission must not change the retained source.
-                std::fs::write(&audio, b"replaced after attachment").unwrap();
+
                 reply(&mut writer, json!({"id":request["id"],"result":{"turn":{"id":"turn"}}})).await;
 
                 let client = reqwest::Client::new();
@@ -867,7 +865,7 @@ mod tests {
                 let session = init.headers().get("mcp-session-id").unwrap().to_str().unwrap().to_owned();
                 let notify = request(json!({"jsonrpc":"2.0","method":"notifications/initialized"})).header("mcp-session-id", &session).send().await.unwrap();
                 assert!(notify.status().is_success());
-                let result=crate::live_mcp::transcription_test_call(&client,&mcp.url,&mcp.token,&session,&metadata["attachment_id"],"Codex lead").await;
+                let result=crate::live_mcp::transcription_test_call(&client,&mcp.url,&mcp.token,&session,"Codex lead").await;
                 assert_ne!(result["result"]["isError"], true, "{result}");
                 assert!(result["error"].is_null(), "{result}");
                 reply(&mut writer, json!({"method":"item/agentMessage/delta","params":{"threadId":"thread","turnId":"turn","delta":"Added the track."}})).await;
@@ -905,7 +903,7 @@ mod tests {
                         _ => {}
                     }
                 }
-                assert_eq!((permissions, edits), (2, 1));
+                assert_eq!((permissions, edits), (1, 1));
                 assert!(session.project().tracks.iter().any(|track| track.name == "Codex lead"));
                 let piano = session.project().tracks.iter().find(|track|track.name == "Codex lead").unwrap();
                 assert_eq!(piano.kind.as_instrument().unwrap().instrument_id, "auris.physical.piano");

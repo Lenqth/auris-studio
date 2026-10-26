@@ -329,6 +329,7 @@ impl AurisApp {
             );
         div()
             .id("project-chooser")
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -390,6 +391,7 @@ impl AurisApp {
                         .child(footer),
                 ),
             )
+            .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }

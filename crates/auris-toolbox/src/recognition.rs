@@ -1,7 +1,7 @@
 //! CPU music recognition commands shared by both model frontends.
 
 use super::*;
-use auris_session::{AnalysisControl, AudioOptions, ChordOptions};
+use auris_session::{AnalysisControl, ChordOptions};
 
 fn analysis_control() -> AnalysisControl {
     AnalysisControl::cancelled_by(cancellation::current().flag_handle())
@@ -109,12 +109,8 @@ pub mod analyze_audio {
     }
     /// Decodes and reports in source seconds.
     pub fn run(args: &Args) -> Result<String, String> {
-        let report = auris_session::analyze_audio_file(
-            Path::new(&args.audio),
-            AudioOptions::default(),
-            &analysis_control(),
-        )
-        .map_err(|e| e.to_string())?;
+        let report = auris_session::analyze_audio_file(Path::new(&args.audio), &analysis_control())
+            .map_err(|e| e.to_string())?;
         reports::publish(&report)
     }
 }
@@ -123,7 +119,7 @@ pub mod analyze_audio {
 mod tests {
     use super::*;
     #[test]
-    fn file_tools_report_without_writing_then_export_only_the_draft_and_apply() {
+    fn file_tools_report_without_writing_then_accept_external_notes() {
         let root = std::env::temp_dir().join(format!(
             "auris-recognition-{}-{}",
             std::process::id(),
@@ -193,20 +189,10 @@ mod tests {
             "C"
         );
         assert_eq!(std::fs::read(&project).unwrap(), original);
-        let args = crate::transcription_tools::Args {
-            path: Some(wav.display().to_string()),
-            attachment: None,
-            backend: crate::transcription_tools::Backend::Yin,
-        };
-        let recognized: serde_json::Value =
-            serde_json::from_str(&crate::transcription_tools::run(&args).unwrap()).unwrap();
-        assert_eq!(recognized["note_count"], 1);
-        assert_eq!(recognized["preview"]["notes"][0]["pitch"], 69);
-        assert_eq!(std::fs::read(&project).unwrap(), original);
         let accepted = crate::runtime::call_saved(
             &crate::ToolGroups::default(),
             "import_transcription",
-            serde_json::json!({"project":project,"draft_id":recognized["draft_id"],"at_tick":7680}),
+            serde_json::json!({"project":project,"transcription":{"source":{"method":"external-fixture"},"seconds":1.0,"notes":[{"pitch":69,"start":0.2,"end":0.8,"strength":0.7}]},"at_tick":7680}),
         )
         .unwrap();
         let accepted: serde_json::Value = serde_json::from_str(&accepted).unwrap();

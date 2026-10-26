@@ -20,10 +20,10 @@ use winapi::{
     shared::windef::{HWND, RECT},
     um::libloaderapi::GetModuleHandleW,
     um::winuser::{
-        CreateWindowExW, DefWindowProcW, DestroyWindow, LoadCursorW, RegisterClassExW,
-        SetWindowPos, ShowWindow, UpdateWindow, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, IDC_ARROW,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SW_SHOW, WM_CLOSE, WM_DPICHANGED, WNDCLASSEXW,
-        WS_OVERLAPPEDWINDOW,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, IsIconic, LoadCursorW, RegisterClassExW,
+        SetForegroundWindow, SetWindowPos, ShowWindow, UpdateWindow, CS_HREDRAW, CS_VREDRAW,
+        CW_USEDEFAULT, IDC_ARROW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SW_RESTORE, SW_SHOW,
+        WM_CLOSE, WM_DPICHANGED, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
     },
 };
 
@@ -555,6 +555,44 @@ impl PluginWindow {
 
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         let _ = (width, height);
+    }
+
+    /// Raises an existing editor without detaching its view or changing its size.
+    /// Call only in response to an explicit user action, never from a polling loop.
+    pub fn bring_to_front(&self) {
+        #[cfg(target_os = "windows")]
+        if let Some(hwnd) = self.native_window {
+            // SAFETY: this object owns the window and is used on its creating thread.
+            unsafe {
+                ShowWindow(
+                    hwnd,
+                    if IsIconic(hwnd) != 0 {
+                        SW_RESTORE
+                    } else {
+                        SW_SHOW
+                    },
+                );
+                SetForegroundWindow(hwnd);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(window) = &self.native_window {
+            if window.isMiniaturized() {
+                window.deminiaturize(None);
+            }
+            window.makeKeyAndOrderFront(None);
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(state) = &self.native_window {
+            state.connection.send_request(&xcb::x::MapWindow {
+                window: state.window,
+            });
+            state.connection.send_request(&xcb::x::ConfigureWindow {
+                window: state.window,
+                value_list: &[xcb::x::ConfigWindow::StackMode(xcb::x::StackMode::Above)],
+            });
+            let _ = state.connection.flush();
+        }
     }
 
     /// Close the plugin window

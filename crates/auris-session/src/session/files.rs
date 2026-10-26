@@ -295,12 +295,10 @@ impl MidiImportJob {
             } else {
                 project.add_instrument_track(&track.name, instrument)
             };
-            let (Some(first), Some(last)) = (
-                track.notes.iter().map(|note| note.start).min(),
-                track.notes.iter().map(|note| note.end()).max(),
-            ) else {
+            let Some(first) = track.notes.iter().map(|note| note.start).min() else {
                 continue;
             };
+            let last = track.end();
             let Some(clip_id) = project.add_midi_clip(
                 track_id,
                 &track.name,
@@ -2791,6 +2789,45 @@ mod tests {
         }
         live.save_as_replacing(&document)
             .expect("explicit replacement permits the overwrite");
+    }
+
+    #[test]
+    fn midi_import_preserves_the_pedal_tail_after_the_last_key_release() {
+        let scratch = Scratch::new("midi-import-pedal-tail");
+        let midi = scratch.join("Pedal.mid");
+        // Format 0, 480 PPQ: press at beat 1, release the key at beat 2,
+        // and lift the pedal 4.5 beats later, as in a piano ending.
+        let events = [
+            0x83, 0x60, 0xb0, 64, 127, 0, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0x90, 0x70, 0xb0,
+            64, 0, 0, 0xff, 0x2f, 0,
+        ];
+        let mut bytes = b"MThd\0\0\0\x06\0\0\0\x01\x01\xe0MTrk".to_vec();
+        bytes.extend_from_slice(&(events.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(&events);
+        std::fs::write(&midi, bytes).unwrap();
+
+        let mut live = session();
+        let report = live.import_midi(&midi).unwrap();
+        let clip = &live.project().tracks[0].kind.as_instrument().unwrap().clips[0];
+        let end = Ticks::from_beats(6.5);
+        assert_eq!(report.length, end);
+        assert_eq!(live.project().end_tick(), end);
+        assert_eq!(clip.start, Ticks::QUARTER);
+        assert_eq!(clip.length, Ticks::from_beats(5.5));
+        assert_eq!(clip.notes[0].length, Ticks::QUARTER);
+        let pedal = clip.sounding_performance_curve_events(
+            auris_core::project::ClipCurve::Controller(64),
+            auris_core::project::CURVE_STEP,
+            &live.project().tempo_map,
+            &live.project().signatures,
+        );
+        assert!(pedal.contains(&(clip.length, 0.0)));
+        assert!(
+            pedal
+                .iter()
+                .all(|(at, value)| { *value == if *at < clip.length { 1.0 } else { 0.0 } }),
+            "the pedal must stay down until its authored release: {pedal:?}"
+        );
     }
 
     #[test]

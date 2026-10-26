@@ -3,6 +3,8 @@
 
 [English](grand-piano-calibration.md)
 
+2026-10-26 の[鍵盤全体の整音](grand-piano-register.ja.md)で、ここに書いたモデルと工場値は置き換わりました。そのホールドアウト検証には、ここの音と指標を使っています。
+
 ネイティブの Physical Piano 工場音色は、Evan Mazunik が演奏した University of Iowa の [Steinway model B 録音](https://theremin.music.uiowa.edu/MISpiano.html) に対して較正しています。2026-10-05の改訂では、フェルトの硬さ、打弦位置、弦の剛性、損失、12帯域の響板色付けを調整しました。オシレーターは有限接触の結合ユニゾンモデルのままで、コールバックの確保やI/Oは追加していません。
 
 <a id="reference-and-selection"></a>

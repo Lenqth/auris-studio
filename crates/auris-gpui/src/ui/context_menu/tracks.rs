@@ -447,7 +447,8 @@ impl AurisApp {
                 },
             );
         }
-        menu.separator()
+        let menu = menu
+            .separator()
             .item(
                 self.t(Key::MenuMoveUp),
                 MenuCommand::MoveEffect {
@@ -470,6 +471,11 @@ impl AurisApp {
                 self.t(Key::MenuAddEffect),
                 MenuCommand::ShowEffectPicker { track, at: anchor },
             )
+            .separator();
+        self.plugin_window_menu_entries(
+            menu,
+            crate::ui::plugin_window::PluginSubject::Insert { track, slot },
+        )
     }
 
     /// Every track an effect could be keyed from, with a tick on the one it listens to now.
