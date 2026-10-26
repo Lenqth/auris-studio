@@ -188,6 +188,18 @@ fn advance_quit(cx: &mut App) {
     });
 }
 
+/// Whether a project window other than `own` was told to reopen after the update is applied.
+///
+/// `own` is skipped because it is the window being updated when this is asked, and so cannot be
+/// read. Without the window registry there is only the one window, and nothing else to ask.
+pub(crate) fn restart_requested_elsewhere(own: Option<WindowId>, cx: &App) -> bool {
+    installed(cx)
+        && windows(cx)
+            .into_iter()
+            .filter(|handle| Some(handle.window_id()) != own)
+            .any(|handle| handle.read(cx).is_ok_and(|view| view.restart_after_update))
+}
+
 impl AurisApp {
     pub(crate) fn refresh_shared_settings(&mut self) {
         let placement = self.settings.window;
@@ -395,6 +407,28 @@ mod tests {
                 })
                 .unwrap();
             assert_eq!(first.read(cx).project().tracks.len(), 2);
+        });
+    }
+
+    #[gpui::test]
+    fn a_restart_chosen_in_another_window_is_seen_by_this_ones_quit(cx: &mut gpui::TestAppContext) {
+        let (first, cx) = crate::harness::open(cx);
+        let own = cx.update(|window, cx| {
+            install(cx);
+            let own = window.window_handle().window_id();
+            first.update(cx, |view, _| view.project_window = Some(own));
+            own
+        });
+        let second = cx.cx.update(|cx| create(cx).unwrap());
+        cx.cx.update(|cx| {
+            assert!(!restart_requested_elsewhere(Some(own), cx));
+            second
+                .update(cx, |view, _, _| view.restart_after_update = true)
+                .unwrap();
+            assert!(restart_requested_elsewhere(Some(own), cx));
+            // The asking window's own flag is its caller's to read, not this function's.
+            let other = second.window_id();
+            assert!(!restart_requested_elsewhere(Some(other), cx));
         });
     }
 

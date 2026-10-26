@@ -515,6 +515,11 @@ fn apply_macos(args: &ApplyArgs) -> Result<(), UpdateError> {
         }
         Ok(())
     })();
+    if result.is_err() {
+        // A failed copy or swap leaves the staged bundle beside the app, hidden by its leading
+        // dot. The backup is not touched here: if restoring it failed, it is the only copy left.
+        let _ = std::fs::remove_dir_all(&stage);
+    }
     let _ = Command::new("/usr/bin/hdiutil")
         .args(["detach", "-force"])
         .arg(&mount)

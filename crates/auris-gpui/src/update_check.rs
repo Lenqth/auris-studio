@@ -420,8 +420,21 @@ fn verified_file(path: &Path, asset: &ReleaseAsset) -> Result<bool, CheckError> 
     Ok(hex::encode(digest.finalize()) == asset.sha256)
 }
 
+/// Set once a quit has started the helper, whichever window's quit callback got there first.
+///
+/// Every project window holds its own update state and its own quit callback, so two windows that
+/// both reached Ready would otherwise start two helpers. Both would copy themselves to the same
+/// per-process name, and on macOS race each other to swap the same bundle.
+static HELPER_STARTED: AtomicBool = AtomicBool::new(false);
+
 /// Starts the shipped helper from outside the installed app after the save guard approves quit.
+///
+/// Only the first call in a process does anything; later ones return `Ok` without starting a
+/// second helper.
 pub(crate) fn spawn_update_helper(update: &ReadyUpdate, restart: bool) -> Result<(), CheckError> {
+    if HELPER_STARTED.swap(true, Ordering::AcqRel) {
+        return Ok(());
+    }
     let result_file = update_result_path();
     if result_file.exists() {
         fs::remove_file(&result_file).map_err(|error| CheckError::File(error.to_string()))?;

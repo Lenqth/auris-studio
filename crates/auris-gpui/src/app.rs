@@ -1735,8 +1735,6 @@ pub struct AurisApp {
     pub(crate) update_generation: u64,
     /// Reopen after applying only when the user chose Restart and Update.
     pub(crate) restart_after_update: bool,
-    /// Prevents duplicate helper processes if quit callbacks are repeated.
-    update_helper_started: bool,
     /// Crash-recovery snapshots discovered before this session was created, newest first.
     ///
     /// Discard walks this queue during the current launch. Recover and Cancel stop asking, so
@@ -1979,13 +1977,12 @@ impl AurisApp {
         })
         .detach();
         cx.on_app_quit(|this, cx| {
-            if !this.update_helper_started
-                && let crate::ui::updates::UpdatePhase::Ready(update) = &this.update_phase
-            {
-                this.update_helper_started = true;
-                if let Err(error) =
-                    crate::update_check::spawn_update_helper(update, this.restart_after_update)
-                {
+            if let crate::ui::updates::UpdatePhase::Ready(update) = &this.update_phase {
+                // Restart and Update marks only the window it was chosen in, and this callback may
+                // be another window's, so the choice is read from every window.
+                let restart = this.restart_after_update
+                    || crate::project_windows::restart_requested_elsewhere(this.project_window, cx);
+                if let Err(error) = crate::update_check::spawn_update_helper(update, restart) {
                     log::error!("could not start update helper: {error}");
                     crate::update_check::record_update_launch_failure(&error);
                 }
@@ -2228,7 +2225,6 @@ impl AurisApp {
             update_phase: crate::ui::updates::UpdatePhase::Idle,
             update_generation: 0,
             restart_after_update: false,
-            update_helper_started: false,
             recovery_queue,
             palette: None,
             plugin_window: None,
