@@ -31,7 +31,7 @@ struct Rpc {
     deferred: VecDeque<Value>,
 }
 
-fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
+pub(crate) fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.codex_path.trim().is_empty() {
         let path = PathBuf::from(prefs.codex_path.trim());
         if cfg!(windows)

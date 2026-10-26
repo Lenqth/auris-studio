@@ -45,7 +45,7 @@ fn tool_name(name: &str) -> Option<&str> {
         .filter(|name| ToolHost::contains(name))
 }
 
-fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
+pub(crate) fn executable(prefs: &auris_session::AgentPreferences) -> Result<PathBuf, String> {
     if !prefs.claude_path.trim().is_empty() {
         let path = PathBuf::from(prefs.claude_path.trim());
         if cfg!(windows)

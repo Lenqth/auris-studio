@@ -11,6 +11,12 @@ pub(super) struct AgentSettings {
     pub(super) focus: [FocusHandle; 7],
     pub(super) active: Option<usize>,
     expanded_providers: [bool; 4],
+    provider_status: [Option<auris_agent::ProviderStatus>; 5],
+    checked_fields: Option<[String; 6]>,
+    checked_provider: String,
+    checking_providers: bool,
+    provider_check_focus: FocusHandle,
+    provider_check: Option<gpui::Task<()>>,
     pub(super) prompt_viewport:
         std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
 }
@@ -50,6 +56,12 @@ impl AgentSettings {
             ],
             active: None,
             expanded_providers: [false; 4],
+            provider_status: Default::default(),
+            checked_fields: None,
+            checked_provider: String::new(),
+            checking_providers: false,
+            provider_check_focus: cx.focus_handle(),
+            provider_check: None,
             prompt_viewport: Default::default(),
             prefs,
         }
@@ -57,6 +69,147 @@ impl AgentSettings {
 }
 
 impl SettingsWindow {
+    fn check_agent_providers(&mut self, cx: &mut Context<Self>) {
+        if self.agent.checking_providers {
+            return;
+        }
+        let fields: [String; 6] =
+            std::array::from_fn(|i| self.agent.fields[i].content().trim().to_owned());
+        let mut prefs = self.agent.prefs.clone();
+        prefs.url.clone_from(&fields[0]);
+        prefs.api_key_env.clone_from(&fields[1]);
+        prefs.codex_path.clone_from(&fields[2]);
+        prefs.claude_path.clone_from(&fields[3]);
+        prefs.opencode_path.clone_from(&fields[4]);
+        prefs.antigravity_path.clone_from(&fields[5]);
+        prefs.discovery_endpoint = None;
+        // Harness windows never contact installed CLIs or the developer's API accounts.
+        let receiver = if cfg!(test) {
+            std::sync::mpsc::channel().1
+        } else {
+            auris_agent::check_providers_background(prefs)
+        };
+        self.agent.checked_fields = Some(fields);
+        self.agent
+            .checked_provider
+            .clone_from(&self.agent.prefs.provider);
+        self.agent.provider_status = Default::default();
+        self.agent.checking_providers = true;
+        self.watch_agent_providers(receiver, cx);
+        cx.notify();
+    }
+
+    fn watch_agent_providers(
+        &mut self,
+        receiver: std::sync::mpsc::Receiver<(usize, auris_agent::ProviderStatus)>,
+        cx: &mut Context<Self>,
+    ) {
+        self.agent.provider_check = Some(cx.spawn(async move |this, cx| {
+            loop {
+                let mut results = Vec::new();
+                let disconnected = loop {
+                    match receiver.try_recv() {
+                        Ok(result) => results.push(result),
+                        Err(std::sync::mpsc::TryRecvError::Empty) => break false,
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => break true,
+                    }
+                };
+                if (!results.is_empty() || disconnected)
+                    && this
+                        .update(cx, |this, cx| {
+                            for (index, status) in results {
+                                this.agent.provider_status[index] = Some(status);
+                            }
+                            if disconnected {
+                                this.agent.checking_providers = false;
+                            }
+                            cx.notify();
+                        })
+                        .is_err()
+                {
+                    break;
+                }
+                if disconnected {
+                    break;
+                }
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(100))
+                    .await;
+            }
+        }));
+    }
+
+    fn agent_provider_status_is_current(&self, row: usize) -> bool {
+        let Some(fields) = &self.agent.checked_fields else {
+            return false;
+        };
+        if row < 4 {
+            fields[row + 2] == self.agent.fields[row + 2].content().trim()
+        } else {
+            self.agent.checked_provider == self.agent.prefs.provider
+                && fields[0] == self.agent.fields[0].content().trim()
+                && fields[1] == self.agent.fields[1].content().trim()
+        }
+    }
+
+    fn agent_provider_status(&self, row: usize) -> AnyElement {
+        let status = self.agent.provider_status[row].as_ref();
+        let current = self.agent_provider_status_is_current(row);
+        let label = if !current {
+            Key::AgentProviderCheckNeeded
+        } else if let Some(status) = status {
+            match (status.error.is_some(), status.models) {
+                (false, Some(0)) => Key::AgentProviderNoModels,
+                (false, Some(_)) => Key::AgentProviderConnected,
+                _ => Key::AgentProviderUnavailable,
+            }
+        } else if self.agent.checking_providers {
+            Key::AgentProviderChecking
+        } else {
+            Key::AgentProviderUnavailable
+        };
+        let mut line = div()
+            .id(("agent-provider-status", row))
+            .debug_selector(move || format!("agent-provider-status-{row}"))
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_2()
+            .text_xs()
+            .text_color(self.theme.text_muted)
+            .child(
+                div()
+                    .px_2()
+                    .py_0p5()
+                    .rounded(Metrics::RADIUS_SM)
+                    .bg(self.theme.surface_sunken)
+                    .text_color(
+                        if current && status.is_some_and(|status| status.error.is_some()) {
+                            self.theme.warning
+                        } else {
+                            self.theme.text
+                        },
+                    )
+                    .child(self.t(label)),
+            );
+        if current && let Some(status) = status {
+            if let Some(version) = &status.version {
+                line = line.child(div().child(version.clone()));
+            } else if row < 4 {
+                line = line.child(div().child(self.t(Key::AgentProviderVersionUnknown)));
+            }
+            if let Some(count) = status.models {
+                line = line.child(
+                    div().child(
+                        self.t(Key::AgentProviderModelCount)
+                            .replace("{count}", &count.to_string()),
+                    ),
+                );
+            }
+        }
+        line.into_any_element()
+    }
+
     fn apply_agent(&mut self, cx: &mut Context<Self>) {
         let Ok(save) = self.app.update(cx, |app, _| app.settings_saver()) else {
             return;
@@ -326,12 +479,6 @@ impl SettingsWindow {
     ) -> AnyElement {
         let theme = &self.theme;
         let expanded = self.agent.expanded_providers[index - 2];
-        let path = self.agent.fields[index].content().trim();
-        let summary = if path.is_empty() {
-            self.t(Key::AgentPathAutomatic).to_owned()
-        } else {
-            path.to_owned()
-        };
         let header = div()
             .flex()
             .items_center()
@@ -357,13 +504,7 @@ impl SettingsWindow {
                     .flex_col()
                     .gap_1()
                     .child(div().text_sm().text_color(theme.text).child(name))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .truncate()
-                            .child(summary),
-                    ),
+                    .child(self.agent_provider_status(index - 2)),
             )
             .child(icon(
                 if expanded {
@@ -377,6 +518,8 @@ impl SettingsWindow {
         div()
             .w_full()
             .min_w_0()
+            .flex()
+            .flex_col()
             .flex_shrink_0()
             .border_b_1()
             .border_color(theme.border_subtle)
@@ -400,22 +543,37 @@ impl SettingsWindow {
                 .p_3(),
             )
             .when(expanded, |view| {
-                view.child(
-                    div()
-                        .px_3()
-                        .pb_4()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(section_title(self.t(label), theme))
-                        .child(self.agent_field(index, cx))
-                        .child(note(self.t(help), theme)),
-                )
+                let status = self.agent.provider_status[index - 2]
+                    .as_ref()
+                    .filter(|_| self.agent_provider_status_is_current(index - 2));
+                let mut details = div()
+                    .w_full()
+                    .min_w_0()
+                    .px_3()
+                    .pb_4()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(section_title(self.t(label), theme))
+                    .child(self.agent_field(index, cx))
+                    .child(note(self.t(help), theme));
+                if let Some(status) = status {
+                    if let Some(path) = &status.executable {
+                        details = details.child(note(&path.display().to_string(), theme));
+                    }
+                    if let Some(error) = &status.error {
+                        details = details.child(note(error, theme));
+                    }
+                }
+                view.child(details)
             })
             .into_any_element()
     }
 
     pub(super) fn render_agent(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        if self.agent.checked_fields.is_none() {
+            self.check_agent_providers(cx);
+        }
         let theme = self.theme.clone();
         let provider = self.agent.prefs.provider.clone();
         let provider = if provider.is_empty() {
@@ -476,10 +634,37 @@ impl SettingsWindow {
         ]);
         let mut rows = vec![
             div()
-                .text_lg()
-                .child(self.t(Key::AgentProviders))
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(div().text_lg().child(self.t(Key::AgentProviders)))
+                .child(
+                    crate::ui::widgets::button_enabled(
+                        "agent-check-providers",
+                        self.t(Key::AgentProviderCheck),
+                        ButtonStyle::Normal,
+                        crate::ui::widgets::ButtonState::available(
+                            false,
+                            !self.agent.checking_providers,
+                        ),
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, window, cx| {
+                            this.agent.active = None;
+                            this.editing_search = false;
+                            window.focus(&this.agent.provider_check_focus);
+                            this.check_agent_providers(cx);
+                        }),
+                    )
+                    .track_focus(&self.agent.provider_check_focus)
+                    .tab_index(0)
+                    .tab_stop(!self.agent.checking_providers)
+                    .focus(|view| view.border_color(theme.selection)),
+                )
                 .into_any_element(),
             note(self.t(Key::AgentDiscoveryHelp), &theme),
+            note(self.t(Key::AgentProviderStatusHelp), &theme),
             providers.into_any_element(),
             div()
                 .pt_4()
@@ -496,6 +681,7 @@ impl SettingsWindow {
                 ))
                 .child(div().text_base().child(self.t(Key::AgentApiConnection)))
                 .into_any_element(),
+            self.agent_provider_status(4),
             section_title(self.t(Key::AgentProviderLabel), &theme),
             provider_control,
             section_title(self.t(Key::AgentUrlLabel), &theme),
@@ -503,6 +689,13 @@ impl SettingsWindow {
             section_title(self.t(Key::AgentKeyEnvLabel), &theme),
             self.agent_field(1, cx),
         ];
+        if self.agent_provider_status_is_current(4)
+            && let Some(error) = self.agent.provider_status[4]
+                .as_ref()
+                .and_then(|status| status.error.as_ref())
+        {
+            rows.push(note(error, &theme));
+        }
         if provider == "ollama" {
             let context = self.agent.prefs.context_tokens.unwrap_or(32768);
             let output = self.agent.prefs.output_tokens.unwrap_or(4096);
@@ -620,6 +813,118 @@ impl SettingsWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn provider_results_arrive_independently_and_edits_invalidate_only_their_route(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        cx.run_until_parked();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        handle
+            .update(cx, |this, _, cx| {
+                this.agent.checking_providers = true;
+                this.watch_agent_providers(receiver, cx);
+            })
+            .unwrap();
+        sender
+            .send((
+                0,
+                auris_agent::ProviderStatus {
+                    version: Some("codex-cli fixture".into()),
+                    models: Some(3),
+                    ..Default::default()
+                },
+            ))
+            .unwrap();
+        cx.run_until_parked();
+        cx.background_executor
+            .advance_clock(std::time::Duration::from_millis(100));
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, _, _| {
+                assert_eq!(
+                    this.agent.provider_status[0].as_ref().unwrap().models,
+                    Some(3)
+                );
+                assert!(this.agent.provider_status[1].is_none());
+                assert!(this.agent.checking_providers);
+                this.agent.fields[2] = TextField::new("different-codex.exe");
+                assert!(!this.agent_provider_status_is_current(0));
+                assert!(this.agent_provider_status_is_current(1));
+                assert!(this.agent_provider_status_is_current(4));
+                this.agent.fields[0] = TextField::new("http://different.invalid");
+                assert!(!this.agent_provider_status_is_current(4));
+            })
+            .unwrap();
+        drop(sender);
+        cx.background_executor
+            .advance_clock(std::time::Duration::from_millis(100));
+        cx.run_until_parked();
+        handle
+            .read_with(cx, |this, _| assert!(!this.agent.checking_providers))
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn connection_check_does_not_apply_unsaved_paths_and_is_keyboard_accessible(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, _, _| {
+                this.agent.fields[2] = TextField::new("unsaved-codex.exe");
+            })
+            .unwrap();
+        crate::harness::click("agent-check-providers", cx);
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, window, _| {
+                assert_eq!(
+                    this.agent.checked_fields.as_ref().unwrap()[2],
+                    "unsaved-codex.exe"
+                );
+                assert_eq!(this.agent.fields[2].content(), "unsaved-codex.exe");
+                assert!(this.agent.provider_check_focus.is_focused(window));
+                this.agent.checked_fields.as_mut().unwrap()[2] = "previous.exe".into();
+            })
+            .unwrap();
+        cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
+        cx.run_until_parked();
+        handle
+            .read_with(cx, |this, _| {
+                assert_eq!(
+                    this.agent.checked_fields.as_ref().unwrap()[2],
+                    "unsaved-codex.exe"
+                );
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_ne!(this.settings.agent.codex_path, "unsaved-codex.exe")
+        });
+        for selector in [
+            "agent-provider-status-0",
+            "agent-provider-status-1",
+            "agent-provider-status-2",
+            "agent-provider-status-3",
+        ] {
+            assert!(cx.debug_bounds(selector).is_some());
+        }
+    }
 
     #[gpui::test]
     fn failure_limit_draft_reaches_saved_preferences_and_worker_configuration(
@@ -839,7 +1144,7 @@ mod tests {
             assert_eq!(this.settings.agent.opencode_path, "C:/Tools/opencode.exe");
             assert_eq!(this.settings.agent.antigravity_path, "C:/Tools/agy.exe");
         });
-        crate::harness::click("agent-prompt-reset", cx);
+        click_visible_control("agent-prompt-reset", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(this.settings.agent.system_prompt, expected)
         });
