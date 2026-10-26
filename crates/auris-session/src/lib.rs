@@ -152,6 +152,7 @@ pub use session::{
 };
 pub use session::{CheckpointJob, CheckpointOperation, CheckpointResult};
 pub use session::{CompositionPreview, CompositionTrackPreview};
+pub mod workshop;
 pub use session::{
     DrumKitAnalysis, DrumProbeFont, DrumProbeRequest, DrumProbeSample, DrumScanOptions,
     DrumVoiceAnalysis, probe_drum_request,

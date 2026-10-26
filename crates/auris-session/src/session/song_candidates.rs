@@ -295,6 +295,52 @@ pub struct SongCandidate {
 }
 
 impl SongCandidate {
+    /// Stable musical addresses for planning a scoped continuation.
+    pub fn workshop_outline(&self) -> serde_json::Value {
+        serde_json::json!({"tracks": self.project.tracks.iter().map(|t| serde_json::json!({
+            "track":t.id.0, "name":t.name, "clips": t.kind.note_clips().map(|clips| clips.iter().map(|c| serde_json::json!({"clip":c.id.0,"notes":c.notes.len()})).collect::<Vec<_>>())
+        })).collect::<Vec<_>>()})
+    }
+    /// Restore an exact persisted workshop candidate and its audition.
+    pub fn load_workshop(folder: &std::path::Path, idea: SongIdea) -> Result<Self, String> {
+        let song = folder.join("song");
+        let mut project =
+            auris_io::load_project(&song.join("song.auris")).map_err(|e| e.to_string())?;
+        let resolve = |asset: &mut AssetPath| -> Result<(), String> {
+            *asset = AssetPath::external(
+                asset
+                    .resolve(Some(&song))
+                    .ok_or("Missing candidate asset")?,
+            );
+            Ok(())
+        };
+        for source in project.audio_sources.values_mut() {
+            resolve(&mut source.path)?;
+        }
+        for font in project.soundfonts.values_mut() {
+            resolve(&mut font.path)?;
+        }
+        for track in &mut project.tracks {
+            if let Some(instrument) = track.kind.as_instrument_mut()
+                && let Some(file) = &mut instrument.file
+            {
+                resolve(file)?;
+            }
+            if let Some(singer) = track.kind.as_singer_mut()
+                && let Some(voice) = &mut singer.voice
+            {
+                resolve(&mut voice.path)?;
+            }
+        }
+        let audio = auris_io::import_audio_file(&folder.join("audition.wav"), 22_050.0)
+            .map_err(|e| e.to_string())?;
+        Ok(Self {
+            idea,
+            project,
+            audio: Arc::new(audio),
+            _assets: None,
+        })
+    }
     /// Track names in the retained arrangement, including each selected singer.
     pub fn part_names(&self) -> Vec<String> {
         self.project
@@ -460,6 +506,69 @@ impl SongCandidate {
 }
 
 impl Session {
+    /// Save an isolated workshop document and its exact audition before publication.
+    pub fn finish_workshop_candidate(
+        &mut self,
+        folder: &std::path::Path,
+        idea: SongIdea,
+        cancel: &AtomicBool,
+    ) -> Result<SongCandidate, String> {
+        if cancel.load(Ordering::Acquire) {
+            return Err("Cancelled".into());
+        }
+        if self.project.duration_seconds() > 330.0 {
+            return Err("A workshop candidate may be at most five minutes plus its ending".into());
+        }
+        for track in &self.project.tracks {
+            if track.kind.is_singer()
+                && self
+                    .singer_take_state(track.id)
+                    .map_err(|e| e.to_string())?
+                    != super::SingerTakeState::Current
+            {
+                return Err(format!(
+                    "Singer {} has no current synthesized take",
+                    track.name
+                ));
+            }
+        }
+        self.project.creation_brief = Some(format!("{}\n{}", idea.title, idea.description));
+        std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+        let report = self
+            .save_as(&folder.join("song.auris"))
+            .map_err(|e| e.to_string())?;
+        if !report.uncollected.is_empty() {
+            return Err("Candidate assets could not be collected".into());
+        }
+        let audio = self
+            .render_job()
+            .render(
+                &OfflineOptions {
+                    sample_rate: Some(22_050.0),
+                    ..Default::default()
+                },
+                &mut RenderProgress::default().cancelled_by(cancel),
+            )
+            .map_err(|e| e.to_string())?;
+        if cancel.load(Ordering::Acquire) {
+            return Err("Cancelled".into());
+        }
+        if audio.peak() <= 1e-8 {
+            return Err("The candidate is silent".into());
+        }
+        auris_io::write_wav(
+            &folder.join("audition.wav"),
+            &audio,
+            &auris_io::WavExportSettings {
+                sample_rate: 22_050,
+                bit_depth: auris_io::WavBitDepth::Float32,
+                dither: false,
+            },
+        )
+        .map_err(|e| e.to_string())?;
+        SongCandidate::load_workshop(folder, idea)
+    }
+
     fn arrange_candidate_singers(
         &mut self,
         request: &SongRequest,
@@ -631,6 +740,43 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workshop_descendants_keep_parent_notes_and_do_not_modify_parent_files() {
+        let root = tempfile::tempdir().unwrap();
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        session
+            .agent_command(crate::live_agent::Command::Compose {
+                spec: None,
+                preset: Some("chiptune".into()),
+                replace: false,
+            })
+            .unwrap();
+        let idea = SongIdea {
+            title: "Original".into(),
+            description: "Chiptune".into(),
+            preset: "chiptune".into(),
+            tempo: 120.0,
+            key: "C major".into(),
+            density: 0.5,
+            lead: "synth".into(),
+        };
+        let cancel = AtomicBool::new(false);
+        let original = session
+            .finish_workshop_candidate(&root.path().join("1"), idea.clone(), &cancel)
+            .unwrap();
+        let parent = root.path().join("1/song/song.auris");
+        let bytes = std::fs::read(&parent).unwrap();
+        let mut child = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        assert!(child.open(&parent).unwrap().is_empty());
+        child.set_tempo_at(auris_core::time::Ticks::ZERO, 90.0);
+        let derived = child
+            .finish_workshop_candidate(&root.path().join("2"), idea, &cancel)
+            .unwrap();
+        assert_eq!(original.project.tracks, derived.project.tracks);
+        assert_eq!(std::fs::read(parent).unwrap(), bytes);
+        assert!(derived.audio.duration_seconds() > 0.0);
+    }
 
     fn vocal_request(folder: &std::path::Path, singing: SongSinging) -> SongRequest {
         let path = folder.join("test.voicevox.json");

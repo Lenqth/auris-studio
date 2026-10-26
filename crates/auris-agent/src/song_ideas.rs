@@ -14,6 +14,23 @@ pub struct SongPlanner {
 }
 
 impl SongPlanner {
+    pub(crate) fn conversation(prefs: AgentPreferences, prompt: String) -> Result<Self, String> {
+        let mut prefs = prefs;
+        prefs.policy = Policy {
+            mode: Mode::Plan,
+            allow: vec![],
+            deny: vec!["*".into()],
+        };
+        prefs.system_prompt = auris_toolbox::workshop::DIRECTOR.into();
+        let worker = Worker::spawn(prefs.clone(), None, true, None)?;
+        // Tool requests are denied by poll_text. Do not advertise a document planning mode:
+        // that context otherwise leaks into the assignments for authorized composer workers.
+        worker.send(&serde_json::json!({"say":prompt}).to_string())?;
+        Ok(Self {
+            worker,
+            deadline: Instant::now() + Duration::from_secs(180),
+        })
+    }
     /// Start an isolated conversation; no open project or conversation history is exposed.
     pub fn start(mut prefs: AgentPreferences, brief: &str, seconds: u32) -> Result<Self, String> {
         if !prefs.is_configured() {
@@ -96,7 +113,7 @@ impl SongPlanner {
         })
     }
 
-    fn poll_text(&mut self) -> Option<Result<String, String>> {
+    pub(crate) fn poll_text(&mut self) -> Option<Result<String, String>> {
         if Instant::now() >= self.deadline {
             self.worker.cancel();
             return Some(Err("Song planning timed out".into()));
