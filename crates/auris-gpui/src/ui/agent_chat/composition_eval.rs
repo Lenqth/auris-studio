@@ -203,6 +203,52 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
         .collect()
 }
 
+fn wait_for_agent_conversation(app: &gpui::Entity<AurisApp>, cx: &mut gpui::VisualTestContext) {
+    let started = Instant::now();
+    loop {
+        app.update(cx, |this, cx| this.drain_agent(cx));
+        cx.run_until_parked();
+        let ready = app.read_with(cx, |this, _| {
+            !this.agent_chat.conversations.unavailable()
+                && !this.agent_operation_busy()
+                && this.agent_chat.history_load.is_none()
+                && this.agent_chat.history_error_project.is_none()
+                && (this.session.path().is_none() || this.agent_chat.loaded_history.is_some())
+        });
+        if ready {
+            return;
+        }
+        if started.elapsed() > Duration::from_secs(10) {
+            panic!("agent conversation preflight did not become ready for saved seed");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[gpui::test]
+fn saved_project_agent_conversation_preflight_loads_without_starting_model(
+    cx: &mut gpui::TestAppContext,
+) {
+    let directory = tempfile::tempdir().unwrap();
+    let mut seed = Session::new(SessionOptions::headless()).unwrap();
+    let path = seed
+        .save_as(&directory.path().join("Preflight.auris"))
+        .unwrap()
+        .document;
+    let (app, cx) = crate::harness::open(cx);
+    app.update(cx, |this, _| {
+        this.session.open(&path).unwrap();
+        this.panels.show(crate::dock::Panel::Agent);
+    });
+    crate::harness::paint(&app, cx);
+    wait_for_agent_conversation(&app, cx);
+    app.read_with(cx, |this, _| {
+        assert!(this.agent_chat.loaded_history.is_some());
+        assert!(!this.agent_operation_busy());
+        assert!(this.agent_chat.link.is_none());
+    });
+}
+
 #[gpui::test]
 #[ignore = "real model inference; requires AURIS_COMPOSITION_EVAL config"]
 fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
@@ -292,6 +338,11 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
         .unwrap();
     });
     crate::harness::paint(&app, cx);
+    // Opening a saved seed causes the painted Agent panel to initialize conversation storage and
+    // load the project's history asynchronously.  A first Send while that work is pending is
+    // intentionally ignored by the live UI; this evaluation must wait for the same readiness
+    // boundary before submitting its first prompt, otherwise no model worker is ever spawned.
+    wait_for_agent_conversation(&app, cx);
     let started = Instant::now();
     let mut turns = Vec::new();
     for (index, prompt) in config.prompts.iter().enumerate() {
