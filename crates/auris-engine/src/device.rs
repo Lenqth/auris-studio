@@ -347,6 +347,7 @@ fn start_with_device(
     let latency_stale = Arc::new(AtomicBool::new(false));
     let stream_notices = Arc::new(AtomicU32::new(0));
     let clock = Arc::new(crate::clock::OutputClock::default());
+    let callbacks = Arc::new(AtomicU64::new(0));
 
     let sample_rate = f64::from(setup.config.sample_rate);
     let channel_count = usize::from(setup.config.channels).max(1);
@@ -368,6 +369,7 @@ fn start_with_device(
             max_block,
         )
         .with_clock(Arc::clone(&clock))
+        .with_callbacks(Arc::clone(&callbacks))
     };
 
     let stream = match build_stream(
@@ -412,6 +414,7 @@ fn start_with_device(
         latency_stale,
         stream_notices,
         clock,
+        callbacks,
         sample_rate,
         channel_count,
         max_block: setup.max_block,
@@ -464,6 +467,7 @@ pub fn start_silent(settings: &AudioSettings) -> (AudioDevice, EngineHandle) {
         latency_stale: Arc::new(AtomicBool::new(false)),
         stream_notices: Arc::new(AtomicU32::new(0)),
         clock: Arc::default(),
+        callbacks: Arc::default(),
         sample_rate,
         channel_count: 2,
         max_block,
@@ -783,6 +787,9 @@ pub(crate) struct AudioEngine {
     latency_stale: Arc<AtomicBool>,
     /// Where this engine says it is audible, for a capture to line a take up against.
     clock: Arc<crate::clock::OutputClock>,
+    /// Counts device callbacks, so the other side can tell a stream that runs from one that
+    /// merely exists.
+    callbacks: Arc<AtomicU64>,
     scratch: AudioBuffer,
     sample_rate: f64,
     channels: usize,
@@ -860,6 +867,7 @@ impl AudioEngine {
             playing,
             latency_stale,
             clock: Arc::default(),
+            callbacks: Arc::default(),
             scratch,
             sample_rate,
             channels: channels.max(1),
@@ -873,6 +881,12 @@ impl AudioEngine {
         self
     }
 
+    /// Counts callbacks into `callbacks` rather than a counter of the engine's own.
+    pub(crate) fn with_callbacks(mut self, callbacks: Arc<AtomicU64>) -> Self {
+        self.callbacks = callbacks;
+        self
+    }
+
     /// Fills one device buffer that the device will start playing at `playback`.
     ///
     /// [`Self::fill`], and then the one thing only the callback knows: which virtual frame
@@ -883,6 +897,7 @@ impl AudioEngine {
     where
         T: Sample + FromSample<f32>,
     {
+        self.callbacks.fetch_add(1, Ordering::Relaxed);
         self.fill(data);
         let frames = data.len() / self.channels;
         let playback = playback.as_nanos();
