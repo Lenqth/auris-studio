@@ -253,7 +253,7 @@ pub enum Command {
         /// Required for writes, returned by the latest lane read.
         expected_revision: Option<String>,
     },
-    /// Discover instrument parameter keys, native units, choices, values and automation overrides. Follow next_offset.
+    /// Discover instrument parameter keys, value_domain, units, steps, read_only flags, values and automation overrides. VST3 values are normalized 0..1, not display units such as Hz/dB. Follow next_offset.
     InspectInstrument {
         /// Stable instrument or drum track ID.
         track: u64,
@@ -261,7 +261,7 @@ pub enum Command {
         #[serde(default)]
         offset: usize,
     },
-    /// Set 1..256 static instrument controls atomically in native units. Discover exact keys with inspect_instrument. Omitted controls and existing automation are preserved. Identical retries are no-ops.
+    /// Set 1..256 static instrument controls atomically in the inspected value_domain (VST3: normalized 0..1). Discover exact keys/ranges/steps with inspect_instrument; read_only controls cannot be changed. Omitted controls and existing automation are preserved. Identical retries are no-ops.
     SetInstrumentParams {
         /// One or more parameter targets; duplicate targets are refused.
         #[schemars(length(min = 1, max = 256))]
@@ -348,7 +348,7 @@ pub enum Command {
     ImportTranscription {
         /// Validated recognizer-independent draft; resolved by the tool host before authorization.
         draft: Box<crate::TranscriptionDraft>,
-        /// New track/clip name for a piano draft; mixture labels retain their instrument names.
+        /// New track/clip name for the pitched note draft.
         name: String,
         /// Nonnegative absolute insertion tick.
         at_tick: i64,
@@ -735,10 +735,18 @@ impl Session {
                 if offset > descriptors.len() {
                     return Err("Offset exceeds parameter count".into());
                 }
-                let parameters: Vec<_> = descriptors.iter().skip(offset).take(32).map(|descriptor| {
-                    let target = crate::ParamTarget::Instrument { track, param: descriptor.id };
-                    serde_json::json!({"key":descriptor.key,"name":descriptor.name,"value":self.param_value(target,descriptor),"min":descriptor.min,"max":descriptor.max,"unit":descriptor.unit,"choices":descriptor.choices.iter().take(16).collect::<Vec<_>>(),"choice_count":descriptor.choices.len(),"automated":self.is_automated(target)})
-                }).collect();
+                let parameters: Vec<_> = descriptors
+                    .iter()
+                    .skip(offset)
+                    .take(32)
+                    .map(|descriptor| {
+                        let target = crate::ParamTarget::Instrument {
+                            track,
+                            param: descriptor.id,
+                        };
+                        self.agent_parameter_report(target, descriptor)
+                    })
+                    .collect();
                 let next = offset + parameters.len();
                 Ok(serde_json::json!({"track":track.0,"parameters":parameters,"total":descriptors.len(),"next_offset":(next < descriptors.len()).then_some(next)}).to_string())
             }

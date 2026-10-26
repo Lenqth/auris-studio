@@ -70,6 +70,8 @@ struct Request {
     inputs: Vec<std::path::PathBuf>,
     #[serde(default)]
     choir_calibration: Option<ChoirCalibration>,
+    #[serde(default)]
+    piano_voicing: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -130,7 +132,11 @@ fn render_blocks(request: &Request, block: usize) -> Result<Vec<f32>, Box<dyn Er
         if request.choir_calibration.is_some() {
             return Err("tract calibration requires the choir model".into());
         }
-        instrument(&request.model)?
+        match &request.piano_voicing {
+            Some(voicing) if request.model == "piano" => voiced_piano(voicing)?,
+            Some(_) => return Err("piano voicing requires the piano model".into()),
+            None => instrument(&request.model)?,
+        }
     };
     if !request.seconds.is_finite()
         || !(0.05..=20.0).contains(&request.seconds)
@@ -281,6 +287,21 @@ fn render_blocks(request: &Request, block: usize) -> Result<Vec<f32>, Box<dyn Er
         return Err("non-finite renderer output".into());
     }
     Ok(samples)
+}
+
+fn voiced_piano(voicing: &serde_json::Value) -> Result<Box<dyn Instrument>, Box<dyn Error>> {
+    #[cfg(feature = "piano-calibration")]
+    {
+        let voicing: auris_synth::PianoVoicing = serde_json::from_value(voicing.clone())?;
+        let mut piano = Physical::new(Model::Piano);
+        piano.set_piano_voicing(voicing);
+        Ok(Box::new(piano))
+    }
+    #[cfg(not(feature = "piano-calibration"))]
+    {
+        let _ = voicing;
+        Err("piano-calibration feature is required".into())
+    }
 }
 
 fn instrument(name: &str) -> Result<Box<dyn Instrument>, Box<dyn Error>> {

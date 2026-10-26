@@ -25,8 +25,13 @@ mod string;
 
 use body::Body;
 use legato::Legato;
-use modal::Modal;
+use modal::{Modal, VOICING};
 use string::StringModel;
+
+#[cfg(not(feature = "piano-calibration"))]
+use modal::PianoVoicing;
+#[cfg(feature = "piano-calibration")]
+pub use modal::piano::PianoVoicing;
 
 const VOICES: usize = 24;
 const P_HARDNESS: u32 = 0;
@@ -60,7 +65,7 @@ pub enum Model {
     Bass,
     /// Struck shell with inharmonic modes.
     Bell,
-    /// Struck free bar with bending modes.
+    /// Struck bar tuned like a marimba's, its overtones two and about three octaves up.
     Mallet,
     /// Bowed string with a nonlinear friction junction.
     Violin,
@@ -125,7 +130,7 @@ impl Model {
             }
             Self::Bass => "Plucked bass string: finger/pick hardness, damping and body",
             Self::Bell => "Struck bell: inharmonic shell modes, beater hardness and decay",
-            Self::Mallet => "Mallet bar: bending modes, beater hardness and damping",
+            Self::Mallet => "Tuned mallet bar: marimba overtones, beater hardness and damping",
             Self::Violin => "Bowed strings: nonlinear friction, bow pressure, position and body",
         }
     }
@@ -141,7 +146,7 @@ impl Model {
         // Keep the median factory-note RMS after real-recording mel calibration. The
         // public level dial keeps its existing meaning for saved projects and automation.
         match self {
-            Self::Piano => 0.186_700,
+            Self::Piano => 0.077_622,
             Self::Guitar => 0.178_368,
             Self::ElectricGuitar => 0.8,
             Self::Violin => 1.787_516,
@@ -157,6 +162,7 @@ struct Settings {
     decay: f32,
     damping: f32,
     stiffness: f32,
+    release: f32,
     pickup: f32,
     electric: bool,
     pickup_position: f32,
@@ -185,9 +191,9 @@ struct Voice {
 }
 
 impl Voice {
-    fn new(model: Model, rate: f32) -> Self {
+    fn new(model: Model, rate: f32, voicing: PianoVoicing) -> Self {
         let mut modal = Modal::default();
-        modal.prepare(model);
+        modal.prepare(model, voicing);
         let mut string = StringModel::default();
         if model.is_string() {
             string.prepare(rate);
@@ -245,13 +251,16 @@ pub struct Physical {
     motion: MotionCapture,
     motion_frames: usize,
     legato: Legato,
+    voicing: PianoVoicing,
+    /// The piano's soundboard knock for one segment, mixed after radiation.
+    knock: Vec<f32>,
 }
 
 impl Physical {
     /// Builds an unprepared physical instrument. All voice storage is allocated in `prepare`.
     pub fn new(model: Model) -> Self {
         let (mut decay, release, mut position, mut hardness) = match model {
-            Model::Piano => (11.498_04, 0.20, 0.232_063, 0.606_004),
+            Model::Piano => (11.498_04, 0.20, 0.244_4, 0.606_004),
             Model::Guitar => (5.638_205, 0.12, 0.298_280, 0.249_201),
             Model::ElectricGuitar => (7.493_398, 0.12, 0.069_559, 0.186_606),
             Model::Bass => (3.5, 0.15, 0.30, 0.40),
@@ -414,7 +423,26 @@ impl Physical {
             motion: MotionCapture::default(),
             motion_frames: 0,
             legato: Legato::default(),
+            voicing: VOICING,
+            knock: Vec::new(),
         }
+    }
+
+    /// Replaces the piano's register curves and soundboard for offline fitting.
+    ///
+    /// Available only with the development `piano-calibration` feature, and only on
+    /// [`Model::Piano`]. Strikes from the next note on use it. Call off the
+    /// audio thread.
+    #[cfg(feature = "piano-calibration")]
+    pub fn set_piano_voicing(&mut self, voicing: PianoVoicing) {
+        if self.model != Model::Piano {
+            return;
+        }
+        self.voicing = voicing;
+        for voice in &mut self.voices {
+            voice.modal.set_voicing(voicing);
+        }
+        self.body.prepare(self.model, self.rate, &self.voicing);
     }
 
     fn settings(&self) -> Settings {
@@ -428,6 +456,7 @@ impl Physical {
             } else {
                 0.0
             },
+            release: self.params.at(P_RELEASE),
             pickup: if self.model == Model::Guitar {
                 self.params.at(P_PICKUP)
             } else {
@@ -608,7 +637,6 @@ impl Physical {
         voice.deferred = false;
         voice.age = 0;
         voice.contact = settings.position;
-        voice.limit = (settings.decay * 2.0 * self.rate) as usize;
         let hz = pitch_to_hz(f32::from(pitch.min(127)) + self.bend).min(self.rate * 0.2);
         if self.model.is_string() {
             voice
@@ -619,6 +647,10 @@ impl Physical {
                 .modal
                 .excite(self.model, hz, velocity, self.rate, settings);
         }
+        voice.limit = voice
+            .modal
+            .lifetime(self.rate, settings)
+            .unwrap_or((settings.decay * 2.0 * self.rate) as usize);
     }
 
     fn note_off(&mut self, pitch: u8) {
@@ -635,14 +667,41 @@ impl Physical {
             }
             self.legato.voice = None;
         }
+        let settings = self.settings();
         for index in self.allocator.note_off(pitch) {
             if let Some(voice) = self.voices.get_mut(index) {
                 voice.held = false;
-                if self.model == Model::Piano && self.pedal {
+                if self.model != Model::Piano {
+                    voice.envelope.release();
+                } else if self.pedal {
                     voice.deferred = true;
                 } else {
-                    voice.envelope.release();
+                    // The damper stops the strings; the keys above it let them ring.
+                    let settings = calibration::register(self.model, voice.pitch, settings);
+                    voice.modal.damp(self.rate, settings);
                 }
+            }
+        }
+    }
+
+    fn set_pedal(&mut self, down: bool) {
+        if down == self.pedal {
+            return;
+        }
+        self.pedal = down;
+        let settings = self.settings();
+        for voice in &mut self.voices {
+            if !voice.envelope.is_active() || voice.envelope.is_releasing() {
+                continue;
+            }
+            let settings = calibration::register(self.model, voice.pitch, settings);
+            if !down && voice.deferred {
+                voice.deferred = false;
+                voice.modal.damp(self.rate, settings);
+            } else if down && !voice.held && voice.modal.is_damped() {
+                // Pressing the pedal lifts every damper, catching a note already decaying.
+                voice.deferred = true;
+                voice.modal.lift(self.rate, settings);
             }
         }
     }
@@ -673,6 +732,7 @@ impl Parameterized for Physical {
             }
             let settings = self.settings();
             let changes_resonance = matches!(id.0, P_DECAY | P_DAMPING | P_HARDNESS)
+                || self.model == Model::Piano && id.0 == P_RELEASE
                 || self.model == Model::Guitar && id.0 == P_PICKUP
                 || self.model == Model::ElectricGuitar
                     && matches!(
@@ -699,7 +759,10 @@ impl Parameterized for Physical {
                     } else {
                         voice.modal.update_loss(self.model, self.rate, settings);
                     }
-                    voice.limit = (settings.decay * 2.0 * self.rate) as usize;
+                    voice.limit = voice
+                        .modal
+                        .lifetime(self.rate, settings)
+                        .unwrap_or((settings.decay * 2.0 * self.rate) as usize);
                 }
             }
         }
@@ -751,17 +814,7 @@ impl SegmentRenderer for Physical {
                             self.expression_current = self.expression;
                         }
                     }
-                    64 if self.model == Model::Piano => {
-                        self.pedal = value >= 0.5;
-                        if !self.pedal {
-                            for voice in &mut self.voices {
-                                if voice.deferred {
-                                    voice.envelope.release();
-                                    voice.deferred = false;
-                                }
-                            }
-                        }
-                    }
+                    64 if self.model == Model::Piano => self.set_pedal(value >= 0.5),
                     _ => {}
                 }
             }
@@ -776,13 +829,19 @@ impl SegmentRenderer for Physical {
             return;
         };
         samples.fill(0.0);
+        let mut empty = [];
+        let knock = self
+            .knock
+            .get_mut(..samples.len())
+            .unwrap_or(&mut empty[..]);
+        knock.fill(0.0);
         let pressure = self.pressure * self.params.at(P_PRESSURE);
         for (index, voice) in self.voices.iter_mut().enumerate() {
             if !voice.envelope.is_active() {
                 continue;
             }
             let frequency = pitch_to_hz(f32::from(voice.pitch) + self.bend);
-            for sample in samples.iter_mut() {
+            for (frame, sample) in samples.iter_mut().enumerate() {
                 let raw = if self.model.is_string() {
                     let bow = if voice.held { self.expression } else { 0.0 };
                     voice.string.next(bow, pressure)
@@ -791,6 +850,9 @@ impl SegmentRenderer for Physical {
                 };
                 let raw = voice.presence.process(raw, frequency, 1.0);
                 let envelope = voice.envelope.process();
+                if let Some(thump) = knock.get_mut(frame) {
+                    *thump += voice.modal.thump() * envelope;
+                }
                 let current = raw * envelope;
                 voice.last = current * (1.0 - voice.fade) + voice.tail * voice.fade;
                 voice.fade = (voice.fade - 1.0 / (0.002 * self.rate)).max(0.0);
@@ -814,7 +876,9 @@ impl SegmentRenderer for Physical {
             } else {
                 1.0
             };
+        let mut thumps = knock.iter();
         for sample in samples {
+            let thump = thumps.next().copied().unwrap_or(0.0);
             let expression = if self.model == Model::Violin {
                 self.expression_current +=
                     (self.expression - self.expression_current) * self.expression_step;
@@ -825,7 +889,7 @@ impl SegmentRenderer for Physical {
             let signal = if self.model == Model::ElectricGuitar {
                 *sample
             } else {
-                self.body.next(*sample, body)
+                self.body.next(*sample, body) + thump
             };
             *sample = signal * self.gain * self.volume * expression;
         }
@@ -847,10 +911,15 @@ impl Instrument for Physical {
     fn prepare(&mut self, ctx: &PrepareContext) {
         self.rate = crate::sample_rate_f32(ctx.sample_rate).clamp(8_000.0, 192_000.0);
         self.voices = (0..VOICES)
-            .map(|_| Voice::new(self.model, self.rate))
+            .map(|_| Voice::new(self.model, self.rate, self.voicing))
             .collect();
         self.allocator.prepare(VOICES);
-        self.body.prepare(self.model, self.rate);
+        self.body.prepare(self.model, self.rate, &self.voicing);
+        self.knock = if self.model == Model::Piano {
+            vec![0.0; ctx.max_block_frames]
+        } else {
+            Vec::new()
+        };
         self.update_expression_step();
         self.reset();
     }

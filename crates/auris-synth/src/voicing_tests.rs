@@ -11,7 +11,8 @@ fn bright_instruments_reduce_upper_midrange_without_losing_the_note() {
     // Each ceiling is below the measured pre-change band/fundamental amplitude ratio.
     type Probe = (Box<dyn Instrument>, u8, bool, f64, f64);
     let cases: [Probe; 9] = [
-        (Box::new(Physical::new(Model::Piano)), 84, true, 0.65, 0.070),
+        // The piano's C6 sits about 9 dB under C4, as measured on a grand.
+        (Box::new(Physical::new(Model::Piano)), 84, true, 0.65, 0.012),
         (
             Box::new(Physical::new(Model::Guitar)),
             85,

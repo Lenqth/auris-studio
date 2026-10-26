@@ -144,29 +144,6 @@ impl ToolHost {
                 "status":"Local file access only; not proof of listening or transcription."});
             return Ok(json!({"event":"edit_result","ok":true,"text":metadata.to_string()}));
         }
-        if name == toolbox::transcription_tools::NAME {
-            let request: toolbox::transcription_tools::Args =
-                serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
-            request.validate()?;
-            let source = request
-                .attachment
-                .as_ref()
-                .map(|id| self.bridge.audio_reference(id))
-                .transpose()?;
-            permissions::authorize(Some(&self.bridge), name, &args.to_string()).await?;
-            let control = self.bridge.analysis_control();
-            let text = tokio::task::spawn_blocking(move || {
-                let path = source
-                    .as_ref()
-                    .map(|s| s.path())
-                    .or_else(|| request.path.as_deref().map(std::path::Path::new))
-                    .ok_or("Missing audio source")?;
-                toolbox::transcription_tools::recognize(path, request.backend, &control)
-            })
-            .await
-            .map_err(|e| e.to_string())??;
-            return Ok(json!({"event":"edit_result","ok":true,"text":text}));
-        }
         if name == toolbox::live_agent::transcription_import::NAME {
             let request: toolbox::live_agent::transcription_import::Args =
                 serde_json::from_value(args).map_err(|e| e.to_string())?;
@@ -616,38 +593,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn recognition_uses_retained_audio_and_acceptance_has_a_separate_edit_gate() {
+    async fn external_note_import_respects_the_edit_gate() {
         for allowed in [false, true] {
-            let folder = tempfile::tempdir().unwrap();
-            let path = folder.path().join("reference.wav");
-            crate::attachments::tests::reference_wav(&path, false);
             let (bridge, commands, events) = crate::worker::test_bridge();
-            let prepared = crate::attachments::cli_input(
-                "Transcribe".into(),
-                vec![path.display().to_string()],
-                &bridge,
-                false,
-            )
-            .await
-            .unwrap();
-            let metadata: Value = serde_json::from_str(
-                prepared[1]["text"]
-                    .as_str()
-                    .unwrap()
-                    .lines()
-                    .nth(1)
-                    .unwrap(),
-            )
-            .unwrap();
-            std::fs::write(&path, b"changed original").unwrap();
             let host = ToolHost::new(bridge.clone());
             let invoke = async {
-                let result=host.call("transcribe_audio",json!({"attachment":metadata["attachment_id"],"backend":{"kind":"basic_pitch"}})).await.unwrap();
-                let draft: Value = serde_json::from_str(result["text"].as_str().unwrap()).unwrap();
-                assert!(draft["note_count"].as_u64().unwrap() >= 3);
                 host.call(
                     "import_transcription",
-                    json!({"draft_id":draft["draft_id"],"at_tick":3840}),
+                    json!({"transcription":crate::live_mcp::transcription_fixture(),"at_tick":3840}),
                 )
                 .await
             };
@@ -656,20 +609,6 @@ mod tests {
                     auris_session::Session::new(auris_session::SessionOptions::headless()).unwrap();
                 session.add_default_instrument_track("Existing").unwrap();
                 let before = session.project().clone();
-                let recognition = next_event(&events).await;
-                assert_eq!(recognition["tool"], "transcribe_audio");
-                let operation = auris_session::agent_policy::Operation::parse(
-                    "transcribe_audio",
-                    &recognition["args"],
-                )
-                .unwrap();
-                assert!(!operation.mutating && !operation.confirm);
-                commands
-                    .send(
-                        json!({"event":"permission_result","id":recognition["id"],"ok":true})
-                            .to_string(),
-                    )
-                    .unwrap();
                 let acceptance = next_event(&events).await;
                 let operation = auris_session::agent_policy::Operation::parse(
                     "edit_project",
@@ -716,8 +655,6 @@ mod tests {
             .unwrap();
             assert_eq!(reply.is_ok(), allowed);
             assert!(events.try_recv().is_err());
-            let other = ToolHost::new(crate::worker::test_bridge().0);
-            assert!(other.call("transcribe_audio",json!({"attachment":metadata["attachment_id"],"backend":{"kind":"basic_pitch"}})).await.unwrap_err().contains("Unknown or expired"));
         }
     }
 

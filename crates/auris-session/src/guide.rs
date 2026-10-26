@@ -233,7 +233,7 @@
 //!
 //! # Offline music recognition
 //!
-//! `auris-analysis` recognizes written chords, audio tempo/chords and monophonic note events
+//! `auris-analysis` recognizes written chords and audio tempo/chords
 //! on the CPU. Library timbre exploration uses [`crate::Session::timbre_map_job`]: a read-only
 //! snapshot shares immutable SoundFonts with independent background instruments, measures matched
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
@@ -242,20 +242,11 @@
 //! It also runs an explicitly prepared YAMNet ONNX model for instrument-presence
 //! tagging, using ONNX Runtime's CPU provider. The optional weights are external runtime data,
 //! and inference never downloads them. The session collects written notes or shares source audio with
-//! a worker job. Analysis returns a draft; applying harmony or placing transcribed notes is an
+//! a worker job. Analysis returns a draft; applying harmony or a source tempo is an
 //! explicit, undoable session command. Source audio times stay in seconds until placement maps
 //! them through the current tempo map. Cancellation and source/document validation belong to
 //! the job boundary, never to the audio callback. Unknown harmony and silence are distinct,
 //! and candidate scores are matching scores rather than calibrated probabilities.
-//!
-//! Optional multi-instrument transcription runs a user-converted MuScriptor Small ONNX package
-//! in `auris-analysis`, using the CPU provider and a bounded Rust token loop with KV caches.
-//! Its audio graph includes STFT/log-mel preprocessing; Rust joins sustained notes across chunks.
-//! Python is only conversion tooling. The session requires per-run acknowledgement of the model's
-//! noncommercial terms before decoding; models remain local external data, verified against their
-//! export manifest. Cancellation is checked between inference calls. Instrument-labeled drafts
-//! follow source validation and tempo mapping, with all new tracks in one undo transaction.
-//! No model inference or model-file I/O belongs on the audio callback.
 //!
 //! # The smallest complete program
 //!
@@ -386,13 +377,7 @@ pub mod architecture {
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
-    //! attachment IDs. `transcribe_audio` recognizes an attachment or authorized local file
-    //! on a worker using explicit YIN, Basic Pitch or MuScriptor selection. Recognition returns
-    //! an immutable bounded draft and never changes the score. `import_transcription` explicitly
-    //! accepts that draft, inline recognized events or a bounded JSON file. Source seconds map
-    //! through the current tempo map, and the complete import creates one Undo transaction.
-    //! Notes remain estimates; provenance and model hashes do not verify musical accuracy.
-    //! MuScriptor requires its separate model prerequisites and acknowledgement on every call.
+    //! attachment IDs.
     //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
     //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
     //! exposes the internal snapshot. One current copy per attachment is retained; re-export
@@ -409,15 +394,9 @@ pub mod architecture {
     //! never verified rights or instructions. Remote search/download pass the network approval
     //! gate. EQ uses the existing mixer graph on audio-track inserts; no RT processing changes.
     //!
-    //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
-    //! residual activity outside their attack/release guards. Weak sustained predictions alone
-    //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo
-    //! windows use the strongest channel instead of erasing the recording. The composer-pair
-    //! evaluation freezes performed notes and PCM before tuning; separate seeds and an independent
-    //! existing score check false positives, missing notes and timing through this same backend.
     //! Native audio API turns retain the same exact sources. Above 25 MiB, the session prepares
     //! a full-length 16 kHz PCM16 WAV for upload, preserving mono/stereo channels; the original
-    //! remains available for transcription. Decoding has the importer's 512 MiB sample budget,
+    //! remains available for local analysis. Decoding has the importer's 512 MiB sample budget,
     //! and preparation accepts at most thirty minutes. The transport bounds actual payloads
     //! at 128 MiB per turn; this is an Auris budget, not a provider capability guarantee.
     //! Live agents write bounded harmony with `edit_harmony` and singer lyrics with
@@ -1456,6 +1435,15 @@ pub mod plugins {
     //! panic also restarts each VST3 effect with `IAudioProcessor::setProcessing(false/true)`,
     //! the VST3 audio-thread transition that clears delay, reverb and filter history without the
     //! control-thread-only `IComponent::setActive` lifecycle.
+    //! The graph calls `Effect::prepare` for caller-built inserts as well as registry effects,
+    //! just as it does for instruments. CLAP activation has already sized the plugin's own
+    //! buffers; its callback reserves host event storage. VST3 uses the callback to start its
+    //! independent renderer, so constructing the wrapper alone is insufficient for processing.
+    //!
+    //! Agent parameter inspection preserves read-only flags and discrete position counts.
+    //! VST3 arithmetic remains normalized to 0..1 even when its display unit is Hz or dB;
+    //! instrument, insert and automation reports identify that domain separately. Session
+    //! commands reject writes to read-only outputs before changing the document or history.
     //!
     //! **Notes are translated, and the translation is lossy in one direction only.** A note port
     //! declares which dialects it speaks. CLAP's own carries the key as a field and a bend as a

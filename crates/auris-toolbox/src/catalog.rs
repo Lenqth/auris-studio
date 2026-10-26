@@ -218,11 +218,6 @@ pub fn tool_catalog() -> Vec<ToolDefinition> {
             analyze_instruments::DESCRIPTION,
             analyze_instruments::run,
         ),
-        definition::<transcription_tools::Args>(
-            transcription_tools::NAME,
-            transcription_tools::DESCRIPTION,
-            transcription_tools::run,
-        ),
         definition::<inspect_composition::Args>(
             inspect_composition::NAME,
             inspect_composition::DESCRIPTION,

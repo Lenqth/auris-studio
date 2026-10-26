@@ -133,7 +133,7 @@ pub enum GraphAction {
         /// True taps after inserts but before the fader; false taps after the fader.
         pre_fader: Option<bool>,
     },
-    /// Read an effect node's parameter keys, native units, ranges, static values and automation flags. Follow next_offset for more parameters. Choice labels are previews of at most 16.
+    /// Read an effect node's parameter keys, value_domain, units, ranges, steps, read_only flags, static values and automation flags. VST3 values are normalized 0..1, not display units such as Hz/dB. Follow next_offset for more parameters. Choice labels are previews of at most 16.
     Parameters {
         /// Exact effect node ID.
         node: String,
@@ -143,7 +143,7 @@ pub enum GraphAction {
         /// Page size, default 32, clamped to 1..64.
         limit: Option<usize>,
     },
-    /// Set one static parameter on an effect node using a key from mixer_graph parameters and its native units. Refuses non-finite or out-of-range values. Automation, if present, still overrides the static value.
+    /// Set one static parameter on an effect node using a key and value_domain from mixer_graph parameters (VST3: normalized 0..1). Refuses read_only controls, non-finite or out-of-range values and invalid steps. Automation, if present, still overrides the static value.
     SetParameter {
         /// Exact effect node ID.
         node: String,
@@ -400,11 +400,12 @@ impl Session {
                 if *offset > parameters.len() {
                     return Err("offset exceeds parameter count".into());
                 }
-                let page: Vec<_> = parameters.iter().skip(*offset).take(limit.unwrap_or(32).clamp(1,64)).map(|(target, descriptor)| json!({
-                    "key":descriptor.key, "name":descriptor.name, "value":self.param_value(*target, descriptor),
-                    "min":descriptor.min, "max":descriptor.max, "unit":descriptor.unit,
-                    "automated":self.is_automated(*target), "choices":descriptor.choices.iter().take(16).collect::<Vec<_>>(), "choice_count":descriptor.choices.len()
-                })).collect();
+                let page: Vec<_> = parameters
+                    .iter()
+                    .skip(*offset)
+                    .take(limit.unwrap_or(32).clamp(1, 64))
+                    .map(|(target, descriptor)| self.agent_parameter_report(*target, descriptor))
+                    .collect();
                 let next = offset + page.len();
                 return Ok(
                     json!({"node":node,"parameters":page,"total":parameters.len(),"next_offset":(next < parameters.len()).then_some(next)}),
@@ -597,6 +598,9 @@ impl Session {
                     .iter()
                     .find(|(_, descriptor)| descriptor.key.as_ref() == param)
                     .ok_or("Unknown parameter key; use mixer_graph parameters")?;
+                if descriptor.read_only {
+                    return Err("parameter is read-only".into());
+                }
                 if !value.is_finite() || !(descriptor.min..=descriptor.max).contains(value) {
                     return Err(
                         "value must be finite and within the parameter's native range".into(),

@@ -226,8 +226,8 @@ const PLUGIN_DESCRIPTIONS: &[(&str, &str)] = &[
         "非整数倍の倍音を持つベル音源。打撃の硬さと減衰を調整",
     ),
     (
-        "Mallet bar: bending modes, beater hardness and damping",
-        "音板の曲げ振動を再現するマレット音源。打撃の硬さと減衰を調整",
+        "Tuned mallet bar: marimba overtones, beater hardness and damping",
+        "マリンバと同じ倍音に調律した音板のマレット音源。打撃の硬さと減衰を調整",
     ),
     (
         "Bowed violin string: nonlinear friction, bow pressure, position and body",

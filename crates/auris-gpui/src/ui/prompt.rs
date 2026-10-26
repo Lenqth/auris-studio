@@ -560,13 +560,6 @@ pub enum Question {
     },
     /// Removes an exact saved library entry without changing applied project settings.
     DeleteSound(std::sync::Arc<auris_session::SoundPreset>),
-    /// Optional restricted model use; consent applies to this invocation only.
-    Muscriptor {
-        /// Audio clip selected when the notice was opened.
-        clip: ClipId,
-        /// Invalidates a notice after cancellation or document replacement.
-        generation: u64,
-    },
     /// Permanently remove one explicitly selected conversation.
     DeleteAgentConversation(String, std::path::PathBuf),
     /// Replace a stale transcript with disk history while keeping its unsent draft.
@@ -1493,10 +1486,6 @@ impl AurisApp {
                 );
             }
             (Question::OverwriteSound { .. } | Question::DeleteSound(_), Answer::Deny) => {}
-            (Question::Muscriptor { clip, generation }, Answer::Confirm) => {
-                self.choose_mixture_model(clip, generation, cx)
-            }
-            (Question::Muscriptor { .. }, Answer::Deny) => {}
             (Question::DeleteAgentConversation(id, root), Answer::Confirm) => {
                 if self.agent_conversation_store_is(&root) {
                     self.delete_agent_conversation(id, cx);
@@ -2172,11 +2161,6 @@ impl AurisApp {
             Question::DeleteSound(_) => (
                 self.t(Key::DeleteSoundBody).into(),
                 self.t(Key::DeleteSoundConfirm).into(),
-                None,
-            ),
-            Question::Muscriptor { .. } => (
-                self.t(Key::MuscriptorWarning).into(),
-                self.t(Key::MuscriptorAgree).into(),
                 None,
             ),
             Question::DeleteAgentConversation(..) => (

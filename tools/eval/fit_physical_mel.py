@@ -43,9 +43,15 @@ CENTERS = np.geomspace(90, 10000, 12)
 
 def body_profiles(path=REPO / "crates/auris-synth/src/physical/body.rs"):
     text = path.read_text(encoding="utf-8")
+    # The piano's twelve gains belong to its voicing, beside a radiation highpass that this
+    # surrogate leaves out; see docs/grand-piano-register.md.
+    piano = (path.parent / "piano.rs").read_text(encoding="utf-8")
     profiles = {}
     for model in BOUNDS:
-        match = re.search(rf"Model::{model.title()} => Some\(\[(.*?)\]\)", text, re.DOTALL)
+        if model == "piano":
+            match = re.search(r"soundboard: \[([-0-9.,\s]+)\]", piano)
+        else:
+            match = re.search(rf"Model::{model.title()} => Some\(\[(.*?)\]\)", text, re.DOTALL)
         if match is None:
             raise ValueError(f"missing body profile for {model}")
         gains = np.array([float(value) for value in match[1].split(",") if value.strip()])

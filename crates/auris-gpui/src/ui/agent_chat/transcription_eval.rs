@@ -19,8 +19,6 @@ struct Evaluation {
     effort: ReasoningEffort,
     timeout_seconds: u64,
     #[serde(default)]
-    bundled_allowed: bool,
-    #[serde(default)]
     natural_workflow: bool,
     #[serde(default)]
     listening_required: bool,
@@ -195,7 +193,6 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
         let entries=transcript(&this.agent_chat.entries);
         let imported=entries.iter().any(|e|e["name"]=="import_transcription" && e["ok"]==true);
         let exported=entries.iter().any(|e|e["name"]=="export_audio_attachment" && e["ok"]==true);
-        let used_basic_pitch=entries.iter().any(|e|e["name"]=="transcribe_audio" && e["args"].as_str().is_some_and(|args|args.contains("basic_pitch")));
         let cover_added=imported;
         let import_index=entries.iter().position(|e| e["name"]=="import_transcription" && e["ok"]==true);
         let readback=import_index.is_some_and(|index|entries[index+1..].iter().any(|e|e["name"]=="read_notes" && e["ok"]==true && e["detail"].as_str().is_some_and(|s|!s.is_empty())));
@@ -213,7 +210,7 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
         json!({"elapsed_seconds":started.elapsed().as_secs_f64(),"backend":backend,"model":config.model,"effort":config.effort,
             "policy":"isolated AutoReview with explicit fixture allow rules; other operations use the actual app reviewer",
             "allow_operations":config.allow_operations,
-            "failure":failure,"exported":exported,"imported":imported,"used_basic_pitch":used_basic_pitch,"cover_added":cover_added,"readback_after_import":readback,"inspected_after_import":inspected,
+            "failure":failure,"exported":exported,"imported":imported,"cover_added":cover_added,"readback_after_import":readback,"inspected_after_import":inspected,
             "dirty_before_host_save":dirty,"one_undo_restored":undo_restored,"redo_restored":redo_restored,
             "sections":after.sections,"tracks":after.tracks.len(),"project":this.session.path(),"entries":entries})
     });
@@ -224,22 +221,11 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
     .unwrap();
     assert!(failure.is_none(), "{failure:?}");
     if cover {
-        if config.bundled_allowed {
-            assert_eq!(
-                report["cover_added"], true,
-                "an actual cover operation is required"
-            );
-        } else {
-            assert_eq!(
-                report["exported"], true,
-                "actual attachment export required"
-            );
-            assert_eq!(report["imported"], true, "actual generic import required");
-            assert_eq!(
-                report["used_basic_pitch"], false,
-                "independent recognition required"
-            );
-        }
+        assert_eq!(
+            report["exported"], true,
+            "actual attachment export required"
+        );
+        assert_eq!(report["imported"], true, "actual generic import required");
         assert_eq!(report["dirty_before_host_save"], true);
         assert_eq!(report["readback_after_import"], true);
         assert_eq!(report["inspected_after_import"], true);

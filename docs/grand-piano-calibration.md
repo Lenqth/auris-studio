@@ -2,6 +2,9 @@
 
 [日本語](grand-piano-calibration.ja.md)
 
+The [whole-keyboard voicing](grand-piano-register.md) of 2026-10-26 replaces the model and
+factory values described here. Its held-out check reuses this cohort and metric.
+
 The native Physical Piano factory voice is calibrated against the University of Iowa's
 [Steinway model B recordings](https://theremin.music.uiowa.edu/MISpiano.html), performed
 by Evan Mazunik. The 2026-10-05 revision adjusts felt hardness, strike position, string

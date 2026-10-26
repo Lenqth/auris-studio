@@ -19,6 +19,8 @@ It fits only training notes and evaluates held-out pitches and dynamics with the
 renderer. This acoustic distance complements the symbolic and learned song measurements below.
 The [grand-piano calibration](grand-piano-calibration.md) fits three-second Steinway notes
 and checks held-out pitches/dynamics at one, three and six seconds, at 24/48 kHz.
+The [whole-keyboard piano voicing](grand-piano-register.md) measures per-partial two-stage decay,
+register level and soundboard knock from C1 to C8, and checks itself on that cohort's held-out notes.
 The [low-register correction](physical-low-register.md) measures bow-force continuity,
 bass-note periodicity and piano partial stretch, with paired audition files.
 The [long-note/trajectory extension](physical-trajectories.md) adds 3/6-second notes, real

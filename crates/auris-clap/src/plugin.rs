@@ -938,7 +938,7 @@ fn read_params(instance: &mut PluginInstance<AurisHost>) -> ParamList {
         // The position in *our* slice, not the plugin's index: a parameter the plugin refused
         // to describe is skipped, and everything after it shifts up.
         let id = descriptors.len() as u32;
-        descriptors.push(describe(
+        let mut descriptor = describe(
             id,
             info.id.get(),
             &String::from_utf8_lossy(info.name),
@@ -946,7 +946,9 @@ fn read_params(instance: &mut PluginInstance<AurisHost>) -> ParamList {
             info.max_value,
             info.default_value,
             info.flags.contains(ParamInfoFlags::IS_STEPPED),
-        ));
+        );
+        descriptor.read_only = info.flags.contains(ParamInfoFlags::IS_READONLY);
+        descriptors.push(descriptor);
         clap_ids.push(info.id);
     }
 
@@ -1047,6 +1049,7 @@ fn describe(
         curve: auris_core::param::ParamValueCurve::Linear,
         steps,
         choices,
+        read_only: false,
     }
 }
 
