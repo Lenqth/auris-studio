@@ -422,6 +422,7 @@ jobs:
     permissions:
       contents: write
       actions: read
+      checks: read
     name: Publish the release
     needs: [macos, windows, linux]
     # Only from a tag. A dispatched run builds all three and stops here, which is the point of
