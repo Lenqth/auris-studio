@@ -16,7 +16,7 @@ Candidates are bounded to five minutes plus an ending, and each worker has a tim
 and tool-call budget.
 
 Completed alternatives can be auditioned while other workers continue. Stop applies
-to one candidate or the entire batch. Retry creates a new artifact identity and leaves
+to one candidate or the entire batch. Regenerating a completed candidate creates a new artifact identity and leaves
 earlier results available. Selecting **Continue with this song** establishes the
 exact score for the next request without closing the conversation. Ask for revisions
 or new alternatives from that score. Earlier comparisons remain in the transcript.
@@ -46,6 +46,20 @@ directory. At most eight recent observations, with their request context and can
 descriptions, are included in a director request when personalization is enabled.
 
 ## Storage and recovery
+
+Successful operations checkpoint the private score and its owned assets. Recoverable
+candidate failures restart the composer from that checkpoint up to three times, with
+2, 4 and 8 second cancellable waits. The composer receives the last failure and must
+inspect existing work before continuing. Each attempt has its own time and tool-call
+budget. Other candidates continue independently. Cancellation, denied operations,
+protected-note violations and checkpoint storage failures stop automatic recovery.
+
+Candidate cards show the recovery count and the latest error. After the automatic
+limit, **Resume recovery** explicitly starts another attempt with a fresh three-recovery
+budget and the currently selected provider/model. It retains the same candidate,
+assignment and checkpoint. Before the first checkpoint exists, recovery starts from
+the original parent or a blank score. Fix unavailable resources before requesting
+recovery. Completed candidates keep the separate regeneration action.
 
 The workshop owns a sidecar under the project's conversation store. Unsaved documents
 use the same persistent recovery identity as ordinary agent conversations. The sidecar

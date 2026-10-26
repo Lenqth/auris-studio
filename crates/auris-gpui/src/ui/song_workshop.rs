@@ -459,6 +459,7 @@ impl AurisApp {
                                 "render_wait" => Key::WorkshopQueued,
                                 "stopping" => Key::WorkshopStopping,
                                 "planning" => Key::WorkshopPlanning,
+                                "recovering" => Key::WorkshopRecovering,
                                 _ => Key::WorkshopArrangeProgress,
                             });
                             card = card.child(
@@ -477,6 +478,20 @@ impl AurisApp {
                         }
                         if let Some(error) = &candidate.error {
                             card = card.child(div().text_color(theme.danger).child(error.clone()));
+                        }
+                        if candidate.recoveries > 0 {
+                            card = card.child(format!(
+                                "{} {}/{}",
+                                self.t(Key::WorkshopRecoveryCount),
+                                candidate.recoveries,
+                                auris_agent::workshop::AUTO_RECOVERY_LIMIT
+                            ));
+                        }
+                        if !running
+                            && !candidate.ready
+                            && candidate.recoveries >= auris_agent::workshop::AUTO_RECOVERY_LIMIT
+                        {
+                            card = card.child(self.t(Key::WorkshopRecoveryLimit));
                         }
                         card = card.child(
                             self.render_audio_player(
@@ -509,6 +524,8 @@ impl AurisApp {
                                     ("song-retry", index),
                                     self.t(if running {
                                         Key::WorkshopCancel
+                                    } else if !candidate.ready {
+                                        Key::WorkshopRecover
                                     } else {
                                         Key::WorkshopRetry
                                     }),
@@ -519,15 +536,23 @@ impl AurisApp {
                                     ),
                                     theme.accent,
                                     &theme,
-                                    cx.listener(move |this, _, _, cx| {
-                                        if let Some(s) = &this.song_workshop {
-                                            s.send(if running {
-                                                Command::Stop(Some(id))
-                                            } else {
-                                                Command::Retry(id)
-                                            });
+                                    cx.listener({
+                                        let unfinished = !candidate.ready;
+                                        move |this, _, _, cx| {
+                                            if let Some(s) = &this.song_workshop {
+                                                s.send(if running {
+                                                    Command::Stop(Some(id))
+                                                } else if unfinished {
+                                                    Command::Recover(
+                                                        id,
+                                                        Box::new(s.preferences.clone()),
+                                                    )
+                                                } else {
+                                                    Command::Retry(id)
+                                                });
+                                            }
+                                            cx.notify();
                                         }
-                                        cx.notify();
                                     }),
                                 )),
                         );
@@ -819,6 +844,7 @@ mod tests {
                         parent: None,
                         ready: false,
                         error: None,
+                        recoveries: 0,
                         direction: Direction {
                             title: format!("Candidate {id}"),
                             description: "Piano and strings".into(),

@@ -16,6 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Automatic restarts allowed per candidate and explicit recovery request.
+pub const AUTO_RECOVERY_LIMIT: u32 = 3;
+
 /// Commands accepted by the background workshop owner.
 pub enum Command {
     /// Submit one natural-language message with model settings captured at submission.
@@ -24,6 +27,8 @@ pub enum Command {
     Select(u64),
     /// Retry only this candidate in a new artifact directory.
     Retry(u64),
+    /// Continue an unfinished candidate from its checkpoint with a fresh recovery budget.
+    Recover(u64, Box<AgentPreferences>),
     /// Load auditions for an older comparison without retaining every historical WAV.
     View(usize),
     /// Stop one candidate, or all work when absent.
@@ -221,6 +226,7 @@ fn decision(text: &str) -> Result<Decision, String> {
 
 enum JobEvent {
     Progress(u64, String),
+    Recovering(u64, u32, String),
     Done(u64, Result<Arc<SongCandidate>, String>),
 }
 struct Owner {
@@ -342,6 +348,7 @@ impl Owner {
                                     direction,
                                     ready: false,
                                     error: None,
+                                    recoveries: 0,
                                 });
                             }
                             self.snapshot.document.rounds.push(Round {
@@ -358,6 +365,21 @@ impl Owner {
             }
             while let Ok(event) = self.job_receiver.try_recv() {
                 match event {
+                    JobEvent::Recovering(id, count, error) if self.jobs.contains_key(&id) => {
+                        if let Some(candidate) = self
+                            .snapshot
+                            .document
+                            .rounds
+                            .iter_mut()
+                            .flat_map(|r| &mut r.candidates)
+                            .find(|c| c.id == id)
+                        {
+                            candidate.recoveries = count;
+                            candidate.error = Some(error);
+                        }
+                        self.snapshot.progress.insert(id, "recovering".into());
+                        self.publish(true);
+                    }
                     JobEvent::Progress(id, stage) if self.jobs.contains_key(&id) => {
                         self.snapshot.progress.insert(id, stage);
                         self.publish(false);
@@ -385,6 +407,7 @@ impl Owner {
                                 match result {
                                     Ok(candidate) => {
                                         entry.ready = true;
+                                        entry.error = None;
                                         self.snapshot.candidates.insert(id, candidate);
                                     }
                                     Err(e) => entry.error = Some(e),
@@ -493,6 +516,25 @@ impl Owner {
                     }
                 }
             }
+            Command::Recover(id, prefs)
+                if self.jobs.len() < 3
+                    && !self.jobs.contains_key(&id)
+                    && self.planner.is_none() =>
+            {
+                let candidate = self
+                    .snapshot
+                    .document
+                    .rounds
+                    .iter_mut()
+                    .flat_map(|r| &mut r.candidates)
+                    .find(|c| c.id == id && !c.ready);
+                if let Some(candidate) = candidate {
+                    candidate.recoveries = 0;
+                    let candidate = candidate.clone();
+                    self.prefs = *prefs;
+                    self.launch(candidate);
+                }
+            }
             Command::Retry(id)
                 if self.jobs.len() < 3
                     && !self.jobs.contains_key(&id)
@@ -511,6 +553,7 @@ impl Owner {
                     candidate.id = self.snapshot.document.next_id;
                     candidate.ready = false;
                     candidate.error = None;
+                    candidate.recoveries = 0;
                     self.snapshot.document.rounds.push(Round {
                         after_message: self.snapshot.document.messages.len(),
                         candidates: vec![candidate.clone()],
@@ -601,12 +644,26 @@ impl Owner {
         match std::thread::Builder::new()
             .name(format!("auris-composer-{id}"))
             .spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    compose(
-                        &candidate, prefs, settings, folder, parent, &cancel, &sender,
-                    )
-                }))
-                .unwrap_or_else(|_| Err("Candidate worker failed".into()))
+                let result = recover_candidate(
+                    &candidate,
+                    &cancel,
+                    &sender,
+                    wait_for_recovery,
+                    |candidate| {
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            compose(
+                                candidate,
+                                prefs.clone(),
+                                settings.clone(),
+                                folder.clone(),
+                                parent.clone(),
+                                &cancel,
+                                &sender,
+                            )
+                        }))
+                        .unwrap_or_else(|_| Err(AttemptError::permanent("Candidate worker failed")))
+                    },
+                )
                 .map(Arc::new);
                 let _ = sender.send(JobEvent::Done(id, result));
             }) {
@@ -618,6 +675,103 @@ impl Owner {
             }
         }
     }
+}
+
+#[derive(Debug)]
+struct AttemptError {
+    message: String,
+    retryable: bool,
+}
+
+impl AttemptError {
+    fn permanent(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            retryable: false,
+        }
+    }
+}
+
+impl From<String> for AttemptError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            retryable: true,
+        }
+    }
+}
+
+impl From<&str> for AttemptError {
+    fn from(message: &str) -> Self {
+        message.to_owned().into()
+    }
+}
+
+fn recover_candidate<T>(
+    candidate: &Candidate,
+    cancel: &AtomicBool,
+    sender: &mpsc::Sender<JobEvent>,
+    mut wait: impl FnMut(u32, &AtomicBool) -> bool,
+    mut attempt: impl FnMut(&Candidate) -> Result<T, AttemptError>,
+) -> Result<T, String> {
+    let mut candidate = candidate.clone();
+    loop {
+        if cancel.load(Ordering::Acquire) {
+            return Err("Composition stopped".into());
+        }
+        match attempt(&candidate) {
+            Ok(value) => return Ok(value),
+            Err(error) => {
+                if cancel.load(Ordering::Acquire)
+                    || !error.retryable
+                    || candidate.recoveries >= AUTO_RECOVERY_LIMIT
+                {
+                    return Err(error.message);
+                }
+                candidate.recoveries += 1;
+                candidate.error = Some(error.message.clone());
+                let _ = sender.send(JobEvent::Recovering(
+                    candidate.id,
+                    candidate.recoveries,
+                    error.message,
+                ));
+                if !wait(candidate.recoveries, cancel) {
+                    return Err("Composition stopped".into());
+                }
+            }
+        }
+    }
+}
+
+fn wait_for_recovery(count: u32, cancel: &AtomicBool) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(1 << count.min(3));
+    while Instant::now() < deadline {
+        if cancel.load(Ordering::Acquire) {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    !cancel.load(Ordering::Acquire)
+}
+
+fn save_checkpoint(session: &mut Session, folder: &std::path::Path) -> Result<(), AttemptError> {
+    let path = folder.join("checkpoint/checkpoint.auris");
+    if session.path() == Some(path.as_path()) {
+        session
+            .save(&path)
+            .map_err(|e| AttemptError::permanent(format!("Checkpoint save failed: {e}")))?;
+    } else {
+        std::fs::create_dir_all(folder).map_err(|e| AttemptError::permanent(e.to_string()))?;
+        let report = session
+            .save_as(&folder.join("checkpoint.auris"))
+            .map_err(|e| AttemptError::permanent(format!("Checkpoint save failed: {e}")))?;
+        if !report.uncollected.is_empty() {
+            return Err(AttemptError::permanent(
+                "Checkpoint assets could not be collected",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn idea(direction: &Direction) -> SongIdea {
@@ -643,7 +797,7 @@ fn compose(
     parent: Option<PathBuf>,
     cancel: &AtomicBool,
     sender: &mpsc::Sender<JobEvent>,
-) -> Result<SongCandidate, String> {
+) -> Result<SongCandidate, AttemptError> {
     if cancel.load(Ordering::Acquire) {
         return Err("Cancelled".into());
     }
@@ -661,7 +815,46 @@ fn compose(
     if let Some(parent) = parent {
         let missing = session.open(&parent).map_err(|e| e.to_string())?;
         if !missing.is_empty() {
-            return Err("Parent candidate has missing assets".into());
+            return Err(AttemptError::permanent(
+                "Parent candidate has missing assets",
+            ));
+        }
+    }
+    // The original parent remains the reference for protected material and completion.
+    let before = session.project().clone();
+    let validate_protected = |session: &Session| -> Result<(), AttemptError> {
+        for id in &candidate.direction.protected_tracks {
+            let original = before
+                .tracks
+                .iter()
+                .find(|t| t.id.0 == *id)
+                .and_then(|t| t.kind.note_clips());
+            let current = session
+                .project()
+                .tracks
+                .iter()
+                .find(|t| t.id.0 == *id)
+                .and_then(|t| t.kind.note_clips());
+            if original != current {
+                return Err(AttemptError::permanent(format!(
+                    "The composer changed protected notes on track {id}"
+                )));
+            }
+        }
+        Ok(())
+    };
+    let checkpoint = folder.join("checkpoint/checkpoint.auris");
+    if checkpoint
+        .try_exists()
+        .map_err(|e| AttemptError::permanent(e.to_string()))?
+    {
+        let missing = session
+            .open(&checkpoint)
+            .map_err(|e| AttemptError::permanent(e.to_string()))?;
+        if !missing.is_empty() {
+            return Err(AttemptError::permanent(
+                "Checkpoint has missing assets; restore them before recovering",
+            ));
         }
     }
     prefs.policy = auris_session::agent_policy::Policy {
@@ -671,7 +864,6 @@ fn compose(
     };
     prefs.system_prompt = auris_toolbox::workshop::COMPOSER.into();
     let worker = crate::Worker::spawn(prefs.clone(), None, true, None)?;
-    let before = session.project().clone();
     if candidate.direction.protected_tracks.len() > 128
         || candidate
             .direction
@@ -682,8 +874,13 @@ fn compose(
         return Err("Protected track is not present in the parent candidate".into());
     }
     session.begin_agent_request();
+    let _ = sender.send(JobEvent::Progress(candidate.id, "planning".into()));
     worker.send(
-        &json!({"say": candidate.direction.instructions,"policy":prefs.policy}).to_string(),
+        &json!({"say": json!({"assignment":candidate.direction.instructions,
+            "recovery":candidate.error.as_ref().map(|error| json!({
+                "last_error":error,
+                "instruction":"Inspect the restored score and current resources. Continue only unfinished work; do not duplicate successful edits. Correct the cause of the last failure before completing."
+            }))}).to_string(),"policy":prefs.policy}).to_string(),
     )?;
     let deadline = Instant::now() + Duration::from_secs(900);
     let mut edits = 0;
@@ -720,6 +917,9 @@ fn compose(
                             .any(|t| t.name == op.name)
                 });
                 worker.send(&json!({"event":"permission_result","id":event["id"],"ok":allowed,"reason":"Isolated candidate music operations only"}).to_string())?;
+                if !allowed {
+                    return Err(AttemptError::permanent("Candidate operation was denied"));
+                }
             }
             "edit" => {
                 edits += 1;
@@ -736,6 +936,10 @@ fn compose(
                 };
                 let _ = sender.send(JobEvent::Progress(candidate.id, stage.into()));
                 let result = execute(&mut session, event["command"].clone(), &settings, cancel);
+                if result.is_ok() && session.is_dirty() {
+                    validate_protected(&session)?;
+                    save_checkpoint(&mut session, &folder)?;
+                }
                 let reply = match result {
                     Ok(text) if action == "inspect_audio" => {
                         json!({"event":"edit_result","ok":true,"inspection":serde_json::from_str::<serde_json::Value>(&text).map_err(|e|e.to_string())?})
@@ -754,6 +958,7 @@ fn compose(
                     .take(1000)
                     .collect();
             }
+            "result" if event["ok"] == true => last_failure.clear(),
             "answer" => {
                 break event["text"]
                     .as_str()
@@ -773,33 +978,22 @@ fn compose(
         }
     };
     session.end_agent_request();
-    for id in &candidate.direction.protected_tracks {
-        let original = before
-            .tracks
-            .iter()
-            .find(|t| t.id.0 == *id)
-            .and_then(|t| t.kind.note_clips());
-        let current = session
-            .project()
-            .tracks
-            .iter()
-            .find(|t| t.id.0 == *id)
-            .and_then(|t| t.kind.note_clips());
-        if original != current {
-            return Err(format!(
-                "The composer changed protected notes on track {id}"
-            ));
-        }
-    }
+    validate_protected(&session)?;
     if session.project() == &before {
         return Err(format!(
             "The composer did not make the requested music changes. {completion} {last_failure}"
-        ));
+        )
+        .into());
+    }
+    if !last_failure.is_empty() {
+        return Err(format!("The last tool failure remains unresolved: {last_failure}").into());
     }
     let _ = sender.send(JobEvent::Progress(candidate.id, "render_wait".into()));
     let _gate = audio_gate(cancel)?;
     let _ = sender.send(JobEvent::Progress(candidate.id, "render".into()));
-    session.finish_workshop_candidate(&folder, idea(&candidate.direction), cancel)
+    session
+        .finish_workshop_candidate(&folder, idea(&candidate.direction), cancel)
+        .map_err(Into::into)
 }
 
 fn audio_gate(cancel: &AtomicBool) -> Result<std::sync::MutexGuard<'static, ()>, String> {
@@ -936,6 +1130,7 @@ mod tests {
             parent: None,
             ready: false,
             error: None,
+            recoveries: 0,
             direction: Direction {
                 title: "Test".into(),
                 description: "A short instrumental".into(),
@@ -944,6 +1139,234 @@ mod tests {
             },
         }
     }
+    #[test]
+    fn automatic_recovery_is_bounded_and_preserves_failure_context() {
+        let (sender, receiver) = mpsc::channel();
+        let mut attempts = 0;
+        let result = recover_candidate::<()>(
+            &assignment(),
+            &AtomicBool::new(false),
+            &sender,
+            |_, _| true,
+            |candidate| {
+                if attempts > 0 {
+                    assert_eq!(candidate.error.as_deref(), Some("temporary failure"));
+                }
+                attempts += 1;
+                Err("temporary failure".into())
+            },
+        );
+        assert_eq!(result.unwrap_err(), "temporary failure");
+        assert_eq!(attempts, AUTO_RECOVERY_LIMIT + 1);
+        let counts: Vec<_> = receiver
+            .try_iter()
+            .filter_map(|event| match event {
+                JobEvent::Recovering(_, count, _) => Some(count),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(counts, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn recovery_stops_after_success_denial_or_cancellation() {
+        let (sender, _) = mpsc::channel();
+        let cancel = AtomicBool::new(false);
+        let mut attempts = 0;
+        let value = recover_candidate(
+            &assignment(),
+            &cancel,
+            &sender,
+            |_, _| true,
+            |_| {
+                attempts += 1;
+                if attempts == 1 {
+                    Err("connection lost".into())
+                } else {
+                    Ok(42)
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!((value, attempts), (42, 2));
+        attempts = 0;
+        assert!(
+            recover_candidate::<()>(
+                &assignment(),
+                &cancel,
+                &sender,
+                |_, _| panic!("must not wait"),
+                |_| {
+                    attempts += 1;
+                    Err(AttemptError::permanent("denied"))
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(attempts, 1);
+        attempts = 0;
+        assert!(
+            recover_candidate::<()>(
+                &assignment(),
+                &cancel,
+                &sender,
+                |_, cancel| {
+                    cancel.store(true, Ordering::Release);
+                    false
+                },
+                |_| {
+                    attempts += 1;
+                    Err("temporary failure".into())
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn explicit_recovery_resets_persisted_budget_without_replacing_candidate() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(dir.path().into());
+        let mut candidate = assignment();
+        candidate.recoveries = AUTO_RECOVERY_LIMIT;
+        candidate.error = Some("previous failure".into());
+        store
+            .save(&Document {
+                rounds: vec![Round {
+                    after_message: 0,
+                    candidates: vec![candidate],
+                }],
+                ..Default::default()
+            })
+            .unwrap();
+        let (sender, _) = mpsc::channel();
+        let mut owner = Owner::new(store, Settings::default(), sender);
+        let prefs = AgentPreferences {
+            provider: "invalid-test-provider".into(),
+            ..Default::default()
+        };
+        owner.command(Command::Recover(1, Box::new(prefs)));
+        assert_eq!(owner.snapshot.document.rounds.len(), 1);
+        let candidate = &owner.snapshot.document.rounds[0].candidates[0];
+        assert_eq!((candidate.id, candidate.recoveries), (1, 0));
+        assert_eq!(candidate.error.as_deref(), Some("previous failure"));
+        assert_eq!(owner.prefs.provider, "invalid-test-provider");
+        owner.jobs[&1].store(true, Ordering::Release);
+        for handle in owner.handles.drain(..) {
+            handle.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn silent_candidate_recovers_with_real_tools_in_the_same_track() {
+        let call = |id: &str, name: &str, args: serde_json::Value| {
+            json!({"role":"assistant","tool_calls":[{"id":id,"type":"function","function":{"name":name,"arguments":args.to_string()}}]}).to_string()
+        };
+        let setup = call("setup", "add_track", json!({"name":"Kit","kind":"drum"}));
+        let phrase = call(
+            "phrase",
+            "generate_phrase",
+            json!({"track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}),
+        );
+        let answer = json!({"role":"assistant","content":"Finished"}).to_string();
+        let (url, seen) = crate::tests::mock_server(vec![
+            crate::tests::completion(&setup, "tool_calls"),
+            crate::tests::completion(&answer, "stop"),
+            crate::tests::completion(&phrase, "tool_calls"),
+            crate::tests::completion(&answer, "stop"),
+        ]);
+        let prefs = AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            ..Default::default()
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let cancel = AtomicBool::new(false);
+        let result = recover_candidate(
+            &assignment(),
+            &cancel,
+            &sender,
+            |_, _| true,
+            |candidate| {
+                compose(
+                    candidate,
+                    prefs.clone(),
+                    Settings::default(),
+                    dir.path().join("1"),
+                    None,
+                    &cancel,
+                    &sender,
+                )
+                .inspect_err(|error| eprintln!("Recovery attempt failed: {error:?}"))
+            },
+        )
+        .unwrap();
+        assert!(result.audio.peak() > 1e-8);
+        assert_eq!(
+            result.workshop_outline()["tracks"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            receiver
+                .try_iter()
+                .any(|event| matches!(event, JobEvent::Recovering(1, 1, _)))
+        );
+        assert_eq!(seen.lock().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn checkpoint_survives_worker_failure_and_resumes_without_duplicate_tracks() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("1");
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        let cancel = AtomicBool::new(false);
+        execute(
+            &mut session,
+            json!({"action":"add_track","name":"Kit","kind":"drum"}),
+            &Settings::default(),
+            &cancel,
+        )
+        .unwrap();
+        execute(&mut session, json!({"action":"generate_phrase","track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}), &Settings::default(), &cancel).unwrap();
+        save_checkpoint(&mut session, &folder).unwrap();
+        let original = session.project().tracks.clone();
+        drop(session);
+        let answer = json!({"role":"assistant","content":"Verified the existing score; complete."})
+            .to_string();
+        let (url, seen) =
+            crate::tests::mock_server(vec![crate::tests::completion(&answer, "stop")]);
+        let prefs = AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            ..Default::default()
+        };
+        let mut candidate = assignment();
+        candidate.error = Some("Connection interrupted after writing notes".into());
+        let (sender, _) = mpsc::channel();
+        let result = compose(
+            &candidate,
+            prefs,
+            Settings::default(),
+            folder.clone(),
+            None,
+            &cancel,
+            &sender,
+        )
+        .unwrap();
+        assert!(result.audio.peak() > 1e-8);
+        let mut restored = Session::new(SessionOptions::headless()).unwrap();
+        restored.open(&folder.join("song/song.auris")).unwrap();
+        assert_eq!(restored.project().tracks, original);
+        assert!(seen.lock().unwrap()[0].contains("Connection interrupted after writing notes"));
+    }
+
     #[test]
     fn composer_creates_persistent_audition_through_real_session_tools() {
         let call = |id: &str, name: &str, arguments: serde_json::Value| {

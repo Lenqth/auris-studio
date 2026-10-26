@@ -114,6 +114,10 @@ strings! {
     WorkshopListen { en: "Listen", ja: "試聴" }
     WorkshopStop { en: "Stop", ja: "停止" }
     WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopRecover { en: "Resume recovery", ja: "途中から復旧" }
+    WorkshopRecovering { en: "Waiting to recover", ja: "自動復旧を待っています" }
+    WorkshopRecoveryCount { en: "Automatic recoveries", ja: "自動復旧" }
+    WorkshopRecoveryLimit { en: "Automatic recovery limit reached. Resume recovery to try again from the saved progress with a fresh recovery budget.", ja: "自動復旧の上限に達しました。「途中から復旧」で保存済みの作業から再開し、自動復旧を再び3回まで試せます。" }
     WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }

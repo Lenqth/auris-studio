@@ -41,6 +41,9 @@ pub struct Candidate {
     pub ready: bool,
     /// Failure retained across reopening.
     pub error: Option<String>,
+    /// Automatic recoveries consumed since the last explicit recovery request.
+    #[serde(default)]
+    pub recoveries: u32,
 }
 
 /// A comparison is retained even after another round is generated.

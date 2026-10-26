@@ -534,8 +534,10 @@ impl Session {
         }
         self.project.creation_brief = Some(format!("{}\n{}", idea.title, idea.description));
         std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+        // This is the host-owned candidate directory. A failed audition may have left
+        // an earlier score here; recovery replaces that partial result from its checkpoint.
         let report = self
-            .save_as(&folder.join("song.auris"))
+            .save_as_replacing(&folder.join("song.auris"))
             .map_err(|e| e.to_string())?;
         if !report.uncollected.is_empty() {
             return Err("Candidate assets could not be collected".into());
