@@ -38,7 +38,8 @@ pub(super) fn profile(model: Model) -> Option<Profile> {
         Model::Mallet => Profile {
             hardness: 0.157,
             position: 0.45,
-            decay: 4.859,
+            // Fundamental T60 at middle C, measured on the Iowa marimba's tuned bars.
+            decay: 1.5,
             damping: 0.0,
             normalization: 0.119921,
             gains: [

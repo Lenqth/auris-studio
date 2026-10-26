@@ -243,8 +243,9 @@ fn pedal_defers_piano_release_and_all_sound_off_overrides_it() {
         ],
     );
     assert_eq!(rig.instrument.active_voices(), 1);
-    let held = rig.render(4000, &[]);
-    assert!(rms(&held) > 0.001);
+    // Hold past the soundboard's knock, which no damper stops, so the release is the strings'.
+    let held = rig.render(36_000, &[]);
+    assert!(rms(&held[32_000..]) > 0.001);
     let released = rig.render(
         5000,
         &[NoteEvent::Controller {
@@ -756,4 +757,164 @@ fn pluck_contact_stays_with_the_excitation_until_the_next_note() {
     assert!((monitor.read().unwrap().voices[0].contact - 0.2).abs() < 1e-6);
     guitar.render(2000, &[on(64, 0.75)]);
     assert!((monitor.read().unwrap().voices[0].contact - 0.4).abs() < 1e-6);
+}
+
+fn level_db(samples: &[f32]) -> f64 {
+    20.0 * f64::from(rms(samples)).max(1e-12).log10()
+}
+
+#[test]
+fn piano_decays_in_two_stages_and_sustains_longer_in_the_bass() {
+    let mut piano = rig(Model::Piano, 48_000.0);
+    let middle = piano.render(6 * 48_000, &[on(60, 0.65)]);
+    let at = |audio: &[f32], seconds: f64| {
+        let start = (seconds * 48_000.0) as usize;
+        level_db(&audio[start..start + 4800])
+    };
+    // The bridge drains the strings' shared motion first; what they do not share rings on.
+    let prompt = (at(&middle, 0.1) - at(&middle, 0.6)) / 0.5;
+    let after = (at(&middle, 2.0) - at(&middle, 5.0)) / 3.0;
+    assert!(
+        prompt > 2.5 * after,
+        "prompt {prompt} dB/s, aftersound {after} dB/s"
+    );
+    assert!(after > 0.5, "aftersound must still decay: {after} dB/s");
+    let mut decays = Vec::new();
+    for pitch in [36, 84, 100] {
+        piano.instrument.reset();
+        let audio = piano.render(3 * 48_000, &[on(pitch, 0.65)]);
+        decays.push((at(&audio, 0.5) - at(&audio, 2.5)) / 2.0);
+    }
+    assert!(
+        decays.windows(2).all(|pair| pair[0] < pair[1]),
+        "decay rates by register: {decays:?}"
+    );
+}
+
+#[test]
+fn piano_keys_above_the_dampers_ring_after_release() {
+    let mut piano = rig(Model::Piano, 48_000.0);
+    let release = |pitch| NoteEvent::NoteOff { frame: 4800, pitch };
+    let damped = piano.render(48_000, &[on(72, 0.65), release(72)]);
+    piano.instrument.reset();
+    let free = piano.render(48_000, &[on(96, 0.65), release(96)]);
+    let fall = |audio: &[f32]| level_db(&audio[..4800]) - level_db(&audio[19_200..24_000]);
+    assert!(
+        fall(&damped) > 40.0,
+        "C5 damper removed only {} dB",
+        fall(&damped)
+    );
+    assert!(
+        fall(&free) < 25.0,
+        "C7 has no damper, yet fell {} dB",
+        fall(&free)
+    );
+    assert_eq!(piano.instrument.active_voices(), 1);
+}
+
+#[test]
+fn piano_pedal_catches_a_note_its_damper_has_begun_to_stop() {
+    let mut piano = rig(Model::Piano, 48_000.0);
+    piano.set_param("release", 0.5);
+    let pedal = |frame, value| NoteEvent::Controller {
+        frame,
+        number: 64,
+        value,
+    };
+    let events = [
+        on(60, 0.65),
+        NoteEvent::NoteOff {
+            frame: 4800,
+            pitch: 60,
+        },
+    ];
+    let stopped = piano.render(48_000, &events);
+    piano.instrument.reset();
+    let caught = piano.render(48_000, &[events[0], events[1], pedal(7200, 1.0)]);
+    assert_eq!(&stopped[..7200], &caught[..7200]);
+    let tail = 38_400..48_000;
+    assert!(
+        level_db(&caught[tail.clone()]) > level_db(&stopped[tail]) + 20.0,
+        "the pedal did not lift the damper"
+    );
+}
+
+#[test]
+fn piano_hammer_brightens_with_velocity_on_the_existing_loudness_law() {
+    let mut piano = Rig::new(Box::new(Physical::new(Model::Piano)), 48_000.0, 256, 2);
+    let mut take = |velocity| {
+        piano.instrument.reset();
+        piano.render(24_000, &[on(60, velocity)])
+    };
+    let (soft, middle, loud) = (take(0.35), take(0.65), take(0.95));
+    let hz = f64::from(pitch_to_hz(60.0));
+    let brightness = |audio: &[f32]| {
+        let window = &audio[480..9600];
+        let upper: f64 = (4..=8)
+            .map(|n| goertzel(window, 48_000.0, hz * f64::from(n)))
+            .sum();
+        20.0 * (upper / goertzel(window, 48_000.0, hz)).log10()
+    };
+    assert!(
+        brightness(&loud) > brightness(&soft) + 10.0,
+        "soft {} dB, loud {} dB",
+        brightness(&soft),
+        brightness(&loud)
+    );
+    // The previous law gave -7.0 and +4.5 dB here; brightness may widen it only modestly.
+    let quieter = level_db(&soft) - level_db(&middle);
+    let louder = level_db(&loud) - level_db(&middle);
+    assert!((-13.0..-5.0).contains(&quieter), "pp {quieter} dB");
+    assert!((3.0..9.0).contains(&louder), "ff {louder} dB");
+}
+
+#[test]
+fn piano_strike_knocks_the_soundboard_below_a_treble_note() {
+    let mut piano = Rig::new(Box::new(Physical::new(Model::Piano)), 48_000.0, 256, 2);
+    let audio = piano.render(48_000, &[on(96, 0.8)]);
+    let mut lowpass: [_; 4] = std::array::from_fn(|_| {
+        auris_dsp::Biquad::new(auris_dsp::BiquadCoefficients::lowpass(
+            48_000.0,
+            700.0,
+            std::f32::consts::FRAC_1_SQRT_2,
+        ))
+    });
+    let low: Vec<_> = audio
+        .iter()
+        .map(|x| {
+            lowpass
+                .iter_mut()
+                .fold(*x, |y, section| section.process_sample(y))
+        })
+        .collect();
+    // C7's fundamental is 2093 Hz: everything under 700 Hz is the soundboard's knock.
+    let knock = level_db(&low[..2880]);
+    assert!(knock > level_db(&audio[..2880]) - 30.0, "knock {knock} dB");
+    let later = level_db(&low[24_000..26_880]);
+    assert!(
+        knock > later + 30.0,
+        "knock {knock} dB, half a second later {later} dB"
+    );
+}
+
+#[test]
+fn mallet_bars_are_tuned_like_a_marimba() {
+    let mut mallet = rig(Model::Mallet, 48_000.0);
+    mallet.set_param("hardness", 1.0);
+    let audio = mallet.render(24_000, &[on(60, 1.0)]);
+    let hz = f64::from(pitch_to_hz(60.0));
+    let strongest = (150..=650)
+        .map(|hundredths| f64::from(hundredths) / 100.0)
+        .max_by(|a, b| {
+            goertzel(&audio[..12_000], 48_000.0, hz * a).total_cmp(&goertzel(
+                &audio[..12_000],
+                48_000.0,
+                hz * b,
+            ))
+        })
+        .unwrap();
+    assert!(
+        (strongest - 4.0).abs() < 0.02,
+        "first overtone at {strongest}x"
+    );
 }

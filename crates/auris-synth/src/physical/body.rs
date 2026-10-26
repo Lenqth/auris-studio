@@ -7,6 +7,7 @@
 use auris_dsp::{Biquad, BiquadCoefficients};
 
 use super::Model;
+use super::modal::PianoVoicing;
 
 const BANDS: usize = 12;
 const MODES: usize = 6;
@@ -29,15 +30,22 @@ pub(super) struct Body {
     legacy_first: bool,
     modes: [Biquad; MODES],
     mode_gains: [f32; MODES],
+    highpass: Option<Biquad>,
 }
 
 impl Body {
-    pub(super) fn prepare(&mut self, model: Model, rate: f32) {
+    pub(super) fn prepare(&mut self, model: Model, rate: f32, piano: &PianoVoicing) {
+        // A soundboard is a poor radiator below its first modes, which is why a piano's
+        // lowest fundamentals are heard mostly through their upper partials.
+        self.highpass = (model == Model::Piano).then(|| {
+            Biquad::new(BiquadCoefficients::highpass(
+                f64::from(rate),
+                piano.highpass.clamp(10.0, rate * 0.2),
+                0.707,
+            ))
+        });
         let gains = match model {
-            Model::Piano => Some([
-                -9.000, -5.277, 9.000, 9.000, -0.138, -2.364, 8.816, 9.000, 8.766, 6.990, 4.196,
-                2.085,
-            ]),
+            Model::Piano => Some(piano.soundboard),
             Model::Guitar => Some([
                 -1.461, 5.898, 8.876, 7.226, 1.867, -0.267, -0.352, 0.458, 1.530, 1.882, 0.962,
                 -0.275,
@@ -98,10 +106,14 @@ impl Body {
             input
         };
         if self.fitted {
+            let radiated = self
+                .highpass
+                .as_mut()
+                .map_or(input, |filter| filter.process_sample(input));
             let wet = self
                 .sections
                 .iter_mut()
-                .fold(input, |sample, section| section.process_sample(sample));
+                .fold(radiated, |sample, section| section.process_sample(sample));
             let mix = if self.legacy_first {
                 amount / 0.35
             } else {
@@ -135,6 +147,7 @@ impl Body {
             .iter_mut()
             .chain(&mut self.legacy)
             .chain(&mut self.modes)
+            .chain(&mut self.highpass)
         {
             section.reset();
         }
@@ -151,7 +164,7 @@ mod tests {
         for model in Model::ALL {
             for rate in [8000.0, 44100.0, 48000.0, 96000.0, 192000.0] {
                 let mut body = Body::default();
-                body.prepare(model, rate);
+                body.prepare(model, rate, &super::super::VOICING);
                 let amount = if super::super::pack::profile(model).is_some() {
                     0.35
                 } else {
@@ -171,8 +184,10 @@ mod tests {
                 } else {
                     0.03
                 };
+                // The piano's soundboard does not radiate DC at all; the others pass it unchanged.
+                let expected = if model == Model::Piano { 0.0 } else { 1.0 };
                 assert!(
-                    (dc - 1.0).abs() < dc_tolerance,
+                    (dc - expected).abs() < dc_tolerance,
                     "{model:?} at {rate}: DC {dc}"
                 );
                 let low = goertzel(&impulse, f64::from(rate), 200.0);
