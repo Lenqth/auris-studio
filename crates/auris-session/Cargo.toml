@@ -46,3 +46,9 @@ url.workspace = true
 [dev-dependencies]
 # The hosting tests need a CLAP plugin, and must not need one installed on the machine.
 auris-clap = { workspace = true, features = ["testkit"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { workspace = true, features = [
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
