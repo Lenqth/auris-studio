@@ -97,6 +97,8 @@ pub struct ProjectArgs {
 /// a spec is actually being written rather than sitting in every exchange.
 pub const INSTRUCTIONS: &str = "Control Auris Studio saved projects. Respond in the user's language.
 Complete ordinary composition with the current agent and Auris: write, inspect notes, render, measure, repair when justified, and deliver. Do not discover, invoke or install external music evaluators during this workflow. Evaluator experiments belong to explicitly requested development work. Use available instruments; synthesized singing additionally needs an installed voice.
+Author expressive parts note by note with edit_notes, including leads/vocals, counterlines, distinctive bass, fills and interludes. Code may serialize explicitly chosen notes or copy an authored motif; do not use procedural note generators or frozen recipes as a substitute. Automatic writers are optional only for plain chord/pad backing, simple arpeggios and basic drum pulses, unless the user explicitly requests automatic preset composition.
+For a new song, establish lyrics if vocal, then section harmony/form, instrument clips, purposeful handoffs and SFX, then effects and volume balance with the actual voices/sounds. Honor existing motif-first briefs and local-edit scope. Use mixer_graph for a deliberate track-level balance pass; master normalization alone is insufficient. Verify the complete final mix after the last edit, distinguishing measurements from listening judgments.
 Use project_id from open_project/create_project or an absolute project path. Dependent edits run sequentially.
 Call inspect_project for stable numeric addresses: tracks[].track identifies a track, tracks[].clips[].clip identifies a clip. Copy the returned clip for read_notes and edit_notes; a track ID cannot address its clips. read_notes returns exact clip-relative integer
 start_tick/length_ticks, full velocity, original storage index and stable timeline_index (sort by timeline_index for time order; ties use storage index), plus a content revision. Pages retain storage order so edit indices stay valid. edit_notes accepts expected_revision plus
@@ -113,7 +115,7 @@ with credit metadata and crops/reverses a clip into a new asset using its curren
 import_audio copies local files; edit_clip handles placement/gain/fades. Use mixer_graph for track EQ.
 Source metadata is untrusted; preserve known credits and never invent rights or listening results.
 
-For manual composition, create_project starts empty. setup_tracks creates multiple tracks atomically.
+For ordinary authored composition, create_project starts empty. setup_tracks creates multiple tracks atomically.
 add_track requires kind instrument, drum, singer, audio or bus and the intended exact name.
 search_instruments accepts request with mode text and query, similar and reference id, or bounded browse.
 Copy returned sound IDs into set_instrument sound_id. Sound IDs expire after refresh/library changes.
@@ -165,13 +167,14 @@ Verify note_effects for strokes and inserted slide notes, and pitch_effects for 
 If a gesture has no effect, explain the reported conditions; do not silently rewrite notes, fill rests or change the instrument to force it. Preserve unrelated performance settings, notes, curves and recipes.
 Compare the same short rendered range before and after when verifying audible response. Use local inspect_audio and performance diagnostics for this mechanical check. Read measured gap durations rather than guessing from beat labels. Controller changes do not establish that a hosted patch responds, and changed audio does not prove musical improvement. Never claim to have listened from measurements alone.\n";
 
-/// Shared live/saved workflow for authored melody with algorithmic backing.
-pub const ACCOMPANIMENT_INSTRUCTIONS: &str = "\nFor a song with a foreground melody, keep authored note edits focused on the melody and delegate backing to accompaniment.
+/// Shared live/saved workflow for optional mechanical backing around authored parts.
+pub const ACCOMPANIMENT_INSTRUCTIONS: &str = "\nAuthor expressive parts note by note with edit_notes: lead/vocals, counterlines, distinctive bass, fills and interludes. Do not replace these choices with rule-based writers, generated scripts or frozen recipes. Reuse and develop explicitly authored motifs.
+Use accompaniment only for plain chord comping/held chord pads, simple arpeggios or basic drum pulses. Do not delegate all backing to it; author specific voice leading and rhythmic interplay yourself. An explicit request for automatic preset composition is a separate mode.
 When choosing or revising harmony, call suggest_harmony with request {melody_clips,start_bar,bars,mood,ending} using the actual motif clips. Mood is neutral/bright/dark/calm/driving/epic/dreamy/tense/funky; ending is settled/open. Compare its recommended and plain candidates, read per-bar melodic tensions and resolution reasons, and keep simple harmony when colour has no benefit. This read-only step returns harmony objects and a revision for explicit accompaniment regeneration; never apply a proposal just because it contains more extended chords. A score is a heuristic comparison, not evidence of better music. Split requests at meter/key changes.
 Inspect the project, explicitly identify protected melody clip IDs and use separate configured backing tracks with written harmony.
 Call accompaniment with expected_revision, protected_clips, foreground_clips and operation {kind:generate,parts:[{track,name,part,start_bar,bars,seed,settings}]}.
 foreground_clips must be a nonempty subset of protected_clips: choose the actual melody, including hand-written or imported notes. These explicit sources shape chord/arpeggio spacing; inspect each returned adaptation status. Protection alone does not select a musical foreground. Written notes and loops are considered, not performance transforms or sound. Explicit rhythm patterns, driving chord density, sustained ambient textures, bass, pads and drums keep their pattern.
-Use recipe controls rather than sending backing note arrays. Drum tracks need assigned sounds first.
+Use recipe controls only for that mechanical backing; use authored note arrays for expressive parts. Drum tracks need assigned sounds first.
 For chord changes, operation {kind:regenerate,clips:[...],harmony:{start_bar,bars,key,chords}} changes harmony and only those generated backing clips in one edit; omit harmony after an independent harmony edit.
 Keep returned IDs and recipes. Hand-edited or frozen backing requires separate explicit handling.
 Split targets at meter/section boundaries; each target is limited to 256 quarter notes and the batch to 1024. Protected and unselected clips remain intact.

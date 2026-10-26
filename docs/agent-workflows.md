@@ -437,8 +437,18 @@ Musical knowledge lives in `crates/auris-agent/src/prompts/musical-design.md`, s
 both live prompt profiles, the startup song-direction planner and standalone lyric generation.
 It covers motif rhythm/development, phrase releases, harmonic colour, chorus register,
 prosody, arrangement, interludes, effects and interpreting component-specific feedback.
-The startup planner applies this guidance through its existing preset, tempo, key, density
-and lead controls; descriptions do not author exact notes, tensions or effect automation.
+The startup planner selects three directions. Each then runs the configured tool-using agent
+in an isolated, note-free session, with the same resolved composition prompt as the panel.
+Selected instruments and singers are prepared first. The agent authors expressive notes,
+section harmony, instrument handoffs and purposeful SFX, then finishes effects and volume balance.
+Plain chord/pad backing, simple arpeggios and basic drum pulses may use phrase generators;
+leads, counterlines, distinctive bass lines and fills use explicit note edits.
+The host checks authored notes, mixer review, current vocal takes and full-mix inspection
+after the last edit before retaining the exact candidate for audition/adoption. Missing work
+gets at most two completion requests; failure is reported without automatic-composition fallback.
+Each candidate has a 20-minute worker deadline and respects cancellation and explicit permission
+denials. Note replacement is allowed inside the new disposable candidate; operations requiring
+interactive approval remain unavailable. No external evaluator or shell setup is required.
 Lyric generation applies it to words and phrase structure without claiming known pitches.
 
 Live editing instructions remain in `crates/auris-agent/src/prompts/composition.md`; the standard

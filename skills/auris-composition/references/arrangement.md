@@ -1,6 +1,6 @@
 # Arrangement after composition
 
-Use this pass for complete songs and instrumental cues after the core melody, lyrics where applicable, harmony, and form exist. Composing and arranging may overlap, but revisit the actual generated score before final synthesis/export. A preset's track count, automatic balance, or successful render does not establish an intentional arrangement. Scale the work to the brief; do not expand a local edit or a short demo into a full production.
+Use this pass for complete songs and instrumental cues after the core melody, lyrics where applicable, harmony, and form exist. Composing and arranging may overlap, but revisit the actual score before final synthesis/export. Author counterlines, distinctive bass, interludes and fills note by note; reserve writers for plain chord/pad backing, simple arpeggios and basic drum pulses. The CLI specification examples below apply to an explicit automatic-generation request. A preset's track count, automatic balance, or successful render does not establish an intentional arrangement. Scale the work to the brief; do not expand a local edit or a short demo into a full production.
 
 ## Establish what the arrangement must serve
 

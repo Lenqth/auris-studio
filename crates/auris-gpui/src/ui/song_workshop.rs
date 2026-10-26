@@ -91,16 +91,13 @@ impl SongWorkshop {
         let cancel = self.cancel.clone();
         let request = self.captured_request.clone();
         let brief = self.captured_brief.clone();
+        let preferences = self.preferences.clone();
         let (sender, receiver) = mpsc::channel();
         for &index in &indices {
             self.pending[index] = true;
             self.progress[index] = String::new();
             self.errors[index] = None;
         }
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
         match std::thread::Builder::new()
             .name("auris-song-candidates".into())
             .spawn(move || {
@@ -108,11 +105,11 @@ impl SongWorkshop {
                     if cancel.load(Ordering::Acquire) {
                         break;
                     }
-                    let result = SongCandidate::generate_with(
+                    let result = auris_agent::song_authoring::generate(
+                        preferences.clone(),
                         ideas[index].clone(),
                         &brief,
                         &request,
-                        seed.wrapping_add(index as u64),
                         &cancel,
                         &mut |stage| {
                             let _ = sender.send(CandidateEvent::Progress(index, stage.to_owned()));

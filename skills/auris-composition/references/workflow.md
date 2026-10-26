@@ -2,6 +2,10 @@
 
 This reference records the concrete interfaces the `auris-composition` skill may use. Discover exact fields with MCP `discover_tools`/`tool_help` when the installed build differs.
 
+## Authored notes first
+
+For ordinary composition, create an empty project with MCP and write expressive parts using add_clip/read_notes/edit_notes. Decide the actual notes yourself; scripts may serialize them or copy an authored motif, not invent the melody algorithmically. Use automatic writers only for plain chord/pad backing, simple arpeggios and basic drum pulses. The CLI compose examples below are for an explicit automatic preset/recipe request. Finish arrangement, effects and track balance with the actual voices before rendering.
+
 ## Headless CLI
 
 For a complete delivery, follow [arrangement.md](arrangement.md) between establishing the composition and final export. It maps section/part revisions and protected MCP backing edits to the arrangement review.
@@ -27,7 +31,7 @@ The saved-project server exposes specification and composition tools:
 1. `create_project` or `open_project`.
 2. `inspect_project` to obtain stable track and clip IDs.
 3. `list_presets`, `list_progressions`, `spec_reference`, and `check_spec` for generated scores.
-4. `compose` to write a complete specification, or `edit_notes`/`generate_phrase` for targeted material.
+4. `add_clip`/`read_notes`/`edit_notes` to author expressive parts. `generate_phrase` is optional for mechanical backing only. Use `compose` only for an explicitly requested automatic preset/specification score.
 5. `accompany` for backing parts under an existing melody.
 6. `inspect_project`, `inspect_audio`/`analyze`, and `preview_composition` to verify.
 7. `render` and `verify_render` for delivery files.
