@@ -213,6 +213,9 @@ impl ConsonantWidths {
 /// "behind the score" without keeping the frames themselves.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SingerTake {
+    /// Immutable synthesis evidence captured when this take was generated; older takes are unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Box<crate::synthesis::SynthesisProvenance>>,
     /// The audio source holding the rendered waveform, starting at the beginning of the
     /// timeline.
     pub source: super::SourceId,

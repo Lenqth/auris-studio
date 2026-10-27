@@ -941,6 +941,60 @@ pub fn clap_search_paths() -> Vec<PathBuf> {
 }
 
 impl Session {
+    pub(crate) fn analysis_loaded_fonts(
+        &self,
+    ) -> Vec<(auris_core::SoundFontId, Arc<auris_io::SoundFont>)> {
+        self.project
+            .soundfonts
+            .keys()
+            .filter_map(|id| self.fonts.get(*id).map(|font| (*id, font)))
+            .collect()
+    }
+    /// Snapshot current hosted patches/parameters without editing the source document.
+    pub(crate) fn analysis_render_project(&mut self) -> Result<Project, SessionError> {
+        let mut project = self.project.clone();
+        self.vst3.snapshot_for_render(&mut project)?;
+        for track in &mut project.tracks {
+            let id = track.id;
+            if let Some(instrument) = track.kind.as_instrument_mut()
+                && instrument.instrument_id.starts_with("clap:")
+            {
+                instrument.instrument_state = self
+                    .hosted
+                    .sound_state(PluginWindow::Instrument(id), &instrument.instrument_state)?;
+            }
+        }
+        for strip in project
+            .tracks
+            .iter_mut()
+            .map(|t| &mut t.mixer)
+            .chain([&mut project.master])
+        {
+            for effect in &mut strip.effects {
+                if effect.effect_id.starts_with("clap:") {
+                    effect.state = self
+                        .hosted
+                        .sound_state(PluginWindow::Effect(effect.id), &effect.state)?;
+                }
+            }
+        }
+        Ok(project)
+    }
+
+    pub(crate) fn render_plugin_metadata(
+        &mut self,
+        which: PluginWindow,
+    ) -> Option<serde_json::Value> {
+        if let Some(info) = self.vst3.render_metadata(which) {
+            return Some(info);
+        }
+        let plugin = self.hosted.window_slot(which)?.plugin_mut()?;
+        let info = plugin.info();
+        Some(
+            serde_json::json!({"format":"clap","id":info.clap_id,"name":info.name,"vendor":info.vendor,"version":info.version}),
+        )
+    }
+
     /// Every `.clap` file installed in the usual places, plus anywhere else asked for.
     ///
     /// Only the files: opening them is what [`Self::hosted_plugins_in`] does, and a browser that
@@ -1255,6 +1309,49 @@ mod tests {
     use auris_core::plugin::{Effect, ProcessContext};
     use auris_core::time::Ticks;
     use auris_core::{AssetPath, AudioBuffer};
+
+    #[test]
+    fn analysis_snapshot_captures_actual_hosted_patch_and_metadata_without_editing() {
+        let scratch = super::super::fixtures::Scratch::new("analysis-clap-state");
+        let file = scratch.join("tone.clap");
+        std::fs::write(&file, b"fixture").unwrap();
+        let mut session = super::super::fixtures::session();
+        session
+            .hosted
+            .libraries
+            .insert(file.clone(), instrument_library());
+        let track = session.add_default_instrument_track("Tone").unwrap();
+        session
+            .set_hosted_instrument(track, &file, TONE_ID)
+            .unwrap();
+        let before = session.project.clone();
+        session
+            .hosted
+            .instruments
+            .get_mut(&track)
+            .unwrap()
+            .plugin_mut()
+            .unwrap()
+            .load_state(&0.25f32.to_le_bytes())
+            .unwrap();
+        let snapshot = session.analysis_render_project().unwrap();
+        let state = &snapshot
+            .track(track)
+            .unwrap()
+            .kind
+            .as_instrument()
+            .unwrap()
+            .instrument_state;
+        assert_eq!(state.hosted_bytes(), Some(0.25f32.to_le_bytes().to_vec()));
+        assert!(state.params.values().any(|v| *v == 0.25));
+        let metadata = session
+            .render_plugin_metadata(PluginWindow::Instrument(track))
+            .unwrap();
+        assert_eq!(metadata["format"], "clap");
+        assert!(metadata["vendor"].is_string());
+        assert!(metadata["version"].is_string());
+        assert_eq!(session.project, before);
+    }
 
     #[test]
     fn reusable_sound_captures_effect_values_changed_inside_the_plugin() {

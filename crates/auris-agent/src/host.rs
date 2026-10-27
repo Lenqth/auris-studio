@@ -40,7 +40,11 @@ impl ToolHost {
             .into_iter()
             .map(|mut tool| {
                 toolbox::compact_parameters(&mut tool.parameters);
-                tool.description = toolbox::concise_description(&tool.description);
+                // Full contracts stay available through tool_help; schema growth must not
+                // crowd ordinary requests out of the default native-model context.
+                let concise = toolbox::concise_description(&tool.description);
+                let sentence = concise.split(". ").next().unwrap_or_default();
+                tool.description = sentence.to_owned();
                 tool
             })
             .collect()
@@ -48,6 +52,33 @@ impl ToolHost {
 
     pub(crate) fn contains(name: &str) -> bool {
         Self::catalog().iter().any(|tool| tool.name == name)
+    }
+
+    pub(crate) async fn call_with_origin(
+        &self,
+        name: &str,
+        args: Value,
+        origin: permissions::PermissionOrigin,
+    ) -> Result<Value, String> {
+        permissions::with_origin(origin, self.call(name, args)).await
+    }
+
+    pub(crate) async fn traced_call(&self, name: &str, args: Value) -> Result<Value, String> {
+        // MCP request identities are distinct from a CLI's model-side tool IDs.
+        let id = format!("live-mcp-{}", uuid::Uuid::new_v4());
+        self.bridge
+            .emit(json!({"event":"trace_call","call_id":id,"tool":name}));
+        let result = self
+            .call_with_origin(
+                name,
+                args,
+                permissions::call_origin(Some(&id), name, "live_mcp"),
+            )
+            .await;
+        let ok = result.as_ref().is_ok_and(|reply| reply["ok"] == true);
+        self.bridge
+            .emit(json!({"event":"trace_result","call_id":id,"tool":name,"ok":ok}));
+        result
     }
 
     pub(crate) async fn call(&self, name: &str, args: Value) -> Result<Value, String> {
@@ -467,10 +498,18 @@ mod tests {
             } else {
                 json!({"transcription":draft,"at_tick":3840})
             };
-            let call = host.call("import_transcription", args);
+            let call = host.call_with_origin(
+                "import_transcription",
+                args,
+                permissions::call_origin(Some("source-call"), "import_transcription", "fixture"),
+            );
             let owner = async {
                 if file {
                     let event = next_event(&events).await;
+                    assert_eq!(
+                        event["origin"],
+                        json!({"kind":"tool_call","call_id":"source-call","tool":"import_transcription"})
+                    );
                     assert_eq!(event["tool"], "cli_file_read");
                     commands
                         .send(
@@ -484,6 +523,10 @@ mod tests {
                 }
                 let event = next_event(&events).await;
                 assert_eq!(event["event"], "permission");
+                assert_eq!(
+                    event["origin"],
+                    json!({"kind":"tool_call","call_id":"source-call","tool":"import_transcription"})
+                );
                 assert_eq!(event["args"]["command"]["draft"]["transcription"], draft);
                 let operation = auris_session::agent_policy::Operation::parse(
                     event["tool"].as_str().unwrap(),

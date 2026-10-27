@@ -66,6 +66,58 @@ impl Vst3Plugins {
         Some(self.instruments.get(&track)?.source_revision)
     }
 
+    pub(super) fn snapshot_for_render(&self, project: &mut Project) -> Result<(), SessionError> {
+        for track in &mut project.tracks {
+            if let Some(instrument) = track.kind.as_instrument_mut()
+                && let Some(slot) = self.instruments.get(&track.id)
+            {
+                instrument
+                    .instrument_state
+                    .set_hosted_bytes(&slot.plugin.save_state()?);
+                for descriptor in slot.plugin.parameters() {
+                    if let Some(value) = slot.plugin.value(descriptor.id) {
+                        instrument
+                            .instrument_state
+                            .params
+                            .insert(descriptor.key.to_string(), value);
+                    }
+                }
+            }
+        }
+        for strip in project
+            .tracks
+            .iter_mut()
+            .map(|t| &mut t.mixer)
+            .chain([&mut project.master])
+        {
+            for effect in &mut strip.effects {
+                if let Some(slot) = self.slots.get(&effect.id) {
+                    effect.state.set_hosted_bytes(&slot.plugin.save_state()?);
+                    for descriptor in slot.plugin.parameters() {
+                        if let Some(value) = slot.plugin.value(descriptor.id) {
+                            effect
+                                .state
+                                .params
+                                .insert(descriptor.key.to_string(), value);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn render_metadata(&self, which: super::PluginWindow) -> Option<serde_json::Value> {
+        let plugin = match which {
+            super::PluginWindow::Instrument(track) => &self.instruments.get(&track)?.plugin,
+            super::PluginWindow::Effect(slot) => &self.slots.get(&slot)?.plugin,
+        };
+        let info = plugin.info();
+        Some(
+            serde_json::json!({"format":"vst3","id":info.class_id,"name":info.name,"vendor":info.vendor,"version":info.version}),
+        )
+    }
+
     /// Consumes native editor notifications and mirrors their values into the document.
     ///
     /// Parameter values already reached renderers through their atomic snapshots. Opaque preset

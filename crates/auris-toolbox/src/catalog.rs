@@ -349,7 +349,7 @@ pub mod tool_help {
                 })?;
             schema["properties"]["operation"] = selected.clone();
         } else {
-            crate::compact_parameters(&mut schema);
+            crate::tool_exposure::compact_help_parameters(&mut schema);
         }
         let project = "/absolute/path/Song/Song.auris";
         let mut examples = match name {
@@ -438,7 +438,7 @@ mod tests {
             )
             .unwrap();
             let mut expected = tool.parameters.clone();
-            crate::compact_parameters(&mut expected);
+            crate::tool_exposure::compact_help_parameters(&mut expected);
             assert_eq!(help["parameters"], expected);
             if crate::session_tools::definitions()
                 .iter()

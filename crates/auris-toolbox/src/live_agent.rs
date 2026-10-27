@@ -71,14 +71,23 @@ pub mod transcription_import {
     /// Stable live tool name.
     pub const NAME: &str = "import_transcription";
     /// Tool instructions shared by native APIs, Codex and Claude Code.
-    pub const DESCRIPTION: &str = "Explicitly accept an existing note draft as new editable tracks. Supply exactly one of transcription (inline external piano NoteTranscription) or path (absolute local JSON external piano NoteTranscription, up to 32 MiB). External JSON contains source:{method, optional model/artifact_sha256/audio_sha256}, seconds, notes:[{pitch,start,end,strength}], optional limitations. Piano pitch 21..108, strength 0..1, finite positive source duration up to ten minutes and 1..200000 notes. Times are source seconds; at_tick is an absolute insertion tick (defaults to 0). Provenance claims do not verify musical accuracy. Existing music/tempo and overlapping notes are preserved; review with read_notes/inspect_audio.";
+    pub const DESCRIPTION: &str = "Preview (preview=true) then import external notes as new tracks in one Undo. Supply exactly one of legacy piano transcription, versioned multitrack, or absolute local JSON path up to 32 MiB. Multitrack apply requires expected_revision and preview_digest returned by preview; any draft, sound_id, name or at_tick change requires re-preview. Version 1 contains source SHA-256/seconds, recognizer, tracks and MIDI notes. Version 2 additionally requires performance: explicit destination timeline policy, source tempo/meter anchors, per-part channel, linear semitone bends, normalized CC including terminal states, and written lyrics/readings/per-note IPA alignment. Read tool_help for full units and limits. Preserve destination maps unless replacement is explicitly selected. Unknown instruments remain declared in provenance; omitted sound_id uses a guide. Unsupported events and values are rejected. Provenance does not verify musical accuracy or authenticity.";
     /// Exactly one immutable recognized draft or explicitly claimed external piano draft.
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     #[serde(deny_unknown_fields)]
     pub struct Args {
-        /// Inline external piano note draft; omit path.
+        /// Inline external piano note draft; omit multitrack/path.
         pub transcription: Option<auris_session::NoteTranscription>,
-        /// Absolute local JSON NoteTranscription file, up to 32 MiB; omit transcription.
+        /// Version-one note or version-two performance draft; omit transcription/path.
+        pub multitrack: Option<auris_session::MultitrackTranscription>,
+        /// Validate and preview the exact draft and timeline mapping without editing.
+        #[serde(default)]
+        pub preview: bool,
+        /// Required for multitrack apply: exact destination revision returned by preview.
+        pub expected_revision: Option<String>,
+        /// Exact preview digest binding the draft, name, insertion and sound assignments.
+        pub preview_digest: Option<String>,
+        /// Absolute local JSON NoteTranscription file, up to 32 MiB; omit multitrack/transcription.
         pub path: Option<String>,
         /// Optional new piano track/clip name, up to 256 bytes.
         pub name: Option<String>,
@@ -88,8 +97,17 @@ pub mod transcription_import {
     impl Args {
         /// Reject ambiguous sources and invalid insertion metadata before file authorization.
         pub fn validate(&self) -> Result<(), String> {
-            if self.transcription.is_some() == self.path.is_some() {
-                return Err("Supply exactly one of transcription or path".into());
+            if [
+                self.transcription.is_some(),
+                self.multitrack.is_some(),
+                self.path.is_some(),
+            ]
+            .into_iter()
+            .filter(|present| *present)
+            .count()
+                != 1
+            {
+                return Err("Supply exactly one of transcription, multitrack or path".into());
             }
             if self
                 .name
@@ -112,24 +130,28 @@ pub mod transcription_import {
             if name.trim().is_empty() || name.len() > 256 || at_tick < 0 {
                 return Err("Use a nonempty name up to 256 bytes and nonnegative at_tick".into());
             }
-            let draft = match (self.transcription, self.path) {
-                (Some(transcription), None) => {
+            let draft = match (self.transcription, self.path, self.multitrack) {
+                (Some(transcription), None, None) => {
                     auris_session::TranscriptionDraft::Piano { transcription }
                 }
-                (None, Some(path)) => auris_session::TranscriptionDraft::Piano {
-                    transcription: auris_session::read_transcription_file(
-                        std::path::Path::new(&path),
-                        control,
-                    )
-                    .map_err(|e| e.to_string())?,
-                },
-                _ => return Err("Supply exactly one of transcription or path".into()),
+                (None, Some(path), None) => auris_session::read_external_transcription_file(
+                    std::path::Path::new(&path),
+                    control,
+                )
+                .map_err(|e| e.to_string())?,
+                (None, None, Some(transcription)) => {
+                    auris_session::TranscriptionDraft::Multitrack { transcription }
+                }
+                _ => return Err("Supply exactly one of transcription, multitrack or path".into()),
             };
             draft.validate()?;
             Ok(auris_session::live_agent::Command::ImportTranscription {
                 draft: Box::new(draft),
                 name,
                 at_tick,
+                preview: self.preview,
+                expected_revision: self.expected_revision,
+                preview_digest: self.preview_digest,
             })
         }
     }

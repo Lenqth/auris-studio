@@ -1,8 +1,10 @@
 //! Snapshot-based file operations; workers stage outputs and the owner publishes them.
 
 use super::Command;
+mod analysis;
 mod peak_export;
 use crate::{Session, prelude::*};
+pub use analysis::{AnalysisRange, AnalysisRender};
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
@@ -68,6 +70,7 @@ enum Work {
         settings: WavExportSettings,
         audition_root: Option<PathBuf>,
         ceiling_db: f32,
+        manifest: Option<Box<analysis::Manifest>>,
     },
     Midi {
         job: crate::MidiExportJob,
@@ -101,7 +104,7 @@ enum Outcome {
         provenance: std::collections::BTreeMap<String, String>,
     },
     ImportedMidi(Box<crate::MidiImportResult>, Ticks),
-    Audio(Vec<StagedAudio>),
+    Audio(Vec<StagedAudio>, Option<Box<analysis::Manifest>>),
     Midi(crate::MidiExportResult),
     Verified(String),
 }
@@ -113,6 +116,7 @@ struct StagedAudio {
     source_true_peak_db: f32,
     attenuation_db: f32,
     ceiling_db: f32,
+    source_inspection: Option<crate::ExportInspection>,
 }
 
 fn local_path(value: &str) -> Result<PathBuf, String> {
@@ -216,6 +220,7 @@ impl FileJob {
                 settings,
                 audition_root,
                 ceiling_db,
+                mut manifest,
             } => {
                 if let Some(folder) = &folder {
                     guard
@@ -251,10 +256,24 @@ impl FileJob {
                         }
                     }
                 }
-                let staged = peak_export::stage(
-                    &mut job, targets, &options, settings, ceiling_db, cancelled,
-                )?;
-                Outcome::Audio(staged)
+                let staged = if let Some(manifest) = &mut manifest {
+                    manifest.freeze_dependencies()?;
+                    manifest.value["loaded_audio"] = job.audio_content_identity();
+                    manifest.check_dependencies()?;
+                    job.validate_complete().map_err(|e| e.to_string())?;
+                    analysis::stage(
+                        &mut job,
+                        targets,
+                        &options,
+                        manifest.context_from_start,
+                        cancelled,
+                    )?
+                } else {
+                    peak_export::stage(
+                        &mut job, targets, &options, settings, ceiling_db, cancelled,
+                    )?
+                };
+                Outcome::Audio(staged, manifest)
             }
             Work::Midi { job, guard, path } => {
                 guard.check_file(&path).map_err(|e| e.to_string())?;
@@ -348,12 +367,51 @@ impl Session {
                 bit_depth,
                 include_tail,
                 ceiling_db,
+                analysis,
             } => {
+                let explicit_ceiling = ceiling_db.is_some();
                 let ceiling_db = ceiling_db.unwrap_or(-1.0);
                 if !ceiling_db.is_finite() || !(-12.0..=-0.1).contains(&ceiling_db) {
                     return Err("ceiling_db must be finite within -12..-0.1 dBTP".into());
                 }
-                let options = self.agent_export_range(range, include_tail)?;
+                if analysis.is_some()
+                    && (range.is_some()
+                        || include_tail
+                        || explicit_ceiling
+                        || bit_depth.is_some_and(|bits| bits != 32))
+                {
+                    return Err("Analysis has its own precise range, no appended tail, no ceiling and float32 encoding; omit range/include_tail/ceiling_db/bit_depth".into());
+                }
+                let options = match &analysis {
+                    Some(request) => request.options()?,
+                    None => self.agent_export_range(range, include_tail)?,
+                };
+                let mut render_project = if analysis.is_some() {
+                    self.analysis_render_project().map_err(|e| e.to_string())?
+                } else {
+                    self.project().clone()
+                };
+                let source_snapshot_sha256 = if analysis.is_some() {
+                    use sha2::{Digest, Sha256};
+                    hex::encode(Sha256::digest(
+                        serde_json::to_vec(&render_project).map_err(|e| e.to_string())?,
+                    ))
+                } else {
+                    String::new()
+                };
+                if let Some(request) = &analysis {
+                    request.select_signal(&mut render_project)?;
+                }
+                let mut manifest = analysis
+                    .as_ref()
+                    .map(|request| {
+                        self.analysis_manifest(request, &options, &render_project)
+                            .map(Box::new)
+                    })
+                    .transpose()?;
+                if let Some(manifest) = &mut manifest {
+                    manifest.value["source_snapshot_sha256"] = source_snapshot_sha256.into();
+                }
                 let settings = WavExportSettings {
                     bit_depth: match bit_depth.unwrap_or(24) {
                         16 => WavBitDepth::Int16,
@@ -363,8 +421,8 @@ impl Session {
                     },
                     ..Default::default()
                 };
-                let job = self.render_job();
-                let (targets, folder) = match destination {
+                let job = self.job_for(render_project);
+                let (mut targets, folder) = match destination {
                     AudioDestination::Mix { path } => (vec![(local_path(&path)?, None)], None),
                     AudioDestination::Stems { folder } => {
                         let folder = local_path(&folder)?;
@@ -383,6 +441,23 @@ impl Session {
                         )
                     }
                 };
+                if let Some(request) = &analysis {
+                    if let Some(track) = request.track {
+                        if folder.is_some() || self.project().track(TrackId(track)).is_none() {
+                            return Err("Analysis track requires a mix destination and an existing track or bus".into());
+                        }
+                        targets[0].1 = Some(TrackId(track));
+                    }
+                    let path = local_path(&request.manifest_path)?;
+                    self.export_guard()
+                        .check_file(&path)
+                        .map_err(|e| e.to_string())?;
+                    if path.exists() || targets.iter().any(|(target, _)| *target == path) {
+                        return Err(
+                            "Manifest must be a new file distinct from every audio output".into(),
+                        );
+                    }
+                }
                 Work::Audio {
                     job,
                     guard: self.export_guard(),
@@ -392,6 +467,7 @@ impl Session {
                     settings,
                     audition_root: None,
                     ceiling_db,
+                    manifest,
                 }
             }
             Command::Preview { range } => {
@@ -434,6 +510,7 @@ impl Session {
                     },
                     audition_root: self.project_folder().map(std::path::Path::to_owned),
                     ceiling_db: -1.0,
+                    manifest: None,
                 }
             }
             Command::ExportMidi { output } => {
@@ -542,7 +619,36 @@ impl Session {
                         .to_string(),
                 )
             }
-            Outcome::Audio(staged) => {
+            Outcome::Audio(staged, manifest) => {
+                let staged_manifest = if let Some(manifest) = &manifest {
+                    use sha2::{Digest, Sha256};
+                    use std::io::Write;
+                    let current = self.analysis_render_project().map_err(|e| e.to_string())?;
+                    let current = hex::encode(Sha256::digest(
+                        serde_json::to_vec(&current).map_err(|e| e.to_string())?,
+                    ));
+                    if manifest.value["source_snapshot_sha256"] != current {
+                        return Err("Hosted source state changed during analysis render; no output was published".into());
+                    }
+                    manifest.check_dependencies()?;
+                    self.export_guard()
+                        .check_file(&manifest.path)
+                        .map_err(|e| e.to_string())?;
+                    if manifest.path.exists() {
+                        return Err("Manifest already exists".into());
+                    }
+                    let parent = manifest.path.parent().ok_or("Missing manifest parent")?;
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    let mut file =
+                        tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+                    let mut value = manifest.value.clone();
+                    value["files"] = serde_json::json!(staged.iter().map(|file|serde_json::json!({"path":file.path,"encoded":file.inspection,"source":file.source_inspection,"gain_db":0.0})).collect::<Vec<_>>());
+                    serde_json::to_writer_pretty(&mut file, &value).map_err(|e| e.to_string())?;
+                    file.flush().map_err(|e| e.to_string())?;
+                    Some(file)
+                } else {
+                    None
+                };
                 for StagedAudio { path, .. } in &staged {
                     self.export_guard()
                         .check_file(path)
@@ -559,14 +665,21 @@ impl Session {
                     source_true_peak_db,
                     attenuation_db,
                     ceiling_db,
+                    source_inspection,
                 } in staged
                 {
                     encoded.publish_noclobber().map_err(|e| {
                         format!("Publication failed: {e}; already published: {files:?}")
                     })?;
-                    files.push(serde_json::json!({"path":path,"encoded":inspection,"attenuation_db":attenuation_db,"source_true_peak_db":source_true_peak_db,"ceiling_db":ceiling_db}));
+                    files.push(serde_json::json!({"path":path,"encoded":inspection,"attenuation_db":attenuation_db,"source_true_peak_db":source_true_peak_db,"ceiling_db":if manifest.is_some(){None}else{Some(ceiling_db)},"source":source_inspection}));
                 }
-                Ok(serde_json::json!({"files":files,"document_unchanged":true}).to_string())
+                if let (Some(file), Some(manifest)) = (staged_manifest, &manifest) {
+                    file.persist_noclobber(&manifest.path).map_err(|e| {
+                        format!("Manifest publication failed: {e}; published: {files:?}")
+                    })?;
+                }
+                self.trace_published_files(&files);
+                Ok(serde_json::json!({"files":files,"manifest_path":manifest.as_ref().map(|m|&m.path),"provenance":manifest.map(|m|m.value),"document_unchanged":true}).to_string())
             }
         }
     }
@@ -679,6 +792,7 @@ mod tests {
                 bit_depth: Some(24),
                 include_tail: false,
                 ceiling_db: Some(-3.0),
+                analysis: None,
             })
             .unwrap()
             .run(&cancelled)
@@ -905,6 +1019,7 @@ mod tests {
             bit_depth: Some(24),
             include_tail: false,
             ceiling_db: None,
+            analysis: None,
         }
     }
 
@@ -1015,6 +1130,7 @@ mod tests {
                 bit_depth: None,
                 include_tail: false,
                 ceiling_db: None,
+                analysis: None,
             })
             .unwrap()
             .run(&cancelled)

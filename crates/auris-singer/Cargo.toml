@@ -29,6 +29,7 @@ log.workspace = true
 ort.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 serde_yaml_ng.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
@@ -42,3 +43,6 @@ ort = { workspace = true, features = ["directml"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 ort = { workspace = true, features = ["coreml"] }
+
+[dev-dependencies]
+tempfile.workspace = true

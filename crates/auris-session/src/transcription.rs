@@ -11,6 +11,42 @@ pub fn read_transcription_file(
     path: &Path,
     control: &AnalysisControl,
 ) -> Result<NoteTranscription, SessionError> {
+    let draft: NoteTranscription = read_draft_file(path, control)?;
+    draft
+        .validate()
+        .map_err(|e| SessionError::MusicAnalysis(e.to_string()))?;
+    Ok(draft)
+}
+
+/// Read a versioned multitrack or legacy piano draft through the same bounded file gate.
+pub fn read_external_transcription_file(
+    path: &Path,
+    control: &AnalysisControl,
+) -> Result<crate::TranscriptionDraft, SessionError> {
+    let value: serde_json::Value = read_draft_file(path, control)?;
+    let failure = |e: serde_json::Error| SessionError::MusicAnalysis(e.to_string());
+    let draft = if value.get("schema_version").is_some() {
+        crate::TranscriptionDraft::Multitrack {
+            transcription: serde_json::from_value(value).map_err(failure)?,
+        }
+    } else if value
+        .get("kind")
+        .is_some_and(|kind| kind == "piano" || kind == "multitrack")
+    {
+        serde_json::from_value(value).map_err(failure)?
+    } else {
+        crate::TranscriptionDraft::Piano {
+            transcription: serde_json::from_value(value).map_err(failure)?,
+        }
+    };
+    draft.validate().map_err(SessionError::MusicAnalysis)?;
+    Ok(draft)
+}
+
+fn read_draft_file<T: serde::de::DeserializeOwned>(
+    path: &Path,
+    control: &AnalysisControl,
+) -> Result<T, SessionError> {
     let failure = |message: &str| SessionError::MusicAnalysis(message.into());
     let check = || {
         if control.is_cancelled() {
@@ -54,10 +90,8 @@ pub fn read_transcription_file(
             return Err(failure("transcription JSON exceeds 32 MiB"));
         }
     }
-    let draft: NoteTranscription =
-        serde_json::from_slice(&bytes).map_err(|e| failure(&e.to_string()))?;
+    let draft: T = serde_json::from_slice(&bytes).map_err(|e| failure(&e.to_string()))?;
     check()?;
-    draft.validate().map_err(|e| failure(&e.to_string()))?;
     Ok(draft)
 }
 

@@ -35,6 +35,7 @@ pub mod project;
 pub mod registry;
 pub mod rng;
 pub mod structure;
+pub mod synthesis;
 pub mod theory;
 pub mod time;
 

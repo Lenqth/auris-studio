@@ -127,6 +127,7 @@ pub struct SingerVoiceLoadResult {
 
 /// A singer-take landing captured before inference for worker-side encoding and read-back.
 pub struct SingerLandingJob {
+    input_sha256: String,
     owner: Arc<auris_core::PluginRegistry>,
     revision: u64,
     folder: PathBuf,
@@ -142,6 +143,7 @@ pub struct SingerLandingJob {
 
 /// A staged singer WAV and decoded buffer awaiting a short stale-checked document edit.
 pub struct SingerLandingResult {
+    provenance: Box<auris_core::synthesis::SynthesisProvenance>,
     owner: Arc<auris_core::PluginRegistry>,
     revision: u64,
     folder: PathBuf,
@@ -1713,6 +1715,20 @@ impl Session {
             .map(|track| track.name.clone())
             .unwrap_or_else(|| "Singer".to_string());
         Ok(SingerLandingJob {
+            input_sha256: {
+                use sha2::Digest;
+                hex::encode(sha2::Sha256::digest(
+                    serde_json::to_vec(&(
+                        "auris-singing-input-v1",
+                        &plan.frames,
+                        &plan.score,
+                        plan.speaker,
+                        plan.seed,
+                        plan.sample_rate,
+                    ))
+                    .map_err(|e| auris_singer::SingError::Inference(e.to_string()))?,
+                ))
+            },
             owner: Arc::clone(&self.registry),
             revision: self.revision,
             folder,
@@ -1743,6 +1759,7 @@ impl Session {
         self.land_singer_render(
             plan,
             &auris_singer::SingingRender {
+                provenance: None,
                 samples: samples.to_vec(),
                 backend_pitch: None,
             },
@@ -1780,6 +1797,7 @@ impl Session {
             return Ok(None);
         }
         let SingerLandingResult {
+            provenance,
             track,
             fingerprint,
             seed,
@@ -1823,6 +1841,7 @@ impl Session {
             .and_then(|track| track.kind.as_singer_mut())
         {
             singer.take = Some(SingerTake {
+                provenance: Some(provenance),
                 source,
                 fingerprint,
                 seed,
@@ -2050,6 +2069,35 @@ impl SingerLandingJob {
         let file_name = super::record::take_file_name(&self.folder, &self.track_name);
         let inside = PathBuf::from(auris_io::AUDIO_DIR).join(&file_name);
         let path = self.folder.join(&inside);
+        let mut provenance = render.provenance.unwrap_or_else(|| {
+            Box::new(auris_core::synthesis::SynthesisProvenance {
+                schema_version: 1,
+                identity: auris_core::synthesis::SynthesisIdentity {
+                    backend: "unknown".into(),
+                    ..Default::default()
+                },
+                seed: self.seed,
+                ..Default::default()
+            })
+        });
+        // Bind persisted evidence to the actual landing input and output even for external callers.
+        provenance.input_sha256 = self.input_sha256;
+        provenance.seed = self.seed;
+        provenance
+            .settings
+            .insert("sample_rate".into(), self.sample_rate.to_string());
+        provenance.settings.insert(
+            "sample_encoding".into(),
+            "mono_float32_little_endian".into(),
+        );
+        {
+            use sha2::Digest;
+            let mut hash = sha2::Sha256::new();
+            for sample in &render.samples {
+                hash.update(sample.to_le_bytes());
+            }
+            provenance.output_audio_sha256 = hex::encode(hash.finalize());
+        }
         let buffer = AudioBuffer::from_planar(vec![render.samples], f64::from(self.sample_rate))?;
         let settings = auris_io::AudioExportSettings::from(auris_io::WavExportSettings {
             sample_rate: self.sample_rate,
@@ -2063,6 +2111,24 @@ impl SingerLandingJob {
         )?;
         writer.write(&buffer)?;
         let staged = writer.finish_staged()?;
+        {
+            use sha2::Digest;
+            use std::io::Read;
+            let mut file = std::fs::File::open(staged.staged_path())
+                .map_err(|e| auris_io::IoError::from_fs(staged.staged_path(), e))?;
+            let mut hash = sha2::Sha256::new();
+            let mut bytes = [0u8; 65536];
+            loop {
+                let count = file
+                    .read(&mut bytes)
+                    .map_err(|e| auris_io::IoError::from_fs(staged.staged_path(), e))?;
+                if count == 0 {
+                    break;
+                }
+                hash.update(&bytes[..count]);
+            }
+            provenance.output_wav_sha256 = Some(hex::encode(hash.finalize()));
+        }
         // `import_audio_file` allocates the project-rate buffer. Release the model-rate render
         // first so a take near the shared decoded-audio ceiling cannot transiently retain two
         // complete copies (plus the resampler's working storage) on this worker.
@@ -2079,6 +2145,7 @@ impl SingerLandingJob {
             return Ok(None);
         }
         Ok(Some(SingerLandingResult {
+            provenance,
             owner: self.owner,
             revision: self.revision,
             folder: self.folder,
@@ -2551,11 +2618,78 @@ mod tests {
                 .collect(),
         };
         let render = auris_singer::SingingRender {
+            provenance: Some(Box::new(auris_core::synthesis::SynthesisProvenance {
+                schema_version: 1,
+                identity: auris_core::synthesis::SynthesisIdentity {
+                    backend: "voicevox".into(),
+                    model: auris_core::synthesis::SynthesisComponent {
+                        id: auris_core::synthesis::IdentityEvidence::new(
+                            Some("server-model-a"),
+                            auris_core::synthesis::EvidenceSource::ServerDeclaration,
+                        ),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            })),
             samples: vec![0.0; plan.frames.len() * 256],
             backend_pitch: Some(pitch.clone()),
         };
         session.land_singer_render(&plan, &render).unwrap();
         assert_eq!(session.singer_backend_pitch(track), Some(&pitch));
+        let provenance = session
+            .require_singer(track)
+            .unwrap()
+            .take
+            .as_ref()
+            .unwrap()
+            .provenance
+            .clone()
+            .unwrap();
+        assert_eq!(provenance.identity.backend, "voicevox");
+        assert_eq!(provenance.input_sha256.len(), 64);
+        assert_eq!(provenance.output_audio_sha256.len(), 64);
+        assert_eq!(provenance.output_wav_sha256.as_ref().unwrap().len(), 64);
+        let mut next_render = render.clone();
+        next_render
+            .provenance
+            .as_mut()
+            .unwrap()
+            .identity
+            .model
+            .id
+            .value = Some("server-model-b".into());
+        session.land_singer_render(&plan, &next_render).unwrap();
+        assert_eq!(
+            session
+                .require_singer(track)
+                .unwrap()
+                .take
+                .as_ref()
+                .unwrap()
+                .provenance
+                .as_ref()
+                .unwrap()
+                .identity
+                .model
+                .id
+                .value
+                .as_deref(),
+            Some("server-model-b")
+        );
+        session.undo();
+        assert_eq!(
+            session
+                .require_singer(track)
+                .unwrap()
+                .take
+                .as_ref()
+                .unwrap()
+                .provenance
+                .as_ref(),
+            Some(&provenance)
+        );
         session.undo();
         assert!(session.singer_backend_pitch(track).is_none());
         session.redo();
@@ -2570,6 +2704,38 @@ mod tests {
         let saved = session.save_as(&scratch.join("Pitch.auris")).unwrap();
         session.open(&saved.document).unwrap();
         assert_eq!(session.singer_backend_pitch(track), Some(&pitch));
+        assert_eq!(
+            session
+                .require_singer(track)
+                .unwrap()
+                .take
+                .as_ref()
+                .unwrap()
+                .provenance
+                .as_ref(),
+            Some(&provenance)
+        );
+
+        let manifest_path = scratch.join("take.manifest.json");
+        let analysis: crate::live_agent::Command = serde_json::from_value(serde_json::json!({
+            "action":"render", "destination":{"kind":"mix","path":scratch.join("take.analysis.wav")},
+            "analysis":{"sample_rate":48000,"range":{"unit":"frames","start":0,"end":480},"manifest_path":manifest_path}
+        })).unwrap();
+        let cancelled = AtomicBool::new(false);
+        let rendered = session
+            .begin_agent_file_job(analysis)
+            .unwrap()
+            .run(&cancelled)
+            .unwrap();
+        session
+            .continue_agent_file_job(rendered, &cancelled)
+            .unwrap();
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+        assert_eq!(
+            manifest["singers"][0]["synthesis_provenance"],
+            serde_json::to_value(&provenance).unwrap()
+        );
 
         let take = session
             .require_singer(track)
@@ -2618,6 +2784,7 @@ mod tests {
                 .unwrap()
                 .run(
                     auris_singer::SingingRender {
+                        provenance: None,
                         samples: vec![0.0; 256],
                         backend_pitch: None,
                     },
@@ -2633,6 +2800,7 @@ mod tests {
             .unwrap()
             .run(
                 auris_singer::SingingRender {
+                    provenance: None,
                     samples: vec![0.0; 256],
                     backend_pitch: None,
                 },
@@ -2659,6 +2827,7 @@ mod tests {
             .unwrap()
             .run(
                 auris_singer::SingingRender {
+                    provenance: None,
                     samples: vec![0.0; 256],
                     backend_pitch: None,
                 },
@@ -2768,6 +2937,7 @@ mod tests {
             .as_singer_mut()
             .unwrap()
             .take = Some(SingerTake {
+            provenance: None,
             backend_pitch: None,
             source: auris_core::SourceId(999),
             fingerprint: original.fingerprint,
@@ -4012,6 +4182,7 @@ mod tests {
             .and_then(|track| track.kind.as_singer_mut())
         {
             singer.take = Some(SingerTake {
+                provenance: None,
                 backend_pitch: None,
                 source: auris_core::SourceId(999),
                 fingerprint,

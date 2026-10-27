@@ -154,14 +154,25 @@ pub fn concise_description(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(". ")
 }
-/// Remove field prose from transmitted schemas; full descriptions remain in tool_help.
-/// Only JSON Schema positions are visited, preserving literal const/default values and
-/// fields whose actual name happens to be description. Validation is unchanged.
+/// Remove prose and default annotations from transmitted schemas; help retains defaults.
+/// Only JSON Schema positions are visited, preserving literal const payloads and properties
+/// whose names happen to be description or default. Validation is unchanged.
 pub fn compact_parameters(value: &mut serde_json::Value) {
+    compact_annotations(value, false);
+}
+
+pub(crate) fn compact_help_parameters(value: &mut serde_json::Value) {
+    compact_annotations(value, true);
+}
+
+fn compact_annotations(value: &mut serde_json::Value, keep_defaults: bool) {
     let Some(schema) = value.as_object_mut() else {
         return;
     };
     schema.remove("description");
+    if !keep_defaults {
+        schema.remove("default");
+    }
     for key in [
         "properties",
         "patternProperties",
@@ -173,7 +184,7 @@ pub fn compact_parameters(value: &mut serde_json::Value) {
             .and_then(serde_json::Value::as_object_mut)
         {
             for child in entries.values_mut() {
-                compact_parameters(child);
+                compact_annotations(child, keep_defaults);
             }
         }
     }
@@ -191,7 +202,7 @@ pub fn compact_parameters(value: &mut serde_json::Value) {
         "contentSchema",
     ] {
         if let Some(child) = schema.get_mut(key) {
-            compact_parameters(child);
+            compact_annotations(child, keep_defaults);
         }
     }
     for key in ["oneOf", "allOf", "anyOf", "prefixItems"] {
@@ -200,7 +211,7 @@ pub fn compact_parameters(value: &mut serde_json::Value) {
             .and_then(serde_json::Value::as_array_mut)
         {
             for child in branches {
-                compact_parameters(child);
+                compact_annotations(child, keep_defaults);
             }
         }
     }
@@ -272,6 +283,7 @@ mod tests {
         match value {
             serde_json::Value::Object(o) => {
                 o.remove("description");
+                o.remove("default");
                 for child in o.values_mut() {
                     without_descriptions(child);
                 }
@@ -286,9 +298,18 @@ mod tests {
     }
     #[test]
     fn compact_schema_preserves_named_description_fields_and_literal_payloads() {
-        let literal = serde_json::json!({"description":"literal user data"});
-        let mut schema = serde_json::json!({"type":"object","description":"schema prose","properties":{"description":{"type":"string","description":"field prose"},"payload":{"const":literal}},"required":["description"]});
+        let literal =
+            serde_json::json!({"description":"literal user data","default":"literal default data"});
+        let mut schema = serde_json::json!({"type":"object","description":"schema prose","default":{},"properties":{"description":{"type":"string","description":"field prose","default":"annotation"},"default":{"type":"integer"},"payload":{"const":literal}},"required":["description"]});
+        let mut help = schema.clone();
+        compact_help_parameters(&mut help);
+        assert_eq!(help["properties"]["description"]["default"], "annotation");
         compact_parameters(&mut schema);
+        assert!(schema.get("default").is_none());
+        assert_eq!(
+            schema["properties"]["default"],
+            serde_json::json!({"type":"integer"})
+        );
         assert!(schema.get("description").is_none());
         assert_eq!(
             schema["properties"]["description"],

@@ -280,6 +280,10 @@ pub struct Project {
     /// This is comparison metadata, not an alternative score or a regeneration algorithm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub composition_baseline: Option<CompositionBaseline>,
+    /// Declared external transcription JSON, keyed by its first imported clip.
+    /// Claims are retained for audit and do not certify a recognizer or its accuracy.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub transcription_provenance: BTreeMap<ClipId, String>,
     next_id: u64,
 }
 
@@ -337,6 +341,7 @@ impl Project {
             song_spec: None,
             creation_brief: None,
             composition_baseline: None,
+            transcription_provenance: BTreeMap::new(),
             next_id: 1,
         }
     }

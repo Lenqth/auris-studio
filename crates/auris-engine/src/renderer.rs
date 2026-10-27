@@ -1450,6 +1450,7 @@ mod tests {
             .and_then(|track| track.kind.as_singer_mut())
         {
             singer.take = Some(auris_core::SingerTake {
+                provenance: None,
                 backend_pitch: None,
                 source,
                 fingerprint: 1,

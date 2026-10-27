@@ -1227,6 +1227,7 @@ mod tests {
             .as_singer_mut()
             .unwrap()
             .take = Some(auris_core::SingerTake {
+            provenance: None,
             source,
             fingerprint: 0,
             seed: 0,

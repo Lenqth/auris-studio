@@ -518,7 +518,14 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>, prompt: &str) -> Agent {
             definition.name,
             definition.description,
             definition.parameters,
-            move |args| {
+            move |mut args| {
+                let origin = args
+                    .as_object_mut()
+                    .and_then(|args| args.remove("__auris_call_origin"))
+                    .and_then(|origin| serde_json::from_value(origin).ok())
+                    .unwrap_or_else(|| {
+                        permissions::call_origin(None, &tool_name, "native_tool_without_dispatch")
+                    });
                 let bridge = bridge.clone();
                 let name = tool_name.clone();
                 Box::pin(async move {
@@ -539,7 +546,7 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>, prompt: &str) -> Agent {
                         )
                     })?;
                     let reply = host::ToolHost::new(bridge.clone())
-                        .call(&name, args)
+                        .call_with_origin(&name, args, origin)
                         .await
                         .map_err(ToolExecutionError::other)?;
                     if name == "inspect_audio" && reply["ok"] == true {
@@ -1024,12 +1031,32 @@ impl AgentHook for Reporter {
         }
         // Live calls authorize inside ToolHost so every transport crosses the same gate.
         if self.bridge.is_some() && host::ToolHost::contains(tool) {
-            return DispatchAction::proceed();
+            let mut args: serde_json::Value =
+                match serde_json::from_str(event.tool_args().unwrap_or_default()) {
+                    Ok(serde_json::Value::Object(args)) => args.into(),
+                    _ => return DispatchAction::skip("Tool arguments must be an object"),
+                };
+            // This reserved field is overwritten by the host and removed before validation.
+            args["__auris_call_origin"] = serde_json::to_value(permissions::call_origin(
+                event.call_id.map(ToString::to_string).as_deref(),
+                tool,
+                "native_dispatch",
+            ))
+            .expect("serializable identity");
+            return DispatchAction::rewrite_tool_args(event.kind, args);
         }
-        match permissions::authorize(
-            self.bridge.as_ref(),
+        let origin = permissions::call_origin(
+            event.call_id.map(ToString::to_string).as_deref(),
             tool,
-            event.tool_args().unwrap_or_default(),
+            "native_dispatch",
+        );
+        match permissions::with_origin(
+            origin,
+            permissions::authorize(
+                self.bridge.as_ref(),
+                tool,
+                event.tool_args().unwrap_or_default(),
+            ),
         )
         .await
         {

@@ -74,6 +74,7 @@ pub mod lyric_harness;
 mod lyrics;
 mod mixer;
 mod monitor;
+mod multitrack_transcription;
 mod musical_analysis;
 mod note_preview;
 pub(crate) mod notes;
@@ -416,6 +417,7 @@ pub struct Session {
     /// an expensive question thirty times a second would otherwise have no cheap way to know the
     /// old answer still stands. Monotonic within a session, meaningless across two.
     revision: u64,
+    pub(crate) execution_trace: std::cell::RefCell<crate::execution_trace::Recorder>,
     needs_rebuild: bool,
     /// Whether the meter has moved since the render graph was built.
     ///
@@ -718,6 +720,7 @@ impl Session {
             agent_request_serial: 0,
             transaction: None,
             revision: 0,
+            execution_trace: Default::default(),
             listening: Default::default(),
             needs_rebuild: false,
             meter_is_stale: false,
@@ -1416,6 +1419,7 @@ impl Session {
     /// Nothing while a gesture is open — see [`Self::can_undo`], which is the same rule stated as
     /// a question.
     pub fn undo(&mut self) -> Option<Edit> {
+        self.trace_edit_boundary("undo");
         if self.transaction.is_some() {
             return None;
         }
@@ -1439,6 +1443,7 @@ impl Session {
     ///
     /// Nothing while a gesture is open, for the reasons under [`Self::can_undo`].
     pub fn redo(&mut self) -> Option<Edit> {
+        self.trace_edit_boundary("redo");
         if self.transaction.is_some() {
             return None;
         }
@@ -1529,6 +1534,7 @@ impl Session {
     /// document dirty, so a command that records first and refuses after has already cost the
     /// user both — a phantom step that undoes nothing, and a redo branch that is simply gone.
     fn record(&mut self, edit: Edit) {
+        self.trace_edit_boundary(&format!("{edit:?}"));
         if self.transaction.is_none() {
             self.history.push(edit, &self.project);
         }
@@ -1561,6 +1567,7 @@ impl Session {
             .last_record
             .is_some_and(|(last, at)| last == edit && now.duration_since(at) < Self::COALESCE);
         if folds {
+            self.trace_edit_boundary(&format!("{edit:?}"));
             self.dirty = true;
             self.revision = self.revision.wrapping_add(1);
         } else {
@@ -1672,6 +1679,7 @@ impl Session {
 
     /// Replaces the whole document, keeping the engine in step.
     fn replace_project(&mut self, project: Project) {
+        self.trace_edit_boundary("replace_project");
         self.adopt_project(project);
         self.rebuild_graph();
         // The loop lives in the audio thread's transport and only `SetLoop` moves it, so a

@@ -360,7 +360,7 @@ impl Cli {
             let message = self.read().await?;
             if message["method"].is_string() {
                 if message.get("id").is_some() {
-                    self.server_request(&message, bridge).await?;
+                    self.server_request(&message, bridge, &turn).await?;
                 } else if message["method"] == "session/update"
                     && message["params"]["sessionId"] == self.session
                 {
@@ -398,6 +398,7 @@ impl Cli {
         &mut self,
         message: &Value,
         bridge: Option<&Bridge>,
+        turn: &Turn,
     ) -> Result<(), String> {
         let params = &message["params"];
         if message["method"] != "session/request_permission" {
@@ -418,8 +419,28 @@ impl Cli {
             && let (Some(bridge), Some(operation)) = (bridge, operation)
         {
             let _guard = bridge.tool_lock().await;
-            allowed = crate::permissions::authorize(Some(bridge), operation,
-                &json!({"backend":"opencode","tool":tool["title"],"input":tool["rawInput"],"request":tool,"within_project":false}).to_string()).await.is_ok();
+            let call_id = tool["toolCallId"].as_str();
+            let original_tool = call_id
+                .and_then(|id| turn.calls.get(id))
+                .map(|(name, _, _)| name.as_str())
+                .or_else(|| {
+                    tool["name"]
+                        .as_str()
+                        .filter(|name| NATIVE_TOOLS.contains(name))
+                })
+                .or_else(|| {
+                    tool["title"]
+                        .as_str()
+                        .filter(|name| NATIVE_TOOLS.contains(name))
+                });
+            let origin = match original_tool {
+                Some(name) => crate::permissions::call_origin(call_id, name, "opencode_approval"),
+                None => crate::permissions::PermissionOrigin::Independent {
+                    source: "opencode_approval_without_tool_identity".into(),
+                },
+            };
+            allowed = crate::permissions::with_origin(origin, crate::permissions::authorize(Some(bridge), operation,
+                &json!({"backend":"opencode","tool":tool["title"],"input":tool["rawInput"],"request":tool,"within_project":false}).to_string())).await.is_ok();
         }
         let kind = if allowed { "allow_once" } else { "reject_once" };
         let option = params["options"].as_array().and_then(|options| {

@@ -2,6 +2,13 @@
 
 use crate::{ToolGroups, tool_catalog, tool_group};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+
+fn schema_hash(parameters: &Value) -> String {
+    let mut parameters = parameters.clone();
+    crate::compact_parameters(&mut parameters);
+    hex::encode(Sha256::digest(parameters.to_string().as_bytes()))
+}
 
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -42,8 +49,14 @@ pub fn call_live_reference_in(
             }
             "capabilities" => {
                 let _: Empty = serde_json::from_value(args).map_err(invalid)?;
+                let audio_input_contract =
+                    auris_session::audio_input::AudioInputContract::from_env()?;
                 let names: Vec<_> = catalog.iter().map(|d| d.name.as_str()).collect();
-                Ok(json!({"context":"open_document","tools":names}).to_string())
+                let schemas:Vec<_>=catalog.iter().map(|d|json!({"name":d.name,"group":tool_group(&d.name),"schema_sha256":schema_hash(&d.parameters)})).collect();
+                let catalog_sha256 = schema_hash(&json!(schemas));
+                Ok(json!({"context":"open_document","tools":names,"tool_schemas":schemas,"catalog_sha256":catalog_sha256,"audio_input_contract":audio_input_contract,
+                    "feature_flags":{"arrangement":auris_session::arrangement::enabled()},
+                    "groups":catalog.iter().map(|d|tool_group(&d.name)).collect::<std::collections::BTreeSet<_>>()}).to_string())
             }
             "tool_help" => {
                 let request: crate::tool_help::Args =
@@ -131,6 +144,10 @@ pub fn call_saved(groups: &ToolGroups, name: &str, args: Value) -> Result<String
                     .collect::<Vec<_>>()
             );
             value["context"] = "saved_project".into();
+            value["audio_input_contract"] =
+                json!(auris_session::audio_input::AudioInputContract::from_env()?);
+            value["tool_schemas"] = json!(catalog.iter().filter(|tool|groups.allows(&tool.name)).map(|tool|json!({"name":tool.name,"group":tool_group(&tool.name),"schema_sha256":schema_hash(&tool.parameters)})).collect::<Vec<_>>());
+            value["catalog_sha256"] = schema_hash(&value["tool_schemas"]).into();
             Ok(value.to_string())
         }
         "discover_tools" => discover_saved(
@@ -194,6 +211,48 @@ fn discover_saved(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capability_hashes_match_the_transmitted_saved_and_live_schemas() {
+        let live = crate::live_agent::definitions();
+        let live_capabilities: Value = serde_json::from_str(
+            &call_live_reference_in("capabilities", json!({}), &live)
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        let groups = ToolGroups::default();
+        let saved_capabilities: Value =
+            serde_json::from_str(&call_saved(&groups, "capabilities", json!({})).unwrap()).unwrap();
+        for (report, catalog) in [
+            (
+                live_capabilities,
+                live.into_iter()
+                    .map(|tool| (tool.name, tool.parameters))
+                    .collect::<Vec<_>>(),
+            ),
+            (
+                saved_capabilities,
+                tool_catalog()
+                    .into_iter()
+                    .map(|tool| (tool.name, tool.parameters))
+                    .collect(),
+            ),
+        ] {
+            for (name, mut transmitted) in catalog {
+                // The MCP tools/list and native tool templates use this public wire projection.
+                crate::compact_parameters(&mut transmitted);
+                let expected = hex::encode(Sha256::digest(transmitted.to_string().as_bytes()));
+                let contract = report["tool_schemas"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|tool| tool["name"] == name)
+                    .unwrap();
+                assert_eq!(contract["schema_sha256"], expected, "{name}");
+            }
+        }
+    }
 
     #[test]
     fn optional_host_tools_are_shared_by_capabilities_discovery_and_full_help() {

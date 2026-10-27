@@ -510,6 +510,24 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn default_native_catalog_leaves_room_for_a_user_prompt() {
+        let prefs = auris_session::AgentPreferences {
+            model: "mock".into(),
+            ..Default::default()
+        };
+        let Command::Run(options) = parse_args(&[], &|_| None, &prefs).unwrap() else {
+            panic!()
+        };
+        let agent = build_for_worker(&options, None).unwrap();
+        let guard = Guard::new(&agent, Some(32768), 4096).await.unwrap();
+        assert!(
+            guard.schema_tokens + 1024 <= 32768,
+            "catalog estimate {} leaves too little default context",
+            guard.schema_tokens
+        );
+    }
+
+    #[tokio::test]
     async fn context_guard_budgets_the_configured_prompt() {
         let mut prefs = auris_session::AgentPreferences {
             model: "mock".into(),

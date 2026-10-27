@@ -217,6 +217,7 @@ impl Resources {
 }
 
 pub(super) struct VarianceBackend {
+    pub(super) model_components: BTreeMap<String, auris_core::synthesis::SynthesisComponent>,
     linguistic: Session,
     predictor: Session,
     symbols: Vec<String>,
@@ -305,8 +306,37 @@ impl VarianceBackend {
         } else {
             None
         };
+        let mut model_components = BTreeMap::from([
+            (
+                "linguistic".into(),
+                crate::backend::model_component(&linguistic_path),
+            ),
+            (
+                "variance".into(),
+                crate::backend::model_component(&predictor_path),
+            ),
+        ]);
         let (linguistic, linguistic_gpu) = open_session(&linguistic_path, acceleration)?;
         let (predictor, predictor_gpu) = open_session(&predictor_path, acceleration)?;
+        crate::backend::observe_model_metadata(
+            model_components
+                .get_mut("linguistic")
+                .expect("linguistic component"),
+            &linguistic,
+        );
+        crate::backend::observe_model_metadata(
+            model_components
+                .get_mut("variance")
+                .expect("variance component"),
+            &predictor,
+        );
+        if crate::backend::hash_artifact(&linguistic_path) != model_components["linguistic"].sha256
+            || crate::backend::hash_artifact(&predictor_path) != model_components["variance"].sha256
+        {
+            return Err(SingError::Metadata(
+                "Predictor files changed while loading".into(),
+            ));
+        }
         let channels: Vec<_> = ["energy", "breathiness", "voicing", "tension"]
             .into_iter()
             .filter(|name| predictor.inputs().iter().any(|input| input.name() == *name))
@@ -326,6 +356,7 @@ impl VarianceBackend {
         }
         Ok(Self {
             linguistic,
+            model_components,
             predictor,
             symbols,
             resources,

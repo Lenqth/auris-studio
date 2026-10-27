@@ -5,6 +5,31 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_REQUEST: AtomicU64 = AtomicU64::new(1);
 
+pub(crate) use auris_session::execution_trace::PermissionOrigin;
+
+tokio::task_local! {
+    static CALL_ORIGIN: PermissionOrigin;
+}
+
+pub(crate) async fn with_origin<T>(
+    origin: PermissionOrigin,
+    task: impl std::future::Future<Output = T>,
+) -> T {
+    CALL_ORIGIN.scope(origin, task).await
+}
+
+pub(crate) fn call_origin(id: Option<&str>, tool: &str, source: &str) -> PermissionOrigin {
+    match id.filter(|id| !id.is_empty()) {
+        Some(id) => PermissionOrigin::ToolCall {
+            call_id: id.into(),
+            tool: tool.into(),
+        },
+        None => PermissionOrigin::Independent {
+            source: source.into(),
+        },
+    }
+}
+
 pub(super) async fn authorize(
     bridge: Option<&Bridge>,
     tool: &str,
@@ -33,8 +58,14 @@ pub(super) async fn authorize(
         };
     };
     let id = NEXT_REQUEST.fetch_add(1, Ordering::Relaxed);
+    let origin =
+        CALL_ORIGIN
+            .try_with(Clone::clone)
+            .unwrap_or_else(|_| PermissionOrigin::Independent {
+                source: "host_operation".into(),
+            });
     let response = bridge
-        .exchange(serde_json::json!({"event":"permission", "id":id, "tool":tool, "args":args}))
+        .exchange(serde_json::json!({"event":"permission", "id":id, "tool":tool, "args":args, "origin":origin}))
         .await?;
     if response["event"] != "permission_result" || response["id"] != id {
         bridge.block_tool_recovery();

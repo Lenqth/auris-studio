@@ -246,6 +246,61 @@ fn review_requests(typed: &[String]) -> Vec<String> {
 }
 
 impl AurisApp {
+    /// Common wire-event route used by polling and the headless desktop harness.
+    pub(super) fn route_agent_control_event(&mut self, event: &AgentEvent) -> bool {
+        self.observe_agent_trace_event(event);
+        if !self.agent_chat.interrupting
+            && let AgentEvent::Permission { id, tool, args, .. } = event
+        {
+            self.agent_permission(*id, tool.clone(), args.clone());
+            return true;
+        }
+        false
+    }
+    /// Observe the same parsed events used by the desktop polling path before policy/execution.
+    pub(super) fn observe_agent_trace_event(&self, event: &AgentEvent) {
+        match event {
+            AgentEvent::Trace { call_id, tool, ok } => {
+                if let Some(ok) = ok {
+                    let _ = self.session.record_execution_outcome(
+                        call_id,
+                        tool,
+                        if *ok { "success" } else { "failed" },
+                    );
+                } else {
+                    let _ = self.session.record_execution_call(call_id, tool);
+                }
+            }
+            AgentEvent::Call { call_id, tool, .. } => {
+                let _ = self.session.record_execution_call(call_id, tool);
+            }
+            AgentEvent::Result {
+                call_id, tool, ok, ..
+            } => {
+                let _ = self.session.record_execution_outcome(
+                    call_id,
+                    tool,
+                    if *ok { "success" } else { "failed" },
+                );
+            }
+            AgentEvent::Permission {
+                id,
+                origin,
+                tool,
+                args,
+            } => {
+                let operation = Operation::parse(tool, args)
+                    .map(|operation| operation.name)
+                    .unwrap_or_else(|_| tool.clone());
+                let _ = self
+                    .session
+                    .record_permission_request(*id, origin.clone(), &operation);
+            }
+            AgentEvent::Ended | AgentEvent::Error { .. } => self.session.cancel_execution_calls(),
+            _ => {}
+        }
+    }
+
     /// Opens or closes the permission rules and reveals their start when they become visible.
     fn set_agent_rules_open(&mut self, open: bool) {
         self.agent_chat.controls.rules_open = open;
@@ -344,6 +399,9 @@ impl AurisApp {
     }
 
     fn permission_result(&mut self, id: u64, ok: bool, reason: &str) {
+        let _ = self
+            .session
+            .record_permission_outcome(id, if ok { "allowed" } else { "denied" });
         let wire =
             serde_json::json!({"event":"permission_result", "id":id, "ok":ok, "reason":reason});
         if let Some(link) = self.agent_chat.link.as_mut()
@@ -938,6 +996,60 @@ impl AurisApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn wire_permissions_retain_call_identity_across_allow_deny_cancel_and_multiple_checks(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use auris_session::execution_trace::TraceOperation;
+        use serde_json::{Value, json};
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.session.execution_trace(TraceOperation::Start).unwrap();
+            let dispatch = |this: &mut AurisApp, value: Value| {
+                let event = parse_event(&value.to_string()).unwrap();
+                this.route_agent_control_event(&event)
+            };
+            let command = json!({"action":"import_transcription","name":"Private fixture label","at_tick":0,
+                "draft":{"kind":"piano","transcription":{"source":{"method":"cpu-fixture"},"seconds":1.0,
+                "notes":[{"pitch":60,"start":0.0,"end":1.0,"strength":0.7}]}}});
+            let request = |id, call: &str| json!({"event":"permission","id":id,"tool":"edit_project","args":{"command":command},"origin":{"kind":"tool_call","call_id":call,"tool":"import_transcription"}});
+            this.settings.agent.policy.mode = Mode::Edit;
+            dispatch(this, json!({"event":"call","call_id":"allowed","tool":"import_transcription","args":{}}));
+            assert!(dispatch(this, request(1, "allowed")));
+            assert!(dispatch(this, request(2, "allowed")));
+            this.agent_edit(command.clone()).unwrap();
+            dispatch(this, json!({"event":"result","call_id":"allowed","tool":"import_transcription","ok":true,"text":"private output"}));
+            this.settings.agent.policy.mode = Mode::ReadOnly;
+            dispatch(this, json!({"event":"call","call_id":"denied","tool":"import_transcription","args":{}}));
+            dispatch(this, request(3, "denied"));
+            dispatch(this, json!({"event":"result","call_id":"denied","tool":"import_transcription","ok":false,"text":"denied"}));
+            this.settings.agent.policy.mode = Mode::Edit;
+            dispatch(this, json!({"event":"call","call_id":"cancelled","tool":"cli_command","args":{}}));
+            dispatch(this, json!({"event":"permission","id":4,"tool":"cli_command","args":{"backend":"fixture","input":{"command":"private command"}},"origin":{"kind":"tool_call","call_id":"cancelled","tool":"cli_command"}}));
+            assert!(this.agent_chat.controls.pending.is_some());
+            this.agent_stop(cx);
+            dispatch(this, json!({"event":"result","call_id":"cancelled","tool":"cli_command","ok":false,"text":"late cancellation"}));
+            dispatch(this, json!({"event":"permission","id":5,"tool":"inspect_project","args":{},"origin":{"kind":"independent","source":"startup"}}));
+            let trace: Value = serde_json::from_str(&this.session.execution_trace(TraceOperation::Read { after: None }).unwrap()).unwrap();
+            let events = trace["events"].as_array().unwrap();
+            for (id, call, outcome) in [(1, "allowed", "allowed"), (2, "allowed", "allowed"), (3, "denied", "denied"), (4, "cancelled", "cancelled")] {
+                let permission = events.iter().find(|e| e["kind"] == "permission_outcome" && e["permission_id"] == id).unwrap();
+                assert_eq!(permission["call_id"], call);
+                assert_eq!(permission["outcome"], outcome);
+                assert_eq!(permission["tool"], if id == 4 { "cli_command" } else { "import_transcription" });
+            }
+            let result = events.iter().find(|e| e["kind"] == "host_outcome" && e["call_id"] == "allowed").unwrap();
+            assert_eq!(result["outcome"], "success");
+            assert_eq!(events.iter().filter(|e| e["kind"] == "host_outcome" && e["call_id"] == "cancelled").count(), 1);
+            assert!(result["before_state"].is_string());
+            assert_ne!(result["before_state"], result["state"]);
+            assert!(events.iter().any(|e| e["permission_id"] == 5 && e["call_id"].is_null() && e["origin"]["source"] == "startup"));
+            assert!(!trace.to_string().contains("private command"));
+            assert!(!trace.to_string().contains("private output"));
+            assert!(!trace.to_string().contains("Private fixture label"));
+        });
+    }
 
     #[test]
     fn review_history_excludes_pending_failed_and_non_native_tool_calls() {

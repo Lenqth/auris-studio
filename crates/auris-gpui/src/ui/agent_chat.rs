@@ -254,10 +254,17 @@ fn transcript_runs(entries: &[ChatEntry]) -> impl Iterator<Item = std::ops::Rang
 /// One event off the agent's wire, already parsed.
 #[derive(Debug, PartialEq)]
 pub(crate) enum AgentEvent {
+    /// Executable MCP invocation evidence, distinct from the CLI's visible tool observation.
+    Trace {
+        call_id: String,
+        tool: String,
+        ok: Option<bool>,
+    },
     Permission {
         id: u64,
         tool: String,
         args: serde_json::Value,
+        origin: auris_session::execution_trace::PermissionOrigin,
     },
     Compacting,
     Compacted {
@@ -361,8 +368,25 @@ pub(crate) fn parse_event(line: &str) -> Option<AgentEvent> {
             .to_string()
     };
     Some(match parsed.get("event")?.as_str()? {
+        "trace_call" | "trace_result" => AgentEvent::Trace {
+            call_id: text("call_id"),
+            tool: text("tool"),
+            ok: if parsed["event"] == "trace_result" {
+                Some(parsed["ok"] == true)
+            } else {
+                None
+            },
+        },
         "ended" => AgentEvent::Ended,
         "permission" => AgentEvent::Permission {
+            origin: parsed
+                .get("origin")
+                .and_then(|origin| serde_json::from_value(origin.clone()).ok())
+                .unwrap_or_else(
+                    || auris_session::execution_trace::PermissionOrigin::Independent {
+                        source: "legacy_transport".into(),
+                    },
+                ),
             id: parsed.get("id")?.as_u64()?,
             tool: text("tool"),
             args: parsed.get("args")?.clone(),
@@ -1602,7 +1626,7 @@ impl AgentChat {
         dirty: bool,
     ) -> Absorbed {
         match event {
-            AgentEvent::Permission { .. } | AgentEvent::Edit { .. } => {}
+            AgentEvent::Permission { .. } | AgentEvent::Edit { .. } | AgentEvent::Trace { .. } => {}
             AgentEvent::Compacting => {
                 self.controls.compacting = true;
             }
@@ -2191,6 +2215,7 @@ impl AurisApp {
 
     /// Stops the worker and checks for completed writes, which remain undoable.
     fn agent_stop(&mut self, cx: &mut gpui::Context<Self>) {
+        self.session.cancel_execution_calls();
         self.agent_chat.queue_paused = true;
         self.agent_chat.interrupting = false;
         self.session.end_agent_request();
@@ -2831,6 +2856,10 @@ impl AurisApp {
             let Some(event) = parse_event(&value.to_string()) else {
                 continue;
             };
+            let permission_handled = self.route_agent_control_event(&event);
+            if matches!(event, AgentEvent::Trace { .. }) {
+                continue;
+            }
             if self.agent_chat.interrupting {
                 if matches!(event, AgentEvent::Ended) {
                     let paused = self.agent_chat.queue_paused;
@@ -2840,8 +2869,7 @@ impl AurisApp {
                 // A cancelled turn may still have buffered tool requests. Never execute them.
                 continue;
             }
-            if let AgentEvent::Permission { id, tool, args } = event {
-                self.agent_permission(id, tool, args);
+            if permission_handled {
                 cx.notify();
                 continue;
             }

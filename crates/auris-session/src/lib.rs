@@ -47,8 +47,10 @@ mod audio_attachment;
 pub mod audio_audition;
 pub mod audio_inspection;
 pub use audio_attachment::{AudioAttachmentCopy, copy_audio_attachment, prepare_audio_attachment};
+pub mod audio_input;
 pub mod audio_review;
 pub mod conversations;
+pub mod execution_trace;
 mod export_inspection;
 pub mod live_agent;
 pub mod production_record;
@@ -172,8 +174,11 @@ pub use settings::{
     WindowPlacement, config_dir,
 };
 pub use singer_portrait::{SingerPortraitError, SingerPortraitSource, load_singer_portrait};
-pub use transcription::read_transcription_file;
-pub use transcription_draft::TranscriptionDraft;
+pub use transcription::{read_external_transcription_file, read_transcription_file};
+pub use transcription_draft::{
+    DraftAudioSource, DraftNote, DraftRecognizer, DraftTrack, MultitrackTranscription,
+    TranscriptionDraft,
+};
 pub use voice_setup::{
     DiffSingerSetup, LeapSingerCheck, LeapSingerSetup, VoiceSetupError, VoicevoxCatalog,
     VoicevoxConnection, VoicevoxSetup, VoicevoxSpeakerChoice, VoicevoxStyle,
