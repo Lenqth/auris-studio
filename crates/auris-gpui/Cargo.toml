@@ -29,10 +29,10 @@ log.workspace = true
 # while `xcode-select -p` points at the Command Line Tools.
 gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
 gpui-flow = { path = "../../vendor/gpui-flow" }
-# The agent transcript uses the same Markdown view as picocode, including fenced code-block
-# highlighting. It shares gpui's version and stays wholly inside this presentation crate.
+# The agent transcript uses selectable Markdown without language-specific highlighting.
+# It shares gpui's version and stays wholly inside this presentation crate.
 # Later component releases require GPUI snapshots; 0.5.1 is the latest compatible release.
-gpui-component = { version = "=0.5.1", features = ["tree-sitter-languages"] }
+gpui-component = "=0.5.1"
 # Share the renderer's GFM parser; the transcript owns block and list layout.
 markdown = "1"
 # Decode voice artwork on a worker, with bounded dimensions before GPUI sees the pixels.

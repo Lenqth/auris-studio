@@ -36,16 +36,14 @@ jobs:
           clang_runtime="$(xcrun --sdk macosx clang -print-libgcc-file-name)"
           echo "RUSTFLAGS=${RUSTFLAGS:-} -C link-arg=$clang_runtime" >> "$GITHUB_ENV"
 
+      # Keep dependency artifacts, pruning workspace binaries and incremental state. The action
+      # keys by rustc, manifests, Cargo configuration and compiler environment automatically.
       - name: Cache the build
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: macos-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: macos-cargo-
+          prefix-key: v1-build-performance
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.event_name == 'workflow_dispatch' }}
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -54,7 +52,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked
 
       - name: Test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --timings
 
       - name: Test the release update helper
         run: cargo test -p auris-update-helper --release --locked
@@ -69,6 +67,15 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --locked
+
+      - name: Upload build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 7
 
   # The whole workspace again, on the other platform the desktop application ships for.
   #
@@ -91,15 +98,11 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component clippy
 
       - name: Cache the build
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: windows-cargo-
+          prefix-key: v1-build-performance
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.event_name == 'workflow_dispatch' }}
 
       - name: Lint the default Windows build
         run: cargo clippy --workspace --all-targets --locked
@@ -108,7 +111,7 @@ jobs:
       # skips. What this does exercise is every `cfg!(target_os = ...)` arm the other two jobs
       # never take — the key bindings, the pointer gestures, the menu bar and the locale.
       - name: Test the default Windows build
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --timings
 
       # Unit tests run on test-runner threads with larger stacks. Launch the actual
       # optimized helper too, using the same main-thread stack as the shipped binary.
@@ -123,7 +126,16 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked --features asio
 
       - name: Test with ASIO
-        run: cargo test --workspace --locked --features asio
+        run: cargo test --workspace --locked --features asio --timings
+
+      - name: Upload build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Everything except the gpui frontend, on a platform with no Apple frameworks at all.
   #
@@ -147,15 +159,11 @@ jobs:
           sudo apt-get install --no-install-recommends -y libasound2-dev libxcb1-dev
 
       - name: Cache the build
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: linux-cargo-
+          prefix-key: v1-build-performance
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.event_name == 'workflow_dispatch' }}
 
       - name: Lint
         run: cargo clippy --workspace --exclude auris-gpui --all-targets --locked
@@ -163,4 +171,13 @@ jobs:
       # The runner has no audio device and no GPU. Every test that needs either checks first and
       # skips, so this exercises the DSP, the document model and the whole render path.
       - name: Test
-        run: cargo test --workspace --exclude auris-gpui --locked
+        run: cargo test --workspace --exclude auris-gpui --locked --timings
+
+      - name: Upload build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-${{ runner.os }}-${{ runner.arch }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
+          retention-days: 7
