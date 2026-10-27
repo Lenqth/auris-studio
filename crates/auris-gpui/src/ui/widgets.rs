@@ -102,6 +102,8 @@ pub enum ButtonStyle {
     Normal,
     /// Filled with the accent colour; for the primary action in a dialog.
     Primary,
+    /// Hands work to the agent, using Atelier's dedicated agent treatment.
+    Agent,
     /// Filled with the danger colour; for irreversible commitment in a dialog.
     Danger,
     /// Borderless, for dense toolbars.
@@ -356,6 +358,11 @@ where
         // reads as the same button rather than as a second latched one in a row of them.
         (_, Latch::Ready) => (theme.surface_raised, active_color, active_color),
         (ButtonStyle::Primary, Latch::Off) => (theme.accent, theme.text_on_accent, theme.accent),
+        (ButtonStyle::Agent, Latch::Off) => (
+            theme.atelier.colors.agent_wash,
+            theme.atelier.colors.agent,
+            Theme::translucent(theme.atelier.colors.agent, 0.35),
+        ),
         (ButtonStyle::Danger, Latch::Off) => {
             (theme.danger, theme.text_on(theme.danger), theme.danger)
         }
@@ -385,13 +392,18 @@ where
         .flex()
         .items_center()
         .justify_center()
-        .h(Metrics::CONTROL_HEIGHT)
-        .px_2()
-        .rounded(Metrics::RADIUS_SM)
+        .h(theme.atelier.density.control_sm)
+        .px(theme.atelier.density.control_padding * 0.75)
+        .rounded(
+            theme
+                .atelier
+                .control_radius(theme.atelier.density.control_sm),
+        )
         .border_1()
         .border_color(border)
         .bg(background)
-        .text_xs()
+        .text_size(theme.atelier.typography.size_sm)
+        .font_weight(theme.atelier.typography.label_weight)
         .text_color(if enabled {
             text_color
         } else {
@@ -401,7 +413,7 @@ where
             this.tab_index(0)
                 .focus(|this| this.border_color(theme.selection))
                 .hover(|this| this.bg(hover))
-                .active(|this| this.opacity(0.75))
+                .active(|this| this.bg(atelier::mix(hover, text_color, 0.08)))
                 .on_click(on_click)
         })
         .when(!enabled, |this| this.opacity(0.62))
@@ -453,14 +465,18 @@ where
         .flex()
         .items_center()
         .justify_center()
-        .size(px(32.0))
-        .rounded(Metrics::RADIUS_MD)
+        .size(theme.atelier.density.control_md)
+        .rounded(
+            theme
+                .atelier
+                .control_radius(theme.atelier.density.control_md),
+        )
         .border_1()
         .border_color(if active { active_color } else { theme.border })
         .bg(background)
         .hover(|this| this.bg(hover))
         .active(|this| this.opacity(0.75))
-        .child(icon(glyph, px(15.0), foreground))
+        .child(icon(glyph, theme.atelier.typography.size_lg, foreground))
         .on_click(on_click)
 }
 
@@ -487,10 +503,14 @@ where
         .flex()
         .items_center()
         .justify_center()
-        .gap_1()
-        .h(Metrics::CONTROL_HEIGHT)
-        .px_1p5()
-        .rounded(Metrics::RADIUS_SM)
+        .gap(theme.atelier.spacing.xs)
+        .h(theme.atelier.density.control_sm)
+        .px(theme.atelier.spacing.sm)
+        .rounded(
+            theme
+                .atelier
+                .control_radius(theme.atelier.density.control_sm),
+        )
         .border_1()
         .border_color(theme.border)
         .bg(theme.surface_raised)
@@ -498,7 +518,11 @@ where
         .text_color(theme.text)
         .hover(|this| this.bg(theme.surface_hover))
         .active(|this| this.opacity(0.75))
-        .child(icon(glyph, px(10.0), theme.text_muted))
+        .child(icon(
+            glyph,
+            theme.atelier.typography.size_sm,
+            theme.text_muted,
+        ))
         .child(label.into())
         .on_click(on_click)
 }
@@ -526,8 +550,12 @@ where
         .flex()
         .items_center()
         .justify_center()
-        .size(px(20.0))
-        .rounded(Metrics::RADIUS_SM)
+        .size(theme.atelier.density.control_sm)
+        .rounded(
+            theme
+                .atelier
+                .control_radius(theme.atelier.density.control_sm),
+        )
         .bg(theme.surface)
         .border_1()
         .border_color(theme.border_subtle)

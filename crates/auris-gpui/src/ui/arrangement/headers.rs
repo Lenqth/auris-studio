@@ -271,7 +271,7 @@ impl AurisApp {
                         .border_b_1()
                         .border_color(theme.border_subtle)
                         .bg(if is_selected {
-                            theme.surface_raised
+                            theme.accent_soft
                         } else {
                             theme.surface
                         })
@@ -410,7 +410,7 @@ impl AurisApp {
                     .border_b_1()
                     .border_color(theme.border_subtle)
                     .bg(if is_selected {
-                        theme.surface_raised
+                        theme.accent_soft
                     } else {
                         theme.surface
                     })

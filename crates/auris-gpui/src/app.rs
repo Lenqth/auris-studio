@@ -2017,7 +2017,7 @@ impl AurisApp {
         .detach();
         let appearance = Appearance::load();
         let theme = appearance.theme();
-        cx.set_global(theme.clone());
+        theme.install(cx);
 
         // List before creating this session's private workspace. An empty current workspace has
         // no snapshot and would not be offered, but taking the inventory first keeps "previous
@@ -3290,7 +3290,7 @@ impl AurisApp {
     ) -> std::io::Result<()> {
         self.appearance = appearance.normalised();
         self.theme = self.appearance.theme();
-        cx.set_global(self.theme.clone());
+        self.theme.install(cx);
         let saved = self.appearance.save();
         if let Some(handle) = self.settings_window {
             let appearance = self.appearance.clone();

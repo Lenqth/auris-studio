@@ -154,6 +154,11 @@ strings! {
     ChooseRecent { en: "Recent projects", ja: "最近使った項目" }
     ChooseEmpty { en: "Empty project", ja: "空のプロジェクト" }
     ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement.", ja: "音源トラックから、自由に曲を作り始めます。" }
+    ChooseStartHelp { en: "Choose how to begin your song.", ja: "曲の始め方を選んでください。" }
+    ChooseAiHelp { en: "Describe your idea and compare three song candidates.", ja: "作りたい曲を伝えて、3つの候補を聴き比べます。" }
+    ChooseStartAi { en: "Start with AI…", ja: "AIで作り始める…" }
+    ChoosePauseBackground { en: "Pause background", ja: "背景を一時停止" }
+    ChooseAnimateBackground { en: "Animate background", ja: "背景を動かす" }
     ChooseRecentEmpty { en: "No recent projects. Open an existing project to get started.", ja: "最近使ったプロジェクトはありません。既存のプロジェクトを開いて始められます。" }
     ChooseExisting { en: "Open existing project…", ja: "既存のプロジェクトを開く…" }
     ChooseCreate { en: "Create", ja: "作成" }
@@ -2042,6 +2047,7 @@ new のオプション
     AgentPanel { en: "Agent", ja: "エージェント" }
     CmdShowAgent { en: "Agent", ja: "エージェント" }
     AgentPlaceholder { en: "Ask about this song…", ja: "この曲について話しかける…" }
+    AgentIntro { en: "Discuss the arrangement, instruments or a change you want to make.", ja: "アレンジや音色の相談、変えたい箇所を伝えてください。" }
     AgentNotConfigured { en: "Name a model to talk to.", ja: "話しかけるモデルを設定してください。" }
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }

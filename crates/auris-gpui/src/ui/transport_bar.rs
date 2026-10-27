@@ -611,9 +611,11 @@ impl AurisApp {
             .items_center()
             .h(Metrics::TRANSPORT_HEIGHT)
             .px_3()
-            .bg(theme.surface_raised)
+            // Transport is a single chrome band; its sunken LCD fields provide the only
+            // elevation and keep the timeline below visually primary.
+            .bg(theme.surface)
             .border_b_1()
-            .border_color(theme.border)
+            .border_color(theme.border_subtle)
             .child(
                 div()
                     .flex()
