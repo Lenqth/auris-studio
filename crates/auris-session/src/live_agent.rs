@@ -77,7 +77,7 @@ pub enum Command {
         /// Explicit foreground clips and musical intent for one short phrase.
         request: harmony_suggestions::Request,
     },
-    /// Generate backing parts on existing tracks, or change harmony and regenerate only explicit backing clips, while preserving protected melody clips and every other clip. Uses Auris writers, not model-authored note arrays. Read inspect_project for expected_revision. Operations run on a worker and apply atomically as one Undo; stale/cancelled work and hand-edited regeneration targets are refused. Returns compact recipe summaries, not notes. Split targets at meter/section boundaries first; read tool_help for limits.
+    /// Generate or regenerate backing clips. Preserves all other clips. Protected clips only reserve tracks; foreground requires notes on non-drum tracks. Uses Auris writers. Read inspect_project for expected_revision. Runs on a worker and applies atomically as one Undo; stale/cancelled work and hand-edited regeneration targets are refused. Returns recipes, not notes. Split at meter/section boundaries; see tool_help for limits.
     Accompaniment {
         /// Content revision from inspect_project or read_notes.
         expected_revision: String,
@@ -219,7 +219,7 @@ pub enum Command {
         /// Explicit one-based bar range within the arrangement.
         range: file_jobs::BarRange,
     },
-    /// Export the current unsaved instrumental score to a new MIDI file without saving the project. Existing files are refused.
+    /// Export instrumental MIDI with trailing rests. Uses the unsaved score. Never overwrites or saves the project. Returns note count, duration in ticks/seconds and PPQ.
     ExportMidi {
         /// Absolute new local MIDI file path.
         output: String,
