@@ -15,7 +15,9 @@ use auris_core::{
 use auris_dsp::Adsr;
 
 use crate::params::{ParamBank, finite_or};
-use crate::render::{SegmentRenderer, render_segments, spread_to_all_channels};
+use crate::render::{
+    SegmentRenderer, StereoImage, downmix_to_extra_channels, pan_gains, render_segments,
+};
 use crate::voice::VoiceAllocator;
 
 const VOICES: usize = 24;
@@ -30,6 +32,10 @@ const P_STIFFNESS: u32 = 4;
 const P_DETUNE: u32 = 5;
 const P_RELEASE: u32 = 6;
 const P_LEVEL: u32 = 7;
+const P_WIDTH: u32 = 8;
+/// Seen from the player, the bass bridge stands to the right of the treble bridge, so the
+/// low courses lie on the right and the high ones on the left.
+pub(crate) const IMAGE: StereoImage = StereoImage::new(68.0, 18.0, -0.35);
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Mode {
@@ -44,6 +50,10 @@ struct Mode {
 
 #[derive(Clone, Debug)]
 struct Voice {
+    /// Pan at unit width, fixed when the note starts.
+    position: f32,
+    /// Pan currently applied, chasing `position` times the width control.
+    pan: f32,
     modes: [[Mode; STRINGS]; MODES],
     pitch: f32,
     velocity: f32,
@@ -59,6 +69,8 @@ impl Voice {
         let mut envelope = Adsr::new();
         envelope.set_sample_rate(rate);
         Self {
+            position: 0.0,
+            pan: 0.0,
             modes: [[Mode::default(); STRINGS]; MODES],
             pitch: 60.0,
             velocity: 0.0,
@@ -98,6 +110,8 @@ pub struct HammeredDulcimer {
     expression: f32,
     expression_current: f32,
     expression_coeff: f32,
+    /// One-pole coefficient by which a voice's pan follows the width control.
+    pan_step: f32,
 }
 
 impl Default for HammeredDulcimer {
@@ -141,6 +155,7 @@ impl HammeredDulcimer {
                 ParamDescriptor::new(P_RELEASE, "release", "Release", 0.01, 4.0, 0.08443)
                     .with_unit(ParamUnit::Seconds),
                 ParamDescriptor::decibels(P_LEVEL, "level", "Level", -60.0, 6.0, -10.0),
+                ParamDescriptor::new(P_WIDTH, "width", "Stereo Width", 0.0, 2.0, 1.0),
             ]),
             voices: Vec::new(),
             allocator: VoiceAllocator::new(),
@@ -150,6 +165,7 @@ impl HammeredDulcimer {
             expression: 1.0,
             expression_current: 1.0,
             expression_coeff: 0.0,
+            pan_step: 1.0,
         };
         instrument.refresh();
         instrument
@@ -209,6 +225,8 @@ impl HammeredDulcimer {
                 }
             }
         }
+        voice.position = IMAGE.position(f32::from(pitch));
+        voice.pan = voice.position * self.params.at(P_WIDTH);
         voice.envelope.trigger();
     }
 }
@@ -293,13 +311,17 @@ impl SegmentRenderer for HammeredDulcimer {
     }
 
     fn render_segment(&mut self, out: &mut AudioBuffer, start: usize, end: usize) {
-        let Some((mono, _)) = out.channels_mut().split_first_mut() else {
+        let Some((first, rest)) = out.channels_mut().split_first_mut() else {
             return;
         };
-        let Some(dst) = mono.get_mut(start..end) else {
+        let Some(dst) = first.get_mut(start..end) else {
             return;
         };
+        let mut right = rest
+            .first_mut()
+            .and_then(|channel| channel.get_mut(start..end));
         dst.fill(0.0);
+        let width = self.params.at(P_WIDTH);
         let damping = self.params.at(P_DAMPING).clamp(0.0, 1.0);
         let decay = self.params.at(P_DECAY).clamp(0.2, 20.0);
         let output = db_to_gain(self.params.at(P_LEVEL)) * self.channel_volume * 0.9;
@@ -319,10 +341,10 @@ impl SegmentRenderer for HammeredDulcimer {
                 }
             }
         }
-        for sample in dst.iter_mut() {
+        for (frame, sample) in dst.iter_mut().enumerate() {
+            let mut to_right = 0.0;
             self.expression_current +=
                 self.expression_coeff * (self.expression - self.expression_current);
-            let mut sum = 0.0;
             for voice in &mut self.voices {
                 if !voice.envelope.is_active() {
                     continue;
@@ -370,9 +392,18 @@ impl SegmentRenderer for HammeredDulcimer {
                     }
                     voice_output += mean_real / (1.0 + damping * 0.04);
                 }
-                sum += voice_output * env;
+                let voiced = voice_output * env;
+                voice.pan += (voice.position * width - voice.pan) * self.pan_step;
+                let (gain_left, gain_right) = pan_gains(voice.pan);
+                *sample += voiced * gain_left;
+                to_right += voiced * gain_right;
             }
-            *sample = sum * output * self.expression_current;
+            let scale = output * self.expression_current;
+            *sample *= scale;
+            match right.as_deref_mut().and_then(|right| right.get_mut(frame)) {
+                Some(right) => *right = to_right * scale,
+                None => *sample = (*sample + to_right * scale) * 0.5,
+            }
         }
         for (slot, voice) in self.voices.iter().enumerate() {
             self.allocator
@@ -381,6 +412,7 @@ impl SegmentRenderer for HammeredDulcimer {
                 self.allocator.retire(slot);
             }
         }
+        downmix_to_extra_channels(out, start, end);
     }
 }
 
@@ -406,6 +438,8 @@ impl Instrument for HammeredDulcimer {
         self.expression = 1.0;
         self.expression_current = 1.0;
         self.expression_coeff = (1.0 - (-1.0 / (0.020 * f64::from(self.rate))).exp()) as f32;
+        // About ten milliseconds, so turning the width control never clicks.
+        self.pan_step = 1.0 - (-1.0 / (0.010 * self.rate)).exp();
         let decay = self.params.at(P_DECAY).clamp(0.2, 20.0);
         let damping = self.params.at(P_DAMPING).clamp(0.0, 1.0);
         for voice in &mut self.voices {
@@ -431,7 +465,6 @@ impl Instrument for HammeredDulcimer {
     }
     fn process(&mut self, events: &[NoteEvent], out: &mut AudioBuffer, ctx: &ProcessContext) {
         render_segments(self, events, out, ctx.block_frames.min(out.frame_count()));
-        spread_to_all_channels(out, ctx.block_frames.min(out.frame_count()));
     }
     fn active_voices(&self) -> usize {
         self.allocator.active_count()

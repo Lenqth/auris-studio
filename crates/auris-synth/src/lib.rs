@@ -73,6 +73,9 @@ mod presence;
 mod test_support;
 
 #[cfg(test)]
+mod stereo_tests;
+
+#[cfg(test)]
 mod voicing_tests;
 
 pub use chiptune::Chiptune;

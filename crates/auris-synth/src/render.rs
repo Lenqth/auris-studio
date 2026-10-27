@@ -81,6 +81,76 @@ pub fn spread_to_all_channels(out: &mut AudioBuffer, frames: usize) {
     }
 }
 
+/// Where an instrument's notes sit across the stereo field, by pitch.
+///
+/// A real instrument is wide because its notes come from different places: a piano's bass
+/// strings lie to the player's left, a marimba's bars run low to high from left to right, and
+/// an orchestra seats its violins on the left and its basses on the right. A note's position
+/// is fixed when it is struck, so a held note never wanders, and the gains are
+/// `1 - pan` and `1 + pan` — the convention the choir already uses — so the mono downmix
+/// `(left + right) / 2` is exactly the centred signal whatever the width.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct StereoImage {
+    /// Pitch heard from the centre.
+    center: f32,
+    /// Semitones from the centre to the edge of the instrument's range.
+    half_range: f32,
+    /// Pan at the edge of the range at unit width; negative puts the low notes on the right.
+    spread: f32,
+}
+
+impl StereoImage {
+    /// An image centred on `center` that reaches `spread` at `half_range` semitones away.
+    pub(crate) const fn new(center: f32, half_range: f32, spread: f32) -> Self {
+        Self {
+            center,
+            half_range,
+            spread,
+        }
+    }
+
+    /// Pan of a note at `pitch` before the width control, in `-1.0..=1.0`.
+    pub(crate) fn position(self, pitch: f32) -> f32 {
+        let offset = ((pitch - self.center) / self.half_range.max(1.0)).clamp(-1.0, 1.0);
+        offset * self.spread
+    }
+}
+
+/// Left and right gains for `pan`, which is clamped to `-1.0..=1.0`.
+///
+/// The gains always sum to two, so the downmix of a panned note is the note itself.
+pub(crate) fn pan_gains(pan: f32) -> (f32, f32) {
+    let pan = pan.clamp(-1.0, 1.0);
+    (1.0 - pan, 1.0 + pan)
+}
+
+/// Writes the mono downmix of channels 0 and 1 into every further channel, for `start..end`.
+///
+/// Stereo instruments render their first two channels natively; this keeps the requirement to
+/// write every channel of a surround bus without inventing a placement for it.
+pub(crate) fn downmix_to_extra_channels(out: &mut AudioBuffer, start: usize, end: usize) {
+    let end = end.min(out.frame_count());
+    if start >= end {
+        return;
+    }
+    let Some((left, rest)) = out.channels_mut().split_first_mut() else {
+        return;
+    };
+    let Some((right, extra)) = rest.split_first_mut() else {
+        return;
+    };
+    let (Some(left), Some(right)) = (left.get(start..end), right.get(start..end)) else {
+        return;
+    };
+    for channel in extra {
+        if let Some(target) = channel.get_mut(start..end) {
+            for ((sample, l), r) in target.iter_mut().zip(left).zip(right) {
+                *sample = (l + r) * 0.5;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

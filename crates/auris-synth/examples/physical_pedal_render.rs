@@ -156,7 +156,7 @@ fn render(request: &Request, block: usize) -> Result<Vec<f32>, Box<dyn std::erro
                 &mut buffer,
                 &ProcessContext::realtime(f64::from(RATE), 1, frame as u64, 120.0, true),
             );
-            let dry = buffer.channel(0)[0];
+            let dry = (buffer.channel(0)[0] + buffer.channel(1)[0]) * 0.5;
             result.push(dry + request.resonance * bank.next(dry));
         }
     }

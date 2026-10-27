@@ -14,7 +14,8 @@ use auris_core::{
 use auris_dsp::Adsr;
 
 use crate::params::finite_or;
-use crate::{ParamBank, SegmentRenderer, VoiceAllocator, render_segments, spread_to_all_channels};
+use crate::render::{StereoImage, downmix_to_extra_channels, pan_gains};
+use crate::{ParamBank, SegmentRenderer, VoiceAllocator, render_segments};
 
 mod body;
 mod calibration;
@@ -135,6 +136,23 @@ impl Model {
         }
     }
 
+    /// Where the notes sit across the stereo field, heard from the player's seat.
+    ///
+    /// Keyboards and bars run low to high from left to right; the strings follow orchestral
+    /// seating, violins on the left and basses on the right. The electric guitar is a DI
+    /// signal and stays close to the centre.
+    pub(crate) fn stereo_image(self) -> StereoImage {
+        match self {
+            Self::Piano => StereoImage::new(64.5, 43.5, 0.6),
+            Self::Guitar => StereoImage::new(62.0, 22.0, 0.3),
+            Self::ElectricGuitar => StereoImage::new(62.0, 22.0, 0.15),
+            Self::Bass => StereoImage::new(45.0, 18.0, 0.2),
+            Self::Bell => StereoImage::new(72.0, 18.0, 0.5),
+            Self::Mallet => StereoImage::new(64.5, 31.5, 0.6),
+            Self::Violin => StereoImage::new(60.0, 28.0, -0.5),
+        }
+    }
+
     fn is_string(self) -> bool {
         matches!(
             self,
@@ -188,6 +206,10 @@ struct Voice {
     tail: f32,
     fade: f32,
     contact: f32,
+    /// Pan at unit width, fixed when the note is struck.
+    position: f32,
+    /// Pan currently applied, chasing `position` times the width control.
+    pan: f32,
 }
 
 impl Voice {
@@ -222,6 +244,8 @@ impl Voice {
             tail: 0.0,
             fade: 0.0,
             contact: 0.25,
+            position: 0.0,
+            pan: 0.0,
         }
     }
 }
@@ -238,7 +262,9 @@ pub struct Physical {
     params: ParamBank,
     voices: Vec<Voice>,
     allocator: VoiceAllocator,
-    body: Body,
+    /// One radiation filter per side. Both are linear, so the downmix of the two is the
+    /// mono instrument's single body.
+    body: [Body; 2],
     rate: f32,
     bend: f32,
     volume: f32,
@@ -254,6 +280,12 @@ pub struct Physical {
     voicing: PianoVoicing,
     /// The piano's soundboard knock for one segment, mixed after radiation.
     knock: Vec<f32>,
+    /// Stands in for the right channel when the output buffer is mono.
+    scratch: Vec<f32>,
+    /// Id of the stereo width parameter, which follows each model's own parameters.
+    width_param: u32,
+    /// One-pole coefficient by which a voice's pan follows the width control.
+    pan_step: f32,
 }
 
 impl Physical {
@@ -404,13 +436,22 @@ impl Physical {
                 0.0,
             ));
         }
+        let width_param = descriptors.len() as u32;
+        descriptors.push(ParamDescriptor::new(
+            width_param,
+            "width",
+            "Stereo Width",
+            0.0,
+            2.0,
+            1.0,
+        ));
         let params = ParamBank::new(descriptors);
         Self {
             model,
             params,
             voices: Vec::new(),
             allocator: VoiceAllocator::new(),
-            body: Body::default(),
+            body: Default::default(),
             rate: 48_000.0,
             bend: 0.0,
             volume: 1.0,
@@ -425,6 +466,9 @@ impl Physical {
             legato: Legato::default(),
             voicing: VOICING,
             knock: Vec::new(),
+            scratch: Vec::new(),
+            width_param,
+            pan_step: 1.0,
         }
     }
 
@@ -442,7 +486,9 @@ impl Physical {
         for voice in &mut self.voices {
             voice.modal.set_voicing(voicing);
         }
-        self.body.prepare(self.model, self.rate, &self.voicing);
+        for body in &mut self.body {
+            body.prepare(self.model, self.rate, &self.voicing);
+        }
     }
 
     fn settings(&self) -> Settings {
@@ -637,6 +683,8 @@ impl Physical {
         voice.deferred = false;
         voice.age = 0;
         voice.contact = settings.position;
+        voice.position = self.model.stereo_image().position(f32::from(pitch));
+        voice.pan = voice.position * self.params.at(self.width_param);
         let hz = pitch_to_hz(f32::from(pitch.min(127)) + self.bend).min(self.rate * 0.2);
         if self.model.is_string() {
             voice
@@ -822,26 +870,34 @@ impl SegmentRenderer for Physical {
     }
 
     fn render_segment(&mut self, out: &mut AudioBuffer, start: usize, end: usize) {
-        let Some((mono, _)) = out.channels_mut().split_first_mut() else {
+        let Some((first, rest)) = out.channels_mut().split_first_mut() else {
             return;
         };
-        let Some(samples) = mono.get_mut(start..end) else {
+        let Some(left) = first.get_mut(start..end) else {
             return;
         };
-        samples.fill(0.0);
+        left.fill(0.0);
+        let stereo = !rest.is_empty();
+        let right = match rest.first_mut() {
+            Some(channel) => channel.get_mut(start..end),
+            None => self.scratch.get_mut(..end - start),
+        };
+        let Some(right) = right else {
+            return;
+        };
+        right.fill(0.0);
         let mut empty = [];
-        let knock = self
-            .knock
-            .get_mut(..samples.len())
-            .unwrap_or(&mut empty[..]);
+        let knock = self.knock.get_mut(..left.len()).unwrap_or(&mut empty[..]);
         knock.fill(0.0);
         let pressure = self.pressure * self.params.at(P_PRESSURE);
+        let width = self.params.at(self.width_param);
         for (index, voice) in self.voices.iter_mut().enumerate() {
             if !voice.envelope.is_active() {
                 continue;
             }
             let frequency = pitch_to_hz(f32::from(voice.pitch) + self.bend);
-            for (frame, sample) in samples.iter_mut().enumerate() {
+            let target = voice.position * width;
+            for (frame, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
                 let raw = if self.model.is_string() {
                     let bow = if voice.held { self.expression } else { 0.0 };
                     voice.string.next(bow, pressure)
@@ -856,7 +912,10 @@ impl SegmentRenderer for Physical {
                 let current = raw * envelope;
                 voice.last = current * (1.0 - voice.fade) + voice.tail * voice.fade;
                 voice.fade = (voice.fade - 1.0 / (0.002 * self.rate)).max(0.0);
-                *sample += voice.last;
+                voice.pan += (target - voice.pan) * self.pan_step;
+                let (to_left, to_right) = pan_gains(voice.pan);
+                *l += voice.last * to_left;
+                *r += voice.last * to_right;
                 voice.age = voice.age.saturating_add(1);
                 if self.model != Model::Violin && voice.age >= voice.limit {
                     voice.envelope.release();
@@ -876,8 +935,10 @@ impl SegmentRenderer for Physical {
             } else {
                 1.0
             };
+        let [body_left, body_right] = &mut self.body;
         let mut thumps = knock.iter();
-        for sample in samples {
+        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+            // The soundboard's knock comes from the whole case, so it sits in the centre.
             let thump = thumps.next().copied().unwrap_or(0.0);
             let expression = if self.model == Model::Violin {
                 self.expression_current +=
@@ -886,13 +947,22 @@ impl SegmentRenderer for Physical {
             } else {
                 self.expression
             };
-            let signal = if self.model == Model::ElectricGuitar {
-                *sample
+            let (signal_left, signal_right) = if self.model == Model::ElectricGuitar {
+                (*l, *r)
             } else {
-                self.body.next(*sample, body) + thump
+                (
+                    body_left.next(*l, body) + thump,
+                    body_right.next(*r, body) + thump,
+                )
             };
-            *sample = signal * self.gain * self.volume * expression;
+            let gain = self.gain * self.volume * expression;
+            *l = signal_left * gain;
+            *r = signal_right * gain;
+            if !stereo {
+                *l = (*l + *r) * 0.5;
+            }
         }
+        downmix_to_extra_channels(out, start, end);
     }
 }
 
@@ -914,12 +984,17 @@ impl Instrument for Physical {
             .map(|_| Voice::new(self.model, self.rate, self.voicing))
             .collect();
         self.allocator.prepare(VOICES);
-        self.body.prepare(self.model, self.rate, &self.voicing);
+        for body in &mut self.body {
+            body.prepare(self.model, self.rate, &self.voicing);
+        }
         self.knock = if self.model == Model::Piano {
             vec![0.0; ctx.max_block_frames]
         } else {
             Vec::new()
         };
+        self.scratch = vec![0.0; ctx.max_block_frames];
+        // About ten milliseconds, so turning the width control never clicks.
+        self.pan_step = 1.0 - (-1.0 / (0.010 * self.rate)).exp();
         self.update_expression_step();
         self.reset();
     }
@@ -930,7 +1005,9 @@ impl Instrument for Physical {
             voice.last = 0.0;
             voice.fade = 0.0;
         }
-        self.body.reset();
+        for body in &mut self.body {
+            body.reset();
+        }
         self.allocator.clear();
         self.bend = 0.0;
         self.volume = 1.0;
@@ -945,7 +1022,6 @@ impl Instrument for Physical {
     fn process(&mut self, events: &[NoteEvent], out: &mut AudioBuffer, ctx: &ProcessContext) {
         let frames = ctx.block_frames.min(out.frame_count());
         render_segments(self, events, out, frames);
-        spread_to_all_channels(out, frames);
         if self.motion.is_watched() {
             self.motion_frames = self.motion_frames.saturating_add(frames);
             if self.motion_frames >= (self.rate / 30.0) as usize {
