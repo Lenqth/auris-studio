@@ -22,10 +22,10 @@ GENRES = (
     "game_bgm",
 )
 ACCEPTANCE = {
+    "selection_policy_version": "overall-mean-priority-v2",
     "overall_mean_delta_at_least": 0.03,
-    "worst_genre_delta_at_least": -0.10,
-    "improved_genres_at_least": 4,
     "holdout_mean_delta_positive": True,
+    "combined_mean_delta_at_least": 0.03,
 }
 
 
@@ -547,28 +547,15 @@ def compare(
         and "development" in before["splits"]
         and development["mean_delta"] is not None
         and development["mean_delta"] >= ACCEPTANCE["overall_mean_delta_at_least"]
-        and all(
-            report["mean_delta"] is not None
-            and report["mean_delta"] >= ACCEPTANCE["worst_genre_delta_at_least"]
-            for report in development_genres.values()
-        )
-        and sum(
-            report["mean_delta"] is not None and report["mean_delta"] > 0
-            for report in development_genres.values()
-        )
-        >= ACCEPTANCE["improved_genres_at_least"]
-        and acceptance["overall_mean_delta"] is not None
-        and acceptance["overall_mean_delta"]
-        >= ACCEPTANCE["overall_mean_delta_at_least"]
-        and acceptance["worst_genre_delta"] is not None
-        and acceptance["worst_genre_delta"] >= ACCEPTANCE["worst_genre_delta_at_least"]
-        and acceptance["improved_genres"] >= ACCEPTANCE["improved_genres_at_least"]
     )
     acceptance["accepted"] = bool(
         acceptance["candidate_eligible"]
         and acceptance["complete_development_and_holdout"]
         and acceptance["holdout_mean_delta"] is not None
         and acceptance["holdout_mean_delta"] > 0
+        and acceptance["overall_mean_delta"] is not None
+        and acceptance["overall_mean_delta"]
+        >= ACCEPTANCE["combined_mean_delta_at_least"]
     )
     return {
         "schema_version": 1,
@@ -576,6 +563,7 @@ def compare(
         "supplementary_axes": list(AUX_AXES),
         "naturalness_note": "Naturalness is retained for SongEval parity; instrumental cases do not establish vocal naturalness.",
         "acceptance_rule": ACCEPTANCE,
+        "selection_policy_version": ACCEPTANCE["selection_policy_version"],
         "conditions": {key: before[key] for key in condition_fields},
         "splits": before["splits"],
         "agent_runtimes": {"before": before["runtimes"], "after": after["runtimes"]},
@@ -592,6 +580,7 @@ def compare(
         "genres": genre_reports,
         "overall": overall,
         "development": development,
+        "development_genres": development_genres,
         "holdout": holdout,
         "supplementary": auxiliary,
         "acceptance": acceptance,

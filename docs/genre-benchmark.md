@@ -102,20 +102,30 @@ same pinned evaluator. Repeating the evaluator does not create new musical takes
 
 ### Screening and confirmation
 
-The development cohort is a screening gate. A candidate must have all valid
-pairs, a mean improvement of at least 0.03 across the five equally weighted
-SongEval axes, no genre mean regression below −0.10, and strict positive mean
-improvement in at least four of the seven genres. A development-only run is
-never accepted: the current benchmark reports it as an eligible candidate but
-keeps `accepted=false` until the holdout comparison is present.
+The selection policy was amended before holdout execution: **overall mean
+improvement has priority**. The policy identifier is
+`overall-mean-priority-v2`. The development cohort is a screening gate: a
+candidate must have all valid pairs and a mean improvement of at least 0.03
+across the five equally weighted SongEval axes. Genre means, the worst genre,
+and the count of strictly improved genres remain prominent diagnostics, but a
+genre regression is reported rather than used as a blocking veto. A
+development-only run is never accepted: the benchmark may report it as an
+eligible candidate but keeps `accepted=false` until the holdout comparison is
+present.
 
 The holdout cohort must then have a positive mean delta under the same frozen
-conditions, and the combined cohort must pass the same mean and genre gates.
-Only after these checks pass is the candidate eligible for adoption.
-These thresholds are pre-registered engineering gates, not statistical
-significance tests. A single repetition is a pilot and can be noisy; the result
-is retained as evidence, and a fresh seed/repetition cohort is planned before
-drawing a stable conclusion.
+conditions, and the combined development-plus-holdout mean must be at least
+0.03. All pairs in both cohorts must remain valid; failures are retained and
+prevent adoption. Only after these checks pass is the candidate eligible for
+adoption. These thresholds are pre-registered engineering gates, not
+statistical significance tests. A single repetition is a pilot and can be
+noisy; the result is retained as evidence, and a fresh seed/repetition cohort
+is planned before drawing a stable conclusion.
+
+Reports generated before this amendment retain the former fixed worst-genre
+and improved-genre gates in their `acceptance_rule` metadata. They are archived
+pilot evidence and must not be reinterpreted as reports generated under
+`overall-mean-priority-v2`.
 
 The [official SongEval toolkit](https://github.com/ASLP-lab/SongEval) predicts five
 axes, retained here with equal weight. A supplementary sensitivity

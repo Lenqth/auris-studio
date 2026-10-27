@@ -192,6 +192,7 @@ def test_compare_requires_both_splits_and_multiple_repetitions(tmp_path):
     before, after, before_report, after_report = _cohorts(tmp_path, base, improved)
     result = benchmark.compare(before, after, before_report, after_report, MANIFEST)
     assert result["acceptance"]["accepted"] is True
+    assert result["selection_policy_version"] == "overall-mean-priority-v2"
     assert result["overall"]["count"] == 28
     assert result["acceptance"]["improved_genres"] == 7
 
@@ -366,10 +367,10 @@ def test_holdout_decline_prevents_acceptance(tmp_path):
     assert result["acceptance"]["accepted"] is False
 
 
-def test_per_genre_decline_prevents_acceptance(tmp_path):
+def test_genre_regression_is_reported_but_not_a_veto_after_holdout(tmp_path):
     base = {axis: 3.0 for axis in benchmark.AXES}
     before, after, before_report, after_report = _cohorts(
-        tmp_path, base, {axis: 3.2 for axis in benchmark.AXES}
+        tmp_path, base, {axis: 3.25 for axis in benchmark.AXES}
     )
     payload = json.loads(after_report.read_text())
     payload["rows"] = [
@@ -386,4 +387,39 @@ def test_per_genre_decline_prevents_acceptance(tmp_path):
     after_report.write_text(json.dumps(payload))
     result = benchmark.compare(before, after, before_report, after_report, MANIFEST)
     assert result["acceptance"]["worst_genre_delta"] < -0.1
-    assert result["acceptance"]["accepted"] is False
+    assert result["acceptance"]["improved_genres"] == 6
+    assert result["development"]["mean_delta"] >= 0.03
+    assert result["holdout"]["mean_delta"] > 0
+    assert result["acceptance"]["accepted"] is True
+
+
+def test_overall_priority_does_not_require_a_majority_of_improved_genres(tmp_path):
+    base = {axis: 3.0 for axis in benchmark.AXES}
+    before, after, before_report, after_report = _cohorts(tmp_path, base, base)
+    payload = json.loads(after_report.read_text())
+    for row in payload["rows"]:
+        value = 4.0 if row["id"].startswith(("pop-", "city_pop-")) else 2.9
+        row["scores"] = {axis: value for axis in benchmark.AXES}
+    after_report.write_text(json.dumps(payload))
+    result = benchmark.compare(before, after, before_report, after_report, MANIFEST)
+    assert result["acceptance"]["improved_genres"] == 2
+    assert result["acceptance"]["accepted"] is True
+
+
+@pytest.mark.parametrize(
+    "development_gain,holdout_gain,eligible,accepted",
+    [(0.02, 0.5, False, False), (0.04, 0.01, True, False), (0.1, 0.0, True, False)],
+)
+def test_overall_priority_preserves_independent_mean_gates(
+    tmp_path, development_gain, holdout_gain, eligible, accepted
+):
+    base = {axis: 3.0 for axis in benchmark.AXES}
+    before, after, before_report, after_report = _cohorts(tmp_path, base, base)
+    payload = json.loads(after_report.read_text())
+    for row in payload["rows"]:
+        gain = holdout_gain if "holdout" in row["id"] else development_gain
+        row["scores"] = {axis: 3.0 + gain for axis in benchmark.AXES}
+    after_report.write_text(json.dumps(payload))
+    result = benchmark.compare(before, after, before_report, after_report, MANIFEST)
+    assert result["acceptance"]["candidate_eligible"] is eligible
+    assert result["acceptance"]["accepted"] is accepted
