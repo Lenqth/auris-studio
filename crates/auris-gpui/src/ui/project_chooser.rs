@@ -11,6 +11,7 @@ use crate::app::{AurisApp, Pane};
 pub(crate) struct ProjectChooser {
     recent: bool,
     selected: usize,
+    ai: bool,
 }
 
 impl AurisApp {
@@ -32,6 +33,8 @@ impl AurisApp {
             if let Some(path) = self.settings.recent.get(chooser.selected).cloned() {
                 self.open_project_window(path, cx);
             }
+        } else if chooser.ai {
+            self.open_song_workshop(window, cx);
         } else {
             self.project_chooser = None;
             self.focus_pane(Pane::Arrangement, window);
@@ -71,6 +74,8 @@ impl AurisApp {
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
         let recent = chooser.recent;
         let selected = chooser.selected;
+        let ai_selected = chooser.ai;
+        let animate = self.appearance.animate_welcome;
         let busy = self.opening_project.is_some();
         let can_choose = !busy && (!recent || selected < self.settings.recent.len());
         let mut content = div()
@@ -80,7 +85,6 @@ impl AurisApp {
             .min_h_0()
             .overflow_y_scroll()
             .p(theme.atelier.spacing.xl)
-            .bg(theme.background)
             .flex()
             .flex_col()
             .gap(theme.atelier.spacing.lg);
@@ -99,7 +103,7 @@ impl AurisApp {
                     if recent {
                         Key::ChooseRecentEmpty
                     } else {
-                        Key::ChooseEmptyHelp
+                        Key::ChooseStartHelp
                     },
                 )))
             });
@@ -155,7 +159,7 @@ impl AurisApp {
                 );
             }
         } else {
-            let mut tiles = div().flex().flex_wrap().gap_4();
+            let mut tiles = div().flex().flex_wrap().gap(theme.atelier.spacing.lg);
             for (id, key, ai) in [
                 ("chooser-empty", Key::ChooseEmpty, false),
                 ("chooser-ai", Key::WorkshopTitle, true),
@@ -166,11 +170,12 @@ impl AurisApp {
                         div()
                             .flex()
                             .flex_col()
-                            .items_center()
-                            .gap_4()
+                            .w_full()
+                            .items_start()
+                            .gap(theme.atelier.spacing.md)
                             .child(
                                 div()
-                                    .size_24()
+                                    .size(theme.atelier.spacing.xxl + theme.atelier.spacing.lg)
                                     .flex_shrink_0()
                                     .rounded(theme.atelier.shape.radius_lg)
                                     .bg(if ai {
@@ -183,7 +188,7 @@ impl AurisApp {
                                     .justify_center()
                                     .child(icon(
                                         if ai { Icon::Sparkles } else { Icon::Notes },
-                                        theme.atelier.spacing.xxl * 1.5,
+                                        theme.atelier.spacing.xl,
                                         if ai {
                                             theme.atelier.colors.agent
                                         } else {
@@ -191,25 +196,49 @@ impl AurisApp {
                                         },
                                     )),
                             )
-                            .child(div().text_base().child(self.t(key))),
+                            .child(
+                                div()
+                                    .text_size(theme.atelier.typography.size_lg)
+                                    .font_weight(theme.atelier.typography.heading_weight)
+                                    .child(self.t(key)),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme.atelier.typography.size_sm)
+                                    .text_color(theme.text_muted)
+                                    .child(self.t(if ai {
+                                        Key::ChooseAiHelp
+                                    } else {
+                                        Key::ChooseEmptyHelp
+                                    })),
+                            ),
                         ButtonStyle::Normal,
-                        ButtonState::available(false, !busy),
-                        theme.accent,
+                        ButtonState::available(ai == ai_selected, !busy),
+                        theme.accent_soft,
                         &theme,
-                        cx.listener(move |this, _, window, cx| {
-                            if ai {
-                                this.open_song_workshop(window, cx);
-                            } else {
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            if let Some(chooser) = &mut this.project_chooser {
+                                chooser.ai = ai;
+                            }
+                            if event.click_count() == 2 {
                                 this.choose_project(window, cx);
                             }
+                            cx.notify();
                         }),
                     )
-                    .w_64()
+                    .w(theme.atelier.spacing.xxl * 10.0)
                     .max_w_full()
-                    .h(theme.atelier.spacing.xxl * 6.0)
+                    .h_auto()
+                    .min_h(theme.atelier.spacing.xxl * 5.0)
+                    .p(theme.atelier.spacing.lg)
                     .flex_shrink_0()
                     .rounded(theme.atelier.shape.radius_lg)
-                    .bg(theme.surface)
+                    .bg(theme.surface_raised)
+                    .border_color(if ai == ai_selected {
+                        theme.accent
+                    } else {
+                        theme.border_subtle
+                    })
                     .text_base()
                     .flex_col()
                     .gap_4(),
@@ -219,13 +248,16 @@ impl AurisApp {
         }
 
         let sidebar = div()
-            .w_56()
+            .w(if window.viewport_size().width < gpui::px(900.0) {
+                gpui::px(176.0)
+            } else {
+                gpui::px(232.0)
+            })
             .flex_shrink_0()
             .p_4()
             .flex()
             .flex_col()
             .gap_2()
-            .bg(theme.atelier.colors.chrome)
             .border_r_1()
             .border_color(theme.border_subtle)
             .child(
@@ -265,30 +297,31 @@ impl AurisApp {
                 .h_10()
                 .text_sm()
                 .justify_start(),
-            );
-        let footer = div()
-            .p_4()
-            .border_t_1()
-            .border_color(theme.border_subtle)
-            .bg(theme.surface)
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
+            )
+            .child(div().flex_1())
             .child(
                 button_enabled(
                     "chooser-setup",
                     self.t(Key::SetupGuide),
-                    ButtonStyle::Normal,
+                    ButtonStyle::Ghost,
                     ButtonState::available(false, !busy),
                     theme.accent,
                     &theme,
                     cx.listener(|this, _, _, cx| this.open_setup_guide(cx)),
                 )
-                .h_9()
-                .px_4()
-                .text_sm(),
-            )
+                .w_full()
+                .h_auto()
+                .min_h(theme.atelier.density.control_md)
+                .whitespace_normal(),
+            );
+        let footer = div()
+            .p_4()
+            .border_t_1()
+            .border_color(theme.border_subtle)
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_2()
             .child(
                 button_enabled(
                     "chooser-browse",
@@ -331,6 +364,8 @@ impl AurisApp {
                     "chooser-confirm",
                     self.t(if recent {
                         Key::ChooseOpen
+                    } else if ai_selected {
+                        Key::ChooseStartAi
                     } else {
                         Key::ChooseCreate
                     }),
@@ -386,6 +421,25 @@ impl AurisApp {
                             .justify_center()
                             .child(self.t(Key::ChooseProject)),
                     )
+                    .child(button(
+                        "chooser-motion",
+                        self.t(if animate {
+                            Key::ChoosePauseBackground
+                        } else {
+                            Key::ChooseAnimateBackground
+                        }),
+                        ButtonStyle::Ghost,
+                        false,
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, _, cx| {
+                            this.appearance.animate_welcome = !this.appearance.animate_welcome;
+                            if let Err(error) = this.appearance.save() {
+                                log::warn!("could not save welcome motion preference: {error}");
+                            }
+                            cx.notify();
+                        }),
+                    ))
                     .child(crate::titlebar::controls(
                         window,
                         &theme,
@@ -393,25 +447,67 @@ impl AurisApp {
                     )),
             )
             .child(
-                div().flex().flex_1().min_h_0().child(sidebar).child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .flex_1()
-                        .min_w_0()
-                        .child(content)
-                        .when(!self.status.is_empty(), |view| {
-                            view.child(
+                div()
+                    .relative()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .items_center()
+                    .justify_center()
+                    .p(theme.atelier.spacing.xl)
+                    // Ambient owns its GPU cache and animation lifetime. No backdrop is mounted
+                    // in the editor or workshop; inactive welcome windows hold a still frame.
+                    .when(!cfg!(test), |view| {
+                        view.child(
+                            div().absolute().inset_0().child(
+                                atelier::AmbientBackdrop::new(
+                                    "chooser-aurora",
+                                    atelier::Ambience::Aurora,
+                                )
+                                .when(!animate || !window.is_window_active(), |backdrop| {
+                                    backdrop.phase(0.12)
+                                }),
+                            ),
+                        )
+                    })
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .size_full()
+                            .max_w(gpui::px(1040.0))
+                            .max_h(gpui::px(560.0))
+                            .min_w_0()
+                            .min_h_0()
+                            .overflow_hidden()
+                            .rounded(theme.atelier.shape.radius_xl)
+                            .bg(theme.surface)
+                            .border_1()
+                            .border_color(theme.border_subtle)
+                            .shadow(theme.atelier.elevation.high.clone())
+                            .child(sidebar)
+                            .child(
                                 div()
-                                    .px_6()
-                                    .py_3()
-                                    .text_color(theme.text_muted)
-                                    .when(self.status_failed, |view| view.text_color(theme.danger))
-                                    .child(self.status.clone()),
-                            )
-                        })
-                        .child(footer),
-                ),
+                                    .flex()
+                                    .flex_col()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .child(content)
+                                    .when(!self.status.is_empty(), |view| {
+                                        view.child(
+                                            div()
+                                                .px_6()
+                                                .py_3()
+                                                .text_color(theme.text_muted)
+                                                .when(self.status_failed, |view| {
+                                                    view.text_color(theme.danger)
+                                                })
+                                                .child(self.status.clone()),
+                                        )
+                                    })
+                                    .child(footer),
+                            ),
+                    ),
             )
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()
@@ -420,6 +516,27 @@ impl AurisApp {
 
 #[cfg(test)]
 mod tests {
+    #[gpui::test]
+    fn choosing_a_start_card_waits_for_the_explicit_commit(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |app, cx| app.show_project_chooser(window, cx));
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("chooser-ai", cx);
+        app.read_with(cx, |app, _| {
+            assert!(app.project_chooser.as_ref().unwrap().ai);
+            assert!(app.song_workshop.is_none());
+        });
+        crate::harness::click("chooser-empty", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |app, _| {
+            assert!(app.project_chooser.is_none());
+            assert!(app.song_workshop.is_none());
+        });
+    }
+
     #[gpui::test]
     fn chooser_creates_in_place_and_keeps_audio_suspended(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);

@@ -3384,7 +3384,7 @@ impl AurisApp {
             .min_w_0()
             .overflow_hidden()
             .relative()
-            .bg(theme.surface_sunken)
+            .bg(theme.surface)
             .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
                 this.agent_attach_files(paths.paths(), cx);
                 cx.stop_propagation();
@@ -3437,28 +3437,49 @@ impl AurisApp {
                             .items_center()
                             .gap_2()
                             .flex_shrink_0()
-                            .min_h(Metrics::PANEL_HEADER_HEIGHT)
+                            .min_h(theme.atelier.density.toolbar)
                             .flex_wrap()
-                            .px_2()
-                            .bg(theme.surface_raised)
+                            .px(theme.atelier.spacing.md)
+                            .py(theme.atelier.spacing.sm)
+                            .bg(theme.surface)
                             .border_b_1()
                             .border_color(theme.border)
                             .text_xs()
                             .text_color(theme.text_muted)
-                            .child(div().child(self.t(Key::AgentPanel)))
-                            .child(button(
-                                "agent-conversations",
-                                self.t(Key::AgentConversations),
-                                ButtonStyle::Ghost,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.agent_chat.conversations.showing_list = true;
-                                    this.focus_agent_field(AgentField::ConversationSearch);
-                                    cx.notify();
-                                }),
-                            ))
+                            .child(
+                                atelier::Icon::new(atelier::IconName::Sparkles)
+                                    .size(theme.atelier.typography.size_lg)
+                                    .color(theme.atelier.colors.agent),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_color(theme.text)
+                                    .font_weight(theme.atelier.typography.heading_weight)
+                                    .child(self.t(Key::AgentPanel)),
+                            )
+                            .child(
+                                button(
+                                    "agent-conversations",
+                                    "",
+                                    ButtonStyle::Ghost,
+                                    false,
+                                    theme.accent,
+                                    &theme,
+                                    cx.listener(|this, _, _, cx| {
+                                        this.agent_chat.conversations.showing_list = true;
+                                        this.focus_agent_field(AgentField::ConversationSearch);
+                                        cx.notify();
+                                    }),
+                                )
+                                .w(theme.atelier.density.control_sm)
+                                .px_0()
+                                .flex_shrink_0()
+                                .child(atelier::Icon::new(atelier::IconName::History))
+                                .tooltip(self.tip(Key::AgentConversations, "")),
+                            )
                             .when(self.agent_chat.produced_project.is_some(), |this| {
                                 this.child(button(
                                     "agent-open-result",
@@ -3476,10 +3497,10 @@ impl AurisApp {
                                 ))
                             })
                             .child(
-                                bounded_button_enabled(
+                                button_enabled(
                                     "agent-new-conversation",
-                                    self.t(Key::AgentNewConversation),
-                                    ButtonStyle::Normal,
+                                    "",
+                                    ButtonStyle::Ghost,
                                     ButtonState::available(false, true),
                                     theme.accent,
                                     &theme,
@@ -3488,25 +3509,35 @@ impl AurisApp {
                                         cx.notify();
                                     }),
                                 )
-                                .w(px(160.0)),
+                                .w(theme.atelier.density.control_sm)
+                                .px_0()
+                                .flex_shrink_0()
+                                .child(atelier::Icon::new(atelier::IconName::Plus))
+                                .tooltip(self.tip(Key::AgentNewConversation, "")),
                             )
-                            .child(div().flex_1())
                             .child(self.render_active_conversation_actions(cx))
-                            .child(button_enabled(
-                                "agent-configure",
-                                self.t(Key::AgentConfigure),
-                                ButtonStyle::Normal,
-                                ButtonState::available(false, !operation_busy),
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.agent_chat.model_menu = false;
-                                    this.open_settings_tab(
-                                        crate::settings_window::SettingsTab::Agent,
-                                        cx,
-                                    );
-                                }),
-                            )),
+                            .child(
+                                button_enabled(
+                                    "agent-configure",
+                                    "",
+                                    ButtonStyle::Ghost,
+                                    ButtonState::available(false, !operation_busy),
+                                    theme.accent,
+                                    &theme,
+                                    cx.listener(|this, _, _, cx| {
+                                        this.agent_chat.model_menu = false;
+                                        this.open_settings_tab(
+                                            crate::settings_window::SettingsTab::Agent,
+                                            cx,
+                                        );
+                                    }),
+                                )
+                                .w(theme.atelier.density.control_sm)
+                                .px_0()
+                                .flex_shrink_0()
+                                .child(atelier::Icon::new(atelier::IconName::Settings))
+                                .tooltip(self.tip(Key::AgentConfigure, "")),
+                            ),
                     ),
             )
             .child(
@@ -3517,8 +3548,8 @@ impl AurisApp {
                         .flex()
                         .flex_col()
                         .flex_1()
-                        .p_1()
-                        .gap_1()
+                        .p(theme.atelier.spacing.lg)
+                        .gap(theme.atelier.spacing.lg)
                         .overflow_y_scroll()
                         .when(self.agent_chat.controls.rules_open, |this| {
                             this.child(self.agent_rules(cx))
@@ -3542,6 +3573,16 @@ impl AurisApp {
                                 }),
                             ))
                         })
+                        .when(
+                            self.agent_chat.entries.is_empty() && !operation_busy,
+                            |view| {
+                                view.child(super::agent_components::conversation_intro(
+                                    self.t(Key::AgentPlaceholder),
+                                    self.t(Key::AgentIntro),
+                                    &theme,
+                                ))
+                            },
+                        )
                         .children(rows)
                         .when(operation_busy, |this| {
                             this.child(div().px_1p5().text_xs().text_color(theme.text_faint).child(
@@ -3553,19 +3594,7 @@ impl AurisApp {
                                     Key::AgentWorking
                                 }),
                             ))
-                        })
-                        .when(
-                            self.agent_chat.entries.is_empty() && !operation_busy,
-                            |this| {
-                                this.child(
-                                    div()
-                                        .p_2()
-                                        .text_xs()
-                                        .text_color(theme.text_faint)
-                                        .child(self.t(Key::AgentPlaceholder)),
-                                )
-                            },
-                        ),
+                        }),
                     cx,
                 ),
             )
@@ -8043,8 +8072,9 @@ mod tests {
         }
         let control = cx.debug_bounds("agent-new-conversation").unwrap();
         assert!(
-            control.size.width >= panel.size.width * 0.5,
-            "new conversation collapsed instead of yielding its label: {control:?} inside {panel:?}"
+            control.size.width
+                >= app.read_with(cx, |this, _| this.theme.atelier.density.control_sm),
+            "new conversation retains its icon hit target: {control:?} inside {panel:?}"
         );
         crate::harness::click("agent-model", cx);
         crate::harness::paint(&app, cx);

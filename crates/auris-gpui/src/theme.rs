@@ -1352,7 +1352,7 @@ impl Metrics {
     /// Width the left-hand dock opens at.
     pub const LEFT_DOCK_WIDTH: Pixels = px(240.0);
     /// Width the right-hand dock opens at.
-    pub const RIGHT_DOCK_WIDTH: Pixels = px(300.0);
+    pub const RIGHT_DOCK_WIDTH: Pixels = px(380.0);
     /// Height the bottom dock opens at, including the panel's own header strip.
     pub const BOTTOM_DOCK_HEIGHT: Pixels = px(280.0);
     /// Height of the header strip at the top of a docked panel.

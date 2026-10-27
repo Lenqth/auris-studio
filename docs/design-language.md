@@ -26,6 +26,19 @@ follow Atelier for the two Glass presets, while custom schemes supply their own 
 same components. Native glass backdrops are applied when a project window opens and when its
 theme changes; the editor canvas remains opaque.
 
+The screen compositions follow the upstream `showcase` arrangement and `auris_screens` examples:
+selected track headers use the accent fill, clips use rounded coloured bodies and hairline
+outlines, and the trailing agent dock opens at 380 px. Both conversation entry points share the
+same introductory state, message forms and inset composer. Saved dock widths remain intact.
+
+The chooser places the navigation, descriptive start cards and commit footer on an opaque panel
+over `AmbientBackdrop` with `Ambience::Aurora`, as in the upstream `ambient` example. A card
+selects a starting method; Create or Enter commits it, and double-click also opens it. Background
+motion can be paused in the title bar; the choice persists as `animate_welcome` in
+`appearance.json`. Inactive windows hold a still frame. The backdrop is unmounted on entering
+the editor or workshop, respects Atelier's motion policy and uses its static CPU fallback when
+hardware rendering is unavailable.
+
 On Windows, `gpu-allocator` 0.27 must resolve to `windows` 0.58, matching Atelier's `wgpu-hal` 25.
 The committed lockfile includes that resolution; after regenerating it, check `cargo tree -p
 gpu-allocator@0.27.0` and use `cargo update -p gpu-allocator@0.27.0` if it selects 0.57 instead.

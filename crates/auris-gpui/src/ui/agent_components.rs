@@ -11,6 +11,33 @@ use gpui::{AnyElement, ElementId, IntoElement, ParentElement, SharedString, div}
 use super::widgets::{ButtonState, ButtonStyle, button_enabled};
 use crate::theme::Theme;
 
+/// Introduces a new conversation without impersonating a generated assistant message.
+pub(crate) fn conversation_intro(
+    title: impl Into<SharedString>,
+    description: impl Into<SharedString>,
+    theme: &Theme,
+) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap(theme.atelier.spacing.md)
+        .py(theme.atelier.spacing.xl)
+        .child(atelier::Avatar::agent())
+        .child(
+            div()
+                .text_size(theme.atelier.typography.size_xl)
+                .font_weight(theme.atelier.typography.heading_weight)
+                .child(title.into()),
+        )
+        .child(
+            div()
+                .text_size(theme.atelier.typography.size_md)
+                .text_color(theme.text_muted)
+                .child(description.into()),
+        )
+        .into_any_element()
+}
+
 /// Draws a person's message using the shared trailing bubble treatment.
 pub(crate) fn user_message(id: impl Into<ElementId>, text: impl Into<SharedString>) -> AnyElement {
     let id = id.into();
@@ -91,10 +118,10 @@ pub(crate) fn composer_frame(
         .relative()
         .flex_shrink_0()
         .min_w_0()
-        .m(theme.atelier.spacing.sm)
-        .p(theme.atelier.spacing.xs)
-        .gap(theme.atelier.spacing.xs)
-        .rounded(theme.atelier.shape.radius_lg)
+        .m(theme.atelier.spacing.md)
+        .p(theme.atelier.spacing.sm)
+        .gap(theme.atelier.spacing.sm)
+        .rounded(theme.atelier.shape.radius_xl)
         .bg(theme.surface_raised)
         .border_1()
         .border_color(if focused {

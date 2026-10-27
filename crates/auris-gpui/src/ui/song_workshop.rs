@@ -468,7 +468,11 @@ impl AurisApp {
             .gap(theme.atelier.spacing.lg);
         if let Some(snapshot) = &s.snapshot {
             if snapshot.document.messages.is_empty() {
-                body = body.child(self.t(Key::WorkshopChatHint));
+                body = body.child(agent_components::conversation_intro(
+                    self.t(Key::WorkshopTitle),
+                    self.t(Key::WorkshopChatHint),
+                    &theme,
+                ));
             }
             for (i, message) in snapshot.document.messages.iter().enumerate() {
                 body = body.child(agent_components::workshop_message(
@@ -879,7 +883,7 @@ impl AurisApp {
                     .min_h_0()
                     .flex()
                     .flex_col()
-                    .bg(theme.background)
+                    .bg(theme.surface)
                     .child(body)
                     .child(footer),
             )
