@@ -818,14 +818,6 @@ impl Session {
             .project_folder()
             .ok_or(SessionError::NoPath)?
             .join(auris_io::AUDIO_DIR);
-        let mut audio = Vec::new();
-        for source in project.audio_sources.values_mut() {
-            let from = source.path.resolve(None).ok_or(SessionError::NoPath)?;
-            let name = auris_io::copy_into(&from, &folder)?;
-            let buffer = auris_io::import_audio_file(&folder.join(&name), project.sample_rate)?;
-            source.path = AssetPath::inside(std::path::Path::new(auris_io::AUDIO_DIR).join(name));
-            audio.push((source.id, Arc::new(buffer)));
-        }
         let mut fonts = Vec::new();
         for font in project.soundfonts.values() {
             let path = font.path.resolve(None).ok_or(SessionError::NoPath)?;
@@ -859,8 +851,42 @@ impl Session {
                 self.validate_candidate_source(&source)?;
             }
         }
+        // Copy the audio last, once nothing else can refuse the candidate, and take the copies
+        // back out if one of them fails: a refused adoption must not leave files in `Audio/`.
+        let mut audio = Vec::new();
+        let mut copied = Vec::new();
+        // `copy_into` reuses an identical file already in the folder instead of writing another,
+        // and such a file may belong to the open document or its undo history. Only names that
+        // did not exist beforehand are this adoption's to take back.
+        let existing: std::collections::BTreeSet<_> = std::fs::read_dir(&folder)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok().map(|entry| entry.file_name()))
+            .collect();
+        let result = (|| -> Result<(), SessionError> {
+            for source in project.audio_sources.values_mut() {
+                let from = source.path.resolve(None).ok_or(SessionError::NoPath)?;
+                let name = auris_io::copy_into(&from, &folder)?;
+                let path = folder.join(&name);
+                if !existing.contains(&name) {
+                    copied.push(path.clone());
+                }
+                let buffer = auris_io::import_audio_file(&path, project.sample_rate)?;
+                source.path =
+                    AssetPath::inside(std::path::Path::new(auris_io::AUDIO_DIR).join(name));
+                audio.push((source.id, Arc::new(buffer)));
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            remove_copies(&copied);
+            return Err(error);
+        }
         self.stop_output_preview();
-        self.collect_hosted_state()?;
+        if let Err(error) = self.collect_hosted_state() {
+            remove_copies(&copied);
+            return Err(error);
+        }
         self.record(Edit::Compose);
         for (id, path, font) in fonts {
             self.cache_font(&path, Arc::clone(&font), false);
@@ -874,6 +900,15 @@ impl Session {
         self.replace_project(project);
         self.dirty = true;
         Ok(())
+    }
+}
+
+/// Removes the files an adoption copied in before it was refused.
+fn remove_copies(copies: &[std::path::PathBuf]) {
+    for copy in copies {
+        if let Err(error) = std::fs::remove_file(copy) {
+            log::warn!("could not remove {}: {error}", copy.display());
+        }
     }
 }
 
@@ -1336,5 +1371,37 @@ mod tests {
         assert_eq!(target.project(), &candidate.project);
         target.undo();
         assert_eq!(target.project(), &before);
+    }
+
+    #[test]
+    fn a_refused_adoption_leaves_no_audio_copies_behind() {
+        let assets = tempfile::tempdir().unwrap();
+        let file = assets.path().join("voice.wav");
+        let buffer = Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 4800]], 48_000.0).unwrap());
+        auris_io::write_wav(&file, &buffer, &Default::default()).unwrap();
+        let mut project = Project::new("Refused", 48_000.0);
+        project.add_audio_source("Voice", AssetPath::external(&file), 4800, 48_000.0, 1);
+        // A font that cannot be read refuses the candidate after its audio has been found.
+        project.add_soundfont(
+            "Missing",
+            AssetPath::external(assets.path().join("missing.sf2")),
+            0,
+        );
+        let candidate = SongCandidate {
+            idea: idea(),
+            project,
+            audio: buffer,
+            _assets: Some(assets),
+        };
+        let mut target = Session::new(SessionOptions::headless()).unwrap();
+        let audio = target.project_folder().unwrap().join(auris_io::AUDIO_DIR);
+        let listing = || {
+            std::fs::read_dir(&audio)
+                .map(|entries| entries.filter_map(Result::ok).count())
+                .unwrap_or(0)
+        };
+        let before = (target.project.clone(), listing());
+        assert!(target.adopt_song_candidate(&candidate).is_err());
+        assert_eq!((target.project.clone(), listing()), before);
     }
 }
