@@ -39,6 +39,47 @@ def _read(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _is_link(path: Path) -> bool:
+    """Return whether *path* is a symlink or Windows junction."""
+    return path.is_symlink() or getattr(path, "is_junction", lambda: False)()
+
+
+def _trial_root(root: Path, identifier: str) -> Path:
+    """Resolve a safe trial directory below a suite root."""
+    if not isinstance(identifier, str):
+        raise TypeError("trial ID must be a string")
+    relative = Path(identifier)
+    if (
+        not identifier
+        or relative.is_absolute()
+        or ".." in relative.parts
+        or len(relative.parts) != 1
+        or any(character in identifier for character in "/\\:")
+    ):
+        raise ValueError(f"unsafe trial ID/path: {identifier!r}")
+    raw = root / relative
+    if _is_link(raw):
+        raise ValueError(f"unsafe trial path: {identifier}")
+    resolved_root = root.resolve(strict=True)
+    # Failed process startup may leave no trial directory at all.
+    resolved = raw.resolve()
+    if resolved_root not in resolved.parents:
+        raise ValueError(f"trial path escapes suite root: {identifier}")
+    return resolved
+
+
+def _artifact_path(root: Path, identifier: str, filename: str) -> Path:
+    """Resolve one native delivery artifact without following a link."""
+    trial = _trial_root(root, identifier)
+    raw = trial / filename
+    if _is_link(raw):
+        raise ValueError(f"unsafe artifact path: {identifier}/{filename}")
+    resolved = raw.resolve()
+    if resolved.parent != trial:
+        raise ValueError(f"artifact path escapes trial: {identifier}/{filename}")
+    return resolved
+
+
 def scoring_manifest(suites: list[Path]) -> dict[str, Any]:
     """Build SongEval inputs from retained WAV hashes, listing unavailable audio."""
     inputs, missing, sources = [], [], {}
@@ -53,7 +94,7 @@ def scoring_manifest(suites: list[Path]) -> dict[str, Any]:
             if identifier in seen:
                 raise ValueError(f"duplicate trial ID: {identifier}")
             seen.add(identifier)
-            audio = root / identifier / "result.wav"
+            audio = _artifact_path(root, identifier, "result.wav")
             expected = trial.get("artifacts", {}).get("result.wav")
             if expected is None:
                 missing.append({"id": identifier, "reason": "no_retained_audio"})
@@ -150,13 +191,23 @@ def _selected_cases(suite: dict[str, Any], manifest: dict[str, Any]) -> list[str
 
 def _suite(path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     value = _read(path / "suite.json")
-    required = ("manifest_sha256", "model", "backend", "split", "repetitions", "trials")
+    required = (
+        "manifest_sha256",
+        "model",
+        "backend",
+        "split",
+        "repetitions",
+        "runtime",
+        "trials",
+    )
     if any(key not in value for key in required):
         raise ValueError(f"suite missing required fields: {required}")
     if value["split"] not in {"development", "holdout"}:
         raise ValueError("suite split must be development or holdout")
     if type(value["repetitions"]) is not int or not 1 <= value["repetitions"] <= 20:
         raise ValueError("repetitions must be 1..20")
+    if not isinstance(value["runtime"], dict) or not value["runtime"]:
+        raise ValueError("suite runtime metadata must be a nonempty object")
     selected = _selected_cases(value, manifest)
     expected_cases = {
         case["id"] for case in manifest["cases"] if case["split"] == value["split"]
@@ -282,6 +333,9 @@ def delivery_issues(
     diagnostic = score.get("diagnostics")
     if not isinstance(encoded, dict) or not isinstance(diagnostic, dict):
         return issues + ["audio_measurements_missing"]
+    expected_sha = trial.get("artifacts", {}).get("result.wav")
+    if encoded.get("sha256") != expected_sha:
+        issues.append("encoded_artifact_hash_mismatch")
     expected_seconds = case["bars"] * 4 * 60 / case["tempo"]
     for measurement in (encoded, diagnostic):
         seconds, rate = measurement.get("seconds"), measurement.get("sample_rate")
@@ -419,20 +473,32 @@ def compare(
             ("before", before_trials[identifier], left, before),
             ("after", after_trials[identifier], right, after),
         ):
-            expected_hash = trial.get("artifacts", {}).get("result.wav")
             successful = (
                 trial.get("transport_pass") is True
                 and trial.get("delivery_present") is True
             )
+            artifacts = trial.get("artifacts", {})
+            expected_hash = artifacts.get("result.wav")
+            expected_midi_hash = artifacts.get("result.mid")
             if not expected_hash and not successful and score is None:
                 continue
             if not isinstance(expected_hash, str) or not expected_hash:
                 raise ValueError(f"{side} trial lacks result.wav SHA-256: {identifier}")
-            rendered = suite["_roots"][split] / identifier / "result.wav"
+            if successful and (
+                not isinstance(expected_midi_hash, str) or not expected_midi_hash
+            ):
+                raise ValueError(f"{side} trial lacks result.mid SHA-256: {identifier}")
+            rendered = _artifact_path(suite["_roots"][split], identifier, "result.wav")
             if not rendered.is_file() or digest(rendered) != expected_hash:
                 raise ValueError(
                     f"{side} trial artifact is missing or changed: {identifier}"
                 )
+            if successful:
+                midi = _artifact_path(suite["_roots"][split], identifier, "result.mid")
+                if not midi.is_file() or digest(midi) != expected_midi_hash:
+                    raise ValueError(
+                        f"{side} trial MIDI artifact is missing or changed: {identifier}"
+                    )
             if score is not None:
                 if score["sha256"] != expected_hash:
                     raise ValueError(

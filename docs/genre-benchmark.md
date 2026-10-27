@@ -70,6 +70,11 @@ The comparison freezes and checks suite conditions, source/runtime metadata,
 SongEval scores, artifact hashes, and hashes of the files that are actually on
 disk. A missing, failed, duplicated, changed, or invalid trial remains visible
 and makes the cohort ineligible; it is never silently removed.
+Successful deliveries require intact WAV and MIDI artifacts, and encoded-audio
+measurements must identify that same WAV. Input and comparison paths cannot
+escape their trial folders or follow linked trials/artifacts. Each condition
+requires recorded agent runtime metadata; before and after binaries may differ
+because prompt or implementation changes are the treatment.
 
 ## Adoption rule
 

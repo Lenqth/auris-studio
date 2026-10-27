@@ -88,19 +88,25 @@ def _write_suite(
             folder.mkdir()
             wav = folder / "result.wav"
             wav.write_bytes(trial.encode())
+            midi = folder / "result.mid"
+            midi.write_bytes((trial + ".mid").encode())
             trials.append(
                 {
                     "id": trial,
                     "case": case["id"],
                     "transport_pass": success,
                     "delivery_present": success,
-                    "artifacts": {"result.wav": benchmark.digest(wav)},
+                    "artifacts": {
+                        "result.wav": benchmark.digest(wav),
+                        "result.mid": benchmark.digest(midi),
+                    },
                     "encoded": {
                         "seconds": 16 * 4 * 60 / case["tempo"],
                         "sample_rate": 48000,
                         "full_scale_samples": 0,
                         "peak_db": -1.0,
                         "true_peak_db": -0.9,
+                        "sha256": benchmark.digest(wav),
                     },
                 }
             )
@@ -129,6 +135,7 @@ def _write_suite(
                 "prompt_profile": "legacy",
                 "context_tokens": 65536,
                 "candidate_tools_enabled": False,
+                "runtime": RUNTIME,
                 "source_commit": "source",
                 "selected_cases": [case["id"] for case in cases],
                 "trials": trials,
@@ -234,6 +241,7 @@ def test_input_manifest_keeps_trial_ids_and_lists_missing_audio(tmp_path):
     )
     payload = json.loads((suite / "suite.json").read_text())
     payload["trials"][0]["artifacts"] = {}
+    shutil.rmtree(suite / payload["trials"][0]["id"])
     (suite / "suite.json").write_text(json.dumps(payload))
     result = benchmark.scoring_manifest([suite])
     assert len(result["inputs"]) == 6
@@ -241,6 +249,59 @@ def test_input_manifest_keeps_trial_ids_and_lists_missing_audio(tmp_path):
         {"id": "pop-development-01", "reason": "no_retained_audio"}
     ]
     assert result["inputs"][0]["id"] == "city_pop-development-01"
+
+
+@pytest.mark.parametrize(
+    "identifier", ["../outside", "..\\outside", "C:/outside", ".", ""]
+)
+def test_input_manifest_rejects_trial_path_escape(tmp_path, identifier):
+    suite = tmp_path / "suite"
+    _write_suite(
+        suite, "development", {axis: 3.0 for axis in benchmark.AXES}, repetitions=1
+    )
+    suite_path = suite / "suite.json"
+    payload = json.loads(suite_path.read_text())
+    payload["trials"][0]["id"] = identifier
+    payload["trials"][0]["artifacts"]["result.wav"] = "0" * 64
+    suite_path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="unsafe trial ID/path"):
+        benchmark.scoring_manifest([suite])
+
+
+@pytest.mark.parametrize(
+    "entrypoint,target",
+    [
+        ("inputs", "trial"),
+        ("inputs", "result.wav"),
+        ("compare", "trial"),
+        ("compare", "result.wav"),
+        ("compare", "result.mid"),
+    ],
+)
+def test_linked_trial_artifacts_are_rejected(tmp_path, monkeypatch, entrypoint, target):
+    suite = tmp_path / "suite"
+    scores = _write_suite(
+        suite, "development", {axis: 3.0 for axis in benchmark.AXES}, repetitions=1
+    )
+    trial = suite / "pop-development-01"
+    source = trial if target == "trial" else trial / target
+    outside = tmp_path / "external"
+    source.rename(outside)
+    try:
+        source.symlink_to(outside, target_is_directory=target == "trial")
+    except OSError:
+        # Windows can deny link creation. Exercise the filesystem link flag at
+        # the same boundary without requiring developer mode or elevation.
+        outside.rename(source)
+        original = Path.is_symlink
+        monkeypatch.setattr(
+            Path, "is_symlink", lambda path: path == source or original(path)
+        )
+    with pytest.raises(ValueError, match="unsafe"):
+        if entrypoint == "inputs":
+            benchmark.scoring_manifest([suite])
+        else:
+            benchmark.compare(suite, suite, scores, scores, MANIFEST)
 
 
 @pytest.mark.parametrize(
@@ -301,6 +362,101 @@ def test_failed_delivery_without_audio_stays_in_cohort(tmp_path):
     assert result["acceptance"]["candidate_eligible"] is False
     assert len(result["rows"]) == 14
     assert sum(row["status"] == "failed_or_missing" for row in result["rows"]) == 1
+
+
+def test_missing_suite_runtime_metadata_is_rejected(tmp_path):
+    report = _write_suite(
+        tmp_path / "suite", "development", {axis: 3.0 for axis in benchmark.AXES}
+    )
+    suite_path = report.parent / "suite.json"
+    payload = json.loads(suite_path.read_text())
+    payload.pop("runtime")
+    suite_path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="runtime"):
+        benchmark.compare([report.parent], [report.parent], report, report, MANIFEST)
+
+
+@pytest.mark.parametrize("runtime", [None, {}, []])
+def test_empty_or_invalid_agent_runtime_is_rejected(tmp_path, runtime):
+    report = _write_suite(
+        tmp_path / "suite", "development", {axis: 3.0 for axis in benchmark.AXES}
+    )
+    suite_path = report.parent / "suite.json"
+    payload = json.loads(suite_path.read_text())
+    payload["runtime"] = runtime
+    suite_path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="runtime metadata"):
+        benchmark.compare(report.parent, report.parent, report, report, MANIFEST)
+
+
+def test_treatment_can_change_source_and_binary_but_remains_frozen_within_each_side(
+    tmp_path,
+):
+    before, after, before_report, after_report = _cohorts(
+        tmp_path,
+        {axis: 3.0 for axis in benchmark.AXES},
+        {axis: 3.1 for axis in benchmark.AXES},
+    )
+    for root in after:
+        path = root / "suite.json"
+        payload = json.loads(path.read_text())
+        payload.update(
+            source_commit="candidate-source", runtime={"agent.exe": "candidate-binary"}
+        )
+        path.write_text(json.dumps(payload))
+    result = benchmark.compare(before, after, before_report, after_report, MANIFEST)
+    assert result["acceptance"]["accepted"] is True
+    assert result["agent_runtimes"]["before"] != result["agent_runtimes"]["after"]
+
+
+@pytest.mark.parametrize("change", ["delete", "change", "remove_hash"])
+def test_successful_delivery_requires_intact_midi(tmp_path, change):
+    before, after, before_report, after_report = _cohorts(
+        tmp_path,
+        {axis: 3.0 for axis in benchmark.AXES},
+        {axis: 3.1 for axis in benchmark.AXES},
+    )
+    payload = json.loads((after[0] / "suite.json").read_text())
+    trial = payload["trials"][0]
+    midi = after[0] / trial["id"] / "result.mid"
+    if change == "delete":
+        midi.unlink()
+    elif change == "change":
+        midi.write_bytes(b"changed")
+    else:
+        del trial["artifacts"]["result.mid"]
+        (after[0] / "suite.json").write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="MIDI artifact|result.mid SHA-256"):
+        benchmark.compare(
+            [before[0], before[1]],
+            [after[0], after[1]],
+            before_report,
+            after_report,
+            MANIFEST,
+        )
+
+
+def test_stale_encoded_wav_measurement_cannot_be_selected(tmp_path):
+    before2, after2, before_report2, after_report2 = _cohorts(
+        tmp_path,
+        {axis: 3.0 for axis in benchmark.AXES},
+        {axis: 3.1 for axis in benchmark.AXES},
+    )
+    payload = json.loads((after2[0] / "suite.json").read_text())
+    payload["trials"][0]["encoded"]["sha256"] = "0" * 64
+    (after2[0] / "suite.json").write_text(json.dumps(payload))
+    result = benchmark.compare(
+        [before2[0], before2[1]],
+        [after2[0], after2[1]],
+        before_report2,
+        after_report2,
+        MANIFEST,
+    )
+    row = next(
+        item for item in result["rows"] if item["trial"] == payload["trials"][0]["id"]
+    )
+    assert "encoded_artifact_hash_mismatch" in row["issues"]["after"]
+    assert row["status"] == "failed_or_missing"
 
 
 def test_incomplete_cohort_is_rejected(tmp_path):
