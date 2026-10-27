@@ -35,7 +35,7 @@ pub mod capabilities {
         let audio_reviewer = match auris_session::audio_review::AudioReviewOptions::from_env() {
             Ok(options) => serde_json::json!({"tool":"listen","model":options.model,
                 "configured":true,"validated":false,
-                "note":"listen sends rendered WAV bytes to a separate audio model; configured does not establish audible-review quality"}),
+                "note":"For explicitly requested evaluator development experiments only, not ordinary composition. listen sends rendered WAV bytes to a separate audio model; configured does not establish audible-review quality"}),
             Err(error) => serde_json::json!({"tool":"listen","configured":false,"error":error}),
         };
         Ok(serde_json::json!({"general_midi_available":session.general_midi_available(),"voices":voices,

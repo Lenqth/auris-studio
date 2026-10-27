@@ -40,17 +40,25 @@
 //!
 //! # Agent conversations
 //!
-//! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
-//! directions. The session validates each [`crate::SongIdea`] and an immutable [`crate::SongRequest`].
-//! Explicit sources override arrangement defaults. Authored or separately generated lyrics become
-//! editable vocal notes, divided between selected singers or arranged in diatonic harmony.
-//! Candidate generation owns a headless session on one thread, including plugin lifecycles,
-//! and synthesizes vocals before rendering offline into a [`crate::SongCandidate`].
-//! Each candidate retains its editable document, audition audio and a temporary vocal asset
-//! directory. Adoption copies those assets into the destination project before committing
-//! that exact document as one undoable edit;
-//! it never regenerates the score. The original brief is saved as project metadata for later
-//! agent context. Worker cancellation and progress presentation belong to the frontend.
+//! The new-song workshop is a persistent natural-language conversation. A tool-free director
+//! asks focused questions or dispatches three independent composer workers. Each composer owns
+//! a headless session and edits it through the normal session commands. Provider calls run in
+//! parallel; voice inference and final audition rendering use a bounded audio-work gate.
+//! Progress describes observed command stages, never simulated elapsed-time percentages.
+//! Selecting an exact candidate sets the baseline for further edits without closing the chat.
+//! Descendants open that candidate's saved score; selection never regenerates the music.
+//! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
+//! documents and audition assets. Save As copies the store together with conversations.
+//! The frontend owns presentation, provider selection, audition and explicit editor handoff.
+//! Local cross-project preference evidence records contextual choices. It is optional, inspectable
+//! and clearable, and does not infer dislike from nonselection or override explicit instructions.
+//! Direction planning, lyric generation and composer workers share the agent's musical-design
+//! principles. The conversational composer extends the resolved live-agent prompt with its
+//! isolated-session contract: expressive note authoring, purposeful arrangement, a mixer pass
+//! and inspection of the current full mix. The `SongRequest` authoring API also provides a
+//! source-and-singer setup without notes and validates authored-note, mix and vocal evidence
+//! before rendering standalone candidates. A failed agent never silently falls back to a
+//! preset-generated song. These checks establish completion evidence, not musical quality.
 //!
 //! A conversation also retains a bounded `memory.production.json` beside model memory.
 //! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;

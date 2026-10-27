@@ -41,6 +41,22 @@ macro_rules! strings {
 
 strings! {
     WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
+    WorkshopChatHint { en: "Describe the music you want. Discuss ideas, compare alternatives and keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。相談しながら候補を聴き比べ、気に入った曲を育てていけます。" }
+    WorkshopMessage { en: "Message", ja: "メッセージ" }
+    WorkshopSend { en: "Send", ja: "送信" }
+    WorkshopYou { en: "You", ja: "あなた" }
+    WorkshopAssistant { en: "Composer", ja: "作曲アシスタント" }
+    WorkshopContinue { en: "Continue with this song", ja: "この曲で続ける" }
+    WorkshopSelected { en: "Current song", ja: "制作中の曲" }
+    WorkshopOpenEditor { en: "Open editor", ja: "エディタで開く" }
+    WorkshopMemory { en: "Use my preferences", ja: "好みを記録・活用" }
+    WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
+    WorkshopForget { en: "Clear preference history", ja: "好みの履歴を消去" }
+    WorkshopForgetChoice { en: "Forget this choice", ja: "この選択を記録から除く" }
+    WorkshopHarmonyProgress { en: "Writing the chord progression", ja: "コード進行を決めています" }
+    WorkshopMelodyProgress { en: "Writing the melody", ja: "メロディラインを作っています" }
+    WorkshopArrangeProgress { en: "Editing the arrangement", ja: "編曲を進めています" }
+    WorkshopStopping { en: "Stopping", ja: "停止しています" }
     WorkshopHint { en: "Choose a direction, audition three songs, then continue editing your favourite.", ja: "曲の方向性を決め、3つの候補を聴き比べてから編集を始めます。" }
     WorkshopNext { en: "Next", ja: "次へ" }
     WorkshopDirection { en: "Direction", ja: "曲の方向性" }
@@ -93,11 +109,17 @@ strings! {
     WorkshopMelancholy { en: "Melancholy", ja: "切ない" }
     WorkshopCalm { en: "Calm", ja: "落ち着いた" }
     WorkshopEnergetic { en: "Energetic", ja: "激しい" }
-    WorkshopPlanning { en: "AI is planning three directions…", ja: "AIが3つの方向性を考えています…" }
+    WorkshopPlanning { en: "Planning the next step…", ja: "作曲の進め方を考えています…" }
     WorkshopRendering { en: "Composing and preparing audio…", ja: "作曲・試聴音声を準備しています…" }
     WorkshopListen { en: "Listen", ja: "試聴" }
     WorkshopStop { en: "Stop", ja: "停止" }
     WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopSelectionRequest { en: "Continue with “{song}”. Suggest some arrangement and improvement options.", ja: "「{song}」で続けます。追加の編曲や改良の選択肢を提案してください。" }
+    WorkshopRecover { en: "Resume recovery", ja: "途中から復旧" }
+    WorkshopRecovering { en: "Waiting to recover", ja: "自動復旧を待っています" }
+    WorkshopRecoveryCount { en: "Automatic recoveries", ja: "自動復旧" }
+    WorkshopRecoveryLimit { en: "Automatic recovery limit reached. Resume recovery to try again from the saved progress with a fresh recovery budget.", ja: "自動復旧の上限に達しました。「途中から復旧」で保存済みの作業から再開し、自動復旧を再び3回まで試せます。" }
+    WorkshopSave { en: "Save as project…", ja: "プロジェクトとして保存…" }
     WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }

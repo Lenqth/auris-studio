@@ -171,6 +171,16 @@ jobs:
           hdiutil create -volname "Auris Studio" -srcfolder "$dmg_stage" \
             -format UDZO -ov "$stage.dmg"
 
+      - name: Verify the disk image
+        run: |
+          stage="auris-studio-${RELEASE_NAME}-macos-universal"
+          mount="$RUNNER_TEMP/auris-dmg-verify"
+          mkdir -p "$mount"
+          hdiutil attach "$stage.dmg" -readonly -nobrowse -mountpoint "$mount"
+          trap 'hdiutil detach "$mount"' EXIT
+          diff -qr "$stage/Auris Studio.app" "$mount/Auris Studio.app"
+          test "$(readlink "$mount/Applications")" = /Applications
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -295,11 +305,15 @@ jobs:
         run: |
           $version = $env:RELEASE_NAME -replace '^v', ''
           $installer = (Resolve-Path "auris-studio-v$version-windows-x86_64-setup.exe").Path
+          if ((Get-Item -LiteralPath $installer).VersionInfo.ProductVersion.Trim() -ne $version) {
+            throw 'Installer product version does not match the release.'
+          }
           $installDir = Join-Path $env:RUNNER_TEMP 'Auris installer smoke'
           $setup = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', "/DIR=`"$installDir`"") -Wait -PassThru -WindowStyle Hidden
           if ($setup.ExitCode -ne 0) { throw "Installer exited with code $($setup.ExitCode)." }
           try {
-            $files = @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'Dictionary')
+            $files = @('auris-studio.exe', 'auris.exe', 'auris-mcp.exe', 'Dictionary',
+              'README.md', 'README.ja.md', 'CHANGELOG.md', 'LICENSE', 'docs/development.md')
             if ($env:AURIS_UPDATE_HELPER -eq 'true') { $files += 'auris-update-helper.exe' }
             foreach ($file in $files) {
               if (-not (Test-Path -LiteralPath (Join-Path $installDir $file))) { throw "Missing installed file: $file" }
@@ -407,6 +421,8 @@ jobs:
     # Only `gh release create` writes to the repository; build jobs remain read-only.
     permissions:
       contents: write
+      actions: read
+      checks: read
     name: Publish the release
     needs: [macos, windows, linux]
     # Only from a tag. A dispatched run builds all three and stops here, which is the point of
@@ -416,10 +432,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require successful CI for the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit="$(git rev-parse HEAD)"
+          run=$(gh run list --workflow ci.yml --commit "$commit" --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run" ]; then
+            echo "No source CI run found for $commit" >&2
+            exit 1
+          fi
+          gh run watch "$run" --exit-status --interval 30
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Verify packaged contents and record checksums
+        run: bash tools/verify-release.sh "$RELEASE_NAME" artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-verification
+          path: artifacts/SHA256SUMS
+          if-no-files-found: error
 
       # The changelog is the release notes. Taken by heading rather than whole, so a release
       # describes itself and not every release before it; an empty extract fails the job, because
@@ -471,6 +509,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$RELEASE_NAME" \
+            --verify-tag --latest \
             --title "Auris Studio ${RELEASE_NAME}" \
             --notes-file notes.md \
             artifacts/*

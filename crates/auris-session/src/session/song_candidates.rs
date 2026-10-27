@@ -1,6 +1,6 @@
 //! Independent song drafts whose audition and adoption share one exact document.
 
-use super::{Session, SessionOptions};
+use super::{SaveReport, Session, SessionOptions};
 use crate::{Edit, SessionError};
 use auris_compose::{SongSpec, compose, preset};
 use auris_core::{AssetPath, AudioBuffer, Project};
@@ -106,6 +106,18 @@ pub struct SongSinger {
     pub speaker: Option<String>,
 }
 
+impl SongSinger {
+    fn track_name(&self) -> String {
+        self.speaker
+            .as_ref()
+            .filter(|speaker| *speaker != &self.name)
+            .map_or_else(
+                || self.name.clone(),
+                |speaker| format!("{} — {speaker}", self.name),
+            )
+    }
+}
+
 /// How multiple voices share the score.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SongSinging {
@@ -149,6 +161,84 @@ pub struct SongRequest {
 }
 
 impl SongRequest {
+    /// Prepare an isolated, note-free document with the user's exact sound and voice choices.
+    /// The agent supplies the form, chords, notes and mix; no composition writer runs here.
+    pub fn authoring_session(&self, idea: &SongIdea) -> Result<Session, String> {
+        self.validate()?;
+        idea.validate()?;
+        let mut session = Session::new(
+            SessionOptions::headless()
+                .with_balance(false)
+                .with_plugin_paths(self.plugin_paths.clone()),
+        )
+        .map_err(|e| e.to_string())?;
+        let mut project = Project::new(&idea.title, session.project.sample_rate);
+        let mut hosted = Vec::new();
+        for choice in &self.sources {
+            let source = session
+                .prepare_composed_source(choice.source.as_ref())
+                .map_err(|e| e.to_string())?;
+            let instrument = source.as_ref().map_or_else(
+                || choice.instrument.clone(),
+                |source| source.instrument_id(),
+            );
+            if source.is_none() && !session.registry.has_instrument(&instrument) {
+                return Err(format!("Unavailable instrument: {instrument}"));
+            }
+            let track = if choice.role == "drums" {
+                project.add_drum_track(&choice.role, &instrument)
+            } else {
+                project.add_instrument_track(&choice.role, &instrument)
+            };
+            if let Some(source) = source
+                && let Some(source) = session.install_composed_source(&mut project, track, source)
+            {
+                hosted.push((track, source));
+            }
+        }
+        for (track, source) in hosted {
+            session.install_composed_hosted_source(track, source);
+        }
+        session.replace_project(project);
+        session.install_library_fonts();
+        let drums: Vec<_> = session
+            .project
+            .tracks
+            .iter()
+            .filter(|track| track.kind.is_drum())
+            .map(|track| track.id)
+            .collect();
+        for track in drums {
+            if let Some(map) = session.suggested_drum_map(track) {
+                session
+                    .set_drum_map(track, map)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        session.set_tempo_at(auris_core::Ticks::ZERO, idea.tempo);
+        session.set_key(
+            auris_core::Ticks::ZERO,
+            auris_core::theory::key::Key::parse(&idea.key).ok_or("Invalid key")?,
+        );
+        if !self.singers.is_empty()
+            && let Some(dictionary) = &self.japanese_dictionary
+        {
+            session
+                .set_japanese_dictionary(Some(dictionary))
+                .map_err(|e| e.to_string())?;
+        }
+        for singer in &self.singers {
+            let track = session.add_singer_track(singer.track_name());
+            session
+                .set_singer_voice(track, Some(&singer.path))
+                .map_err(|e| e.to_string())?;
+            session
+                .set_singer_speaker(track, singer.speaker.as_deref())
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(session)
+    }
+
     /// Reject inconsistent controls before starting any model or render work.
     pub fn validate(&self) -> Result<(), String> {
         if self.seconds.is_some_and(|s| !(30..=300).contains(&s)) {
@@ -295,6 +385,52 @@ pub struct SongCandidate {
 }
 
 impl SongCandidate {
+    /// Stable musical addresses for planning a scoped continuation.
+    pub fn workshop_outline(&self) -> serde_json::Value {
+        serde_json::json!({"tracks": self.project.tracks.iter().map(|t| serde_json::json!({
+            "track":t.id.0, "name":t.name, "clips": t.kind.note_clips().map(|clips| clips.iter().map(|c| serde_json::json!({"clip":c.id.0,"notes":c.notes.len()})).collect::<Vec<_>>())
+        })).collect::<Vec<_>>()})
+    }
+    /// Restore an exact persisted workshop candidate and its audition.
+    pub fn load_workshop(folder: &std::path::Path, idea: SongIdea) -> Result<Self, String> {
+        let song = folder.join("song");
+        let mut project =
+            auris_io::load_project(&song.join("song.auris")).map_err(|e| e.to_string())?;
+        let resolve = |asset: &mut AssetPath| -> Result<(), String> {
+            *asset = AssetPath::external(
+                asset
+                    .resolve(Some(&song))
+                    .ok_or("Missing candidate asset")?,
+            );
+            Ok(())
+        };
+        for source in project.audio_sources.values_mut() {
+            resolve(&mut source.path)?;
+        }
+        for font in project.soundfonts.values_mut() {
+            resolve(&mut font.path)?;
+        }
+        for track in &mut project.tracks {
+            if let Some(instrument) = track.kind.as_instrument_mut()
+                && let Some(file) = &mut instrument.file
+            {
+                resolve(file)?;
+            }
+            if let Some(singer) = track.kind.as_singer_mut()
+                && let Some(voice) = &mut singer.voice
+            {
+                resolve(&mut voice.path)?;
+            }
+        }
+        let audio = auris_io::import_audio_file(&folder.join("audition.wav"), 22_050.0)
+            .map_err(|e| e.to_string())?;
+        Ok(Self {
+            idea,
+            project,
+            audio: Arc::new(audio),
+            _assets: None,
+        })
+    }
     /// Track names in the retained arrangement, including each selected singer.
     pub fn part_names(&self) -> Vec<String> {
         self.project
@@ -304,6 +440,49 @@ impl SongCandidate {
             .map(|track| track.name.clone())
             .collect()
     }
+
+    /// Writes this draft as a project of its own, leaving any open document alone.
+    ///
+    /// Adopting one draft discards the others, so this is how a draft that was not chosen is
+    /// kept. `chosen` lands in a folder of its own exactly as [`Session::save_as`] places it, and
+    /// the sung audio, which until now lives only in a temporary directory, is copied into that
+    /// folder's `Audio/`. An existing document is refused rather than replaced: keeping a draft
+    /// must never cost another project.
+    pub fn save_as(&self, chosen: &std::path::Path) -> Result<SaveReport, SessionError> {
+        let document = auris_io::document_in_folder(chosen);
+        let folder = auris_io::project_folder(&document)
+            .ok_or(SessionError::NoPath)?
+            .to_path_buf();
+        std::fs::create_dir_all(&folder)
+            .map_err(|error| auris_io::IoError::from_fs(&folder, error))?;
+        // Share the lock with ordinary saves, including the destination check and publication.
+        let _lock = super::files::project_write_lock(&document)?;
+        if document.exists() {
+            return Err(SessionError::WouldReplace(document));
+        }
+        let audio = folder.join(auris_io::AUDIO_DIR);
+        let mut project = self.project.clone();
+        for source in project.audio_sources.values_mut() {
+            let from = source.path.resolve(None).ok_or(SessionError::NoPath)?;
+            let name = auris_io::copy_into(&from, &audio)?;
+            source.path = AssetPath::inside(std::path::Path::new(auris_io::AUDIO_DIR).join(name));
+            source.byte_size = auris_io::byte_size(&from);
+        }
+        // Also refuse a destination created by a writer that does not use Auris's lock.
+        auris_io::stage_project(&document, &mut project)?
+            .publish_noclobber()
+            .map_err(|error| match error {
+                auris_io::IoError::ExportDestinationExists(path) => {
+                    SessionError::WouldReplace(path)
+                }
+                error => error.into(),
+            })?;
+        Ok(SaveReport {
+            document,
+            uncollected: Vec::new(),
+        })
+    }
+
     /// Compose and render on a worker without opening any realtime device.
     pub fn generate(
         idea: SongIdea,
@@ -411,6 +590,18 @@ impl SongCandidate {
                     .ok_or("Stale vocal render")?;
             }
         }
+        Self::from_authored_session(idea, brief, &mut session, cancel, progress)
+    }
+
+    /// Retain and render the exact authored document for audition and later adoption.
+    /// Does not generate notes, substitute instruments or rebalance the mix.
+    pub fn from_authored_session(
+        idea: SongIdea,
+        brief: &str,
+        session: &mut Session,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(&str),
+    ) -> Result<Self, String> {
         session.collect_hosted_state().map_err(|e| e.to_string())?;
         let mut project = session.project().clone();
         project.creation_brief = Some(format!(
@@ -460,6 +651,71 @@ impl SongCandidate {
 }
 
 impl Session {
+    /// Save an isolated workshop document and its exact audition before publication.
+    pub fn finish_workshop_candidate(
+        &mut self,
+        folder: &std::path::Path,
+        idea: SongIdea,
+        cancel: &AtomicBool,
+    ) -> Result<SongCandidate, String> {
+        if cancel.load(Ordering::Acquire) {
+            return Err("Cancelled".into());
+        }
+        if self.project.duration_seconds() > 330.0 {
+            return Err("A workshop candidate may be at most five minutes plus its ending".into());
+        }
+        for track in &self.project.tracks {
+            if track.kind.is_singer()
+                && self
+                    .singer_take_state(track.id)
+                    .map_err(|e| e.to_string())?
+                    != super::SingerTakeState::Current
+            {
+                return Err(format!(
+                    "Singer {} has no current synthesized take",
+                    track.name
+                ));
+            }
+        }
+        self.project.creation_brief = Some(format!("{}\n{}", idea.title, idea.description));
+        std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+        // This is the host-owned candidate directory. A failed audition may have left
+        // an earlier score here; recovery replaces that partial result from its checkpoint.
+        let report = self
+            .save_as_replacing(&folder.join("song.auris"))
+            .map_err(|e| e.to_string())?;
+        if !report.uncollected.is_empty() {
+            return Err("Candidate assets could not be collected".into());
+        }
+        let audio = self
+            .render_job()
+            .render(
+                &OfflineOptions {
+                    sample_rate: Some(22_050.0),
+                    ..Default::default()
+                },
+                &mut RenderProgress::default().cancelled_by(cancel),
+            )
+            .map_err(|e| e.to_string())?;
+        if cancel.load(Ordering::Acquire) {
+            return Err("Cancelled".into());
+        }
+        if audio.peak() <= 1e-8 {
+            return Err("The candidate is silent".into());
+        }
+        auris_io::write_wav(
+            &folder.join("audition.wav"),
+            &audio,
+            &auris_io::WavExportSettings {
+                sample_rate: 22_050,
+                bit_depth: auris_io::WavBitDepth::Float32,
+                dither: false,
+            },
+        )
+        .map_err(|e| e.to_string())?;
+        SongCandidate::load_workshop(folder, idea)
+    }
+
     fn arrange_candidate_singers(
         &mut self,
         request: &SongRequest,
@@ -475,14 +731,7 @@ impl Session {
         let clips = original.kind.note_clips().ok_or("No vocal clips")?.to_vec();
         self.project.remove_track(original.id);
         for (index, voice) in request.singers.iter().enumerate() {
-            let name = voice
-                .speaker
-                .as_ref()
-                .filter(|name| *name != &voice.name)
-                .map_or_else(
-                    || voice.name.clone(),
-                    |speaker| format!("{} — {speaker}", voice.name),
-                );
+            let name = voice.track_name();
             let track = self.project.add_singer_track(&name, auris_synth::Vocal::ID);
             for (position, clip) in clips.iter().enumerate() {
                 let together = request.singing == SongSinging::Harmony
@@ -632,6 +881,81 @@ impl Session {
 mod tests {
     use super::*;
 
+    #[test]
+    fn workshop_descendants_keep_parent_notes_and_do_not_modify_parent_files() {
+        let root = tempfile::tempdir().unwrap();
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        session
+            .agent_command(crate::live_agent::Command::Compose {
+                spec: None,
+                preset: Some("chiptune".into()),
+                replace: false,
+            })
+            .unwrap();
+        let idea = SongIdea {
+            title: "Original".into(),
+            description: "Chiptune".into(),
+            preset: "chiptune".into(),
+            tempo: 120.0,
+            key: "C major".into(),
+            density: 0.5,
+            lead: "synth".into(),
+        };
+        let cancel = AtomicBool::new(false);
+        let original = session
+            .finish_workshop_candidate(&root.path().join("1"), idea.clone(), &cancel)
+            .unwrap();
+        let parent = root.path().join("1/song/song.auris");
+        let bytes = std::fs::read(&parent).unwrap();
+        let mut child = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        assert!(child.open(&parent).unwrap().is_empty());
+        child.set_tempo_at(auris_core::time::Ticks::ZERO, 90.0);
+        let derived = child
+            .finish_workshop_candidate(&root.path().join("2"), idea, &cancel)
+            .unwrap();
+        assert_eq!(original.project.tracks, derived.project.tracks);
+        assert_eq!(std::fs::read(parent).unwrap(), bytes);
+        assert!(derived.audio.duration_seconds() > 0.0);
+    }
+
+    #[test]
+    fn authoring_starts_with_exact_sounds_and_voices_but_no_generated_score() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut request = vocal_request(folder.path(), SongSinging::Alternate);
+        for singer in &mut request.singers {
+            singer.name = "Shared voice".into();
+        }
+        request.sources.push(SongSourceChoice {
+            role: "chords".into(),
+            instrument: "auris.physical.piano".into(),
+            source: None,
+        });
+        let session = request.authoring_session(&idea()).unwrap();
+        assert_eq!(session.project().tracks.len(), 3);
+        assert_eq!(session.project().tracks[1].name, "Shared voice — First");
+        assert_eq!(session.project().tracks[2].name, "Shared voice — Second");
+        assert_eq!(
+            session.project().tracks[0]
+                .kind
+                .as_instrument()
+                .unwrap()
+                .instrument_id,
+            "auris.physical.piano"
+        );
+        assert!(
+            session.project().tracks.iter().all(|track| track
+                .kind
+                .note_clips()
+                .unwrap()
+                .is_empty())
+        );
+        assert!(session.project().song_spec.is_none());
+        assert!(session.project().audio_sources.is_empty());
+        for track in &session.project().tracks[1..] {
+            assert!(track.kind.as_singer().unwrap().voice.is_some());
+        }
+    }
+
     fn vocal_request(folder: &std::path::Path, singing: SongSinging) -> SongRequest {
         let path = folder.join("test.voicevox.json");
         std::fs::write(&path, r#"{"format_version":1,"name":"Test voice","url":"http://127.0.0.1:1","styles":[{"name":"First","query_style_id":6000,"decode_style_id":3001},{"name":"Second","query_style_id":6000,"decode_style_id":3002}]}"#).unwrap();
@@ -727,6 +1051,127 @@ mod tests {
         assert_eq!(
             spec.total_bars(),
             preset("chiptune").unwrap().spec().total_bars()
+        );
+    }
+
+    #[test]
+    fn concurrent_candidate_saves_refuse_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Concurrent.auris");
+        let barrier = Arc::new(std::sync::Barrier::new(16));
+        let audio = Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 480]], 48_000.0).unwrap());
+        let writers: Vec<_> = (0..16)
+            .map(|index| {
+                let barrier = Arc::clone(&barrier);
+                let chosen = chosen.clone();
+                let candidate = SongCandidate {
+                    idea: idea(),
+                    project: Project::new(format!("Draft {index}"), 48_000.0),
+                    audio: Arc::clone(&audio),
+                    _assets: None,
+                };
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    candidate.save_as(&chosen)
+                })
+            })
+            .collect();
+        let results: Vec<_> = writers
+            .into_iter()
+            .map(|writer| writer.join().unwrap())
+            .collect();
+        let successes = results.iter().filter(|result| result.is_ok()).count();
+        assert_eq!(
+            successes, 1,
+            "multiple saves replaced the same project: {results:?}"
+        );
+        for result in &results {
+            assert!(matches!(result, Ok(_) | Err(SessionError::WouldReplace(_))));
+        }
+        let winner = results.iter().position(Result::is_ok).unwrap();
+        let document = auris_io::document_in_folder(&chosen);
+        assert_eq!(
+            auris_io::load_project(&document).unwrap().name,
+            format!("Draft {winner}")
+        );
+    }
+
+    #[test]
+    fn candidate_save_waits_for_an_ordinary_save_to_publish() {
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Shared.auris");
+        let mut ordinary = Session::new(SessionOptions::headless()).unwrap();
+        ordinary.project.name = "Ordinary".into();
+        let staged = ordinary
+            .begin_save_as(&chosen)
+            .unwrap()
+            .run(&AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        let candidate = SongCandidate {
+            idea: idea(),
+            project: Project::new("Candidate", 48_000.0),
+            audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 480]], 48_000.0).unwrap()),
+            _assets: None,
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || sender.send(candidate.save_as(&chosen)).unwrap());
+        // The ordinary save holds the project lock until its staged document is published.
+        assert!(matches!(
+            receiver.recv_timeout(std::time::Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        let report = ordinary.continue_save(staged).unwrap().unwrap();
+        let saved = receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        worker.join().unwrap();
+        assert!(matches!(saved, Err(SessionError::WouldReplace(path)) if path == report.document));
+        assert_eq!(
+            auris_io::load_project(&report.document).unwrap().name,
+            "Ordinary"
+        );
+    }
+
+    #[test]
+    fn an_unchosen_candidate_saves_as_its_own_project_and_never_replaces_one() {
+        let assets = tempfile::tempdir().unwrap();
+        let file = assets.path().join("voice.wav");
+        let buffer = Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 4800]], 48_000.0).unwrap());
+        auris_io::write_wav(&file, &buffer, &Default::default()).unwrap();
+        let mut project = Project::new("Draft", 48_000.0);
+        let source =
+            project.add_audio_source("Voice", AssetPath::external(&file), 4800, 48_000.0, 1);
+        let candidate = SongCandidate {
+            idea: idea(),
+            project,
+            audio: buffer,
+            _assets: Some(assets),
+        };
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("Second.auris");
+        let report = candidate.save_as(&chosen).unwrap();
+        assert_eq!(report.document, root.path().join("Second/Second.auris"));
+        // The draft's temporary directory goes with it; the saved folder must not need it.
+        drop(candidate);
+        let mut reopened = Session::new(SessionOptions::headless()).unwrap();
+        assert!(reopened.open(&report.document).unwrap().is_empty());
+        assert!(reopened.project.audio_sources[&source].path.is_inside());
+        assert!((reopened.bank.get(source).unwrap().peak() - 0.25).abs() < 0.001);
+
+        let other = SongCandidate {
+            idea: idea(),
+            project: Project::new("Other", 48_000.0),
+            audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.5; 480]], 48_000.0).unwrap()),
+            _assets: None,
+        };
+        assert!(matches!(
+            other.save_as(&chosen),
+            Err(SessionError::WouldReplace(path)) if path == report.document
+        ));
+        assert_eq!(
+            auris_io::load_project(&report.document).unwrap().name,
+            "Draft"
         );
     }
 

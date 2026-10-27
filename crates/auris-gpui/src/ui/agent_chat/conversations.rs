@@ -185,6 +185,10 @@ impl ChatEntry {
 }
 
 impl AurisApp {
+    pub(crate) fn open_workshop_conversation(&mut self, store: ConversationStore, id: String) {
+        self.agent_chat.conversations.store = Some(store);
+        self.conversation_operation(Operation::Open(id));
+    }
     pub(crate) fn flush_conversation_storage(&mut self) -> Option<Receiver<()>> {
         self.agent_chat.link = None;
         let snapshot = self.conversation_snapshot();

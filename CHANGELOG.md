@@ -7,6 +7,42 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.13.0 — 2026-10-27
+
+### Conversational songwriting
+
+* **Develop songs through a persistent conversation.** Describe a direction, compare three
+  independently authored candidates as they finish, and continue from the exact selected score.
+  The director suggests arrangement changes without starting another batch until requested.
+* Retain comparisons, audition audio and candidate checkpoints across restarts and Save As.
+  Recover interrupted production from checkpoints with bounded retries, and save individual
+  candidates as separate projects without replacing an existing destination.
+* Optionally remember local song choices for future requests. Inspect or delete preference
+  history, and disable recording and retrieval independently of the current conversation.
+* Expand shared melody, phrasing, prosody, arrangement and mix guidance. Startup composers use
+  the agent's note-editing tools and review the complete mix before returning a candidate.
+
+### Audio and instruments
+
+* **Recover audio output after device loss, sleep or a failed open.** Retry in the background,
+  retain the musical position and reconnect the graph when output returns. Windows recovery
+  preserves ASIO thread affinity and replaces disconnected non-ASIO opener workers.
+* Use a shared audition player with seeking and volume controls across preview interfaces.
+* Preserve imported MIDI endings through the final sustain-controller and pitch-bend events.
+* Rework the physical piano across its registers and tune the mallet instrument's resonators.
+
+### Plugins and agent settings
+
+* Open native plugin editors directly, bring existing windows forward, and close VST3 editors
+  reliably. Distinguish CLAP and VST3 plugins in their controls.
+* Fix hosted parameter controls, initialize external effects before processing, and verify
+  agent-driven instrument and effect edits through the session tools.
+* Show agent-provider connection status and installed CLI versions in Settings.
+* Correct the custom window title bar and package both English and Japanese README files.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.12.0.
+Windows v0.10.0 and v0.11.0 still require one manual upgrade using the Windows installer.
+
 ## 0.12.0 — 2026-10-25
 
 ### Projects and getting started

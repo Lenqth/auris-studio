@@ -24,18 +24,6 @@ pub enum MenuCommand {
     WorkshopModel(usize),
     /// Refreshes the new-song model catalogue.
     WorkshopRefreshModels,
-    /// Adds a singer to the new-song draft.
-    WorkshopSinger(auris_session::SongSinger),
-    /// Selects the speaker of one draft singer.
-    WorkshopSpeaker(usize, String),
-    /// A discovered Engine style for a specific draft singer.
-    WorkshopVoicevox {
-        index: usize,
-        connection: std::sync::Arc<VoicevoxConnection>,
-        choice: VoicevoxSpeakerChoice,
-    },
-    /// Opens the installed voice setup flow.
-    WorkshopVoiceSetup,
     /// Copies the Markdown source of the message captured when its menu opened.
     CopyAgentMarkdown(String),
     /// A command scoped to the conversation identified when the menu opened.
@@ -1185,18 +1173,6 @@ impl AurisApp {
             }
             MenuCommand::WorkshopModel(index) => self.choose_workshop_model(index),
             MenuCommand::WorkshopRefreshModels => self.refresh_workshop_models(),
-            MenuCommand::WorkshopSinger(singer) => self.add_workshop_singer(singer),
-            MenuCommand::WorkshopSpeaker(index, speaker) => {
-                self.choose_workshop_speaker(index, speaker)
-            }
-            MenuCommand::WorkshopVoicevox {
-                index,
-                connection,
-                choice,
-            } => self.choose_workshop_voicevox(index, &connection, &choice),
-            MenuCommand::WorkshopVoiceSetup => {
-                self.open_voice_setup(crate::voice_setup_window::VoiceSetupTab::Voicevox, cx)
-            }
             MenuCommand::SongSinger(path) => {
                 if let Some(dials) = self.song_sheet.as_mut() {
                     if dials.singer != path {

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "conditions": "内蔵音源を使い、外部の音声批評とインターネット検索は使わないで。ダウンロードやシェル操作は不要。既存の曲を引用せずオリジナルを作って。プロジェクトは未保存のまま残して。",
+  "axes": ["request_fit", "melody", "form", "ensemble", "sound"],
+  "listening_rubric": {
+    "request_fit": ["Does the piece serve the requested role and preserve authored material? Do not reward extra complexity, instruments or duration.", "Which requested constraints are satisfied in the score, and which need listening? Cite bars or timestamps."],
+    "melody": ["Can you identify and remember a rhythmic or contour idea? Exact repetition, repeated pitches and a narrow range may be appropriate.", "Do the phrases have purposeful direction, targets and releases against the actual harmony? Intentional tension is not an error simply because it lies outside a triad.", "Do entry timing, note lengths and rests serve the phrase and instrument? Distinguish a flowing or deliberately continuous riff from a line that feels breathless or arbitrarily chopped."],
+    "form": ["Does each requested section contribute to the arc, including interlude, return and ending or loop join?", "Can contrast be heard in pacing, register, harmony or texture rather than only loudness? A sparse or static brief does not require a dramatic climax."],
+    "ensemble": ["Is the intended foreground clear when the ensemble plays, and do supporting rhythms, registers and answers serve it?", "Does bass/harmonic voice leading support the melodic destinations without unnecessary competing attacks? Intentional doubling or overlap is allowed."],
+    "sound": ["Are articulation, note endings and dynamics convincing for the selected sounds? MIDI gates alone cannot establish this.", "Do any effects contribute useful depth, colour or motion without obscuring attacks, phrase gaps or the return? No effects can be the right choice. Consider playback loudness separately."]
+  },
+  "delivery_prompt": "曲全体を読み返して必要な局所修正を済ませ、指定小節数ちょうどの24bit WAV「{output}/result.wav」とMIDI「{output}/result.mid」を書き出して。実ファイルの長さ、無音、音割れ、終端を確認し、行った譜面確認・測定と未実施の試聴を区別して簡潔に報告して。",
+  "cases": [
+    {
+      "id": "singable_answer",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": ["帰り道の気持ちが少し軽くなる、口ずさめる16小節の器楽曲。100 BPM、4/4、ハ長調。クラリネットを主役にピアノとベースを添えて。前半の問いかけに後半で応え、最後は落ち着いて終わって。"]
+    },
+    {
+      "id": "repeated_pitch_hook",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": ["ゲームのメニュー用に、控えめだが覚えやすい8小節ループを作って。112 BPM、4/4、ホ短調。少ない音高と反復を生かしたシンセの短いフック、ベース、軽いドラム。音域を大きく広げず、長く繰り返しても邪魔にならない曲にして。"]
+    },
+    {
+      "id": "interlude_return",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": ["旅の途中の小さな発見を描く20小節のポップ器楽曲。120 BPM、4/4、ト長調。主題8小節、間奏4小節、主題の帰還と終わり8小節。主役はフルート、間奏では鍵盤が前に出る。ベースとドラムも使い、帰還が自然につながるようにして。"]
+    },
+    {
+      "id": "protected_folk_support",
+      "split": "development",
+      "fixture": "melody_six_eight_eight_bars",
+      "prompts": ["既存の8小節の旋律を音符・長さ・強弱とも完全に残して、柔らかな鍵盤とベースの伴奏を加えて。90 BPM、6/8を維持し、主旋律の流れを支える小さな器楽曲にして。8小節ちょうどで終えて。"]
+    },
+    {
+      "id": "held_arrival",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": ["別れを惜しむ8小節の短いクラリネット曲を作って。80 BPM、4/4、イ短調。ピアノだけを伴奏に、終盤の長い音に気持ちが集まり、8小節目の中に余韻を残して終わるようにして。細切れの演奏にはしないで。"]
+    },
+    {
+      "id": "sustained_scene",
+      "split": "development",
+      "fixture": "blank",
+      "prompts": ["静かな宇宙空間を描く8小節のBGMループ。72 BPM、4/4、ニ短調。持続するパッドと疎らな鍵盤だけで、呼吸するような緩い動きを作って。ドラム、派手なサビ、はっきりした終止は不要。"]
+    },
+    {
+      "id": "waltz_lanterns",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": ["夜の灯りを眺める12小節のワルツを作って。108 BPM、3/4、ヘ長調。オーボエ、ピアノ、ベース。親密な主題が途中で少し表情を変えて戻り、最後は静かに閉じる器楽曲にして。"]
+    },
+    {
+      "id": "bass_foreground",
+      "split": "holdout",
+      "fixture": "blank",
+      "prompts": ["低いベースのリフが主役の16小節のファンク風器楽曲。104 BPM、4/4、イ短調。ドラムと短い鍵盤の応答を加えて。前半と後半に違いを作りながらリフを覚えられる曲にして。高音のリードは加えず、16小節目で歯切れよく終わって。"]
+    }
+  ]
+}

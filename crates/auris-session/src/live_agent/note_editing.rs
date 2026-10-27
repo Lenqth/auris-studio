@@ -125,6 +125,15 @@ impl Session {
             if request.offset > clip.notes.len() {
                 return Err("Offset exceeds the note count".into());
             }
+            // Pages retain storage order because `index` is the edit address.  Give every
+            // note its rank in a separate, stable timeline view so callers can sort lyric
+            // phrases without ever confusing that rank with an editable storage index.
+            let mut timeline_order: Vec<_> = (0..clip.notes.len()).collect();
+            timeline_order.sort_by_key(|index| (clip.notes[*index].start, *index));
+            let mut timeline_indices = vec![0; clip.notes.len()];
+            for (timeline_index, storage_index) in timeline_order.into_iter().enumerate() {
+                timeline_indices[storage_index] = timeline_index;
+            }
             let notes: Vec<_> = clip
                 .notes
                 .iter()
@@ -140,6 +149,7 @@ impl Session {
                     fields.insert("start_tick".into(), note.start.raw().into());
                     fields.insert("length_ticks".into(), note.length.raw().into());
                     fields.insert("index".into(), index.into());
+                    fields.insert("timeline_index".into(), timeline_indices[index].into());
                     Ok::<_, String>(value)
                 })
                 .collect::<Result<_, _>>()?;
@@ -411,6 +421,130 @@ mod tests {
                 .is_err()
         );
         assert_eq!(session.project(), &before);
+    }
+
+    #[test]
+    fn read_notes_exposes_stable_timeline_rank_without_changing_storage_addresses() {
+        let mut session = Session::new(crate::SessionOptions::headless()).unwrap();
+        let track = session.add_default_instrument_track("Vocal").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Unsorted", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        session
+            .replace_notes(
+                clip,
+                vec![
+                    Note::new(62, Ticks(960), Ticks(120)),
+                    Note::new(60, Ticks::ZERO, Ticks(120)),
+                    Note::new(64, Ticks::ZERO, Ticks(120)),
+                ],
+            )
+            .unwrap();
+
+        let result: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_read_notes(&[NoteRead {
+                    clip: clip.0,
+                    offset: 0,
+                }])
+                .unwrap(),
+        )
+        .unwrap();
+        let notes = result["clips"][0]["notes"].as_array().unwrap();
+        assert_eq!(notes[0]["index"], 0);
+        assert_eq!(notes[0]["timeline_index"], 2);
+        assert_eq!(notes[1]["index"], 1);
+        assert_eq!(notes[1]["timeline_index"], 0);
+        assert_eq!(notes[2]["index"], 2);
+        assert_eq!(notes[2]["timeline_index"], 1);
+        assert_eq!(notes[1]["start_tick"], 0);
+        assert_eq!(notes[2]["start_tick"], 0);
+    }
+
+    #[test]
+    fn timeline_rank_is_global_across_storage_pages() {
+        let mut session = Session::new(crate::SessionOptions::headless()).unwrap();
+        let track = session.add_default_instrument_track("Lead").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Paged", Ticks::ZERO, Ticks::QUARTER * 200)
+            .unwrap();
+        session
+            .replace_notes(
+                clip,
+                (0..129)
+                    .rev()
+                    .map(|index| Note::new(60, Ticks(index * 960), Ticks(12)))
+                    .collect(),
+            )
+            .unwrap();
+
+        let last: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_read_notes(&[NoteRead {
+                    clip: clip.0,
+                    offset: 128,
+                }])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(last["clips"][0]["notes"][0]["index"], 128);
+        assert_eq!(last["clips"][0]["notes"][0]["timeline_index"], 0);
+    }
+
+    #[test]
+    fn write_lyrics_uses_timeline_order_but_keeps_storage_indices_editable() {
+        let mut session = Session::new(crate::SessionOptions::headless()).unwrap();
+        let track = session.add_singer_track("Vocal");
+        let clip = session
+            .add_midi_clip(track, "Unsorted", Ticks::ZERO, Ticks::QUARTER * 4)
+            .unwrap();
+        session
+            .replace_notes(
+                clip,
+                vec![
+                    Note::new(62, Ticks(960), Ticks(120)),
+                    Note::new(60, Ticks::ZERO, Ticks(120)),
+                    Note::new(64, Ticks(1920), Ticks(120)),
+                ],
+            )
+            .unwrap();
+
+        session.write_lyrics(clip, &[0, 1, 2], "あいう").unwrap();
+        let notes = &session.midi_clip(clip).unwrap().notes;
+        assert_eq!(notes[0].lyric, "い");
+        assert_eq!(notes[1].lyric, "あ");
+        assert_eq!(notes[2].lyric, "う");
+
+        let result: serde_json::Value = serde_json::from_str(
+            &session
+                .agent_read_notes(&[NoteRead {
+                    clip: clip.0,
+                    offset: 0,
+                }])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(result["clips"][0]["notes"][0]["index"], 0);
+        assert_eq!(result["clips"][0]["notes"][0]["timeline_index"], 1);
+        assert_eq!(result["clips"][0]["notes"][1]["index"], 1);
+        assert_eq!(result["clips"][0]["notes"][1]["timeline_index"], 0);
+        let earliest = result["clips"][0]["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["timeline_index"] == 0)
+            .unwrap();
+        let edit: NoteEdit = serde_json::from_value(serde_json::json!({
+            "kind":"patch", "clip":clip.0,
+            "update":[{"index":earliest["index"],"pitch":67}]
+        }))
+        .unwrap();
+        session
+            .agent_edit_notes(result["revision"].as_str().unwrap(), vec![edit])
+            .unwrap();
+        let notes = &session.midi_clip(clip).unwrap().notes;
+        assert_eq!((notes[1].pitch, notes[1].lyric.as_str()), (67, "あ"));
+        assert_eq!((notes[0].pitch, notes[0].lyric.as_str()), (62, "い"));
     }
 
     #[test]

@@ -438,6 +438,8 @@ mod tests {
         let before = app.read_with(cx, |app, _| app.session.project().clone());
         app.update(cx, |app, cx| {
             app.settings.setup_guide_seen = false;
+            // Model a first-run window even if another fixture has already dismissed its guide.
+            app.settings_baseline.borrow_mut().setup_guide_seen = false;
             app.offer_initial_setup(cx);
         });
         let handle = app.read_with(cx, |app, _| app.setup_guide_window.unwrap());
@@ -465,7 +467,9 @@ mod tests {
         guide_cx.run_until_parked();
         app.read_with(guide_cx, |app, _| {
             assert!(app.settings.setup_guide_seen);
-            assert!(auris_session::Settings::load().setup_guide_seen);
+            // A successful disk write advances this window's baseline. A separate read of the
+            // shared settings file can instead see a later write from another window fixture.
+            assert!(app.settings_baseline.borrow().setup_guide_seen);
             assert_eq!(app.session.project(), &before);
         });
         app.update(guide_cx, |app, cx| {
