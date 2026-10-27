@@ -1,6 +1,19 @@
 //! Recognizer-independent piano-note drafts and explicitly claimed provenance.
 
-use crate::{AnalysisError, audio::TranscribedNote};
+use crate::AnalysisError;
+
+/// One note hypothesis in source seconds before musical quantization.
+#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct TranscribedNote {
+    /// MIDI pitch, 0..=127.
+    pub pitch: u8,
+    /// Inclusive source time in seconds.
+    pub start: f64,
+    /// Exclusive source time in seconds.
+    pub end: f64,
+    /// Relative level mapped into 0..=1; not a recovered MIDI velocity.
+    pub strength: f32,
+}
 use serde::{Deserialize, Serialize};
 
 /// Caller-declared provenance, not a certificate of model identity or musical accuracy.

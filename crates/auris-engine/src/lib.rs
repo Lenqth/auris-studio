@@ -100,7 +100,7 @@ pub use capture::{
 pub use command::EngineCommand;
 pub use device::{
     AudioDevice, AudioDeviceInfo, AudioSettings, audio_hosts, output_devices,
-    output_devices_for_host, start_audio, start_silent,
+    output_devices_for_host, start_audio, start_silent, try_start_audio,
 };
 pub use error::EngineError;
 pub use graph::{

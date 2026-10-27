@@ -16,7 +16,7 @@ No production transcription behavior changes as part of this experiment.
 ## Input and isolation
 
 The inputs are the same 12 held-out composer recordings from the
-[piano transcription evaluation](piano-transcription-evaluation.md): city-pop,
+[piano transcription evaluation](../tools/eval/references/piano-transcription-2026-10-21.json): city-pop,
 jazz-trio and orchestral, seeds 901/902, each rendered as piano and a native mixture.
 Their frozen scores contain 924 reference events after coincident unison merging.
 These are controlled synthetic recordings, not independent acoustic performances.

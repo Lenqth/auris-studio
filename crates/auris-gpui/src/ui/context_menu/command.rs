@@ -24,18 +24,6 @@ pub enum MenuCommand {
     WorkshopModel(usize),
     /// Refreshes the new-song model catalogue.
     WorkshopRefreshModels,
-    /// Adds a singer to the new-song draft.
-    WorkshopSinger(auris_session::SongSinger),
-    /// Selects the speaker of one draft singer.
-    WorkshopSpeaker(usize, String),
-    /// A discovered Engine style for a specific draft singer.
-    WorkshopVoicevox {
-        index: usize,
-        connection: std::sync::Arc<VoicevoxConnection>,
-        choice: VoicevoxSpeakerChoice,
-    },
-    /// Opens the installed voice setup flow.
-    WorkshopVoiceSetup,
     /// Copies the Markdown source of the message captured when its menu opened.
     CopyAgentMarkdown(String),
     /// A command scoped to the conversation identified when the menu opened.
@@ -101,21 +89,14 @@ pub enum MenuCommand {
     },
     /// Recognize written chords on one track, or across all pitched tracks.
     AnalyzeChords(Option<TrackId>),
-    /// Analyze the trimmed source of an audio clip, optionally extracting a monophonic draft.
-    AnalyzeAudio {
-        /// Source clip to inspect.
-        clip: ClipId,
-        /// Include isolated monophonic note extraction.
-        transcribe: bool,
-    },
+    /// Analyze tempo and chords in the trimmed source of an audio clip.
+    AnalyzeAudio(ClipId),
     /// Cancel an offline CPU analysis.
     CancelMusicAnalysis,
     /// Display the current draft with its alternatives.
     ViewMusicAnalysis,
     /// Choose a local model and estimate instruments in the audio clip.
     AnalyzeInstruments(ClipId),
-    /// Ask for noncommercial acknowledgement before optional mixture transcription.
-    TranscribeMixture(ClipId),
     /// Explicitly accept supported chord intervals.
     ApplyMusicChords,
     /// Accept one alternative in the symbolic chord report.
@@ -125,8 +106,6 @@ pub enum MenuCommand {
         /// Alternative within that interval.
         candidate: usize,
     },
-    /// Add transcribed notes on a new instrument track.
-    CreateTranscriptionTrack,
     /// Adopt a candidate as the analyzed clip's source BPM.
     ApplyMusicTempo(usize),
     /// Measure this instrument using rendered audio, without changing its notes.
@@ -928,23 +907,19 @@ impl AurisApp {
                 self.session.end_transaction();
             }
             MenuCommand::AnalyzeChords(track) => self.begin_chord_analysis(track, cx),
-            MenuCommand::AnalyzeAudio { clip, transcribe } => {
-                self.begin_audio_analysis(clip, transcribe, cx)
-            }
+            MenuCommand::AnalyzeAudio(clip) => self.begin_audio_analysis(clip, cx),
             MenuCommand::CancelMusicAnalysis => {
                 self.music_analysis.cancel_requested();
                 self.set_status(self.t(Key::AnalysisCancelled));
             }
             MenuCommand::ViewMusicAnalysis => self.view_music_analysis(),
             MenuCommand::AnalyzeInstruments(clip) => self.choose_instrument_model(clip, cx),
-            MenuCommand::TranscribeMixture(clip) => self.request_mixture_transcription(clip),
-            MenuCommand::ApplyMusicChords => self.accept_music_analysis(None, false, None),
+            MenuCommand::ApplyMusicChords => self.accept_music_analysis(None, None),
             MenuCommand::ApplyMusicCandidate { segment, candidate } => {
-                self.accept_music_analysis(Some((segment, candidate)), false, None)
+                self.accept_music_analysis(Some((segment, candidate)), None)
             }
-            MenuCommand::CreateTranscriptionTrack => self.accept_music_analysis(None, true, None),
             MenuCommand::ApplyMusicTempo(candidate) => {
-                self.accept_music_analysis(None, false, Some(candidate))
+                self.accept_music_analysis(None, Some(candidate))
             }
             MenuCommand::AnalyzeDrums(track) => self.begin_drum_analysis(track, cx),
             MenuCommand::ApplyDrumMap(track) => self.apply_measured_drums(track, true),
@@ -1198,18 +1173,6 @@ impl AurisApp {
             }
             MenuCommand::WorkshopModel(index) => self.choose_workshop_model(index),
             MenuCommand::WorkshopRefreshModels => self.refresh_workshop_models(),
-            MenuCommand::WorkshopSinger(singer) => self.add_workshop_singer(singer),
-            MenuCommand::WorkshopSpeaker(index, speaker) => {
-                self.choose_workshop_speaker(index, speaker)
-            }
-            MenuCommand::WorkshopVoicevox {
-                index,
-                connection,
-                choice,
-            } => self.choose_workshop_voicevox(index, &connection, &choice),
-            MenuCommand::WorkshopVoiceSetup => {
-                self.open_voice_setup(crate::voice_setup_window::VoiceSetupTab::Voicevox, cx)
-            }
             MenuCommand::SongSinger(path) => {
                 if let Some(dials) = self.song_sheet.as_mut() {
                     if dials.singer != path {

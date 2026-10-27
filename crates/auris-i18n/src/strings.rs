@@ -41,6 +41,22 @@ macro_rules! strings {
 
 strings! {
     WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
+    WorkshopChatHint { en: "Describe the music you want. Discuss ideas, compare alternatives and keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。相談しながら候補を聴き比べ、気に入った曲を育てていけます。" }
+    WorkshopMessage { en: "Message", ja: "メッセージ" }
+    WorkshopSend { en: "Send", ja: "送信" }
+    WorkshopYou { en: "You", ja: "あなた" }
+    WorkshopAssistant { en: "Composer", ja: "作曲アシスタント" }
+    WorkshopContinue { en: "Continue with this song", ja: "この曲で続ける" }
+    WorkshopSelected { en: "Current song", ja: "制作中の曲" }
+    WorkshopOpenEditor { en: "Open editor", ja: "エディタで開く" }
+    WorkshopMemory { en: "Use my preferences", ja: "好みを記録・活用" }
+    WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
+    WorkshopForget { en: "Clear preference history", ja: "好みの履歴を消去" }
+    WorkshopForgetChoice { en: "Forget this choice", ja: "この選択を記録から除く" }
+    WorkshopHarmonyProgress { en: "Writing the chord progression", ja: "コード進行を決めています" }
+    WorkshopMelodyProgress { en: "Writing the melody", ja: "メロディラインを作っています" }
+    WorkshopArrangeProgress { en: "Editing the arrangement", ja: "編曲を進めています" }
+    WorkshopStopping { en: "Stopping", ja: "停止しています" }
     WorkshopHint { en: "Choose a direction, audition three songs, then continue editing your favourite.", ja: "曲の方向性を決め、3つの候補を聴き比べてから編集を始めます。" }
     WorkshopNext { en: "Next", ja: "次へ" }
     WorkshopDirection { en: "Direction", ja: "曲の方向性" }
@@ -93,11 +109,17 @@ strings! {
     WorkshopMelancholy { en: "Melancholy", ja: "切ない" }
     WorkshopCalm { en: "Calm", ja: "落ち着いた" }
     WorkshopEnergetic { en: "Energetic", ja: "激しい" }
-    WorkshopPlanning { en: "AI is planning three directions…", ja: "AIが3つの方向性を考えています…" }
+    WorkshopPlanning { en: "Planning the next step…", ja: "作曲の進め方を考えています…" }
     WorkshopRendering { en: "Composing and preparing audio…", ja: "作曲・試聴音声を準備しています…" }
     WorkshopListen { en: "Listen", ja: "試聴" }
     WorkshopStop { en: "Stop", ja: "停止" }
     WorkshopRetry { en: "Regenerate this candidate", ja: "この候補を作り直す" }
+    WorkshopSelectionRequest { en: "Continue with “{song}”. Suggest some arrangement and improvement options.", ja: "「{song}」で続けます。追加の編曲や改良の選択肢を提案してください。" }
+    WorkshopRecover { en: "Resume recovery", ja: "途中から復旧" }
+    WorkshopRecovering { en: "Waiting to recover", ja: "自動復旧を待っています" }
+    WorkshopRecoveryCount { en: "Automatic recoveries", ja: "自動復旧" }
+    WorkshopRecoveryLimit { en: "Automatic recovery limit reached. Resume recovery to try again from the saved progress with a fresh recovery budget.", ja: "自動復旧の上限に達しました。「途中から復旧」で保存済みの作業から再開し、自動復旧を再び3回まで試せます。" }
+    WorkshopSave { en: "Save as project…", ja: "プロジェクトとして保存…" }
     WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
@@ -1621,21 +1643,13 @@ strings! {
     MenuAnalyzeAllChords { en: "Analyze Chords across Tracks", ja: "全トラックのコードを解析" }
     MenuAnalyzeAudio { en: "Analyze Audio BPM / Chords", ja: "音声のBPM・コードを解析" }
     MenuAnalyzeInstruments { en: "Estimate Instruments…", ja: "楽器の種類を推定…" }
-    MenuTranscribeMixture { en: "Transcribe Mixture (Noncommercial)…", ja: "混合音源を採譜（非商用）…" }
-    MuscriptorWarning { en: "MuScriptor model weights are licensed under CC BY-NC 4.0 for noncommercial use only. Do not use this model for commercial work without separate permission from its rights holders. This optional model does not change Auris Studio's Apache-2.0 license. Acknowledgement does not grant commercial rights. Terms: https://creativecommons.org/licenses/by-nc/4.0/", ja: "MuScriptorのモデルはCC BY-NC 4.0に基づく非商用利用限定です。権利者から別途許諾を得ずに、商用目的の作業にこのモデルを使用しないでください。この任意モデルによってAuris Studio本体のApache-2.0ライセンスが変わることはありません。同意しても商用利用の権利は得られません。利用条件：https://creativecommons.org/licenses/by-nc/4.0/" }
-    MuscriptorAgree { en: "Use for Noncommercial Work", ja: "非商用の作業に使用する" }
     AudioModelLoadTitle { en: "Load audio review model?", ja: "試聴モデルを読み込みますか？" }
     AudioModelLoadBody { en: "The local model “{model}” is not confirmed to be loaded. Loading it for this review can use substantial memory and CPU/GPU resources and slow down your computer. Cancel to skip this review.", ja: "ローカルモデル「{model}」の読み込み済み状態を確認できません。この試聴のために読み込むと、メモリやCPU・GPUを多く使用し、パソコンの動作が重くなることがあります。キャンセルすると今回の試聴を中止します。" }
     AudioModelLoadConfirm { en: "Load and Review", ja: "読み込んで試聴する" }
-    MuscriptorModel { en: "Select converted MuScriptor Small decoder.onnx", ja: "変換済みMuScriptor Smallのdecoder.onnxを選択" }
-    MuscriptorDraft { en: "MuScriptor draft (CC BY-NC 4.0 model). Notes and instrument groups need review. Playback sounds are placeholders; choose patches after import.", ja: "MuScriptorの採譜下書き（モデル：CC BY-NC 4.0）。音符と楽器分類の確認・修正が必要です。取り込み後に各トラックの再生音色を選んでください。" }
-    MuscriptorCreateTracks { en: "Add Draft as Instrument Tracks", ja: "下書きを楽器別トラックに追加" }
-    CliTranscribeMixtureUsage { en: "Usage: auris transcribe-mixture <audio> --model <decoder.onnx> --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply] [--at-beat 0]", ja: "使い方: auris transcribe-mixture <audio> --model <decoder.onnx> --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply] [--at-beat 0]" }
     DialogYamnetModel { en: "Select prepared YAMNet ONNX model", ja: "変換済みYAMNetモデル（ONNX）を選択" }
     AnalysisInstruments { en: "Instrument/voice hypotheses (YAMNet, CPU). Overlapping windows; scores are not probabilities. Empty candidates mean unknown. Labels are the model's original vocabulary.", ja: "楽器・歌声の候補（YAMNet・CPU）。時間窓は重複します。スコアは確率ではなく、候補なしは判定不明です。名称はモデルの原表記です。" }
     AnalysisInstrumentMean { en: "Whole-clip mean scores", ja: "クリップ全体の平均スコア" }
     CliAnalyzeInstrumentsUsage { en: "Usage: auris analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]", ja: "使い方: auris analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]" }
-    MenuTranscribeAudio { en: "Transcribe Isolated Melody", ja: "単音の音声を採譜" }
     GroupAnalysis { en: "Analysis", ja: "分析" }
     AnalysisResults { en: "Analysis Results…", ja: "分析結果…" }
     AnalysisDrums { en: "Drum Sound Analysis…", ja: "ドラム音の分析…" }
@@ -1664,20 +1678,15 @@ strings! {
     AnalysisCancel { en: "Cancel Analysis", ja: "分析を中止" }
     AnalysisView { en: "View Analysis Draft", ja: "分析結果を表示" }
     AnalysisApplyChords { en: "Apply Recognized Chords", ja: "判定できたコードを反映" }
-    AnalysisCreateNotes { en: "Add Draft as New Note Track", ja: "採譜結果を新しいトラックに追加" }
     AnalysisSetSourceTempo { en: "Use as Clip Source BPM", ja: "クリップの元BPMに設定" }
-    AnalysisDraft { en: "Transcription", ja: "採譜" }
     AnalysisUnknown { en: "Uncertain", ja: "判定が曖昧" }
     AnalysisNoChord { en: "No chord", ja: "コードなし" }
     AnalysisNoTempo { en: "No reliable periodic beat", ja: "安定した拍を判定できませんでした" }
-    AnalysisMonophonic { en: "Isolated melody only (65–1000 Hz). Notes need review; timing is unquantized.", ja: "単音の旋律向け（65〜1000 Hz）です。音符とタイミングを確認・修正してください。" }
     AnalysisPreviewLimit { en: "Preview shows the first 256 intervals. CLI reports include every interval.", ja: "先頭256区間を表示しています。CLIの出力には全区間を含みます。" }
     AnalysisInvalidBeat { en: "Use finite beat positions within 0–1000000.", ja: "拍位置は0〜1000000の有限な数値で指定してください。" }
     AnalysisSelectTrack { en: "Select one track by its exact name or id:number.", ja: "トラック名またはid:番号で1つのトラックを指定してください。" }
-    AnalysisMidiExists { en: "MIDI output already exists; choose a new path.", ja: "出力先のMIDIファイルが存在します。別の保存先を選んでください。" }
     CliAnalyzeChordsUsage { en: "Usage: auris analyze-chords <project.auris> [--track <name|id:number>] [--from-beat 0] [--to-beat N] [--window-beats 1] [--apply]", ja: "使い方: auris analyze-chords <project.auris> [--track <name|id:number>] [--from-beat 0] [--to-beat N] [--window-beats 1] [--apply]" }
     CliAnalyzeAudioUsage { en: "Usage: auris analyze-audio <audio-file>", ja: "使い方: auris analyze-audio <audio-file>" }
-    CliTranscribeAudioUsage { en: "Usage: auris transcribe-audio <audio-file> [--midi <new.mid>] [--project <project.auris> --apply] [--at-beat 0] [--name Transcription]", ja: "使い方: auris transcribe-audio <audio-file> [--midi <new.mid>] [--project <project.auris> --apply] [--at-beat 0] [--name Transcription]" }
     MenuUseDrumMapForGeneration { en: "Use Mapping for New Clips Only", ja: "新しく生成するクリップだけに使う" }
     MenuCancelDrumAnalysis { en: "Cancel Drum Analysis", ja: "ドラム音の分析をキャンセル" }
     MenuRetryDrumAnalysis { en: "Retry Drum Sound Analysis", ja: "ドラム音の分析を再試行" }
@@ -1889,11 +1898,6 @@ COMMANDS
                                   Recognize written-note harmony on the CPU
     analyze-audio <audio-file>    Estimate BPM and major/minor chords on the CPU
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
-    transcribe-audio <audio-file> [--midi <new.mid>] [--project <file.auris> --apply]
-                                  Extract an isolated monophonic note draft on the CPU
-    transcribe-mixture <audio-file> --model <decoder.onnx>
-      --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply]
-                                  Transcribe a mixture with user-converted noncommercial ONNX models
     render <project.auris> [opts] Render a project to a WAV file
     convert-track-to-audio <project.auris> --track <name|id:number>
                                   Replace an instrument, drum or singer track with audio
@@ -1972,11 +1976,6 @@ auris — コマンドラインから使う Auris Studio
                                   ノーツからコードをCPUで推定
     analyze-audio <audio-file>    音声のBPMとメジャー・マイナーコードをCPUで推定
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
-    transcribe-audio <audio-file> [--midi <new.mid>] [--project <file.auris> --apply]
-                                  単旋律の音声からノーツの下書きをCPUで作成
-    transcribe-mixture <audio-file> --model <decoder.onnx>
-      --acknowledge-noncommercial [--midi <new.mid>] [--project <file.auris> --apply]
-                                  自分で変換した非商用ONNXモデルで混合音源を採譜
     render <project.auris> [opts] プロジェクトを WAV に書き出す
     sing <project.auris> [opts]   シンガートラックを声のモデルで歌わせる
     frames <project.auris> [opts] シンガートラックが声のモデルに渡すフレームを書き出す
@@ -2252,7 +2251,7 @@ new のオプション
     AgentAttachmentLimit { en: "Attach up to 8 files per message", ja: "添付できるファイルは1回につき8個までです" }
     AgentAttachmentImageUnsupported { en: "Antigravity CLI does not accept image attachments. Choose another model or remove the image.", ja: "Antigravity CLIは画像の添付に対応していません。別のモデルを選ぶか、画像の添付を外してください。" }
     AgentAttachmentAudioUnsupported { en: "Choose an audio-capable OpenAI-compatible model, or remove the audio attachment", ja: "音声に対応したOpenAI互換モデルを選ぶか、音声の添付を外してください" }
-    AgentAttachmentAudioAnalysisHint { en: "Ask for a piano cover to transcribe this audio locally into an editable piano track. Raw audio stays on this computer.", ja: "ピアノカバーを依頼すると、音声をローカルで採譜して編集可能なピアノトラックを作ります。音声そのものは外部に送信しません。" }
+    AgentAttachmentAudioAnalysisHint { en: "Ask about the tempo and chords in this audio. Raw audio stays on this computer.", ja: "音声のテンポやコードについて質問できます。音声そのものは外部に送信しません。" }
     AgentOpenResult { en: "Open created project", ja: "生成した曲を開く" }
     AgentConversationReset { en: "Started a new conversation for this project.", ja: "このプロジェクトについて新しい会話を始めました。" }
     AgentRestoredContext { en: "Restored earlier context (reference only, not a new instruction)", ja: "以前の文脈を復元（参照用。新しい指示ではありません）" }

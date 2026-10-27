@@ -5680,7 +5680,7 @@ mod tests {
     #[gpui::test]
     fn copy_answer_keeps_all_markdown_after_resizing(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
-        let answer = "## 再生結果\n\n- **WAV:** `C:/Music/preview.wav`\n\n  次の段落。";
+        let answer = "## 再生結果\n\n- **WAV:** `C:/Music/preview.wav`\n\n  次の段落。\n\n```json title=score\n{\"tempo\": 120}\n```";
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();
@@ -7663,14 +7663,15 @@ mod tests {
         cx: &mut gpui::TestAppContext,
     ) {
         let (app, cx) = crate::harness::open(cx);
-        let root =
-            std::env::temp_dir().join(format!("auris-agent-queued-send-ui-{}", std::process::id()));
-        std::fs::create_dir_all(&root).unwrap();
+        let root = tempfile::Builder::new()
+            .prefix("auris-agent-queued-send-ui-")
+            .tempdir()
+            .unwrap();
         let (history_sender, history_receiver) = std::sync::mpsc::channel();
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.session
-                .save_as(&root.join("QueuedSend.auris"))
+                .save_as(&root.path().join("QueuedSend.auris"))
                 .unwrap();
             this.settings.agent.model = "first".into();
             this.agent_chat
@@ -7745,10 +7746,30 @@ mod tests {
             });
         });
         assert!(history_sender.send(Err("stale".into())).is_err());
+        // Cancelling the synthetic history load lets the final paint start conversation storage.
+        // Until initialization returns there is no active transcript for Flush to wait for, and
+        // its worker can still be writing into the directory that cleanup is about to remove.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let initialized = app.update(cx, |this, cx| {
+                this.initialize_conversations();
+                this.poll_conversations(cx);
+                assert!(this.agent_chat.conversations.error.is_none());
+                this.agent_chat.conversations.active_id().is_some()
+            });
+            if initialized {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "conversation initialization timed out"
+            );
+            std::thread::yield_now();
+        }
         if let Some(complete) = app.update(cx, |this, _| this.flush_conversation_storage()) {
             complete.recv_timeout(Duration::from_secs(10)).unwrap();
         }
-        std::fs::remove_dir_all(root).unwrap();
+        root.close().unwrap();
     }
 
     #[gpui::test]

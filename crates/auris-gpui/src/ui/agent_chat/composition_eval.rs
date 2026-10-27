@@ -21,6 +21,67 @@ struct Evaluation {
     timeout_seconds: u64,
     fixture: String,
     prompts: Vec<String>,
+    #[serde(default)]
+    prompt_condition: Option<PromptCondition>,
+    #[serde(default)]
+    seed_project: Option<PathBuf>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PromptCondition {
+    expected_prefix: String,
+    replacement_prefix: String,
+    skill_context: String,
+}
+
+impl PromptCondition {
+    fn apply(&self, current: &str) -> Result<String, &'static str> {
+        // Git checkouts may use CRLF; compare the content rather than checkout encoding.
+        let current = current.replace("\r\n", "\n");
+        let expected = self.expected_prefix.replace("\r\n", "\n");
+        if expected.trim().is_empty() || self.replacement_prefix.trim().is_empty() {
+            return Err("Prompt condition prefixes must be nonempty");
+        }
+        let suffix = current
+            .strip_prefix(&expected)
+            .ok_or("Frozen prompt prefix does not match this evaluation binary")?;
+        let mut prompt = self.replacement_prefix.replace("\r\n", "\n");
+        prompt.push_str(suffix);
+        if !self.skill_context.trim().is_empty() {
+            prompt.push_str("\n\n<composition_skill_context>\n");
+            prompt.push_str(&self.skill_context.replace("\r\n", "\n"));
+            prompt.push_str("\n</composition_skill_context>\n");
+        }
+        Ok(prompt)
+    }
+}
+
+#[test]
+fn prompt_condition_preserves_operational_suffix_and_freezes_skill_context() {
+    let condition = PromptCondition {
+        expected_prefix: "Current composition\n".into(),
+        replacement_prefix: "Baseline composition\n".into(),
+        skill_context: "Frozen skill\r\nReference".into(),
+    };
+    assert_eq!(
+        condition
+            .apply("Current composition\r\nTool and safety contract")
+            .unwrap(),
+        "Baseline composition\nTool and safety contract\n\n<composition_skill_context>\nFrozen skill\nReference\n</composition_skill_context>\n"
+    );
+}
+
+#[test]
+fn prompt_condition_rejects_stale_binary_or_empty_prefix() {
+    let mut condition = PromptCondition {
+        expected_prefix: "Current composition".into(),
+        replacement_prefix: "Baseline composition".into(),
+        skill_context: String::new(),
+    };
+    assert!(condition.apply("Different binary").is_err());
+    condition.expected_prefix.clear();
+    assert!(condition.apply("Current composition").is_err());
 }
 
 fn codex_backend() -> String {
@@ -28,6 +89,63 @@ fn codex_backend() -> String {
 }
 fn context_tokens() -> u32 {
     65536
+}
+
+fn validate_seed_project(path: &Path) -> Result<PathBuf, &'static str> {
+    if !path.is_absolute()
+        || !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("auris"))
+    {
+        return Err("Seed project must be an absolute .auris path");
+    }
+    let canonical = fs::canonicalize(path).map_err(|_| "Seed project cannot be read")?;
+    let metadata = fs::symlink_metadata(&canonical).map_err(|_| "Seed project cannot be read")?;
+    if !metadata.is_file() {
+        return Err("Seed project must be a file");
+    }
+    let stem = canonical
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or("Seed project has no valid name")?;
+    if canonical
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        != Some(stem)
+    {
+        return Err("Seed project must be in the project-named folder");
+    }
+    let audio = canonical.parent().unwrap().join("Audio");
+    if audio.exists() {
+        let metadata =
+            fs::symlink_metadata(&audio).map_err(|_| "Seed project Audio cannot be read")?;
+        if !metadata.is_dir() {
+            return Err("Seed project Audio must be a directory");
+        }
+    }
+    Ok(canonical)
+}
+
+#[test]
+fn seed_project_validation_requires_a_real_project_named_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join("SeedSong");
+    fs::create_dir(&folder).unwrap();
+    let path = folder.join("SeedSong.auris");
+    fs::write(&path, b"{}").unwrap();
+    assert_eq!(
+        validate_seed_project(&path).unwrap(),
+        fs::canonicalize(&path).unwrap()
+    );
+
+    let ambiguous = root.path().join("song.auris");
+    fs::write(&ambiguous, b"{}").unwrap();
+    assert_eq!(
+        validate_seed_project(&ambiguous),
+        Err("Seed project must be in the project-named folder")
+    );
 }
 
 fn melody_fixture(quarter: Ticks) -> (Ticks, Vec<Note>) {
@@ -85,6 +203,52 @@ fn transcript(entries: &[ChatEntry]) -> Vec<Value> {
         .collect()
 }
 
+fn wait_for_agent_conversation(app: &gpui::Entity<AurisApp>, cx: &mut gpui::VisualTestContext) {
+    let started = Instant::now();
+    loop {
+        app.update(cx, |this, cx| this.drain_agent(cx));
+        cx.run_until_parked();
+        let ready = app.read_with(cx, |this, _| {
+            !this.agent_chat.conversations.unavailable()
+                && !this.agent_operation_busy()
+                && this.agent_chat.history_load.is_none()
+                && this.agent_chat.history_error_project.is_none()
+                && (this.session.path().is_none() || this.agent_chat.loaded_history.is_some())
+        });
+        if ready {
+            return;
+        }
+        if started.elapsed() > Duration::from_secs(10) {
+            panic!("agent conversation preflight did not become ready for saved seed");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[gpui::test]
+fn saved_project_agent_conversation_preflight_loads_without_starting_model(
+    cx: &mut gpui::TestAppContext,
+) {
+    let directory = tempfile::tempdir().unwrap();
+    let mut seed = Session::new(SessionOptions::headless()).unwrap();
+    let path = seed
+        .save_as(&directory.path().join("Preflight.auris"))
+        .unwrap()
+        .document;
+    let (app, cx) = crate::harness::open(cx);
+    app.update(cx, |this, _| {
+        this.session.open(&path).unwrap();
+        this.panels.show(crate::dock::Panel::Agent);
+    });
+    crate::harness::paint(&app, cx);
+    wait_for_agent_conversation(&app, cx);
+    app.read_with(cx, |this, _| {
+        assert!(this.agent_chat.loaded_history.is_some());
+        assert!(!this.agent_operation_busy());
+        assert!(this.agent_chat.link.is_none());
+    });
+}
+
 #[gpui::test]
 #[ignore = "real model inference; requires AURIS_COMPOSITION_EVAL config"]
 fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
@@ -96,13 +260,37 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
         config.backend.as_str(),
         "codex" | "claude" | "rig"
     ));
+    let seed_project = config.seed_project.as_deref().map(|path| {
+        assert_eq!(
+            config.fixture, "blank",
+            "seed projects only support the blank fixture"
+        );
+        validate_seed_project(path).expect("frozen seed project must be valid")
+    });
     fs::create_dir(&config.output).expect("a fresh evidence folder");
+    let system_prompt = config.prompt_condition.as_ref().map(|condition| {
+        condition
+            .apply(&auris_agent::default_system_prompt())
+            .expect("an explicitly frozen prompt condition matching this binary")
+    });
+    fs::write(
+        config.output.join("system-prompt.txt"),
+        system_prompt
+            .clone()
+            .unwrap_or_else(auris_agent::default_system_prompt),
+    )
+    .unwrap();
     let (app, cx) = crate::harness::open(cx);
     app.update(cx, |this, _| {
-        this.session.new_project();
-        match config.fixture.as_str() {
-            "blank" => {}
-            "melody_six_eight" | "melody_six_eight_eight_bars" => {
+        if let Some(path) = seed_project.as_deref() {
+            this.session.open(path).expect("seed project opens");
+        } else {
+            this.session.new_project();
+        }
+        match (seed_project.is_some(), config.fixture.as_str()) {
+            (true, "blank") => {}
+            (false, "blank") => {}
+            (false, "melody_six_eight" | "melody_six_eight_eight_bars") => {
                 // Keep v1's four-bar seed unchanged for frozen paired comparisons.
                 let quarter = if config.fixture == "melody_six_eight" {
                     Ticks(480)
@@ -125,13 +313,14 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
                 this.session
                     .set_curve_point(clip, ClipCurve::Controller(1), Ticks(333), 0.37);
             }
-            other => panic!("unknown fixture {other}"),
+            (_, other) => panic!("unknown fixture {other}"),
         }
         this.settings.agent = AgentPreferences {
             backend: config.backend.clone(),
             provider: "ollama".into(),
             context_tokens: Some(config.context_tokens),
             model: config.model.clone(),
+            system_prompt: system_prompt.clone().unwrap_or_default(),
             // Fixture-only trials isolate tool selection from interactive approval timing.
             policy: Policy {
                 mode: Mode::Bypass,
@@ -149,6 +338,11 @@ fn codex_composes_and_revises_the_open_document(cx: &mut gpui::TestAppContext) {
         .unwrap();
     });
     crate::harness::paint(&app, cx);
+    // Opening a saved seed causes the painted Agent panel to initialize conversation storage and
+    // load the project's history asynchronously.  A first Send while that work is pending is
+    // intentionally ignored by the live UI; this evaluation must wait for the same readiness
+    // boundary before submitting its first prompt, otherwise no model worker is ever spawned.
+    wait_for_agent_conversation(&app, cx);
     let started = Instant::now();
     let mut turns = Vec::new();
     for (index, prompt) in config.prompts.iter().enumerate() {

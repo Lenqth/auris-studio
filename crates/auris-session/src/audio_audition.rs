@@ -384,7 +384,8 @@ impl ListeningJob {
             "blind":true,"calibrated":false,
             "method":"Anonymous A/B in randomized order; one common protective gain. No editing narrative supplied. Source audio remains immutable."}));
         let text = json!({"audition_id":excerpt.id,"revision":excerpt.revision,"range":excerpt.range,
-            "model":review.model,"audio_sent":review.audio_sent,"review":review.raw_response,
+            "model":review.model,"audio_sent":review.audio_sent,"assessment_status":review.status,
+            "review":review.raw_response,
             "review_format":"plain_text","reviewer_selection":review.selection,
             "audio":measurements,"compare_to":self.previous.as_ref().map(|entry| &entry.id),"before":before,
             "representation":"actual WAV audio sent to a separate critic; observations are fallible, not controller listening or verified musical improvement",
@@ -508,6 +509,7 @@ mod tests {
         assert_eq!(session.revision(), original_revision);
         assert!(session.path().is_none());
         assert_eq!(first["audio_sent"], true);
+        assert_eq!(first["assessment_status"], "unvalidated_response");
         let baseline = session.listening.excerpts[0].clone();
         let baseline_audio = baseline.audio.clone();
         session.set_param(crate::ParamTarget::TrackGain(track), -12.0);
@@ -528,6 +530,7 @@ mod tests {
         assert!(second["comparison"]["reported_preference"].is_null());
         assert_eq!(second["comparison"]["calibrated"], false);
         assert!(second["assessment_error"].is_null());
+        assert_eq!(second["assessment_status"], "unvalidated_response");
         let prompt = requests[1].1["messages"][0]["content"][0]["text"]
             .as_str()
             .unwrap();

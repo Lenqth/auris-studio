@@ -2,7 +2,7 @@
 
 use auris_analysis::{
     AnalysisControl,
-    audio::{ANALYSIS_RATE, AudioOptions, analyze_audio},
+    audio::{ANALYSIS_RATE, analyze_audio},
 };
 use auris_core::AudioBuffer;
 use std::time::Instant;
@@ -24,26 +24,17 @@ fn main() {
         ANALYSIS_RATE,
     )
     .unwrap();
-    for transcribe in [false, true] {
-        let began = Instant::now();
-        let result = analyze_audio(
-            &audio,
-            AudioOptions { transcribe },
-            &AnalysisControl::default(),
-        )
-        .unwrap();
-        let elapsed = began.elapsed().as_secs_f64();
-        let correct = result.notes.iter().filter(|n| n.pitch == 69).count();
-        println!(
-            "transcribe={transcribe} audio_s={seconds} elapsed_s={elapsed:.3} rtf={:.4} bpm={:?} notes={} A4={correct}",
-            elapsed / seconds,
-            result
-                .tempo
-                .candidates
-                .iter()
-                .map(|c| c.bpm)
-                .collect::<Vec<_>>(),
-            result.notes.len()
-        );
-    }
+    let began = Instant::now();
+    let result = analyze_audio(&audio, &AnalysisControl::default()).unwrap();
+    let elapsed = began.elapsed().as_secs_f64();
+    println!(
+        "audio_s={seconds} elapsed_s={elapsed:.3} rtf={:.4} bpm={:?}",
+        elapsed / seconds,
+        result
+            .tempo
+            .candidates
+            .iter()
+            .map(|c| c.bpm)
+            .collect::<Vec<_>>()
+    );
 }

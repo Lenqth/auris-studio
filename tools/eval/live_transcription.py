@@ -78,7 +78,7 @@ def score(manifest: Path, baseline: Path, reports: dict[str, Path]) -> dict:
         ):
             if report.get(key) is not True:
                 raise ValueError(f"{case['id']}: acceptance failed: {key}")
-        if report.get("failure") or report.get("used_basic_pitch"):
+        if report.get("failure"):
             raise ValueError("independent agent import did not complete")
         source = tool_result(report, "export_audio_attachment")
         imported = tool_result(report, "import_transcription")

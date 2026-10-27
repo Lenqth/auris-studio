@@ -40,17 +40,25 @@
 //!
 //! # Agent conversations
 //!
-//! The desktop's new-song workshop asks an isolated agent worker for three bounded musical
-//! directions. The session validates each [`crate::SongIdea`] and an immutable [`crate::SongRequest`].
-//! Explicit sources override arrangement defaults. Authored or separately generated lyrics become
-//! editable vocal notes, divided between selected singers or arranged in diatonic harmony.
-//! Candidate generation owns a headless session on one thread, including plugin lifecycles,
-//! and synthesizes vocals before rendering offline into a [`crate::SongCandidate`].
-//! Each candidate retains its editable document, audition audio and a temporary vocal asset
-//! directory. Adoption copies those assets into the destination project before committing
-//! that exact document as one undoable edit;
-//! it never regenerates the score. The original brief is saved as project metadata for later
-//! agent context. Worker cancellation and progress presentation belong to the frontend.
+//! The new-song workshop is a persistent natural-language conversation. A tool-free director
+//! asks focused questions or dispatches three independent composer workers. Each composer owns
+//! a headless session and edits it through the normal session commands. Provider calls run in
+//! parallel; voice inference and final audition rendering use a bounded audio-work gate.
+//! Progress describes observed command stages, never simulated elapsed-time percentages.
+//! Selecting an exact candidate sets the baseline for further edits without closing the chat.
+//! Descendants open that candidate's saved score; selection never regenerates the music.
+//! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
+//! documents and audition assets. Save As copies the store together with conversations.
+//! The frontend owns presentation, provider selection, audition and explicit editor handoff.
+//! Local cross-project preference evidence records contextual choices. It is optional, inspectable
+//! and clearable, and does not infer dislike from nonselection or override explicit instructions.
+//! Direction planning, lyric generation and composer workers share the agent's musical-design
+//! principles. The conversational composer extends the resolved live-agent prompt with its
+//! isolated-session contract: expressive note authoring, purposeful arrangement, a mixer pass
+//! and inspection of the current full mix. The `SongRequest` authoring API also provides a
+//! source-and-singer setup without notes and validates authored-note, mix and vocal evidence
+//! before rendering standalone candidates. A failed agent never silently falls back to a
+//! preset-generated song. These checks establish completion evidence, not musical quality.
 //!
 //! A conversation also retains a bounded `memory.production.json` beside model memory.
 //! The session defines attributed intent/role/motif/decision notes and revision-bound evidence;
@@ -233,7 +241,7 @@
 //!
 //! # Offline music recognition
 //!
-//! `auris-analysis` recognizes written chords, audio tempo/chords and monophonic note events
+//! `auris-analysis` recognizes written chords and audio tempo/chords
 //! on the CPU. Library timbre exploration uses [`crate::Session::timbre_map_job`]: a read-only
 //! snapshot shares immutable SoundFonts with independent background instruments, measures matched
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
@@ -242,20 +250,11 @@
 //! It also runs an explicitly prepared YAMNet ONNX model for instrument-presence
 //! tagging, using ONNX Runtime's CPU provider. The optional weights are external runtime data,
 //! and inference never downloads them. The session collects written notes or shares source audio with
-//! a worker job. Analysis returns a draft; applying harmony or placing transcribed notes is an
+//! a worker job. Analysis returns a draft; applying harmony or a source tempo is an
 //! explicit, undoable session command. Source audio times stay in seconds until placement maps
 //! them through the current tempo map. Cancellation and source/document validation belong to
 //! the job boundary, never to the audio callback. Unknown harmony and silence are distinct,
 //! and candidate scores are matching scores rather than calibrated probabilities.
-//!
-//! Optional multi-instrument transcription runs a user-converted MuScriptor Small ONNX package
-//! in `auris-analysis`, using the CPU provider and a bounded Rust token loop with KV caches.
-//! Its audio graph includes STFT/log-mel preprocessing; Rust joins sustained notes across chunks.
-//! Python is only conversion tooling. The session requires per-run acknowledgement of the model's
-//! noncommercial terms before decoding; models remain local external data, verified against their
-//! export manifest. Cancellation is checked between inference calls. Instrument-labeled drafts
-//! follow source validation and tempo mapping, with all new tracks in one undo transaction.
-//! No model inference or model-file I/O belongs on the audio callback.
 //!
 //! # The smallest complete program
 //!
@@ -386,12 +385,7 @@ pub mod architecture {
     //! Long reports sample timestamped beats and chord windows with their strides disclosed.
     //! Preparation runs on a blocking worker with cancellation, before starting a model turn.
     //! A bounded conversation-local snapshot cache retains the attached bytes behind opaque
-    //! attachment IDs. `transcribe_audio` recognizes an attachment or authorized local file
-    //! on a worker using explicit YIN, Basic Pitch or MuScriptor selection. Recognition returns
-    //! an immutable bounded draft and never changes the score. `import_transcription` explicitly
-    //! accepts that draft, inline recognized events or a bounded JSON file. Source seconds map
-    //! through the current tempo map, and the complete import creates one Undo transaction.
-    //! Notes remain estimates; provenance and model hashes do not verify musical accuracy.
+    //! attachment IDs.
     //! Version-one multitrack drafts extend this boundary with full MIDI range, percussion,
     //! explicit playback mapping and persisted declared provenance. Preview validates the same
     //! source-seconds mapping without editing. Unsupported fields are rejected before mutation.
@@ -403,7 +397,7 @@ pub mod architecture {
     //! [`crate::execution_trace`] collection records bounded transition evidence after consent.
     //! The collector owns durable run payloads, data policy and schema-compatible replay;
     //! `docs/model-training.md` describes the public workflow.
-    //! MuScriptor requires its separate model prerequisites and acknowledgement on every call.
+
     //! `export_audio_attachment` copies an attached original to a separate, conversation-scoped
     //! local analysis file, preserving bytes, rate and channels and returning its SHA-256. It never
     //! exposes the internal snapshot. One current copy per attachment is retained; re-export
@@ -420,15 +414,9 @@ pub mod architecture {
     //! never verified rights or instructions. Remote search/download pass the network approval
     //! gate. EQ uses the existing mixer graph on audio-track inserts; no RT processing changes.
     //!
-    //! Basic Pitch decoding first accepts onset-supported events, then recovers confident
-    //! residual activity outside their attack/release guards. Weak sustained predictions alone
-    //! do not create notes. Short repeated attacks remain separate, and near-cancelling stereo
-    //! windows use the strongest channel instead of erasing the recording. The composer-pair
-    //! evaluation freezes performed notes and PCM before tuning; separate seeds and an independent
-    //! existing score check false positives, missing notes and timing through this same backend.
     //! Native audio API turns retain the same exact sources. Above 25 MiB, the session prepares
     //! a full-length 16 kHz PCM16 WAV for upload, preserving mono/stereo channels; the original
-    //! remains available for transcription. Decoding has the importer's 512 MiB sample budget,
+    //! remains available for local analysis. Decoding has the importer's 512 MiB sample budget,
     //! and preparation accepts at most thirty minutes. The transport bounds actual payloads
     //! at 128 MiB per turn; this is an Auris budget, not a provider capability guarantee.
     //! Live agents write bounded harmony with `edit_harmony` and singer lyrics with

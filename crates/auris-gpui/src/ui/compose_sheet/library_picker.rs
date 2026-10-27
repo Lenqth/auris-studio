@@ -41,13 +41,9 @@ impl AurisApp {
     ) -> Option<impl IntoElement + use<>> {
         let browser = self.song_library.as_ref()?;
         if !self
-            .song_workshop
+            .song_sheet
             .as_ref()
-            .is_some_and(|s| s.parts.iter().any(|p| p.name == browser.part))
-            && !self
-                .song_sheet
-                .as_ref()
-                .is_some_and(|dials| dials.parts.iter().any(|part| part.name == browser.part))
+            .is_some_and(|dials| dials.parts.iter().any(|part| part.name == browser.part))
         {
             self.song_library = None;
             return None;
@@ -114,9 +110,6 @@ impl AurisApp {
 
     fn song_library_part_index(&self) -> Option<usize> {
         let name = &self.song_library.as_ref()?.part;
-        if let Some(s) = &self.song_workshop {
-            return s.parts.iter().position(|p| &p.name == name);
-        }
         self.song_sheet
             .as_ref()?
             .parts
@@ -127,17 +120,6 @@ impl AurisApp {
     /// Applies a built-in instrument to the draft part, then returns to the matrix.
     pub(crate) fn choose_song_library_instrument(&mut self, instrument: &str) {
         if let Some(index) = self.song_library_part_index()
-            && let Some(s) = &mut self.song_workshop
-        {
-            if !s.busy() {
-                s.parts[index].instrument = instrument.into();
-                s.parts[index].source = None;
-                s.parts[index].program = None;
-            }
-            self.song_library = None;
-            return;
-        }
-        if let Some(index) = self.song_library_part_index()
             && let Some(dials) = self.song_sheet.as_mut()
         {
             super::set_part_instrument(dials, index, instrument);
@@ -147,16 +129,6 @@ impl AurisApp {
 
     /// Applies an exact file-backed source to the draft part, then returns to the matrix.
     pub(crate) fn choose_song_library_source(&mut self, source: PartSource) {
-        if let Some(index) = self.song_library_part_index()
-            && let Some(s) = &mut self.song_workshop
-        {
-            if !s.busy() {
-                s.parts[index].source = Some(source);
-                s.parts[index].program = None;
-            }
-            self.song_library = None;
-            return;
-        }
         if let Some(index) = self.song_library_part_index()
             && let Some(dials) = self.song_sheet.as_mut()
         {

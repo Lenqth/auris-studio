@@ -3,7 +3,7 @@
 //! TextView 0.5 puts successive paragraphs of a list item in the same horizontal
 //! flex row, can collapse its clipped text body, and drops non-paragraph children.
 //! Own the block structure here while
-//! retaining its selectable rich text, links, tables and syntax highlighting.
+//! retaining its selectable rich text, links and tables.
 
 use std::sync::Arc;
 
@@ -100,11 +100,20 @@ fn blocks(node: &Node, source: &str, definitions: &str) -> Vec<Block> {
                 .flat_map(|child| blocks(child, source, definitions))
                 .collect(),
         )],
+        Node::Code(code) => vec![Block::Text(plain_code_block(&code.value).into())],
         Node::Definition(_) => Vec::new(),
         _ => vec![Block::Text(
             format!("{}{definitions}", fragment(node, source)).into(),
         )],
     }
+}
+
+// A language-free fence keeps TextView from constructing a syntax highlighter.
+// Use a longer fence than any run in the body so literal Markdown stays intact.
+fn plain_code_block(code: &str) -> String {
+    let longest = code.split(|ch| ch != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat((longest + 1).max(3));
+    format!("{fence}\n{code}\n{fence}")
 }
 
 /// Positions exclude the first line's container prefix; remove that prefix from
@@ -255,7 +264,7 @@ mod tests {
         let Block::Text(code) = &items[0].1[2] else {
             panic!("expected code")
         };
-        assert_eq!(code.as_ref(), "```rust\nlet x = 1;\n```");
+        assert_eq!(code.as_ref(), "```\nlet x = 1;\n```");
         assert!(matches!(items[0].1[3], Block::List(_)));
     }
 
@@ -292,6 +301,37 @@ mod tests {
         let Block::Text(code) = &items[0].1[1] else {
             panic!("expected code")
         };
-        assert_eq!(code.as_ref(), "```rust\nfn main() {\n    run();\n}\n```");
+        assert_eq!(code.as_ref(), "```\nfn main() {\n    run();\n}\n```");
+    }
+
+    #[test]
+    fn code_languages_and_metadata_do_not_reach_the_highlighter() {
+        for language in ["rust", "json", "yaml", "unknown title=score"] {
+            let source = format!("```{language}\n  音符: C4\n\n    D4\n```");
+            assert_plain_code(&source, "  音符: C4\n\n    D4");
+        }
+    }
+
+    #[test]
+    fn literal_fences_and_indented_code_keep_their_contents() {
+        assert_plain_code(
+            "~~~~~~markdown\n```rust\nC4\n```\n~~~~\n~~~~~~",
+            "```rust\nC4\n```\n~~~~",
+        );
+        assert_plain_code("    C4\n        D4", "C4\n    D4");
+    }
+
+    fn assert_plain_code(source: &str, expected: &str) {
+        let parsed = parse(source);
+        let Block::Text(text) = &parsed[0] else {
+            panic!("expected code block")
+        };
+        let root = markdown::to_mdast(text, &markdown::ParseOptions::gfm()).unwrap();
+        let [Node::Code(code)] = root.children().unwrap().as_slice() else {
+            panic!("expected one code block")
+        };
+        assert_eq!(code.value, expected);
+        assert_eq!(code.lang, None);
+        assert_eq!(code.meta, None);
     }
 }

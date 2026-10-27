@@ -70,33 +70,19 @@ Long reports sample up to 256 beats and 256 chord windows across the recording,
 with source timestamps and sampling strides. Analysis runs in the background
 without editing or importing into the song. Raw audio stays local on these routes.
 
-To create a piano cover, attach the recording and ask, for example, “Transcribe
-this audio and make a piano cover.” The agent's `transcribe_audio` tool with backend `basic_pitch` runs
-the bundled Apache-2.0 Basic Pitch model locally and returns a draft. `import_transcription` accepts it as an editable physical-piano
-track with overlapping notes, source timing and estimated relative velocities.
-No Python, model setup or separate audio-model connection is needed. The draft
-preserves the project's tempo and existing tracks, remains unsaved, and one Undo
-removes it. Review extra/missing notes, timing and dynamics before export.
-
-Transcription accepts up to ten minutes and eight channels. Piano or isolated
-pitched recordings work best; dense mixes can contain errors and percussion is
-not separated. This is a note draft, not guaranteed faithful sheet music or a
-two-hand playable arrangement. See [music analysis](music-analysis.md).
-
 Audio references are immutable snapshots scoped to the conversation, retained
 within eight files/1 GiB on disk in aggregate. Attaching more files can expire older
 references; reattach a file if the agent reports that its reference expired.
 
 For native audio input, use an OpenAI-compatible model implementing `input_audio`.
 The panel keeps the draft available when the selected rig provider cannot send audio.
-Native API turns can use the same attachment-to-piano tool.
 
 Native API requests have a separate 128 MiB budget for the actual prepared payloads
 before base64 encoding. Audio sources larger than 25 MiB are automatically converted
 to full-length 16 kHz, 16-bit PCM WAV, preserving mono/stereo channels and timing.
 This accepts up to thirty minutes of mono/stereo audio within the ordinary decoder's
 512 MiB decoded-sample budget. No excerpt is silently selected. The original snapshot
-is retained unchanged for local transcription, and the model receives metadata describing
+is retained unchanged for local analysis, and the model receives metadata describing
 the upload conversion. Smaller sources are sent in their original format. Preparation
 runs on a cancellable worker; decoder/resampler calls finish before observing cancellation.
 The selected endpoint/model can impose additional format, duration or request limits;
@@ -198,7 +184,7 @@ the existing Auris gate. V1 receives the authenticated server through ACP stdin.
 
 The authenticated live MCP server edits the open song, including unsaved changes,
 through the existing permission and Undo paths. Images and text use ACP content
-blocks; audio uses the same local analysis and transcription tools as the other
+blocks; audio uses the same local analysis and external-note import tools as the other
 CLI backends. Stop revokes live calls, sends `session/cancel` and terminates the
 child. Auris persists and restores its own text transcript; OpenCode may also keep
 sessions in its normal data directory. Manual compaction from Auris is not yet

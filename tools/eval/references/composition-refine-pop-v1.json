@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "brief": "Compose a fresh, singable pop melody in the open fixed-context project: 112 BPM, 4/4, C major, 24 bars (2 intro, 8 verse, 8 chorus, 2 interlude, 4 ending). Keep the existing Japanese lyrics in their current note order. Establish a recognisable short rhythmic motif, develop it in the answer phrases, and make the chorus feel like a clear arrival. Preserve the fixed backing, lyrics, instrumentation and mix. The melody should have an eighth-note backbone with selective rhythmic contrast and enough space for the lyric phrases, without inserting rests mechanically. Use the actual score and lyric meaning to choose appropriate phrase endings. Apply the melody to the existing Vocal notes and explain its motif and chorus contrast. This is a development experiment, not a human-validated improvement.",
+  "focus_track": "Vocal",
+  "interventions": [
+    {
+      "instruction": "Inspect the repeated rhythmic motif and its phrase endings. Make one local rhythm/phrasing refinement that helps an answer phrase connect naturally while leaving a useful breath before the next phrase. Preserve pitches and the motif's recognisable main accents. Change only the few starts or lengths justified by the actual notes; do not lengthen every gap, rewrite all phrases or flatten the rhythmic contrast. If the current phrase already works, keep it and explain why.",
+      "fields": ["start", "length"],
+      "clip_ids": [5, 6, 7, 8, 9, 10, 11, 12],
+      "max_changed_notes": 16
+    }
+  ]
+}

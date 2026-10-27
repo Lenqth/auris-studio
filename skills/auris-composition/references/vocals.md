@@ -8,6 +8,35 @@ Compose words and melody together. Place important syllables or Japanese mora on
 
 Keep the singer intelligible through accompaniment register, voicing, timing, and space. Prepare section transitions and a real ending unless a loop is requested. Preserve existing words and melody during a local repair. Make targeted corrections supported by evidence; stop after at most two local revision attempts per issue unless more exploration is requested, and report unresolved issues.
 
+When repairing intelligibility, keep word groups, mora assignments and rhythmic identity together. Uniformly widening every gap or slowing every syllable can remove the intended groove. Compare a local reading, consonant, note-length or phrase-boundary edit with the current take before changing the whole line. Preserve the user's chosen grid and held endings; a sustained particle can be an explicit preference for one lyric, not a rule for Japanese singing. Treat a user-edited project as the new baseline and protect its melody during backing-only changes.
+
+## Vowel, register and sustained words
+
+When authoring a new lyric and melody with an exposed high or powerful arrival,
+try a meaningful word sustained on あ /a/ or お /o/ as preferred candidates.
+Identify the vowel actually held in the word, its pitch and duration, and the
+consonant entering it; a kana label alone is not a complete vocal gesture.
+Do not sacrifice the lyric's meaning or natural word boundary for a vowel match.
+
+For ん, prefer a less exposed lower/middle placement or a brief phrase ending
+when that preserves the melodic contour and reading. Keep its mora slot and
+test the following consonant and preceding vowel. Do not assume every ん is
+quiet, forbid a nasal sustain, move every ん downward, or erase it to lengthen
+the preceding vowel. Fixed lyrics and a protected melody take precedence;
+try local timing, articulation or an allowed transposition before proposing a
+lyric change, and identify any remaining conflict.
+
+These are listener-informed authoring preferences, not a universal ranking of
+vowels. Voice, register, intensity and style affect vowel modification:
+[Titze's preliminary classical/belt study](https://vocology.utah.edu/_resources/documents/formant_frequency_shifts_titze.pdf)
+describes style-dependent changes, not a rule for Japanese lyric placement.
+[TUFS's mora-nasal lesson](https://www.coelang.tufs.ac.jp/ja/en/pmod/practical/02-03-01.php)
+explains that ん has its own mora and varies with the following sound; it does
+not prescribe a low pitch. Human singing findings are not validation of a
+synthesis model. Render the actual selected voice, compare the exposed word
+alone and in its phrase/mix, and keep pronunciation, effort and musical
+preference distinct from note-range diagnostics.
+
 ## Voice prerequisites
 
 Discover an installed voice before promising sung audio. MCP provides `list_voices`; with CLI, use a supplied voice path or inspect the configured Auris Voices directories. `auris help` is authoritative for the installed CLI; do not invent an `auris list_voices` command. Voice choices include a DiffSinger `dsconfig.yaml`, a `*.leapsinger.json` manifest, or a `*.voicevox.json` connection. Keep the model's supporting files together. Record the selected voice, speaker, and synthesis seed where supported. A seed does not guarantee identical audio from every backend; retain the actual generated take.
@@ -65,6 +94,14 @@ Use the advertised catalog and `tool_help`; saved-project MCP and the desktop li
 4. Finish notes, lyrics, and backing in every planned vocal section, including later verses. Call `sing` for each singer using the actual schema. Wait for completion if the host returns an asynchronous job; failed, cancelled, or pending synthesis is not success.
 5. Read `inspect_singer`: require `take_state` to be `current`, then inspect `section_coverage`, following `section_coverage.next_section_offset` with `section_offset` until complete. Compare with the plan and read later sections' actual notes and lyrics. Counts, labels, and a current take alone do not prove completeness; intentional instrumental sections may be empty. Check mute/routing and render the mix and requested stems. Save through the host's supported project-save operation; live edits may still be unsaved.
 
+### Time order and bounded synthesis
+
+Read every required note page at one revision before grouping phrases. Storage indices are edit addresses, not chronological positions. When returned, `timeline_index` is the note's rank across the complete clip; sort all collected pages by that rank. On older hosts, order by `(start_tick, original index)`. Retain each original `index` for patches. `write_lyrics` assigns in time order; its `from` remains a storage index. After writing, re-read the affected time-ordered notes and compare onset, pitch, lyric/readings and mora assignments before synthesis. Use `analyze_lyrics`, not character count, for small kana, sokuon and long vowels.
+
+Before a long or late-entering vocal synthesis, inspect first/last sounding time, leading silence and expected frame count. A bar limit alone does not bound memory at slow tempos. Use the backend's advertised duration/frame budget. For a backend without bounded full-song synthesis, use isolated phrase projects with local timing and a short explicit pre-roll, synthesize sequentially, and retain the offset/source mapping when placing audio back on the original timeline. Preserve the editable score and generated takes; never silently truncate a requested song to fit a limit. Check joins, consonant lead-in and the final phrase after assembly.
+
+Do not overlap heavy requests to the same Engine. A client timeout or stopped CLI does not prove server inference stopped or memory was released. Keep an unresolved request pending until its state is known; do not automatically retry it or terminate an Engine that may serve other work. A successful short probe does not establish a safe duration for an arbitrary full song.
+
 ## Delivery checks
 
 After the composition is established, complete [the arrangement pass](arrangement.md) around the actual vocal line. Check backing in sung passages and gaps, including later verses. Refresh any affected singer takes before final export; arrangement review does not authorize replacing the lyrics or vocal melody.
@@ -77,4 +114,6 @@ Automatic mixing may have balanced a preview voice whose level differs substanti
 
 Use actual section/tempo boundaries to measure each planned sung section and the final phrase separately. At changing tempos, derive seconds from the tempo map rather than a single ticks-per-second constant. Inspect the lyric-bearing notes, phonemes, continuation markers, and intentional rests together; one initial lyric string plus continuation notes need not mean missing lyrics. Nonzero section energy only rules out total silence, not missing syllables. Follow coverage/report pagination, verify take freshness after final edits, and measure the ending tail as well as the main song. Keep these three conclusions separate: score assignments, synthesized audio coverage, and perceptual quality.
 
-Distinguish score inspection, audio measurements, a separate listening critic, and human listening. Neither waveform inspection nor a passing diagnostic proves intelligibility, emotional delivery, or musical quality. When an actual critic is available, use it as fallible evidence; never claim personal listening from its report. Deliver only the requested scope and state any unverified listening judgments.
+Distinguish score inspection, audio measurements and human listening. Neither waveform inspection nor a passing diagnostic proves intelligibility, emotional delivery, or musical quality. Deliver the requested audio and editable score with the completed checks and any unverified listening judgments. Use the user's later listening feedback for targeted revisions.
+
+Keep human comments verbatim and do not expand a rhythm preference into unreported claims about breathing or memorability.

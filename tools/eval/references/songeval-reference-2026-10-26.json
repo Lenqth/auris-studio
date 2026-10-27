@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "experiment": "songeval-reference-2026-10-26",
+  "selection": "Convenience sample selected by fixed known-title patterns from a read-only personal NAS; no selection by SongEval score.",
+  "runtime": {
+    "device": "cpu",
+    "torch_threads": 4,
+    "upstream": "https://github.com/ASLP-lab/SongEval",
+    "upstream_revision": "848fb2ff3a2a9d64dcb20d46f07238c28abd7add",
+    "requested_upstream_revision": "848fb2ff3a2a9d64dcb20d46f07238c28abd7add",
+    "artifacts": {
+      "checkpoint": "0cb1eb8be02b96e9949ca3a2b66997c5ac7d9da3567240df4dbfc2048eb98efd",
+      "muq": {
+        "model.safetensors": "273febab2be02872c37d2c37e48a9d6c52c1c9392f3eeeabd498efa281ccb7a6",
+        "pytorch_model.bin": "334df3de2832ec1acfd8b6ce54e7de4073401fe821f7ec0ad0d954832be2d26a"
+      },
+      "muq_config": "237335ee27d8fb951ce778701a12a79e06c51ae636dd786f97e45f51ce532543",
+      "source": {
+        "model.py": "5c40c1cf318c46f6d97e33231356f09a5fe9d00f5896b410f6035076052fc6b2",
+        "eval.py": "8bda6eb4499133962a8b82bbbc05ed9acfa99bb54677173299fe3b6f6e6ab152",
+        "config.yaml": "833ab78c6f380b63ceb08daa66e9af3e19ae1c3105d113274317843f229c951d"
+      }
+    },
+    "packages": {
+      "torch": "2.7.0",
+      "torchaudio": "2.7.0",
+      "librosa": "0.11.0",
+      "muq": "0.1.0",
+      "numpy": "2.4.6",
+      "soundfile": "0.14.0",
+      "transformers": "4.57.6",
+      "hydra-core": "1.3.2",
+      "huggingface-hub": "0.36.2",
+      "safetensors": "0.8.0",
+      "scipy": "1.17.1"
+    },
+    "preprocessing_version": "songeval-adapter-v2",
+    "preprocessing": "librosa mono 24 kHz; MuQ hidden_states[6]; no loudness normalization"
+  },
+  "rows": [
+    {
+      "id": "harumakigohan-meltyland",
+      "source_file": "メルティランドナイトメア ⧸ はるまきごはん feat.初音ミク - Melty Land Nightmare [ZEy36W1xX8c].mp3",
+      "source_url": "https://www.youtube.com/watch?v=ZEy36W1xX8c",
+      "source_sha256": "14807a20a0723bd015249ccc5ebefbf57484cba67e2cff38d801c1f9fa888645",
+      "audio_sha256": "6e4bbe7d69d4b390d78f6fe244e7a4b5e997ce1dc6d35e5462292dcffdc5a1c8",
+      "start_seconds": 30.0,
+      "duration_seconds": 51.42857142857143,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 4.0586,
+        "Musicality": 3.6088,
+        "Memorability": 3.8145,
+        "Clarity": 3.7422,
+        "Naturalness": 3.6579
+      },
+      "elapsed_seconds": 28.4067
+    },
+    {
+      "id": "yorushika-tadakimi",
+      "source_file": "ヨルシカ - ただ君に晴れ (MUSIC VIDEO) [-VKIqrvVOpo].mp3",
+      "source_url": "https://www.youtube.com/watch?v=-VKIqrvVOpo",
+      "source_sha256": "75f828b0f51822741e3cb92b8cd4673efce7bff48e58eb54544bd629312e51f8",
+      "audio_sha256": "d0e8d79bcccb55f279815a6d798d73674c58dac22708dd5e4b9f1f54041e69ff",
+      "start_seconds": 30.0,
+      "duration_seconds": 51.42857142857143,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 4.6408,
+        "Musicality": 4.425,
+        "Memorability": 4.4789,
+        "Clarity": 4.4253,
+        "Naturalness": 4.2754
+      },
+      "elapsed_seconds": 14.9856
+    },
+    {
+      "id": "freebgm-luckyme",
+      "source_file": "《KawaiiフリーBGM》Lucky ME〈ピアノと奏でるポップミュージック〉#FreeMusic [pD9O4fPCa0Q].mp3",
+      "source_url": "https://www.youtube.com/watch?v=pD9O4fPCa0Q",
+      "source_sha256": "c14c3fc2ad830a13d35d42d5e91e54b0735cf6d00ca5fc1cc4d3fe46e5e3c587",
+      "audio_sha256": "4382f135548792cb9ba13ddef4b35bca7d45404f9ff4892213e0412656a5a52a",
+      "start_seconds": 30.0,
+      "duration_seconds": 51.42857142857143,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 3.4934,
+        "Musicality": 3.1094,
+        "Memorability": 2.8596,
+        "Clarity": 3.1251,
+        "Naturalness": 3.0208
+      },
+      "elapsed_seconds": 14.4906
+    },
+    {
+      "id": "freebgm-decision",
+      "source_file": "〈かっこいいフリーBGM 〉Decision ⧸ Side：Blue 〈燃え上がる神々の戦闘BGM〉#FreeMusic [i8stuq8NKQE].mp3",
+      "source_url": "https://www.youtube.com/watch?v=i8stuq8NKQE",
+      "source_sha256": "98c16e32c89fe5706737fb10eaa19ef844398306da48692e9ab9b8fe1ef30108",
+      "audio_sha256": "2c27d79c4a6a5c9778f1ba2323ed6ff87875139ee56a2bc5df554d9db44422e7",
+      "start_seconds": 30.0,
+      "duration_seconds": 51.42857142857143,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 3.1638,
+        "Musicality": 2.5848,
+        "Memorability": 2.7961,
+        "Clarity": 2.8075,
+        "Naturalness": 2.7717
+      },
+      "elapsed_seconds": 16.0826
+    },
+    {
+      "id": "yt-dlp-yorushika-tadakimi",
+      "source_file": "yorushika-official.wav",
+      "source_url": "https://www.youtube.com/watch?v=-VKIqrvVOpo",
+      "source_sha256": "60dff252dc6bf0056ccca255d4fbc0dcca56a68f67a2372c8d683dfd72c85118",
+      "audio_sha256": "67e61e3f85541aba1431718a6e5713c362edc85d8364c9d7b8d16c57d98727c1",
+      "start_seconds": 30.0,
+      "duration_seconds": 51.428548752834466,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 4.6433,
+        "Musicality": 4.4269,
+        "Memorability": 4.5073,
+        "Clarity": 4.4815,
+        "Naturalness": 4.3273
+      },
+      "elapsed_seconds": 7.652
+    },
+    {
+      "id": "yorushika-first",
+      "source_file": "ヨルシカ - ただ君に晴れ (MUSIC VIDEO) [-VKIqrvVOpo].mp3",
+      "source_url": "https://www.youtube.com/watch?v=-VKIqrvVOpo",
+      "source_sha256": "75f828b0f51822741e3cb92b8cd4673efce7bff48e58eb54544bd629312e51f8",
+      "audio_sha256": "644ad2a73837f64bc1f6b7d04678906f3aeb104b0601c3e9b616eea88ddd0872",
+      "start_seconds": 0,
+      "duration_seconds": 51.42857142857143,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 4.5127,
+        "Musicality": 4.3677,
+        "Memorability": 4.4105,
+        "Clarity": 4.3391,
+        "Naturalness": 4.2627
+      },
+      "elapsed_seconds": 12.3302
+    },
+    {
+      "id": "yorushika-center",
+      "source_file": "ヨルシカ - ただ君に晴れ (MUSIC VIDEO) [-VKIqrvVOpo].mp3",
+      "source_url": "https://www.youtube.com/watch?v=-VKIqrvVOpo",
+      "source_sha256": "75f828b0f51822741e3cb92b8cd4673efce7bff48e58eb54544bd629312e51f8",
+      "audio_sha256": "ee61f15ced09c14c67d4dae11c33491ed15f13ac2e7fe3d412a98d6a74c828ed",
+      "start_seconds": 74.17796364795919,
+      "duration_seconds": 51.42857142857143,
+      "sample_rate": 44100,
+      "scores": {
+        "Coherence": 4.5437,
+        "Musicality": 4.3925,
+        "Memorability": 4.3729,
+        "Clarity": 4.3942,
+        "Naturalness": 4.3644
+      },
+      "elapsed_seconds": 15.5112
+    }
+  ],
+  "within_track_range": {
+    "Coherence": 0.1281,
+    "Musicality": 0.0573,
+    "Memorability": 0.106,
+    "Clarity": 0.0862,
+    "Naturalness": 0.1017
+  },
+  "interpretation": "Convenience calibration only. Fixed first/center windows were added post hoc. Window ranges are content sensitivity, not confidence intervals or a significance threshold. No automatic monitoring or winner selection is implemented.",
+  "audit_note": "Final rows are derived from hash-verified evaluator reports. An earlier draft confused the full download hash with its excerpt and was replaced before publication."
+}

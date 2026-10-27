@@ -14,7 +14,7 @@ use auris_vst3::Vst3Plugin;
 use crate::SessionError;
 use crate::session::Session;
 
-pub(super) enum PreparedSource {
+pub(in crate::session) enum PreparedSource {
     SoundFont {
         path: PathBuf,
         reference: AssetPath,
@@ -35,7 +35,7 @@ pub(super) enum PreparedSource {
 }
 
 impl PreparedSource {
-    pub(super) fn instrument_id(&self) -> String {
+    pub(in crate::session) fn instrument_id(&self) -> String {
         match self {
             Self::SoundFont { .. } => SAMPLER_ID.into(),
             Self::Clap { plugin_id, .. } => format!("{}{plugin_id}", auris_clap::ID_PREFIX),
@@ -95,7 +95,7 @@ impl Session {
         })
     }
 
-    pub(super) fn prepare_composed_source(
+    pub(in crate::session) fn prepare_composed_source(
         &mut self,
         source: Option<&PartSource>,
     ) -> Result<Option<PreparedSource>, SessionError> {
@@ -255,7 +255,7 @@ impl Session {
         spec.to_toml()
     }
 
-    pub(super) fn install_composed_source(
+    pub(in crate::session) fn install_composed_source(
         &mut self,
         project: &mut Project,
         track: TrackId,
@@ -302,7 +302,7 @@ impl Session {
         }
     }
 
-    pub(super) fn install_composed_hosted_source(
+    pub(in crate::session) fn install_composed_hosted_source(
         &mut self,
         track: TrackId,
         source: PreparedSource,

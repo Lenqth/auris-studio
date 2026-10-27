@@ -24,12 +24,18 @@ use std::sync::{
 use tokio_util::sync::CancellationToken;
 
 #[cfg(test)]
+pub(crate) fn transcription_fixture() -> serde_json::Value {
+    let notes = [60, 64, 67]
+        .map(|pitch| serde_json::json!({"pitch":pitch,"start":0.1,"end":0.8,"strength":0.7}));
+    serde_json::json!({"source":{"method":"explicit-test-fixture"},"seconds":1.0,"notes":notes})
+}
+
+#[cfg(test)]
 pub(crate) async fn transcription_test_call(
     client: &reqwest::Client,
     url: &str,
     token: &str,
     session: &str,
-    attachment: &serde_json::Value,
     name: &str,
 ) -> serde_json::Value {
     use serde_json::{Value, json};
@@ -46,25 +52,10 @@ pub(crate) async fn transcription_test_call(
             })
             .expect("MCP JSON or SSE")
     };
-    let recognized = request(
-        2,
-        "transcribe_audio",
-        json!({"attachment":attachment,"backend":{"kind":"basic_pitch"}}),
-    )
-    .send()
-    .await
-    .unwrap()
-    .text()
-    .await
-    .unwrap();
-    let recognized = parse(&recognized);
-    assert_ne!(recognized["result"]["isError"], true, "{recognized}");
-    let draft: Value =
-        serde_json::from_str(recognized["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     let imported = request(
         3,
         "import_transcription",
-        json!({"draft_id":draft["draft_id"],"name":name}),
+        json!({"transcription":transcription_fixture(),"name":name}),
     )
     .send()
     .await
