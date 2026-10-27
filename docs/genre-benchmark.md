@@ -8,8 +8,9 @@ case and one holdout case for each of pop, city pop, lo-fi, neo-soul, dance and
 electronic, anime song, and game BGM. Every case is sixteen bars with an
 explicit key, tempo, 4/4 meter, and A/B sections covering bars 1–8 and 9–16.
 The cases use built-in instruments and leave the project unsaved. The holdout
-briefs use a different tempo and musical setting from their development
-counterparts while preserving the genre purpose.
+briefs request another take with different register and accents while keeping
+the development tempo, key and genre purpose. They test a held-back phrasing of
+the request, not generalization to different tempos, keys or song lengths.
 
 ## Paired experiment
 
@@ -71,6 +72,35 @@ disk. A missing, failed, duplicated, changed, or invalid trial remains visible
 and makes the cohort ineligible; it is never silently removed.
 
 ## Adoption rule
+
+### Add independent repetitions
+
+Keep the first pilot and run another complete genre cohort with the same frozen
+executable, source suite, model and prompt condition. Set `--repetition-start 2
+--repetitions 1` to produce `*-02` trial IDs in a fresh output directory. This is
+a new independent take, not a retry selected to replace a low score.
+
+Combine the retained suites before comparison:
+
+```powershell
+uv run tools/eval/composition_quality.py combine-repetitions `
+  --input <pilot-suite> --input <second-repetition-suite> --output <combined-suite>
+```
+
+The combination requires identical frozen conditions and complete, disjoint,
+contiguous repetition IDs starting at one. It verifies recorded artifact hashes,
+copies only recorded trial artifacts, and retains failed trials. Seeded-project
+suites are currently unsupported. The combined directory is a comparison bundle;
+the original suites retain the executable snapshots.
+
+A runner revision mismatch is rejected by default. After reviewing a deliberate
+harness-only change, `--runner-change-reason "<specific reviewed change>"` records
+that exception with each input runner hash. This never permits a changed agent
+binary, prompt, model or musical brief within one condition. Build a new SongEval
+input manifest from the combined suite and score those retained files with the
+same pinned evaluator. Repeating the evaluator does not create new musical takes.
+
+### Screening and confirmation
 
 The development cohort is a screening gate. A candidate must have all valid
 pairs, a mean improvement of at least 0.03 across the five equally weighted

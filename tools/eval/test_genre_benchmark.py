@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import genre_benchmark as benchmark
@@ -17,6 +18,54 @@ def test_manifest_has_two_sixteen_bar_cases_per_genre():
         for genre in benchmark.GENRES
         for split in ("development", "holdout")
     }
+
+
+def test_combined_pilot_and_second_repetition_keep_the_complete_genre_cohort(tmp_path):
+    import composition_quality as quality
+
+    original = tmp_path / "original"
+    scores = _write_suite(
+        original, "development", {axis: 3.0 for axis in benchmark.AXES}
+    )
+    complete = quality.read_json(original / "suite.json")
+    complete.update(
+        {
+            "manifest": benchmark.validate_manifest(MANIFEST),
+            "source_diff": "",
+            "untracked_rust_sources": {},
+            "runtime": {"agent.exe": "frozen"},
+            "runner_sha256": "original-runner",
+        }
+    )
+    quality.write_json(original / "suite.json", complete)
+    inputs = []
+    for repetition in (1, 2):
+        root = tmp_path / f"repetition-{repetition}"
+        root.mkdir()
+        data = dict(complete)
+        data["repetitions"] = 1
+        data["trials"] = [
+            trial
+            for trial in complete["trials"]
+            if trial["id"].endswith(f"-{repetition:02}")
+        ]
+        if repetition == 2:
+            data["repetition_start"] = 2
+            data["runner_sha256"] = "offset-capable-runner"
+        for trial in data["trials"]:
+            shutil.copytree(original / trial["id"], root / trial["id"])
+        quality.write_json(root / "suite.json", data)
+        inputs.append(root)
+    with pytest.raises(ValueError, match="Runner drift"):
+        quality.combine_repetitions(inputs, tmp_path / "refused")
+    aggregate = tmp_path / "aggregate"
+    quality.combine_repetitions(
+        inputs, aggregate, "Add repetition offsets; frozen agent runtime unchanged"
+    )
+    result = benchmark.compare(original, aggregate, scores, scores, MANIFEST)
+    assert result["acceptance"]["all_pairs_valid"]
+    assert len(result["rows"]) == 14
+    assert result["overall"]["mean_delta"] == 0
 
 
 def _write_suite(
