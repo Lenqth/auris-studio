@@ -1,0 +1,107 @@
+# Genre benchmark for agent composition
+
+This benchmark is a development harness for comparing composition guidance. It
+does not claim that a model score is a musical verdict.
+
+The versioned manifest contains fourteen instrumental cases: one development
+case and one holdout case for each of pop, city pop, lo-fi, neo-soul, dance and
+electronic, anime song, and game BGM. Every case is sixteen bars with an
+explicit key, tempo, 4/4 meter, and A/B sections covering bars 1–8 and 9–16.
+The cases use built-in instruments and leave the project unsaved. The holdout
+briefs use a different tempo and musical setting from their development
+counterparts while preserving the genre purpose.
+
+## Paired experiment
+
+Run the existing composition-quality runner with a separately frozen binary for
+each condition. Keep the same backend, model, manifest, repetition count,
+candidate-tool setting, prompt profile, and context budget. Record the source
+suite and any prompt condition so the exact instruction package can be
+reconstructed.
+
+```powershell
+uv run tools/eval/composition_quality.py run `
+  --manifest tools/eval/references/genre-benchmark-v1.json `
+  --executable <frozen-before-test-executable> `
+  --source-suite <before-source-suite.json> --prompt-condition <before-condition.json> `
+  --output <before-development-suite> --split development --repetitions 1
+
+uv run tools/eval/composition_quality.py run `
+  --manifest tools/eval/references/genre-benchmark-v1.json `
+  --executable <frozen-after-test-executable> `
+  --source-suite <after-source-suite.json> --prompt-condition <after-condition.json> `
+  --output <after-development-suite> --split development --repetitions 1
+```
+
+Repeat those commands for `--split holdout`, reusing each condition's frozen
+binary, source suite and prompt condition after development decisions are fixed. Retain
+the WAV/MIDI files produced by the agent. Score
+the retained WAVs with the pinned local SongEval adapter and its frozen
+checkpoint, MuQ weights, upstream revision, and runtime configuration.
+
+Build input manifests with the trial IDs preserved, then use the separately
+managed evaluator interpreter described in [composition refinement](composition-refinement.md):
+
+```powershell
+uv run tools/eval/genre_benchmark.py inputs --suite <before-development-suite> --suite <before-holdout-suite> --output <before-inputs.json>
+<songeval-python> tools/eval/songeval.py --config <songeval-config.json> --manifest <before-inputs.json> --output <before-songeval.json>
+```
+
+Repeat for the after suites. Missing WAVs remain listed in the input manifest;
+they are not substituted with another take. Comparison requires the complete
+expected cohort even when some inputs could not be scored.
+
+Finally compare the complete cohorts:
+
+```powershell
+uv run tools/eval/genre_benchmark.py compare `
+  --before-suite <before-development-suite> `
+  --after-suite <after-development-suite> `
+  --before-suite <before-holdout-suite> `
+  --after-suite <after-holdout-suite> `
+  --before-scores <before-songeval.json> `
+  --after-scores <after-songeval.json> `
+  --manifest tools/eval/references/genre-benchmark-v1.json `
+  --output <comparison.json>
+```
+
+The comparison freezes and checks suite conditions, source/runtime metadata,
+SongEval scores, artifact hashes, and hashes of the files that are actually on
+disk. A missing, failed, duplicated, changed, or invalid trial remains visible
+and makes the cohort ineligible; it is never silently removed.
+
+## Adoption rule
+
+The development cohort is a screening gate. A candidate must have all valid
+pairs, a mean improvement of at least 0.03 across the five equally weighted
+SongEval axes, no genre mean regression below −0.10, and strict positive mean
+improvement in at least four of the seven genres. A development-only run is
+never accepted: the current benchmark reports it as an eligible candidate but
+keeps `accepted=false` until the holdout comparison is present.
+
+The holdout cohort must then have a positive mean delta under the same frozen
+conditions, and the combined cohort must pass the same mean and genre gates.
+Only after these checks pass is the candidate eligible for adoption.
+These thresholds are pre-registered engineering gates, not statistical
+significance tests. A single repetition is a pilot and can be noisy; the result
+is retained as evidence, and a fresh seed/repetition cohort is planned before
+drawing a stable conclusion.
+
+The [official SongEval toolkit](https://github.com/ASLP-lab/SongEval) predicts five
+axes, retained here with equal weight. A supplementary sensitivity
+view recomputes the mean using its four non-Naturalness axes. Naturalness is
+reported because it is part of SongEval, but these cases are instrumental and
+cannot validate vocal naturalness. Genre fit is determined from the prompt and
+score inspection; SongEval is not a genre-fit classifier.
+
+The agent's composition seed is not controlled. Paired trials therefore compare
+instruction packages and cohort behavior, not identical note-by-note random
+draws. Keep elapsed time, tool errors, transcript/provenance data, and generated
+artifacts with each suite so tool usage and delivery failures remain auditable.
+
+For this optimization study, stop after two successive, fully evaluated
+candidates fail to improve the retained condition under the development gates,
+or when the available account quota ends. An infrastructure failure is an
+incomplete experiment, not evidence of a score plateau. Preserve every attempted
+candidate and qualify a plateau as applying to the tested changes, not all
+possible prompts. Extend the manifest under a new version when adding genres.
