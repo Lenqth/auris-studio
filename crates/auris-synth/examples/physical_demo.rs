@@ -58,7 +58,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .collect();
             let ctx = ProcessContext::realtime(f64::from(rate), 256, u64::from(start), 120.0, true);
             instrument.process(&block_events, &mut buffer, &ctx);
-            samples.extend_from_slice(buffer.channel(0));
+            samples.extend(
+                buffer
+                    .channel(0)
+                    .iter()
+                    .zip(buffer.channel(1))
+                    .map(|(left, right)| (left + right) * 0.5),
+            );
         }
         let peak = samples.iter().fold(0.0_f32, |a, s| a.max(s.abs()));
         let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();

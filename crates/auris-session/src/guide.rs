@@ -655,6 +655,12 @@ pub mod architecture {
     //! breath pressure and reed controls carried through the same plugin boundary.
     //! Hammered dulcimer adds finite hammer contact and passively coupled, detuned string
     //! courses. Tin whistle uses a nonlinear fipple jet and an open-pipe resonator.
+    //! All of them render in stereo by placing each note where the real instrument would put it,
+    //! heard from the player's seat: a piano's or marimba's low notes on the left, the strings
+    //! in orchestral seating with the violins left and the basses right, the dulcimer's bass
+    //! bridge on the right. A note's place is fixed when it starts, so a held note never moves,
+    //! and the gains `1 - pan` and `1 + pan` keep the mono downmix identical to the centred
+    //! instrument. A `width` parameter scales the spread from mono to twice the natural image.
     //! There is no sample asset behind these instruments. [`crate::DEFAULT_INSTRUMENT`] names
     //! the physical piano. SoundFont import uses the same worker/session boundary as before.
     //! [`auris_synth::Choir`] is a polyphonic instrument for wordless ensemble vowels. Each

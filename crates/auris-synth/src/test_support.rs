@@ -103,10 +103,25 @@ impl Rig {
 
     /// Renders `frames` frames, applying `events` at their offsets from the start of this call.
     ///
-    /// Returns channel 0. Every channel is checked to be identical, which is how the tests
-    /// verify that the instrument writes the whole buffer.
+    /// Returns the mono downmix: channel 0 of a mono buffer, the mean of the first two
+    /// channels otherwise. That is what every level and pitch measurement wants, and it is the
+    /// centred signal of a stereo instrument whatever its width. Every further channel is
+    /// checked to hold that downmix, which is how the tests verify that the instrument writes
+    /// the whole buffer.
     pub fn render(&mut self, frames: usize, events: &[NoteEvent]) -> Vec<f32> {
-        let mut out = Vec::with_capacity(frames);
+        let (left, right) = self.render_stereo(frames, events);
+        left.iter()
+            .zip(&right)
+            .map(|(l, r)| (l + r) * 0.5)
+            .collect()
+    }
+
+    /// Renders like [`Rig::render`] but returns channels 0 and 1 apart.
+    ///
+    /// A mono buffer returns its one channel twice.
+    pub fn render_stereo(&mut self, frames: usize, events: &[NoteEvent]) -> (Vec<f32>, Vec<f32>) {
+        let mut left = Vec::with_capacity(frames);
+        let mut right = Vec::with_capacity(frames);
         let mut rendered = 0usize;
         while rendered < frames {
             let block = self.block.min(frames - rendered);
@@ -129,18 +144,37 @@ impl Rig {
             self.instrument
                 .process(&block_events, &mut self.buffer, &ctx);
 
-            for channel in 1..self.buffer.channel_count() {
-                assert_eq!(
-                    self.buffer.channel(channel),
-                    self.buffer.channel(0),
-                    "channel {channel} does not match channel 0"
-                );
+            let first = self.buffer.channel(0);
+            let second = if self.buffer.channel_count() > 1 {
+                self.buffer.channel(1)
+            } else {
+                first
+            };
+            let downmix: Vec<f32> = first
+                .iter()
+                .zip(second)
+                .map(|(l, r)| (l + r) * 0.5)
+                .collect();
+            for channel in 2..self.buffer.channel_count() {
+                for (frame, (sample, expected)) in self
+                    .buffer
+                    .channel(channel)
+                    .iter()
+                    .zip(&downmix)
+                    .enumerate()
+                {
+                    assert!(
+                        (sample - expected).abs() <= 1.0e-6 * (1.0 + expected.abs()),
+                        "channel {channel} frame {frame}: {sample} is not the downmix {expected}"
+                    );
+                }
             }
-            out.extend_from_slice(self.buffer.channel(0));
+            left.extend_from_slice(first);
+            right.extend_from_slice(second);
             self.playhead += block as u64;
             rendered += block;
         }
-        out
+        (left, right)
     }
 }
 

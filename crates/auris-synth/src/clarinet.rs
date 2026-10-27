@@ -13,7 +13,9 @@ use auris_core::{
 use auris_dsp::Adsr;
 
 use crate::params::{ParamBank, finite_or};
-use crate::render::{SegmentRenderer, render_segments, spread_to_all_channels};
+use crate::render::{
+    SegmentRenderer, StereoImage, downmix_to_extra_channels, pan_gains, render_segments,
+};
 use crate::voice::VoiceAllocator;
 
 const VOICES: usize = 16;
@@ -23,10 +25,17 @@ const P_NOISE: u32 = 2;
 const P_ATTACK: u32 = 3;
 const P_RELEASE: u32 = 4;
 const P_LEVEL: u32 = 5;
+const P_WIDTH: u32 = 6;
+/// A reed section: low voices a little to the left, the high ones a little to the right.
+pub(crate) const IMAGE: StereoImage = StereoImage::new(70.0, 22.0, 0.25);
 const MAX_BEND: f32 = 24.0;
 
 #[derive(Clone, Debug)]
 struct Voice {
+    /// Pan at unit width, fixed when the note starts.
+    position: f32,
+    /// Pan currently applied, chasing `position` times the width control.
+    pan: f32,
     delay: Vec<f32>,
     write: usize,
     delay_len: usize,
@@ -46,6 +55,8 @@ impl Voice {
         let mut envelope = Adsr::new();
         envelope.set_sample_rate(rate);
         Self {
+            position: 0.0,
+            pan: 0.0,
             delay: Vec::new(),
             write: 0,
             delay_len: 1,
@@ -101,6 +112,8 @@ pub struct Clarinet {
     expression: f32,
     expression_current: f32,
     expression_coeff: f32,
+    /// One-pole coefficient by which a voice's pan follows the width control.
+    pan_step: f32,
 }
 
 impl Default for Clarinet {
@@ -125,6 +138,7 @@ impl Clarinet {
                 ParamDescriptor::new(P_RELEASE, "release", "Release", 0.01, 4.0, 0.24)
                     .with_unit(ParamUnit::Seconds),
                 ParamDescriptor::decibels(P_LEVEL, "level", "Level", -60.0, 6.0, -8.0),
+                ParamDescriptor::new(P_WIDTH, "width", "Stereo Width", 0.0, 2.0, 1.0),
             ]),
             voices: Vec::new(),
             allocator: VoiceAllocator::new(),
@@ -134,6 +148,7 @@ impl Clarinet {
             expression: 1.0,
             expression_current: 1.0,
             expression_coeff: 0.0,
+            pan_step: 1.0,
         };
         clarinet.refresh();
         clarinet
@@ -165,6 +180,8 @@ impl Clarinet {
             voice.delay.fill(0.0);
             voice.presence.reset();
         }
+        voice.position = IMAGE.position(f32::from(pitch));
+        voice.pan = voice.position * self.params.at(P_WIDTH);
         voice.envelope.trigger();
     }
 }
@@ -230,13 +247,17 @@ impl SegmentRenderer for Clarinet {
     }
 
     fn render_segment(&mut self, out: &mut AudioBuffer, start: usize, end: usize) {
-        let Some((mono, _)) = out.channels_mut().split_first_mut() else {
+        let Some((first, rest)) = out.channels_mut().split_first_mut() else {
             return;
         };
-        let Some(dst) = mono.get_mut(start..end) else {
+        let Some(dst) = first.get_mut(start..end) else {
             return;
         };
+        let mut right = rest
+            .first_mut()
+            .and_then(|channel| channel.get_mut(start..end));
         dst.fill(0.0);
+        let width = self.params.at(P_WIDTH);
         let pressure = self.params.at(P_PRESSURE);
         let stiffness = self.params.at(P_REED).clamp(0.02, 1.0);
         let noise_amount = self.params.at(P_NOISE);
@@ -252,7 +273,8 @@ impl SegmentRenderer for Clarinet {
             voice.delay_fraction = delay - voice.delay_len as f32;
         }
         let output = db_to_gain(self.params.at(P_LEVEL)) * self.channel_volume * 0.75;
-        for sample in dst.iter_mut() {
+        for (frame, sample) in dst.iter_mut().enumerate() {
+            let mut to_right = 0.0;
             self.expression_current +=
                 self.expression_coeff * (self.expression - self.expression_current);
             let wind = 0.35 + 0.65 * self.expression_current;
@@ -287,9 +309,18 @@ impl SegmentRenderer for Clarinet {
                     voice
                         .presence
                         .process(bore * 0.7 + input * 0.18, voice.frequency, 1.0);
-                *sample += radiated * env * voice.velocity;
+                let voiced = radiated * env * voice.velocity;
+                voice.pan += (voice.position * width - voice.pan) * self.pan_step;
+                let (gain_left, gain_right) = pan_gains(voice.pan);
+                *sample += voiced * gain_left;
+                to_right += voiced * gain_right;
             }
-            *sample *= output * self.expression_current;
+            let scale = output * self.expression_current;
+            *sample *= scale;
+            match right.as_deref_mut().and_then(|right| right.get_mut(frame)) {
+                Some(right) => *right = to_right * scale,
+                None => *sample = (*sample + to_right * scale) * 0.5,
+            }
         }
         for (slot, voice) in self.voices.iter().enumerate() {
             self.allocator
@@ -298,6 +329,7 @@ impl SegmentRenderer for Clarinet {
                 self.allocator.retire(slot);
             }
         }
+        downmix_to_extra_channels(out, start, end);
     }
 }
 
@@ -326,6 +358,8 @@ impl Instrument for Clarinet {
         self.expression = 1.0;
         self.expression_current = 1.0;
         self.expression_coeff = (1.0 - (-1.0 / (0.020 * f64::from(self.rate))).exp()) as f32;
+        // About ten milliseconds, so turning the width control never clicks.
+        self.pan_step = 1.0 - (-1.0 / (0.010 * self.rate)).exp();
         self.refresh();
     }
     fn reset(&mut self) {
@@ -340,7 +374,6 @@ impl Instrument for Clarinet {
     }
     fn process(&mut self, events: &[NoteEvent], out: &mut AudioBuffer, ctx: &ProcessContext) {
         render_segments(self, events, out, ctx.block_frames.min(out.frame_count()));
-        spread_to_all_channels(out, ctx.block_frames.min(out.frame_count()));
     }
     fn active_voices(&self) -> usize {
         self.allocator.active_count()
@@ -368,7 +401,7 @@ mod tests {
     fn clarinet_has_stable_descriptor_and_sound() {
         let clarinet = Clarinet::new();
         assert_eq!(clarinet.descriptor().id, Clarinet::ID);
-        assert_eq!(clarinet.parameters().len(), 6);
+        assert_eq!(clarinet.parameters().len(), 7);
         let mut rig = Rig::new(Box::new(clarinet), 48_000.0, 256, 2);
         let rendered = rig.render(
             4096,

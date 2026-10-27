@@ -172,7 +172,8 @@ mod tests {
                 buffer.channel(0).iter().all(|s| s.is_finite()),
                 "{id} produced a non-finite sample"
             );
-            if id == Choir::ID {
+            // Every physical instrument places its notes across the stereo field.
+            if id.starts_with("auris.physical.") {
                 assert!(buffer.channel(1).iter().all(|s| s.is_finite()));
                 assert!(
                     peak(buffer.channel(1)) > 0.0,
@@ -186,7 +187,8 @@ mod tests {
 
     #[test]
     fn every_instrument_renders_into_a_mono_buffer() {
-        // `spread_to_all_channels` has to cope with there being nothing to spread to. A
+        // `spread_to_all_channels` and the stereo instruments have to cope with there being
+        // nothing to spread to. A
         // single-channel bus is a real configuration, and indexing channel 1 would panic.
         for (id, mut instrument) in every_instrument() {
             instrument.prepare(&PrepareContext::new(48_000.0, 512, 1));

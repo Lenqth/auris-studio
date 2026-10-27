@@ -13,7 +13,9 @@ use auris_core::{
 use auris_dsp::{Adsr, Biquad, BiquadCoefficients};
 
 use crate::params::{ParamBank, finite_or};
-use crate::render::{SegmentRenderer, render_segments, spread_to_all_channels};
+use crate::render::{
+    SegmentRenderer, StereoImage, downmix_to_extra_channels, pan_gains, render_segments,
+};
 use crate::voice::VoiceAllocator;
 
 const VOICES: usize = 16;
@@ -23,10 +25,17 @@ const P_NOISE: u32 = 2;
 const P_ATTACK: u32 = 3;
 const P_RELEASE: u32 = 4;
 const P_LEVEL: u32 = 5;
+const P_WIDTH: u32 = 6;
+/// A whistle section, spread gently from its low notes on the left to the high ones on the right.
+pub(crate) const IMAGE: StereoImage = StereoImage::new(86.0, 12.0, 0.25);
 const MAX_BEND: f32 = 24.0;
 
 #[derive(Clone, Debug)]
 struct Voice {
+    /// Pan at unit width, fixed when the note starts.
+    position: f32,
+    /// Pan currently applied, chasing `position` times the width control.
+    pan: f32,
     delay: Vec<f32>,
     write: usize,
     length: usize,
@@ -256,6 +265,8 @@ impl Voice {
         let mut envelope = Adsr::new();
         envelope.set_sample_rate(rate);
         Self {
+            position: 0.0,
+            pan: 0.0,
             delay: Vec::new(),
             write: 0,
             length: 2,
@@ -305,6 +316,8 @@ pub struct TinWhistle {
     expression: f32,
     expression_current: f32,
     expression_coeff: f32,
+    /// One-pole coefficient by which a voice's pan follows the width control.
+    pan_step: f32,
 }
 
 impl Default for TinWhistle {
@@ -329,6 +342,7 @@ impl TinWhistle {
                 ParamDescriptor::new(P_RELEASE, "release", "Release", 0.01, 4.0, 0.18)
                     .with_unit(ParamUnit::Seconds),
                 ParamDescriptor::decibels(P_LEVEL, "level", "Level", -60.0, 6.0, -9.0),
+                ParamDescriptor::new(P_WIDTH, "width", "Stereo Width", 0.0, 2.0, 1.0),
             ]),
             voices: Vec::new(),
             allocator: VoiceAllocator::new(),
@@ -338,6 +352,7 @@ impl TinWhistle {
             expression: 1.0,
             expression_current: 1.0,
             expression_coeff: 0.0,
+            pan_step: 1.0,
         };
         whistle.refresh();
         whistle
@@ -370,6 +385,8 @@ impl TinWhistle {
             voice.delay.fill(0.0);
         }
         voice.bore_mode.reset();
+        voice.position = IMAGE.position(f32::from(pitch));
+        voice.pan = voice.position * self.params.at(P_WIDTH);
         voice.envelope.trigger();
     }
 }
@@ -435,13 +452,17 @@ impl SegmentRenderer for TinWhistle {
     }
 
     fn render_segment(&mut self, out: &mut AudioBuffer, start: usize, end: usize) {
-        let Some((mono, _)) = out.channels_mut().split_first_mut() else {
+        let Some((first, rest)) = out.channels_mut().split_first_mut() else {
             return;
         };
-        let Some(dst) = mono.get_mut(start..end) else {
+        let Some(dst) = first.get_mut(start..end) else {
             return;
         };
+        let mut right = rest
+            .first_mut()
+            .and_then(|channel| channel.get_mut(start..end));
         dst.fill(0.0);
+        let width = self.params.at(P_WIDTH);
         let pressure = self.params.at(P_PRESSURE).clamp(0.0, 1.0);
         let jet_shape = self.params.at(P_JET).clamp(0.0, 1.0);
         let noise_amount = self.params.at(P_NOISE).clamp(0.0, 1.0);
@@ -465,7 +486,8 @@ impl SegmentRenderer for TinWhistle {
             voice.fraction = delay - voice.length as f32;
         }
         let gain = db_to_gain(self.params.at(P_LEVEL)) * self.channel_volume * 0.8;
-        for sample in dst.iter_mut() {
+        for (frame, sample) in dst.iter_mut().enumerate() {
+            let mut to_right = 0.0;
             self.expression_current +=
                 self.expression_coeff * (self.expression - self.expression_current);
             let wind = (0.25 + 0.75 * self.expression_current) * pressure;
@@ -490,11 +512,20 @@ impl SegmentRenderer for TinWhistle {
                 voice.delay[voice.write] = wave;
                 voice.write = (voice.write + 1) % voice.delay.len();
                 // Observe acoustic pressure and a small amount of nonlinear jet radiation.
-                *sample += (acoustic * 0.85 + jet * 0.15) * env * voice.velocity;
+                let voiced = (acoustic * 0.85 + jet * 0.15) * env * voice.velocity;
+                voice.pan += (voice.position * width - voice.pan) * self.pan_step;
+                let (gain_left, gain_right) = pan_gains(voice.pan);
+                *sample += voiced * gain_left;
+                to_right += voiced * gain_right;
             }
             // Breath pressure also controls radiated amplitude after the jet loop saturates;
             // otherwise a limit-cycle whistle would make pressure changes inaudible.
-            *sample *= gain * (0.35 + 0.65 * pressure) * self.expression_current;
+            let scale = gain * (0.35 + 0.65 * pressure) * self.expression_current;
+            *sample *= scale;
+            match right.as_deref_mut().and_then(|right| right.get_mut(frame)) {
+                Some(right) => *right = to_right * scale,
+                None => *sample = (*sample + to_right * scale) * 0.5,
+            }
         }
         for (slot, voice) in self.voices.iter().enumerate() {
             self.allocator
@@ -503,6 +534,7 @@ impl SegmentRenderer for TinWhistle {
                 self.allocator.retire(slot);
             }
         }
+        downmix_to_extra_channels(out, start, end);
     }
 }
 
@@ -531,6 +563,8 @@ impl Instrument for TinWhistle {
         self.expression = 1.0;
         self.expression_current = 1.0;
         self.expression_coeff = (1.0 - (-1.0 / (0.020 * f64::from(self.rate))).exp()) as f32;
+        // About ten milliseconds, so turning the width control never clicks.
+        self.pan_step = 1.0 - (-1.0 / (0.010 * self.rate)).exp();
         self.refresh();
     }
     fn reset(&mut self) {
@@ -545,7 +579,6 @@ impl Instrument for TinWhistle {
     }
     fn process(&mut self, events: &[NoteEvent], out: &mut AudioBuffer, ctx: &ProcessContext) {
         render_segments(self, events, out, ctx.block_frames.min(out.frame_count()));
-        spread_to_all_channels(out, ctx.block_frames.min(out.frame_count()));
     }
     fn active_voices(&self) -> usize {
         self.allocator.active_count()

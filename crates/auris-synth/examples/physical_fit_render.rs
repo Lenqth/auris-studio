@@ -271,16 +271,14 @@ fn render_blocks(request: &Request, block: usize) -> Result<Vec<f32>, Box<dyn Er
             for effect in &mut effects {
                 effect.process(&mut buffer, &context);
             }
-            if request.model == "choir" {
-                samples.extend(
-                    buffer.channel(0)[..block.min(frames - start)]
-                        .iter()
-                        .zip(buffer.channel(1))
-                        .map(|(left, right)| (left + right) * 0.5),
-                );
-            } else {
-                samples.extend_from_slice(&buffer.channel(0)[..block.min(frames - start)]);
-            }
+            // Every physical instrument is stereo; the recordings it is fitted to are mono, and
+            // the downmix is the centred instrument whatever its width.
+            samples.extend(
+                buffer.channel(0)[..block.min(frames - start)]
+                    .iter()
+                    .zip(buffer.channel(1))
+                    .map(|(left, right)| (left + right) * 0.5),
+            );
         }
     }
     if samples.iter().any(|sample| !sample.is_finite()) {
