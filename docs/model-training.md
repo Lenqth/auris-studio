@@ -5,6 +5,8 @@ storage, labels, source-work splits, inference and replay policy belong to the
 collector. Retrieve `capabilities` and MCP `tools/list` at the start of a run;
 `tool_schemas` contains per-tool groups and SHA-256 schema hashes, with a catalog
 hash for the enabled tool set. Preserve the exact schemas alongside the run.
+Hashes cover the compact schema transmitted in `tools/list`, excluding prose and
+default annotations retained by on-demand help.
 
 ## Exact analysis output
 

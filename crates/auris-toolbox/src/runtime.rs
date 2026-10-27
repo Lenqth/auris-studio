@@ -5,6 +5,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 fn schema_hash(parameters: &Value) -> String {
+    let mut parameters = parameters.clone();
+    crate::compact_parameters(&mut parameters);
     hex::encode(Sha256::digest(parameters.to_string().as_bytes()))
 }
 
@@ -209,6 +211,48 @@ fn discover_saved(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capability_hashes_match_the_transmitted_saved_and_live_schemas() {
+        let live = crate::live_agent::definitions();
+        let live_capabilities: Value = serde_json::from_str(
+            &call_live_reference_in("capabilities", json!({}), &live)
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        let groups = ToolGroups::default();
+        let saved_capabilities: Value =
+            serde_json::from_str(&call_saved(&groups, "capabilities", json!({})).unwrap()).unwrap();
+        for (report, catalog) in [
+            (
+                live_capabilities,
+                live.into_iter()
+                    .map(|tool| (tool.name, tool.parameters))
+                    .collect::<Vec<_>>(),
+            ),
+            (
+                saved_capabilities,
+                tool_catalog()
+                    .into_iter()
+                    .map(|tool| (tool.name, tool.parameters))
+                    .collect(),
+            ),
+        ] {
+            for (name, mut transmitted) in catalog {
+                // The MCP tools/list and native tool templates use this public wire projection.
+                crate::compact_parameters(&mut transmitted);
+                let expected = hex::encode(Sha256::digest(transmitted.to_string().as_bytes()));
+                let contract = report["tool_schemas"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|tool| tool["name"] == name)
+                    .unwrap();
+                assert_eq!(contract["schema_sha256"], expected, "{name}");
+            }
+        }
+    }
 
     #[test]
     fn optional_host_tools_are_shared_by_capabilities_discovery_and_full_help() {

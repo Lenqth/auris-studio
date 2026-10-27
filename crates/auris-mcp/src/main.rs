@@ -342,7 +342,9 @@ mod tests {
             .parameters
             .clone();
         toolbox::compact_parameters(&mut expected);
-        assert_eq!(payload["parameters"], expected);
+        let mut help_validation = payload["parameters"].clone();
+        toolbox::compact_parameters(&mut help_validation);
+        assert_eq!(help_validation, expected);
         client.cancel().await.unwrap();
         server.await.unwrap();
     }
