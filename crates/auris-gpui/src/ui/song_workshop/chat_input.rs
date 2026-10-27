@@ -12,19 +12,30 @@ impl AurisApp {
             .iter()
             .find(|m| m.matches(&s.preferences))
             .map(|m| m.label())
-            .unwrap_or_else(|| format!("{} / {}", s.preferences.backend, s.preferences.model));
-        let effort = s.preferences.effort.as_str();
-        let mut body = div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(self.workshop_field(0, Key::WorkshopMessage, true, cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .child(button(
+            .unwrap_or_else(|| {
+                if s.preferences.model.is_empty() {
+                    self.t(Key::AgentChooseModel).to_string()
+                } else {
+                    format!("{} / {}", s.preferences.backend, s.preferences.model)
+                }
+            });
+        let effort = self.t(crate::ui::agent_chat::controls::effort_key(
+            s.preferences.effort,
+        ));
+        let focused = s.active_field == Some(0);
+        let mut body = crate::ui::agent_components::composer_frame(
+            "song-workshop-composer",
+            &theme,
+            focused,
+            s.model_error.is_some(),
+        )
+        .debug_selector(|| "song-workshop-composer".to_owned())
+        .gap_2()
+        .child(self.workshop_field(0, Key::WorkshopMessage, true, cx))
+        .child(
+            agent_components::composer_controls("workshop-composer-controls", &theme)
+                .child(
+                    button(
                         "workshop-model",
                         model,
                         ButtonStyle::Normal,
@@ -35,49 +46,76 @@ impl AurisApp {
                             this.workshop_model_menu(event.position());
                             cx.notify();
                         }),
-                    ))
-                    .child(button(
-                        "workshop-effort",
-                        format!("effort: {effort}"),
-                        ButtonStyle::Normal,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            if let Some(s) = &mut this.song_workshop {
-                                let levels = s
-                                    .models
+                    )
+                    .max_w_full()
+                    .truncate(),
+                )
+                .child(button(
+                    "workshop-effort",
+                    format!("{}: {effort}", self.t(Key::AgentEffort)),
+                    ButtonStyle::Normal,
+                    false,
+                    theme.accent,
+                    &theme,
+                    cx.listener(|this, _, _, cx| {
+                        if let Some(s) = &mut this.song_workshop {
+                            let levels = s
+                                .models
+                                .iter()
+                                .find(|m| m.matches(&s.preferences))
+                                .and_then(|m| m.efforts.clone())
+                                .unwrap_or_else(|| vec![auris_session::ReasoningEffort::Default]);
+                            if !levels.is_empty() {
+                                let index = levels
                                     .iter()
-                                    .find(|m| m.matches(&s.preferences))
-                                    .and_then(|m| m.efforts.clone())
-                                    .unwrap_or_else(|| {
-                                        vec![auris_session::ReasoningEffort::Default]
-                                    });
-                                if !levels.is_empty() {
-                                    let index = levels
-                                        .iter()
-                                        .position(|e| *e == s.preferences.effort)
-                                        .map_or(0, |i| (i + 1) % levels.len());
-                                    s.preferences.effort = levels[index];
-                                }
+                                    .position(|e| *e == s.preferences.effort)
+                                    .map_or(0, |i| (i + 1) % levels.len());
+                                s.preferences.effort = levels[index];
                             }
-                            cx.notify();
-                        }),
-                    ))
-                    .child(button(
-                        "workshop-model-settings",
-                        self.t(Key::AgentConfigure),
-                        ButtonStyle::Normal,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.open_settings_tab(crate::settings_window::SettingsTab::Agent, cx)
-                        }),
-                    )),
-            );
+                        }
+                        cx.notify();
+                    }),
+                ))
+                .child(button(
+                    "workshop-model-settings",
+                    self.t(Key::AgentConfigure),
+                    ButtonStyle::Normal,
+                    false,
+                    theme.accent,
+                    &theme,
+                    cx.listener(|this, _, _, cx| {
+                        this.open_settings_tab(crate::settings_window::SettingsTab::Agent, cx)
+                    }),
+                ))
+                .child(div().flex_1())
+                .child(agent_components::composer_action(
+                    "song-cancel",
+                    self.t(Key::WorkshopCancel),
+                    agent_components::ComposerAction::Stop,
+                    s.busy(),
+                    false,
+                    &theme,
+                    cx.listener(|this, _, _, cx| {
+                        if let Some(s) = &mut this.song_workshop {
+                            s.stop();
+                        }
+                        cx.notify();
+                    }),
+                ))
+                .child(agent_components::composer_action(
+                    "song-generate",
+                    self.t(Key::WorkshopSend),
+                    agent_components::ComposerAction::Send,
+                    !s.busy()
+                        && !s.brief.content().trim().is_empty()
+                        && s.preferences.is_configured(),
+                    false,
+                    &theme,
+                    cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
+                )),
+        );
         if let Some(error) = &s.model_error {
-            body = body.child(div().text_color(theme.danger).child(error.clone()));
+            body = body.child(crate::ui::agent_components::error_notice(error.clone()));
         }
         body.into_any_element()
     }
@@ -210,11 +248,11 @@ impl AurisApp {
             })
             .track_focus(&focus)
             .flex_shrink_0()
-            .border_1()
-            .border_color(theme.border)
-            .rounded_md()
-            .bg(theme.surface)
-            .focus(|d| d.border_color(theme.selection))
+            .rounded(atelier::Theme::concentric(
+                theme.atelier.shape.radius_lg,
+                theme.atelier.spacing.xs,
+            ))
+            .bg(theme.surface_raised)
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {

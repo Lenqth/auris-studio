@@ -1,5 +1,6 @@
 //! A persistent conversation with inline, independently produced song alternatives.
 
+use super::agent_components;
 use super::audio_player::{PlayerState, PlayerTarget};
 use super::text_field::{KeyEffect, TextField};
 use super::widgets::{ButtonState, ButtonStyle, Latch, activity_indicator, button, button_enabled};
@@ -453,6 +454,7 @@ impl AurisApp {
         };
         let mut body = div()
             .id("song-workshop-body")
+            .debug_selector(|| "song-workshop-body".into())
             .w_full()
             .max_w(gpui::px(1000.0))
             .mx_auto()
@@ -460,30 +462,20 @@ impl AurisApp {
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&s.scroll)
-            .p_4()
+            .p(theme.atelier.spacing.lg)
             .flex()
             .flex_col()
-            .gap_4();
+            .gap(theme.atelier.spacing.lg);
         if let Some(snapshot) = &s.snapshot {
             if snapshot.document.messages.is_empty() {
                 body = body.child(self.t(Key::WorkshopChatHint));
             }
             for (i, message) in snapshot.document.messages.iter().enumerate() {
-                body =
-                    body.child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(div().text_color(theme.text_muted).child(self.t(
-                                if message.user {
-                                    Key::WorkshopYou
-                                } else {
-                                    Key::WorkshopAssistant
-                                },
-                            )))
-                            .child(message.text.clone()),
-                    );
+                body = body.child(agent_components::workshop_message(
+                    ("song-workshop-message", i),
+                    message.user,
+                    message.text.clone(),
+                ));
                 for (round_index, round) in snapshot
                     .document
                     .rounds
@@ -520,7 +512,7 @@ impl AurisApp {
                         .flex_shrink_0()
                         .overflow_x_scroll()
                         .flex()
-                        .gap_3();
+                        .gap(theme.atelier.spacing.md);
                     for (index, candidate) in round.candidates.iter().enumerate() {
                         let id = candidate.id;
                         let ready = s.candidates[index].is_some();
@@ -531,21 +523,35 @@ impl AurisApp {
                             .debug_selector(move || format!("song-candidate-{index}"))
                             .flex_1()
                             .min_w(gpui::px(300.0))
-                            .p_3()
+                            .p(theme.atelier.spacing.md)
+                            .bg(theme.surface)
                             .border_1()
                             .border_color(if selected {
-                                theme.selection
+                                theme.atelier.colors.agent
                             } else {
-                                theme.border
+                                theme.atelier.colors.separator
                             })
-                            .rounded_md()
+                            .rounded(theme.atelier.shape.radius_lg)
                             .flex()
                             .flex_col()
-                            .gap_2()
-                            .child(div().text_base().child(candidate.direction.title.clone()))
-                            .child(candidate.direction.description.clone());
+                            .gap(theme.atelier.spacing.sm)
+                            .child(
+                                div()
+                                    .text_size(theme.atelier.typography.size_lg)
+                                    .font_weight(theme.atelier.typography.label_weight)
+                                    .child(candidate.direction.title.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_color(theme.text_muted)
+                                    .child(candidate.direction.description.clone()),
+                            );
                         if selected {
-                            card = card.child(self.t(Key::WorkshopSelected));
+                            card = card.child(
+                                div()
+                                    .text_color(theme.atelier.colors.agent)
+                                    .child(self.t(Key::WorkshopSelected)),
+                            );
                         }
                         if let Some(stage) = snapshot.progress.get(&id) {
                             let label = self.t(match stage.as_str() {
@@ -679,14 +685,10 @@ impl AurisApp {
                 }
             }
             if snapshot.planning {
-                body = body.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(activity_indicator("song-planning-activity", theme.accent))
-                        .child(self.t(Key::WorkshopPlanning)),
-                );
+                body = body.child(agent_components::thinking_indicator(
+                    "song-planning-activity",
+                    self.t(Key::WorkshopPlanning),
+                ));
             }
             if s.show_memory {
                 for (index, selection) in snapshot.preferences.selections.iter().enumerate() {
@@ -737,17 +739,13 @@ impl AurisApp {
                 ));
             }
         } else {
-            body = body.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(activity_indicator("song-loading-activity", theme.accent))
-                    .child(self.t(Key::WorkshopLoadingModels)),
-            );
+            body = body.child(agent_components::thinking_indicator(
+                "song-loading-activity",
+                self.t(Key::WorkshopLoadingModels),
+            ));
         }
         if let Some(error) = &s.error {
-            body = body.child(div().text_color(theme.danger).child(error.clone()));
+            body = body.child(agent_components::error_notice(error.clone()));
         }
         let selected = s
             .snapshot
@@ -755,13 +753,16 @@ impl AurisApp {
             .is_some_and(|s| s.document.selected.is_some());
         let memory = s.snapshot.as_ref().is_some_and(|s| s.preferences.enabled);
         let footer = div()
+            .id("song-workshop-footer")
+            .debug_selector(|| "song-workshop-footer".into())
             .w_full()
             .max_w(gpui::px(1000.0))
             .mx_auto()
             .flex_shrink_0()
             .p_4()
             .border_t_1()
-            .border_color(theme.border)
+            .border_color(theme.border_subtle)
+            .bg(theme.surface)
             .flex()
             .flex_col()
             .gap_2()
@@ -822,33 +823,6 @@ impl AurisApp {
                         theme.accent,
                         &theme,
                         cx.listener(Self::open_workshop_editor_click),
-                    ))
-                    .child(button_enabled(
-                        "song-cancel",
-                        self.t(Key::WorkshopCancel),
-                        ButtonStyle::Normal,
-                        enabled(s.busy()),
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            if let Some(s) = &mut this.song_workshop {
-                                s.stop();
-                            }
-                            cx.notify();
-                        }),
-                    ))
-                    .child(button_enabled(
-                        "song-generate",
-                        self.t(Key::WorkshopSend),
-                        ButtonStyle::Primary,
-                        enabled(
-                            !s.busy()
-                                && !s.brief.content().trim().is_empty()
-                                && s.preferences.is_configured(),
-                        ),
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
                     )),
             );
         div()
@@ -856,7 +830,7 @@ impl AurisApp {
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme.background)
+            .bg(theme.atelier.window_fill())
             .text_color(theme.text)
             .font(theme.font.clone())
             .text_sm()
@@ -899,8 +873,16 @@ impl AurisApp {
                         cx.listener(|_, _, window, _| window.remove_window()),
                     )),
             )
-            .child(body)
-            .child(footer)
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .bg(theme.background)
+                    .child(body)
+                    .child(footer),
+            )
             .children(menu)
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()
@@ -992,6 +974,33 @@ mod tests {
             assert!(cx.debug_bounds("song-candidate-activity-1").is_none());
             assert!(cx.debug_bounds("song-planning-activity").is_some());
         }
+    }
+
+    #[gpui::test]
+    fn workshop_body_and_composer_stay_visible_at_narrow_width(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        crate::harness::resize(&app, cx, gpui::size(gpui::px(900.0), gpui::px(600.0)));
+
+        let body = cx
+            .debug_bounds("song-workshop-body")
+            .expect("the workshop body remains visible");
+        let footer = cx
+            .debug_bounds("song-workshop-footer")
+            .expect("the workshop composer footer remains visible");
+        let brief = cx
+            .debug_bounds("song-brief")
+            .expect("the workshop composer remains reachable");
+        assert!(body.bottom() <= footer.top());
+        assert!(brief.left() >= footer.left());
+        assert!(brief.right() <= footer.right());
+        assert!(brief.bottom() <= footer.bottom());
     }
 
     #[gpui::test]

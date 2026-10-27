@@ -20,6 +20,7 @@ use gpui::{
 
 use crate::app::{AurisApp, Pane};
 use crate::theme::{Metrics, Theme};
+use crate::ui::agent_components;
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::icons::{Icon, icon};
 use crate::ui::scrollbars::ScrollPanel;
@@ -249,6 +250,11 @@ fn transcript_runs(entries: &[ChatEntry]) -> impl Iterator<Item = std::ops::Rang
         start = end;
         Some(run)
     })
+}
+
+/// Only the newest assistant entry may show Atelier's streaming caret.
+fn entry_is_streaming(busy: bool, index: usize, len: usize, entry: &ChatEntry) -> bool {
+    busy && index + 1 == len && matches!(entry, ChatEntry::Agent(_))
 }
 
 /// One event off the agent's wire, already parsed.
@@ -3876,7 +3882,6 @@ impl AurisApp {
             ChatEntry::Error(message) => (theme.danger, message.clone()),
             ChatEntry::Note(key) => (note_colour(*key, theme), self.t(*key).to_string()),
         };
-        let bordered = matches!(entry, ChatEntry::You { .. });
         let details = match entry {
             ChatEntry::Reasoning(text) if opened => vec![(None, text.clone())],
             ChatEntry::Tool { args, detail, .. } if opened => {
@@ -3898,14 +3903,29 @@ impl AurisApp {
             ChatEntry::RestoredContext(detail) if opened => vec![(None, detail.clone())],
             _ => Vec::new(),
         };
+        let streaming = entry_is_streaming(
+            self.agent_chat.busy && !self.agent_chat.conversations.previewing(),
+            index,
+            self.agent_chat.entries.len(),
+            entry,
+        );
+        let atelier_message = matches!(entry, ChatEntry::Agent(_) | ChatEntry::You { .. });
         let body: AnyElement = match entry {
-            ChatEntry::Agent(_) => super::agent_markdown::render(
-                SharedString::from(format!("agent-markdown-{index}")),
-                SharedString::from(text),
-                theme,
-                window,
-                cx,
+            ChatEntry::Agent(_) => agent_components::assistant_message(
+                ("agent-message", index),
+                text.clone(),
+                Some(super::agent_markdown::render(
+                    SharedString::from(format!("agent-markdown-{index}")),
+                    SharedString::from(text.clone()),
+                    theme,
+                    window,
+                    cx,
+                )),
+                streaming,
             ),
+            ChatEntry::You { .. } => {
+                agent_components::user_message(("agent-message", index), text.clone())
+            }
             ChatEntry::Reasoning(_) => disclosure(
                 SharedString::from(format!("agent-reasoning-{index}")),
                 text,
@@ -3939,6 +3959,10 @@ impl AurisApp {
                 }),
             )
             .into_any_element(),
+            ChatEntry::Error(message) => agent_components::error_notice(message),
+            ChatEntry::Status(_) | ChatEntry::Note(_) => {
+                agent_components::status_notice(text.clone())
+            }
             _ => div().child(text).into_any_element(),
         };
         div()
@@ -3951,9 +3975,7 @@ impl AurisApp {
             .py_0p5()
             .text_xs()
             .text_color(colour)
-            .when(bordered, |this| {
-                this.border_l_2().border_color(theme.accent)
-            })
+            .when(atelier_message, |this| this.p_0().text_sm())
             .child(body)
             .when_some(
                 match entry {
@@ -4827,27 +4849,8 @@ impl AurisApp {
             })
             .to_owned();
         let bypass = controls::mode_warns(self.settings.agent.policy.mode);
-        div()
-            .id("agent-composer")
+        agent_components::composer_frame("agent-composer", &theme, focused && !locked, bypass)
             .debug_selector(|| "agent-composer".to_owned())
-            .flex()
-            .flex_col()
-            .relative()
-            .flex_shrink_0()
-            .min_w_0()
-            .m_2()
-            .p_1()
-            .gap_1()
-            .rounded(Metrics::RADIUS_LG)
-            .bg(theme.surface_raised)
-            .border_1()
-            .border_color(if focused && !locked {
-                theme.accent
-            } else if bypass {
-                theme.warning
-            } else {
-                theme.border_subtle
-            })
             .when(!self.agent_chat.queued.is_empty(), |this| {
                 this.child(self.agent_queue_view(cx))
             })
@@ -5034,14 +5037,7 @@ impl AurisApp {
                 cx,
             ))
             .child(
-                div()
-                    .id("agent-panel-controls")
-                    .debug_selector(|| "agent-panel-controls".to_owned())
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_1()
-                    .min_w_0()
+                agent_components::composer_controls("agent-panel-controls", &theme)
                     .child(
                         div()
                             .w(relative(0.26))
@@ -5056,63 +5052,31 @@ impl AurisApp {
                     )
                     .when(cancelable, |this| {
                         this.child(
-                            button(
+                            agent_components::composer_action(
                                 "agent-stop",
-                                "",
-                                ButtonStyle::Normal,
-                                false,
-                                theme.warning,
+                                self.t(Key::AgentStop),
+                                agent_components::ComposerAction::Stop,
+                                true,
+                                true,
                                 &theme,
                                 cx.listener(|this, _, window, cx| this.agent_cancel(window, cx)),
                             )
-                            .track_focus(&stop_focus)
-                            .w(Metrics::CONTROL_HEIGHT)
-                            .px_0()
-                            .gap_0()
-                            .justify_center()
-                            .rounded_full()
-                            .child(icon(Icon::Stop, px(12.0), theme.text))
-                            .tooltip(crate::ui::tooltip::keyed_tip(
-                                self.t(Key::AgentStop),
-                                "",
-                                &theme,
-                            )),
+                            .track_focus(&stop_focus),
                         )
                     })
                     .when(!locked, |this| {
-                        this.child(
-                            button_enabled(
-                                "agent-send",
-                                "",
-                                if can_send {
-                                    ButtonStyle::Primary
-                                } else {
-                                    ButtonStyle::Ghost
-                                },
-                                ButtonState::available(false, can_send),
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, window, cx| {
-                                    this.agent_submit(window, cx);
-                                    cx.notify();
-                                }),
-                            )
-                            .w(Metrics::CONTROL_HEIGHT)
-                            .px_0()
-                            .gap_0()
-                            .justify_center()
-                            .rounded_full()
-                            .child(icon(
-                                Icon::ChevronUp,
-                                px(14.0),
-                                if can_send {
-                                    theme.text_on_accent
-                                } else {
-                                    theme.text_faint
-                                },
-                            ))
-                            .tooltip(crate::ui::tooltip::keyed_tip(send_label, "", &theme)),
-                        )
+                        this.child(agent_components::composer_action(
+                            "agent-send",
+                            send_label,
+                            agent_components::ComposerAction::Send,
+                            can_send,
+                            true,
+                            &theme,
+                            cx.listener(|this, _, window, cx| {
+                                this.agent_submit(window, cx);
+                                cx.notify();
+                            }),
+                        ))
                     }),
             )
             .when(queueing, |row| {
@@ -6775,6 +6739,17 @@ mod tests {
             vec![0..2, 2..3, 3..4, 4..5, 5..8]
         );
         assert_eq!(transcript_runs(&[]).count(), 0);
+    }
+
+    #[test]
+    fn streaming_caret_belongs_only_to_the_newest_answer() {
+        let entries = [
+            ChatEntry::Agent("older".into()),
+            ChatEntry::Agent("newest".into()),
+        ];
+        assert!(!entry_is_streaming(true, 0, entries.len(), &entries[0]));
+        assert!(entry_is_streaming(true, 1, entries.len(), &entries[1]));
+        assert!(!entry_is_streaming(false, 1, entries.len(), &entries[1]));
     }
 
     #[gpui::test]

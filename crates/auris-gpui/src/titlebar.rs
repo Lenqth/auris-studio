@@ -191,7 +191,7 @@ pub fn titlebar(window: &Window, theme: &Theme) -> Stateful<Div> {
         .pt(resize_inset(window))
         .border_b_1()
         .border_color(theme.border_subtle)
-        .bg(theme.surface)
+        .bg(theme.atelier.colors.chrome)
         .text_color(if window.is_window_active() {
             theme.text
         } else {

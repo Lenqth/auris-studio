@@ -1,9 +1,9 @@
 //! Startup project selection, before the editor claims realtime audio.
 
 use auris_i18n::Key;
-use gpui::{AnyElement, Context, IntoElement, KeyDownEvent, Window, canvas, div, prelude::*};
+use gpui::{AnyElement, Context, IntoElement, KeyDownEvent, Window, div, prelude::*};
 
-use super::icons::{Icon, paint_icon};
+use super::icons::{Icon, icon};
 use super::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled};
 use crate::app::{AurisApp, Pane};
 
@@ -75,21 +75,36 @@ impl AurisApp {
         let can_choose = !busy && (!recent || selected < self.settings.recent.len());
         let mut content = div()
             .id("chooser-content")
+            .debug_selector(|| "chooser-content".into())
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .p_6()
+            .p(theme.atelier.spacing.xl)
+            .bg(theme.background)
             .flex()
             .flex_col()
-            .gap_4();
+            .gap(theme.atelier.spacing.lg);
+        let content_header = div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .pb_2()
+            .child(div().text_xl().child(self.t(if recent {
+                Key::ChooseRecent
+            } else {
+                Key::ChooseNew
+            })))
+            .when(!recent || self.settings.recent.is_empty(), |header| {
+                header.child(div().text_sm().text_color(theme.text_muted).child(self.t(
+                    if recent {
+                        Key::ChooseRecentEmpty
+                    } else {
+                        Key::ChooseEmptyHelp
+                    },
+                )))
+            });
+        content = content.child(content_header);
         if recent {
-            if self.settings.recent.is_empty() {
-                content = content.child(
-                    div()
-                        .text_color(theme.text_muted)
-                        .child(self.t(Key::ChooseRecentEmpty)),
-                );
-            }
             for (index, path) in self.settings.recent.iter().enumerate() {
                 let title = path
                     .file_stem()
@@ -119,6 +134,12 @@ impl AurisApp {
                     .w_full()
                     .min_w_0()
                     .flex_shrink_0()
+                    .rounded(theme.atelier.shape.radius_md)
+                    .bg(if selected == index {
+                        theme.accent_soft
+                    } else {
+                        theme.surface
+                    })
                     .py_3()
                     .items_start()
                     .flex_col()
@@ -134,7 +155,7 @@ impl AurisApp {
                 );
             }
         } else {
-            let mut tiles = div().flex().flex_wrap().gap_6();
+            let mut tiles = div().flex().flex_wrap().gap_4();
             for (id, key, ai) in [
                 ("chooser-empty", Key::ChooseEmpty, false),
                 ("chooser-ai", Key::WorkshopTitle, true),
@@ -151,23 +172,24 @@ impl AurisApp {
                                 div()
                                     .size_24()
                                     .flex_shrink_0()
-                                    .rounded(crate::theme::Metrics::RADIUS_LG)
-                                    .bg(theme.accent_soft)
-                                    .text_color(theme.accent)
-                                    .child(
-                                        canvas(
-                                            |_, _, _| (),
-                                            move |bounds, _, window, _| {
-                                                paint_icon(
-                                                    window,
-                                                    bounds,
-                                                    if ai { Icon::Sparkles } else { Icon::Notes },
-                                                    theme.accent,
-                                                );
-                                            },
-                                        )
-                                        .size_full(),
-                                    ),
+                                    .rounded(theme.atelier.shape.radius_lg)
+                                    .bg(if ai {
+                                        theme.atelier.colors.agent_wash
+                                    } else {
+                                        theme.accent_soft
+                                    })
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .child(icon(
+                                        if ai { Icon::Sparkles } else { Icon::Notes },
+                                        theme.atelier.spacing.xxl * 1.5,
+                                        if ai {
+                                            theme.atelier.colors.agent
+                                        } else {
+                                            theme.accent
+                                        },
+                                    )),
                             )
                             .child(div().text_base().child(self.t(key))),
                         ButtonStyle::Normal,
@@ -184,18 +206,16 @@ impl AurisApp {
                     )
                     .w_64()
                     .max_w_full()
-                    .h_56()
+                    .h(theme.atelier.spacing.xxl * 6.0)
+                    .flex_shrink_0()
+                    .rounded(theme.atelier.shape.radius_lg)
+                    .bg(theme.surface)
                     .text_base()
                     .flex_col()
                     .gap_4(),
                 );
             }
-            content = content.child(tiles).child(
-                div()
-                    .text_sm()
-                    .text_color(theme.text_muted)
-                    .child(self.t(Key::ChooseEmptyHelp)),
-            );
+            content = content.child(tiles);
         }
 
         let sidebar = div()
@@ -205,9 +225,9 @@ impl AurisApp {
             .flex()
             .flex_col()
             .gap_2()
-            .bg(theme.surface)
+            .bg(theme.atelier.colors.chrome)
             .border_r_1()
-            .border_color(theme.border)
+            .border_color(theme.border_subtle)
             .child(
                 button(
                     "chooser-new",
@@ -249,7 +269,8 @@ impl AurisApp {
         let footer = div()
             .p_4()
             .border_t_1()
-            .border_color(theme.border)
+            .border_color(theme.border_subtle)
+            .bg(theme.surface)
             .flex()
             .flex_wrap()
             .items_center()
@@ -329,11 +350,12 @@ impl AurisApp {
             );
         div()
             .id("project-chooser")
+            .debug_selector(|| "project-chooser".into())
             .relative()
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme.background)
+            .bg(theme.atelier.window_fill())
             .text_color(theme.text)
             .font(theme.font.clone())
             .text_sm()
