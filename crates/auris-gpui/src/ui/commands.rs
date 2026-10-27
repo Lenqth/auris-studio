@@ -2733,10 +2733,10 @@ impl AurisApp {
                             .session
                             .continue_midi_export(result, cancelled.as_ref())
                         {
-                            Ok(Some((path, notes))) => this.set_status(messages::midi_exported(
+                            Ok(Some(report)) => this.set_status(messages::midi_exported(
                                 this.language(),
-                                &path.display().to_string(),
-                                notes,
+                                &report.path.display().to_string(),
+                                report.notes,
                             )),
                             Ok(None) => {
                                 this.set_status(this.t(Key::BackgroundCommandChanged).to_string())

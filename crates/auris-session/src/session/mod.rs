@@ -122,9 +122,9 @@ pub use drum_analysis::{
     DrumVoiceAnalysis, probe_drum_request,
 };
 pub use files::{
-    CollectAssetsJob, CollectAssetsResult, LoadedFont, MidiExportJob, MidiExportResult,
-    MidiImportJob, MidiImportResult, OpenProjectJob, OpenProjectResult, SaveJob, SaveResult,
-    decode_audio, read_soundfont,
+    CollectAssetsJob, CollectAssetsResult, LoadedFont, MidiExportJob, MidiExportReport,
+    MidiExportResult, MidiImportJob, MidiImportResult, OpenProjectJob, OpenProjectResult, SaveJob,
+    SaveResult, decode_audio, read_soundfont,
 };
 pub use hosted::PluginWindow;
 pub use levels::{
