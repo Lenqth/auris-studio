@@ -32,7 +32,8 @@ outlines, and the trailing agent dock opens at 380 px. Both conversation entry p
 same introductory state, message forms and inset composer. Saved dock widths remain intact.
 
 The chooser places the navigation, descriptive start cards and commit footer on an opaque panel
-over `AmbientBackdrop` with `Ambience::Aurora`, as in the upstream `ambient` example. A card
+over `MetalBackdrop`, as in the liquid-metal variant of the upstream `ambient` example. The
+panel occludes pointer events so its controls do not also manipulate the metal beneath it. A card
 selects a starting method; Create or Enter commits it, and double-click also opens it. Background
 motion can be paused in the title bar; the choice persists as `animate_welcome` in
 `appearance.json`. Inactive windows hold a still frame. The backdrop is unmounted on entering

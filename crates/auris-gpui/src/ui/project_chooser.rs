@@ -455,23 +455,21 @@ impl AurisApp {
                     .items_center()
                     .justify_center()
                     .p(theme.atelier.spacing.xl)
-                    // Ambient owns its GPU cache and animation lifetime. No backdrop is mounted
+                    // The backdrop owns its GPU cache and animation lifetime. It is not mounted
                     // in the editor or workshop; inactive welcome windows hold a still frame.
                     .when(!cfg!(test), |view| {
                         view.child(
                             div().absolute().inset_0().child(
-                                atelier::AmbientBackdrop::new(
-                                    "chooser-aurora",
-                                    atelier::Ambience::Aurora,
-                                )
-                                .when(!animate || !window.is_window_active(), |backdrop| {
-                                    backdrop.phase(0.12)
-                                }),
+                                atelier::MetalBackdrop::new("chooser-metal")
+                                    .when(!animate || !window.is_window_active(), |backdrop| {
+                                        backdrop.phase(0.12)
+                                    }),
                             ),
                         )
                     })
                     .child(
                         div()
+                            .occlude()
                             .relative()
                             .flex()
                             .size_full()
