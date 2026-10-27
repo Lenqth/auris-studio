@@ -91,10 +91,12 @@ channels. Verify decoded values at that server's model boundary. The bundled
 16 kHz mono review models retain their own preprocessing; they are different input
 contracts from a custom 48 kHz stereo model.
 
-The expanded performance schema also consumes model context. Configure enough
-context for the catalog and audio together; the native guard refuses an estimated
-over-budget request. CPU full-catalog transport fixtures use a 64k context setting;
-this does not establish the real model's audio-context capacity.
+The expanded performance schema also consumes model context. Startup schemas omit
+prose/default annotations; `tool_help` retains the complete instructions and default
+values. The native catalog is checked against the existing 32k default, while the
+guard still refuses requests that exceed the configured context. Configure enough
+context for the catalog and audio together. CPU fixtures do not establish the real
+model's audio-context capacity.
 
 Under an agreement, complete original WAV bytes are validated and passed unchanged
 in one request. Mono/stereo order, sample representation, duration and byte limits

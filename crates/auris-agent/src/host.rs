@@ -40,7 +40,11 @@ impl ToolHost {
             .into_iter()
             .map(|mut tool| {
                 toolbox::compact_parameters(&mut tool.parameters);
-                tool.description = toolbox::concise_description(&tool.description);
+                // Full contracts stay available through tool_help; schema growth must not
+                // crowd ordinary requests out of the default native-model context.
+                let concise = toolbox::concise_description(&tool.description);
+                let sentence = concise.split(". ").next().unwrap_or_default();
+                tool.description = sentence.to_owned();
                 tool
             })
             .collect()

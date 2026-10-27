@@ -1932,7 +1932,7 @@ mod tests {
             serde_json::json!({"model":"mock","created_at":"2026-09-06T00:00:00Z","message":{"role":"assistant","content":"ready"},"done":true,"prompt_eval_count":100,"eval_count":1}).to_string(),
         ]);
         let Command::Run(mut options) = parse(
-            &format!("--model mock --url {url} --context-tokens 65536 --thinking off"),
+            &format!("--model mock --url {url} --context-tokens 32768 --thinking off"),
             &no_env,
         )
         .unwrap() else {
@@ -1955,7 +1955,7 @@ mod tests {
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 2);
         let body: serde_json::Value = serde_json::from_str(&requests[1]).unwrap();
-        assert_eq!(body["options"]["num_ctx"], 65536);
+        assert_eq!(body["options"]["num_ctx"], 32768);
         assert_eq!(body["options"]["temperature"], 0.0);
         assert_eq!(body["options"]["num_predict"], 8192);
         assert_eq!(body["think"], false);
@@ -1974,11 +1974,9 @@ mod tests {
             "done":true, "done_reason":"stop", "prompt_eval_count":10, "eval_count":1,
         });
         let (url, seen) = mock_server(vec![ollama.to_string()]);
-        let Command::Run(options) = parse(
-            &format!("--model mock --url {url} --context-tokens 65536 --effort high"),
-            &no_env,
-        )
-        .unwrap() else {
+        let Command::Run(options) =
+            parse(&format!("--model mock --url {url} --effort high"), &no_env).unwrap()
+        else {
             panic!()
         };
         let agent = build_agent(&options).unwrap();
@@ -2000,9 +1998,7 @@ mod tests {
         let done = completion(r#"{"role":"assistant","content":"ready"}"#, "stop");
         let (url, seen) = mock_server(vec![done]);
         let Command::Run(mut options) = parse(
-            &format!(
-                "--provider openai --model mock --url {url} --context-tokens 65536 --effort low"
-            ),
+            &format!("--provider openai --model mock --url {url} --effort low"),
             &no_env,
         )
         .unwrap() else {
