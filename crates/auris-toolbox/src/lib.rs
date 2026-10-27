@@ -18,6 +18,9 @@
 
 #![warn(missing_docs)]
 
+#[cfg(test)]
+mod transcription_tests;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

@@ -518,7 +518,14 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>, prompt: &str) -> Agent {
             definition.name,
             definition.description,
             definition.parameters,
-            move |args| {
+            move |mut args| {
+                let origin = args
+                    .as_object_mut()
+                    .and_then(|args| args.remove("__auris_call_origin"))
+                    .and_then(|origin| serde_json::from_value(origin).ok())
+                    .unwrap_or_else(|| {
+                        permissions::call_origin(None, &tool_name, "native_tool_without_dispatch")
+                    });
                 let bridge = bridge.clone();
                 let name = tool_name.clone();
                 Box::pin(async move {
@@ -539,7 +546,7 @@ fn armed(builder: AgentBuilder, bridge: Option<Bridge>, prompt: &str) -> Agent {
                         )
                     })?;
                     let reply = host::ToolHost::new(bridge.clone())
-                        .call(&name, args)
+                        .call_with_origin(&name, args, origin)
                         .await
                         .map_err(ToolExecutionError::other)?;
                     if name == "inspect_audio" && reply["ok"] == true {
@@ -1024,12 +1031,32 @@ impl AgentHook for Reporter {
         }
         // Live calls authorize inside ToolHost so every transport crosses the same gate.
         if self.bridge.is_some() && host::ToolHost::contains(tool) {
-            return DispatchAction::proceed();
+            let mut args: serde_json::Value =
+                match serde_json::from_str(event.tool_args().unwrap_or_default()) {
+                    Ok(serde_json::Value::Object(args)) => args.into(),
+                    _ => return DispatchAction::skip("Tool arguments must be an object"),
+                };
+            // This reserved field is overwritten by the host and removed before validation.
+            args["__auris_call_origin"] = serde_json::to_value(permissions::call_origin(
+                event.call_id.map(ToString::to_string).as_deref(),
+                tool,
+                "native_dispatch",
+            ))
+            .expect("serializable identity");
+            return DispatchAction::rewrite_tool_args(event.kind, args);
         }
-        match permissions::authorize(
-            self.bridge.as_ref(),
+        let origin = permissions::call_origin(
+            event.call_id.map(ToString::to_string).as_deref(),
             tool,
-            event.tool_args().unwrap_or_default(),
+            "native_dispatch",
+        );
+        match permissions::with_origin(
+            origin,
+            permissions::authorize(
+                self.bridge.as_ref(),
+                tool,
+                event.tool_args().unwrap_or_default(),
+            ),
         )
         .await
         {
@@ -1905,7 +1932,7 @@ mod tests {
             serde_json::json!({"model":"mock","created_at":"2026-09-06T00:00:00Z","message":{"role":"assistant","content":"ready"},"done":true,"prompt_eval_count":100,"eval_count":1}).to_string(),
         ]);
         let Command::Run(mut options) = parse(
-            &format!("--model mock --url {url} --context-tokens 32768 --thinking off"),
+            &format!("--model mock --url {url} --context-tokens 65536 --thinking off"),
             &no_env,
         )
         .unwrap() else {
@@ -1928,7 +1955,7 @@ mod tests {
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 2);
         let body: serde_json::Value = serde_json::from_str(&requests[1]).unwrap();
-        assert_eq!(body["options"]["num_ctx"], 32768);
+        assert_eq!(body["options"]["num_ctx"], 65536);
         assert_eq!(body["options"]["temperature"], 0.0);
         assert_eq!(body["options"]["num_predict"], 8192);
         assert_eq!(body["think"], false);
@@ -1947,9 +1974,11 @@ mod tests {
             "done":true, "done_reason":"stop", "prompt_eval_count":10, "eval_count":1,
         });
         let (url, seen) = mock_server(vec![ollama.to_string()]);
-        let Command::Run(options) =
-            parse(&format!("--model mock --url {url} --effort high"), &no_env).unwrap()
-        else {
+        let Command::Run(options) = parse(
+            &format!("--model mock --url {url} --context-tokens 65536 --effort high"),
+            &no_env,
+        )
+        .unwrap() else {
             panic!()
         };
         let agent = build_agent(&options).unwrap();
@@ -1971,7 +2000,9 @@ mod tests {
         let done = completion(r#"{"role":"assistant","content":"ready"}"#, "stop");
         let (url, seen) = mock_server(vec![done]);
         let Command::Run(mut options) = parse(
-            &format!("--provider openai --model mock --url {url} --effort low"),
+            &format!(
+                "--provider openai --model mock --url {url} --context-tokens 65536 --effort low"
+            ),
             &no_env,
         )
         .unwrap() else {

@@ -299,12 +299,14 @@ impl Session {
             if let Some(singer) = track.kind.as_singer() {
                 if let Some(voice) = &singer.voice {
                     identify(
-                        "singing_model_or_connection",
+                        "singing_entry_configuration",
                         track.id.0.to_string(),
                         &voice.path,
                     );
                 }
                 singers.push(json!({"track":track.id,"voice":singer.voice,"take":singer.take,
+                    "synthesis_provenance":singer.take.as_ref().and_then(|take|take.provenance.as_ref()),
+                    "synthesis_provenance_status":if singer.take.as_ref().is_some_and(|take|take.provenance.is_some()){"captured_at_synthesis"}else{"unknown"},
                     "guide_instrument_id":singer.instrument_id,"guide_state_sha256":hex::encode(Sha256::digest(serde_json::to_vec(&singer.instrument_state).map_err(|e|e.to_string())?)),
                     "state":self.singer_take_state(track.id).map(|s|format!("{s:?}")).ok()}));
             }

@@ -119,7 +119,7 @@ impl ServerHandler for LiveTools {
                     self.failure.cancel();
                     Err("The live tool request was cancelled".into())
                 }
-                reply = self.host.call(&request.name, serde_json::Value::Object(request.arguments.unwrap_or_default())) => reply,
+                reply = self.host.traced_call(&request.name, serde_json::Value::Object(request.arguments.unwrap_or_default())) => reply,
             }
         } else {
             Err("No active agent turn".into())
@@ -333,6 +333,9 @@ mod tests {
                 };
                 let (result, ()) = tokio::join!(call, owner);
                 assert_eq!(result["result"]["isError"].as_bool().unwrap_or(false), !allowed, "{result}");
+                let completion = events.try_recv().unwrap();
+                assert_eq!(completion["event"], "trace_result");
+                assert_eq!(completion["ok"], allowed);
                 assert!(events.try_recv().is_err());
             }
         }).await.unwrap();
@@ -353,7 +356,7 @@ mod tests {
             let call = request(json!({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"add_track","arguments":{"name":"Late","kind":"instrument"}}})).header("mcp-session-id", &session);
             let running = tokio::spawn(async move { call.send().await.unwrap().text().await.unwrap() });
             let permission = loop {
-                if let Ok(event) = events.try_recv() { break event; }
+                if let Ok(event) = events.try_recv() && event["event"] == "permission" { break event; }
                 tokio::task::yield_now().await;
             };
             assert_eq!(permission["event"], "permission");

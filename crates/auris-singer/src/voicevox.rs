@@ -524,6 +524,32 @@ pub(crate) struct VoicevoxBackend {
 }
 
 impl VoicevoxBackend {
+    /// Observe bounded optional server metadata after synthesis; unavailable fields stay unknown.
+    fn provenance_metadata(&self, endpoint: &str) -> Value {
+        let metadata = (|| -> Option<Value> {
+            let response = self
+                .agent
+                .get(format!("{}{endpoint}", self.config.url))
+                .config()
+                .timeout_global(Some(std::time::Duration::from_millis(500)))
+                .max_redirects(0)
+                .build()
+                .call()
+                .ok()?;
+            if !response.status().is_success() {
+                return None;
+            }
+            let bytes = bounded_bytes(
+                response.into_body().into_reader(),
+                1024 * 1024,
+                "synthesis identity metadata",
+            )
+            .ok()?;
+            serde_json::from_slice(&bytes).ok()
+        })();
+        metadata.unwrap_or(Value::Null)
+    }
+
     pub(crate) fn load(
         path: &Path,
         acceleration: Acceleration,
@@ -902,6 +928,87 @@ impl CurveGenerator for VoicevoxBackend {
 }
 
 impl SingingBackend for VoicevoxBackend {
+    fn synthesis_settings(&self, speaker: u32) -> BTreeMap<String, String> {
+        let mut settings =
+            BTreeMap::from([("frame_rate".into(), self.config.frame_rate.to_string())]);
+        if let Some(style) = self.config.styles.get(speaker as usize) {
+            settings.insert("query_style_id".into(), style.query_style_id.to_string());
+            settings.insert("decode_style_id".into(), style.decode_style_id.to_string());
+        }
+        settings
+    }
+    fn synthesis_identity(&mut self, speaker: u32) -> auris_core::synthesis::SynthesisIdentity {
+        use auris_core::synthesis::{
+            EvidenceSource, IdentityEvidence, SynthesisComponent, SynthesisIdentity,
+        };
+        let declared =
+            |value: Option<&str>| IdentityEvidence::new(value, EvidenceSource::ServerDeclaration);
+        let version = self.provenance_metadata("/version");
+        let manifest = self.provenance_metadata("/engine_manifest");
+        let singers = self.provenance_metadata("/singers");
+        let mut identity = SynthesisIdentity {
+            backend: "voicevox".into(),
+            engine: SynthesisComponent {
+                id: declared(
+                    manifest
+                        .get("uuid")
+                        .or_else(|| manifest.get("name"))
+                        .and_then(Value::as_str),
+                ),
+                version: declared(version.as_str()),
+                build: declared(manifest["build_id"].as_str()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        if let Some(style) = self.config.styles.get(speaker as usize) {
+            identity.style.id = IdentityEvidence::new(
+                Some(&style.decode_style_id.to_string()),
+                EvidenceSource::LocalObservation,
+            );
+            identity.components.insert(
+                "query_style".into(),
+                SynthesisComponent {
+                    id: IdentityEvidence::new(
+                        Some(&style.query_style_id.to_string()),
+                        EvidenceSource::LocalObservation,
+                    ),
+                    ..Default::default()
+                },
+            );
+            if let Some((singer, selected)) =
+                singers.as_array().into_iter().flatten().find_map(|singer| {
+                    singer["styles"]
+                        .as_array()?
+                        .iter()
+                        .find(|s| s["id"].as_u64() == Some(u64::from(style.decode_style_id)))
+                        .map(|s| (singer, s))
+                })
+            {
+                identity.speaker.id = declared(singer["speaker_uuid"].as_str());
+                identity.speaker.version = declared(singer["version"].as_str());
+                identity.style.id = declared(Some(&style.decode_style_id.to_string()));
+                identity.style.version = declared(selected["version"].as_str());
+                let field = |key: &str| {
+                    selected
+                        .get(key)
+                        .or_else(|| singer.get(key))
+                        .and_then(Value::as_str)
+                };
+                identity.model.id = declared(field("model_id"));
+                identity.model.version = declared(field("model_version"));
+                identity.model.sha256 = declared(
+                    field("model_sha256")
+                        .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())),
+                );
+            }
+        }
+        identity
+    }
+
+    fn seed_support(&self) -> auris_core::synthesis::SynthesisSeedSupport {
+        auris_core::synthesis::SynthesisSeedSupport::Unsupported
+    }
     fn kind(&self) -> BackendKind {
         BackendKind::Voicevox
     }
@@ -1023,6 +1130,7 @@ impl SingingBackend for VoicevoxBackend {
             pitch.extend_from_slice(&local_pitch.hz[local_start..local_start + core.len()]);
         }
         Ok(crate::SingingRender {
+            provenance: None,
             samples,
             backend_pitch: Some(auris_core::SingerPitch {
                 hop_seconds: frames.hop_seconds,
@@ -1095,6 +1203,7 @@ impl VoicevoxBackend {
         samples.drain(..remove);
         samples.truncate(keep);
         Ok(crate::SingingRender {
+            provenance: None,
             samples,
             backend_pitch: Some(backend_pitch),
         })
@@ -1419,6 +1528,88 @@ mod tests {
 
     fn request_body(request: &str) -> Value {
         serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap()
+    }
+
+    #[test]
+    fn synthesis_observes_changed_server_model_with_the_same_connection() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for revision in ["model-a", "model-b"] {
+                let (mut query, _) = listener.accept().unwrap();
+                let request = read_request(&mut query);
+                assert!(request.starts_with("POST /sing_frame_audio_query"));
+                let frames: usize = request_body(&request)["notes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|n| n["frame_length"].as_u64().unwrap() as usize)
+                    .sum();
+                answer(&mut query, "application/json", json!({"f0":vec![440.0;frames],"volume":vec![1.0;frames],"phonemes":[{"phoneme":"a","frame_length":frames}],"outputSamplingRate":24000,"outputStereo":false}).to_string().as_bytes());
+                let (mut synthesis, _) = listener.accept().unwrap();
+                assert!(
+                    read_request(&mut synthesis).starts_with("POST /frame_synthesis?speaker=3001")
+                );
+                answer(&mut synthesis, "audio/wav", &wav(&vec![8192; frames * 240]));
+                for (endpoint, body) in [
+                    ("/version", json!("engine-1")),
+                    (
+                        "/engine_manifest",
+                        json!({"uuid":"engine-id","build_id":"cpu-fixture"}),
+                    ),
+                    (
+                        "/singers",
+                        json!([{"speaker_uuid":"speaker-id","version":"voice-1","styles":[{"id":3001,"version":"style-1","model_id":revision,"model_version":revision,"model_sha256":"b".repeat(64)}]}]),
+                    ),
+                ] {
+                    let (mut stream, _) = listener.accept().unwrap();
+                    assert!(read_request(&mut stream).starts_with(&format!("GET {endpoint} ")));
+                    answer(&mut stream, "application/json", body.to_string().as_bytes());
+                }
+            }
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("fixture.voicevox.json");
+        std::fs::write(&path, json!({"format_version":1,"url":format!("http://{address}"),"frame_rate":100.0,"styles":[{"name":"Fixture","query_style_id":6000,"decode_style_id":3001}]}).to_string()).unwrap();
+        let mut model = crate::VoiceModel::load(&path, Acceleration::Cpu).unwrap();
+        let frames = SingerFrames {
+            hop_seconds: 0.01,
+            inventory: vec!["<sil>".into(), "a".into()],
+            phonemes: vec![1, 1],
+            f0_hz: vec![440.0; 2],
+            energy: vec![0.8; 2],
+        };
+        let score = SingerScore {
+            notes: vec![SingerNote {
+                key: Some(69),
+                frame_length: 2,
+                lyric: "ア".into(),
+            }],
+        };
+        let first = model
+            .sing_render_with(&frames, &score, 0, 42, |_, _| true)
+            .unwrap();
+        let frozen = first.provenance.clone().unwrap();
+        let second = model
+            .sing_render_with(&frames, &score, 0, 43, |_, _| true)
+            .unwrap()
+            .provenance
+            .unwrap();
+        assert_eq!(frozen.identity.model.id.value.as_deref(), Some("model-a"));
+        assert_eq!(second.identity.model.id.value.as_deref(), Some("model-b"));
+        assert_eq!(first.provenance.as_ref(), Some(&frozen));
+        assert_eq!(frozen.configuration_sha256, second.configuration_sha256);
+        assert_ne!(frozen.configuration_sha256, frozen.identity.model.sha256);
+        assert_eq!(
+            frozen.identity.model.sha256.source,
+            auris_core::synthesis::EvidenceSource::ServerDeclaration
+        );
+        assert_eq!(
+            frozen.seed_support,
+            auris_core::synthesis::SynthesisSeedSupport::Unsupported
+        );
+        assert_eq!(frozen.output_audio_sha256.len(), 64);
+        server.join().unwrap();
     }
 
     #[test]

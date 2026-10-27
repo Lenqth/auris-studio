@@ -2,6 +2,9 @@
 
 use crate::{NoteTranscription, Session};
 
+/// Explicit timing, control and lyric semantics for external schema version two.
+pub mod performance;
+
 /// Immutable external events accepted only through an explicit document edit.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -19,6 +22,17 @@ pub enum TranscriptionDraft {
 }
 
 impl TranscriptionDraft {
+    /// Bind the complete normalized draft and destination settings to a validation preview.
+    pub fn preview_digest(&self, name: &str, at_tick: i64) -> Result<String, String> {
+        use sha2::{Digest, Sha256};
+        let bytes = serde_json::to_vec(&("auris-transcription-preview-v1", self, name, at_tick))
+            .map_err(|e| e.to_string())?;
+        Ok(Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
+    }
+
     /// Validate events before authorization or mutation.
     pub fn validate(&self) -> Result<(), String> {
         match self {
@@ -39,7 +53,7 @@ impl TranscriptionDraft {
 }
 
 impl Session {
-    /// Add an external draft while retaining existing music and timeline maps.
+    /// Add an external draft using its explicit, versioned destination timeline policy.
     pub fn agent_import_draft(
         &mut self,
         draft: TranscriptionDraft,
@@ -125,11 +139,11 @@ pub struct DraftTrack {
     pub notes: Vec<DraftNote>,
 }
 
-/// Version-one external note draft. Unknown fields, curves, tempo maps and lyrics are rejected.
+/// Versioned external notes, with explicit performance events in version two.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MultitrackTranscription {
-    /// Must be one. New incompatible schemas require explicit support.
+    /// One for notes only; two requires the performance contract.
     pub schema_version: u32,
     /// Original audio identity and selected range.
     pub source: DraftAudioSource,
@@ -143,6 +157,9 @@ pub struct MultitrackTranscription {
     /// Optional declared provenance. Never establishes authenticity.
     #[serde(default)]
     pub provenance: std::collections::BTreeMap<String, String>,
+    /// Version-two timeline, controllers, bends and aligned lyrics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub performance: Option<performance::DraftPerformance>,
 }
 
 impl MultitrackTranscription {
@@ -152,8 +169,10 @@ impl MultitrackTranscription {
         let text = |s: &str| !s.trim().is_empty() && s.len() <= 256;
         let source = &self.source;
         let count: usize = self.tracks.iter().map(|t| t.notes.len()).sum();
-        if self.schema_version != 1
-            || !hash(&source.audio_sha256)
+        if !matches!(
+            (self.schema_version, self.performance.is_some()),
+            (1, false) | (2, true)
+        ) || !hash(&source.audio_sha256)
             || !source.start_seconds.is_finite()
             || !source.end_seconds.is_finite()
             || source.start_seconds < 0.0
@@ -200,6 +219,9 @@ impl MultitrackTranscription {
             {
                 return Err("Invalid multitrack part or note: bounded MIDI pitch, source time, velocity and confidence required".into());
             }
+        }
+        if let Some(performance) = &self.performance {
+            performance.validate(self)?;
         }
         Ok(())
     }

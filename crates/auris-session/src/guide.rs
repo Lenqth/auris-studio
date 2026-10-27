@@ -389,12 +389,21 @@ pub mod architecture {
     //! Version-one multitrack drafts extend this boundary with full MIDI range, percussion,
     //! explicit playback mapping and persisted declared provenance. Preview validates the same
     //! source-seconds mapping without editing. Unsupported fields are rejected before mutation.
+    //! Multitrack application requires the preview's document revision and a digest binding the
+    //! normalized draft and placement settings. Version two adds explicit timeline preservation
+    //! or replacement, source tempo/meter anchors, controller tails, semitone bends and aligned
+    //! written lyrics/readings/phonemes. Validation precedes the single import transaction.
+    //! Singer takes retain immutable synthesis evidence: available engine/model/speaker/style
+    //! identities, inference settings and input/output hashes. Remote claims and local hashes
+    //! remain distinct; entry configuration hashes never stand in for model artifact hashes.
     //! Analysis rendering uses the existing snapshot/publication pipeline with precise frames
     //! or seconds, stereo float32 samples and a persistent manifest. Source-preserving output
     //! carries zero gain and separate document/render/dependency identities. An explicit
     //! [`crate::audio_input::AudioInputContract`] fixes the model input representation and bounds;
     //! incompatible inputs fail without lossy preprocessing. Optional
     //! [`crate::execution_trace`] collection records bounded transition evidence after consent.
+    //! Permission checks keep the original invocation identity through normalization and have
+    //! their own IDs and outcomes; completing a check never completes the pending invocation.
     //! The collector owns durable run payloads, data policy and schema-compatible replay;
     //! `docs/model-training.md` describes the public workflow.
 

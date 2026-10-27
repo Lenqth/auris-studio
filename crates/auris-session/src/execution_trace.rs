@@ -20,6 +20,24 @@ pub enum TraceOperation {
     Stop,
 }
 
+/// The exact invocation that requested authorization, or an explicitly independent operation.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PermissionOrigin {
+    /// A permission check belonging to an original tool invocation.
+    ToolCall {
+        /// Original invocation ID, unchanged by command normalization.
+        call_id: String,
+        /// Original tool name, unchanged by command normalization.
+        tool: String,
+    },
+    /// An operation for which the transport supplied no tool invocation identity.
+    Independent {
+        /// Transport or operation that requested permission.
+        source: String,
+    },
+}
+
 #[derive(Default)]
 pub(crate) struct Recorder {
     enabled: bool,
@@ -28,10 +46,18 @@ pub(crate) struct Recorder {
     dropped: u64,
     events: VecDeque<Value>,
     pending: Option<(String, u64, String)>,
-    calls: std::collections::BTreeMap<String, (String, u64)>,
+    calls: std::collections::BTreeMap<String, (String, u64, String)>,
+    permissions: std::collections::BTreeMap<u64, (PermissionOrigin, String)>,
+    completed: VecDeque<String>,
 }
 
 impl Recorder {
+    fn completed(&mut self, id: String) {
+        if self.completed.len() == 1024 {
+            self.completed.pop_front();
+        }
+        self.completed.push_back(id);
+    }
     fn push(&mut self, mut event: Value) {
         self.sequence += 1;
         event["sequence"] = self.sequence.into();
@@ -63,9 +89,15 @@ impl Session {
     pub fn cancel_execution_calls(&self) {
         let mut recorder = self.execution_trace.borrow_mut();
         if recorder.enabled {
-            for (id, (state, revision)) in std::mem::take(&mut recorder.calls) {
-                recorder.push(json!({"kind":"host_outcome","call_id":id,"outcome":"cancelled","before_state":state,
+            for (id, (origin, operation)) in std::mem::take(&mut recorder.permissions) {
+                recorder.push(json!({"kind":"permission_outcome","permission_id":id,"origin":origin,
+                    "call_id":permission_call_id(&origin),"tool":permission_tool(&origin),"operation":operation,"outcome":"cancelled",
+                    "state":self.agent_document_revision().ok(),"revision":self.revision()}));
+            }
+            for (id, (state, revision, tool)) in std::mem::take(&mut recorder.calls) {
+                recorder.push(json!({"kind":"host_outcome","call_id":id,"tool":tool,"outcome":"cancelled","before_state":state,
                     "before_revision":revision,"state":self.agent_document_revision().ok(),"revision":self.revision()}));
+                recorder.completed(id);
             }
         }
     }
@@ -78,13 +110,67 @@ impl Session {
         let mut recorder = self.execution_trace.borrow_mut();
         if recorder.enabled {
             let state = self.agent_document_revision()?;
+            recorder.completed.retain(|id| id != call_id);
             if recorder.calls.len() >= 128 {
                 return Err("Too many unresolved trace calls".into());
             }
             recorder
                 .calls
-                .insert(call_id.to_owned(), (state.clone(), self.revision()));
+                .entry(call_id.to_owned())
+                .or_insert_with(|| (state.clone(), self.revision(), tool.to_owned()));
             recorder.push(json!({"kind":"host_call","call_id":call_id,"tool":tool,"before_state":state,"before_revision":self.revision()}));
+        }
+        Ok(())
+    }
+
+    /// Record a permission request separately from the original call's lifecycle.
+    pub fn record_permission_request(
+        &self,
+        id: u64,
+        origin: PermissionOrigin,
+        operation: &str,
+    ) -> Result<(), String> {
+        let bounded = |value: &str| !value.is_empty() && value.len() <= 256;
+        if !bounded(operation)
+            || match &origin {
+                PermissionOrigin::ToolCall { call_id, tool } => !bounded(call_id) || !bounded(tool),
+                PermissionOrigin::Independent { source } => !bounded(source),
+            }
+        {
+            return Err("Invalid bounded permission identity".into());
+        }
+        let mut recorder = self.execution_trace.borrow_mut();
+        if recorder.enabled {
+            if recorder.permissions.len() >= 128 || recorder.permissions.contains_key(&id) {
+                return Err("Duplicate or excessive pending permission identities".into());
+            }
+            recorder
+                .permissions
+                .insert(id, (origin.clone(), operation.into()));
+            recorder.push(json!({"kind":"permission_request","permission_id":id,"call_id":permission_call_id(&origin),
+                "tool":permission_tool(&origin),"origin":origin,"operation":operation,"state":self.agent_document_revision()?,"revision":self.revision()}));
+        }
+        Ok(())
+    }
+
+    /// Finish one permission check without completing its associated tool invocation.
+    pub fn record_permission_outcome(&self, id: u64, outcome: &str) -> Result<(), String> {
+        if !matches!(outcome, "allowed" | "denied" | "cancelled") {
+            return Err("Invalid permission outcome".into());
+        }
+        let mut recorder = self.execution_trace.borrow_mut();
+        if recorder.enabled {
+            let (origin, operation) = recorder.permissions.remove(&id).unwrap_or_else(|| {
+                (
+                    PermissionOrigin::Independent {
+                        source: "unobserved_permission_request".into(),
+                    },
+                    "unknown".into(),
+                )
+            });
+            recorder.push(json!({"kind":"permission_outcome","permission_id":id,"call_id":permission_call_id(&origin),
+                "tool":permission_tool(&origin),"origin":origin,"operation":operation,"outcome":outcome,
+                "state":self.agent_document_revision()?,"revision":self.revision()}));
         }
         Ok(())
     }
@@ -120,13 +206,13 @@ impl Session {
                 recorder.enabled=true;
                 recorder.pending=Some((self.agent_document_revision()?,self.revision(),"external_edit".into()));
             },
-            TraceOperation::Stop=>{recorder.enabled=false;recorder.calls.clear();},
-            TraceOperation::Read{after}=>return Ok(json!({"schema_version":1,"enabled":recorder.enabled,
+            TraceOperation::Stop=>{recorder.enabled=false;recorder.calls.clear();recorder.permissions.clear();recorder.completed.clear();},
+            TraceOperation::Read{after}=>return Ok(json!({"schema_version":2,"enabled":recorder.enabled,
                 "events":recorder.events.iter().filter(|e|after.is_none_or(|s|e["sequence"].as_u64().is_some_and(|n|n>s))).collect::<Vec<_>>(),
                 "last_sequence":recorder.sequence,"dropped_events":recorder.dropped,"document_instance":self.document_instance(),
                 "content_policy":"no_arguments_results_prompts_credentials_or_file_contents"}).to_string()),
         }
-        Ok(json!({"enabled":recorder.enabled,"schema_version":1}).to_string())
+        Ok(json!({"enabled":recorder.enabled,"schema_version":2}).to_string())
     }
 
     pub(crate) fn trace_call_begin(&self) -> Option<(String, u64)> {
@@ -154,7 +240,7 @@ impl Session {
         }
     }
 
-    /// Let a frontend record permission rejection/cancellation using its exact call ID.
+    /// Let a frontend record a terminal result using its exact call ID.
     /// No arguments, response bodies, credentials or untrusted error text are retained.
     pub fn record_execution_outcome(
         &self,
@@ -164,28 +250,40 @@ impl Session {
     ) -> Result<(), String> {
         if call_id.len() > 256
             || tool.len() > 128
-            || !matches!(
-                outcome,
-                "permission_denied"
-                    | "permission_allowed"
-                    | "cancelled"
-                    | "failed"
-                    | "published"
-                    | "success"
-            )
+            || !matches!(outcome, "cancelled" | "failed" | "published" | "success")
         {
             return Err("Invalid bounded execution outcome".into());
         }
         let mut recorder = self.execution_trace.borrow_mut();
         if recorder.enabled {
+            if !recorder.calls.contains_key(call_id)
+                && recorder.completed.iter().any(|id| id == call_id)
+            {
+                return Ok(());
+            }
             let before = recorder.calls.remove(call_id);
             recorder.push(
                 json!({"kind":"host_outcome","call_id":call_id,"tool":tool,"outcome":outcome,
-                "before_state":before.as_ref().map(|(state,_)|state),"before_revision":before.map(|(_,revision)|revision),
+                "before_state":before.as_ref().map(|(state,_,_)|state),"before_revision":before.map(|(_,revision,_)|revision),
                 "state":self.agent_document_revision()?,"revision":self.revision()}),
             );
+            recorder.completed(call_id.to_owned());
         }
         Ok(())
+    }
+}
+
+fn permission_call_id(origin: &PermissionOrigin) -> Option<&str> {
+    match origin {
+        PermissionOrigin::ToolCall { call_id, .. } => Some(call_id),
+        _ => None,
+    }
+}
+
+fn permission_tool(origin: &PermissionOrigin) -> Option<&str> {
+    match origin {
+        PermissionOrigin::ToolCall { tool, .. } => Some(tool),
+        _ => None,
     }
 }
 
@@ -274,8 +372,16 @@ mod tests {
             serde_json::from_value(json!({"action":"remove_track","track":99999})).unwrap();
         let _ = session.agent_command(invalid);
         session
-            .record_execution_outcome("call-42", "render", "permission_denied")
+            .record_permission_request(
+                42,
+                PermissionOrigin::ToolCall {
+                    call_id: "call-42".into(),
+                    tool: "render".into(),
+                },
+                "edit_project",
+            )
             .unwrap();
+        session.record_permission_outcome(42, "denied").unwrap();
         let events = read(&session);
         assert!(
             events["events"]

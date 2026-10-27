@@ -627,9 +627,17 @@ async fn receive_turn_tracked(
                         .as_str()
                         .is_some_and(|tool| read_stays_inside(root, tool, &request["input"]))
                 });
-                let result = crate::permissions::authorize(Some(bridge), operation,
+                let origin = crate::permissions::call_origin(
+                    request["tool_use_id"].as_str(),
+                    request["tool_name"]
+                        .as_str()
+                        .and_then(tool_name)
+                        .unwrap_or(operation),
+                    "claude_approval",
+                );
+                let result = crate::permissions::with_origin(origin, crate::permissions::authorize(Some(bridge), operation,
                     &json!({"backend":"claude","tool":request["tool_name"],"input":request["input"],
-                        "within_project":within}).to_string()).await;
+                        "within_project":within}).to_string())).await;
                 let response = match result {
                     Ok(()) => json!({"behavior":"allow","updatedInput":request["input"]}),
                     Err(reason) => json!({"behavior":"deny","message":reason}),

@@ -1420,8 +1420,16 @@ mod tests {
         let second = Worker::spawn(prefs(second_url), None, false, None).unwrap();
         first.send(r#"{"say":"Create the lead"}"#).unwrap();
         second.send(r#"{"say":"Create the lead"}"#).unwrap();
+        let first_call = until(&first, "call");
+        let second_call = until(&second, "call");
         let first_permission = until(&first, "permission");
         let second_permission = until(&second, "permission");
+        assert_eq!(first_permission["origin"]["call_id"], first_call["call_id"]);
+        assert_eq!(
+            second_permission["origin"]["call_id"],
+            second_call["call_id"]
+        );
+        assert_eq!(first_permission["origin"]["tool"], first_call["tool"]);
         for (worker, permission, answer) in [
             (&first, first_permission, "first document"),
             (&second, second_permission, "second document"),

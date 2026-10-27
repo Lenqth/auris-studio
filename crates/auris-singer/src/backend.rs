@@ -2,13 +2,20 @@
 
 use std::path::Path;
 
+use auris_core::synthesis::{
+    EvidenceSource, IdentityEvidence, SynthesisComponent, SynthesisIdentity, SynthesisProvenance,
+    SynthesisSeedSupport,
+};
 use auris_vocal::{SingerFrames, SingerScore};
+use sha2::{Digest, Sha256};
 
 use crate::{Acceleration, CurveGenerator, CurveSources, SingError, VoiceInfo};
 
 /// The waveform and optional backend pitch produced by one synthesis call.
 #[derive(Clone, Debug, Default)]
 pub struct SingingRender {
+    /// Immutable evidence captured for this exact performance.
+    pub provenance: Option<Box<SynthesisProvenance>>,
     /// Mono waveform at the voice's sample rate.
     pub samples: Vec<f32>,
     /// Pitch after musical edits, with decoder context removed just like the audio.
@@ -92,6 +99,18 @@ impl Default for VoiceCapabilities {
 /// realtime audio thread. The trait is public so another engine can be added without teaching
 /// the session or its frontends about that engine's files and tensors.
 pub trait SingingBackend: Send {
+    /// Component identities observed for the current synthesis, without copying model files.
+    fn synthesis_identity(&mut self, speaker: u32) -> SynthesisIdentity {
+        local_identity(self.kind(), self.info(), speaker)
+    }
+    /// Whether this backend actually consumes the supplied seed.
+    fn seed_support(&self) -> SynthesisSeedSupport {
+        SynthesisSeedSupport::Unknown
+    }
+    /// Numeric and symbolic inference settings, excluding paths, URLs and credentials.
+    fn synthesis_settings(&self, _speaker: u32) -> std::collections::BTreeMap<String, String> {
+        std::collections::BTreeMap::new()
+    }
     /// Sings with optional acoustic pitch for display alongside the host's contour.
     /// Backends with pitch prediction override this and return the decoded performance's
     /// pitch on the input frame clock. Waveform-only backends use the default.
@@ -105,6 +124,7 @@ pub trait SingingBackend: Send {
     ) -> Result<SingingRender, SingError> {
         self.sing_with(frames, score, speaker, seed, progress)
             .map(|samples| SingingRender {
+                provenance: None,
                 samples,
                 backend_pitch: None,
             })
@@ -151,6 +171,7 @@ pub trait SingingBackend: Send {
 /// A loaded voice whose concrete synthesis engine is selected from its entry file.
 pub struct VoiceModel {
     backend: Box<dyn SingingBackend>,
+    configuration_sha256: IdentityEvidence,
 }
 
 impl VoiceModel {
@@ -163,13 +184,67 @@ impl VoiceModel {
         seed: u64,
         mut progress: impl FnMut(usize, usize) -> bool,
     ) -> Result<SingingRender, SingError> {
-        self.backend
-            .sing_render_with(frames, Some(score), speaker, seed, &mut progress)
+        let input = serde_json::to_vec(&(
+            "auris-singing-input-v1",
+            frames,
+            score,
+            speaker,
+            seed,
+            self.backend.info().sample_rate,
+        ))
+        .map_err(|e| SingError::Inference(e.to_string()))?;
+        let mut render =
+            self.backend
+                .sing_render_with(frames, Some(score), speaker, seed, &mut progress)?;
+        let mut output = Sha256::new();
+        for sample in &render.samples {
+            output.update(sample.to_le_bytes());
+        }
+        let mut settings = self.backend.synthesis_settings(speaker);
+        settings.extend(std::collections::BTreeMap::from([
+            (
+                "acceleration".into(),
+                format!("{:?}", self.backend.acceleration()),
+            ),
+            ("on_gpu".into(), self.backend.on_gpu().to_string()),
+            (
+                "identity_observation".into(),
+                if self.backend.kind() == BackendKind::Voicevox {
+                    "after_synthesis_server_declaration"
+                } else {
+                    "loaded_local_metadata"
+                }
+                .into(),
+            ),
+            (
+                "sample_rate".into(),
+                self.backend.info().sample_rate.to_string(),
+            ),
+            ("hop_seconds".into(), frames.hop_seconds.to_string()),
+            ("speaker_index".into(), speaker.to_string()),
+            (
+                "sample_encoding".into(),
+                "mono_float32_little_endian".into(),
+            ),
+        ]));
+        render.provenance = Some(Box::new(SynthesisProvenance {
+            schema_version: 1,
+            identity: self.backend.synthesis_identity(speaker),
+            configuration_sha256: self.configuration_sha256.clone(),
+            settings,
+            seed,
+            seed_support: self.backend.seed_support(),
+            input_sha256: hex_digest(Sha256::digest(input)),
+            output_audio_sha256: hex_digest(output.finalize()),
+            output_wav_sha256: None,
+        }));
+        Ok(render)
     }
     /// Wraps an engine implementation, including its model-specific capabilities.
     pub fn from_backend(backend: impl SingingBackend + 'static) -> Self {
         Self {
             backend: Box::new(backend),
+            configuration_sha256: IdentityEvidence::default(),
         }
     }
 
@@ -203,6 +278,7 @@ impl VoiceModel {
         acceleration: Acceleration,
         automatic: bool,
     ) -> Result<Self, SingError> {
+        let configuration_sha256 = hash_artifact(path);
         let backend: Box<dyn SingingBackend> =
             match BackendKind::from_path(path).ok_or(SingError::NotAVoice)? {
                 BackendKind::DiffSinger => Box::new(crate::diffsinger::DiffSingerBackend::load(
@@ -221,7 +297,15 @@ impl VoiceModel {
                     automatic,
                 )?),
             };
-        Ok(Self { backend })
+        if hash_artifact(path) != configuration_sha256 {
+            return Err(SingError::Metadata(
+                "Voice configuration changed while loading".into(),
+            ));
+        }
+        Ok(Self {
+            backend,
+            configuration_sha256,
+        })
     }
 
     /// Which synthesis engine owns this voice.
@@ -304,6 +388,113 @@ impl VoiceModel {
     ) -> Result<Vec<f32>, SingError> {
         self.backend
             .sing_with(frames, Some(score), speaker, seed, &mut progress)
+    }
+}
+
+fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+pub(crate) fn hash_artifact(path: &Path) -> IdentityEvidence {
+    use std::io::Read;
+    let hash = (|| -> std::io::Result<String> {
+        let mut file = std::fs::File::open(path)?;
+        let mut digest = Sha256::new();
+        let mut buffer = [0u8; 65536];
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            digest.update(&buffer[..count]);
+        }
+        Ok(hex_digest(digest.finalize()))
+    })()
+    .ok();
+    IdentityEvidence::new(hash.as_deref(), EvidenceSource::LocalHash)
+}
+
+pub(crate) fn model_component(path: &Path) -> SynthesisComponent {
+    SynthesisComponent {
+        id: IdentityEvidence::new(
+            path.file_name().and_then(|p| p.to_str()),
+            EvidenceSource::LocalObservation,
+        ),
+        sha256: hash_artifact(path),
+        ..Default::default()
+    }
+}
+
+pub(crate) fn observe_model_metadata(
+    component: &mut SynthesisComponent,
+    session: &ort::session::Session,
+) {
+    if let Ok(metadata) = session.metadata() {
+        let name =
+            IdentityEvidence::new(metadata.name().as_deref(), EvidenceSource::LocalObservation);
+        if name.value.is_some() {
+            component.id = name;
+        }
+        component.version = IdentityEvidence::new(
+            metadata
+                .version()
+                .map(|version| version.to_string())
+                .as_deref(),
+            EvidenceSource::LocalObservation,
+        );
+    }
+}
+
+pub(crate) fn local_identity(
+    kind: BackendKind,
+    info: &VoiceInfo,
+    speaker: u32,
+) -> SynthesisIdentity {
+    static BUILD: std::sync::OnceLock<IdentityEvidence> = std::sync::OnceLock::new();
+    let build = BUILD
+        .get_or_init(|| {
+            std::env::current_exe()
+                .ok()
+                .map(|path| hash_artifact(&path))
+                .unwrap_or_default()
+        })
+        .clone();
+    let backend = match kind {
+        BackendKind::DiffSinger => "diffsinger",
+        BackendKind::Voicevox => "voicevox",
+        BackendKind::LeapSinger => "leapsinger",
+    };
+    SynthesisIdentity {
+        backend: backend.into(),
+        engine: SynthesisComponent {
+            id: IdentityEvidence::new(Some("auris-singer"), EvidenceSource::LocalObservation),
+            version: IdentityEvidence::new(
+                Some(env!("CARGO_PKG_VERSION")),
+                EvidenceSource::LocalObservation,
+            ),
+            build,
+            ..Default::default()
+        },
+        speaker: SynthesisComponent {
+            id: IdentityEvidence::new(Some(&speaker.to_string()), EvidenceSource::LocalObservation),
+            ..Default::default()
+        },
+        model: SynthesisComponent {
+            id: IdentityEvidence::new(
+                info.voice.as_ref().map(|v| v.name.as_str()),
+                EvidenceSource::LocalObservation,
+            ),
+            version: IdentityEvidence::new(
+                info.voice.as_ref().map(|v| v.version.as_str()),
+                EvidenceSource::LocalObservation,
+            ),
+            ..Default::default()
+        },
+        ..Default::default()
     }
 }
 

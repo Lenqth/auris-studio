@@ -3240,6 +3240,7 @@ mod tests {
             assert!(before.backend_contour.is_empty());
             let plan = this.session.sing_plan(track, None).unwrap();
             let render = auris_session::SingingRender {
+                provenance: None,
                 samples: vec![0.0; plan.frames.len() * 256],
                 backend_pitch: Some(SingerPitch {
                     hop_seconds: plan.frames.hop_seconds,

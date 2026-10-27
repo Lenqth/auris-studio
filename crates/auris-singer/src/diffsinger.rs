@@ -173,6 +173,7 @@ impl Default for VocoderConfig {
 
 /// The two-stage ONNX pipeline used by a DiffSinger voicebank.
 pub(crate) struct DiffSingerBackend {
+    model_components: std::collections::BTreeMap<String, auris_core::synthesis::SynthesisComponent>,
     acoustic: Session,
     vocoder: Session,
     config: DsConfig,
@@ -289,8 +290,37 @@ impl DiffSingerBackend {
         } else {
             vocoder_root.join(&vocoder_config.model)
         };
+        let mut model_components = std::collections::BTreeMap::from([
+            (
+                "acoustic".into(),
+                crate::backend::model_component(&acoustic_path),
+            ),
+            (
+                "vocoder".into(),
+                crate::backend::model_component(&vocoder_path),
+            ),
+        ]);
         let (acoustic, acoustic_gpu) = open_session(&acoustic_path, acceleration)?;
         let (vocoder, vocoder_gpu) = open_session(&vocoder_path, acceleration)?;
+        crate::backend::observe_model_metadata(
+            model_components
+                .get_mut("acoustic")
+                .expect("acoustic component"),
+            &acoustic,
+        );
+        crate::backend::observe_model_metadata(
+            model_components
+                .get_mut("vocoder")
+                .expect("vocoder component"),
+            &vocoder,
+        );
+        if crate::backend::hash_artifact(&acoustic_path) != model_components["acoustic"].sha256
+            || crate::backend::hash_artifact(&vocoder_path) != model_components["vocoder"].sha256
+        {
+            return Err(SingError::Metadata(
+                "Model files changed while loading".into(),
+            ));
+        }
         let display_name = root
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
@@ -319,6 +349,7 @@ impl DiffSingerBackend {
             }),
         };
         Ok(Self {
+            model_components,
             acoustic,
             vocoder,
             config,
@@ -502,6 +533,37 @@ impl DiffSingerBackend {
 }
 
 impl SingingBackend for DiffSingerBackend {
+    fn synthesis_settings(&self, _speaker: u32) -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("steps".into(), DEFAULT_STEPS.to_string()),
+            (
+                "continuous_acceleration".into(),
+                self.config.use_continuous_acceleration.to_string(),
+            ),
+            (
+                "variable_depth".into(),
+                self.config.use_variable_depth.to_string(),
+            ),
+            ("depth".into(), self.config.depth().to_string()),
+            ("mel_bins".into(), self.config.num_mel_bins.to_string()),
+            ("mel_base".into(), self.config.mel_base.clone()),
+            ("hop_size".into(), self.config.hop_size.to_string()),
+        ])
+    }
+    fn synthesis_identity(&mut self, speaker: u32) -> auris_core::synthesis::SynthesisIdentity {
+        let mut identity = crate::backend::local_identity(self.kind(), self.info(), speaker);
+        identity.model = self.model_components["acoustic"].clone();
+        identity.components = self.model_components.clone();
+        if let Some(variance) = &self.variance {
+            identity
+                .components
+                .extend(variance.model_components.clone());
+        }
+        identity
+    }
+    fn seed_support(&self) -> auris_core::synthesis::SynthesisSeedSupport {
+        auris_core::synthesis::SynthesisSeedSupport::Unsupported
+    }
     fn kind(&self) -> BackendKind {
         BackendKind::DiffSinger
     }

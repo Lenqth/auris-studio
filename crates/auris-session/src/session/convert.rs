@@ -682,6 +682,7 @@ mod tests {
             .as_singer_mut()
             .unwrap()
             .take = Some(SingerTake {
+            provenance: None,
             backend_pitch: None,
             source,
             fingerprint,

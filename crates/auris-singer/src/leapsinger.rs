@@ -137,6 +137,7 @@ fn mel_bins() -> usize {
 }
 
 pub(crate) struct LeapSingerBackend {
+    model_components: std::collections::BTreeMap<String, auris_core::synthesis::SynthesisComponent>,
     acoustic: Session,
     vocoder: Session,
     config: Config,
@@ -196,8 +197,37 @@ impl LeapSingerBackend {
         };
         let raw = read_text_file(&phonemes_path, "LeapSinger phoneme dictionary")?;
         let symbols = read_symbols(&raw)?;
+        let mut model_components = std::collections::BTreeMap::from([
+            (
+                "acoustic".into(),
+                crate::backend::model_component(&acoustic_path),
+            ),
+            (
+                "vocoder".into(),
+                crate::backend::model_component(&vocoder_path),
+            ),
+        ]);
         let (acoustic, acoustic_gpu) = open_session(&acoustic_path, acceleration)?;
         let (vocoder, vocoder_gpu) = open_session(&vocoder_path, acceleration)?;
+        crate::backend::observe_model_metadata(
+            model_components
+                .get_mut("acoustic")
+                .expect("acoustic component"),
+            &acoustic,
+        );
+        crate::backend::observe_model_metadata(
+            model_components
+                .get_mut("vocoder")
+                .expect("vocoder component"),
+            &vocoder,
+        );
+        if crate::backend::hash_artifact(&acoustic_path) != model_components["acoustic"].sha256
+            || crate::backend::hash_artifact(&vocoder_path) != model_components["vocoder"].sha256
+        {
+            return Err(SingError::Metadata(
+                "Model files changed while loading".into(),
+            ));
+        }
         validate_models(&acoustic, &vocoder, &config)?;
         let speaker_to_id = if config.speakers.is_empty() {
             BTreeMap::from([(config.name.clone(), 0)])
@@ -222,6 +252,7 @@ impl LeapSingerBackend {
             }),
         };
         Ok(Self {
+            model_components,
             acoustic,
             vocoder,
             config,
@@ -345,6 +376,22 @@ impl LeapSingerBackend {
 }
 
 impl SingingBackend for LeapSingerBackend {
+    fn synthesis_settings(&self, _speaker: u32) -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("variant".into(), format!("{:?}", self.config.variant)),
+            ("hop_size".into(), self.config.hop_size.to_string()),
+            ("mel_bins".into(), self.config.num_mel_bins.to_string()),
+        ])
+    }
+    fn synthesis_identity(&mut self, speaker: u32) -> auris_core::synthesis::SynthesisIdentity {
+        let mut identity = crate::backend::local_identity(self.kind(), self.info(), speaker);
+        identity.model = self.model_components["acoustic"].clone();
+        identity.components = self.model_components.clone();
+        identity
+    }
+    fn seed_support(&self) -> auris_core::synthesis::SynthesisSeedSupport {
+        auris_core::synthesis::SynthesisSeedSupport::Unsupported
+    }
     fn kind(&self) -> BackendKind {
         BackendKind::LeapSinger
     }
@@ -402,6 +449,15 @@ impl SingingBackend for LeapSingerBackend {
                 Ok(sung) => sung,
                 Err(error) if self.on_gpu && self.acceleration == Acceleration::Auto => {
                     log::warn!("the GPU refused LeapSinger ({error}); retrying on CPU");
+                    if crate::backend::hash_artifact(&self.acoustic_path)
+                        != self.model_components["acoustic"].sha256
+                        || crate::backend::hash_artifact(&self.vocoder_path)
+                            != self.model_components["vocoder"].sha256
+                    {
+                        return Err(SingError::Inference(
+                            "Model files changed; reload the voice before synthesis".into(),
+                        ));
+                    }
                     let (acoustic, _) = open_session(&self.acoustic_path, Acceleration::Cpu)?;
                     let (vocoder, _) = open_session(&self.vocoder_path, Acceleration::Cpu)?;
                     self.acoustic = acoustic;

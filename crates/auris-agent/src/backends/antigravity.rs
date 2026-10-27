@@ -459,7 +459,11 @@ async fn tool_turn(
             let signature = json!([call.name, call.arguments]).to_string();
             requests.push(signature.clone());
             let reply = host
-                .call(&call.name, call.arguments)
+                .call_with_origin(
+                    &call.name,
+                    call.arguments,
+                    crate::permissions::call_origin(Some(&id), &call.name, "antigravity"),
+                )
                 .await
                 .and_then(|reply| {
                     if reply["ok"] == true

@@ -351,7 +351,7 @@ pub enum Command {
         /// Optional take seed; preserves the previous seed, or uses 0 for a first take.
         seed: Option<u64>,
     },
-    /// Explicitly accept an immutable recognized draft as new editable tracks, preserving existing music and timeline maps. Review extra/missing notes, timing and playback instruments; one Undo removes the complete import.
+    /// Preview then accept an immutable external draft as new editable tracks in one Undo. Multitrack apply requires the preview revision and digest. Existing timeline maps are retained unless version two explicitly requests replacement. Review notes, timing and playback instruments.
     ImportTranscription {
         /// Validated recognizer-independent draft; resolved by the tool host before authorization.
         draft: Box<crate::TranscriptionDraft>,
@@ -362,8 +362,10 @@ pub enum Command {
         /// Validate and preview without editing the project.
         #[serde(default)]
         preview: bool,
-        /// Optional exact revision returned by preview; refuse a changed destination document.
+        /// Exact preview revision; required when applying multitrack drafts.
         expected_revision: Option<String>,
+        /// Digest returned by preview; required when applying multitrack drafts.
+        preview_digest: Option<String>,
     },
     /// Read or edit the live mixer DAG through stable node identities.
     MixerGraph {
@@ -891,20 +893,45 @@ impl Session {
                 at_tick,
                 preview,
                 expected_revision,
+                preview_digest,
             } => {
-                if let Some(expected) = expected_revision
-                    && expected != self.agent_document_revision()?
+                let rejection = |code: &str| {
+                    serde_json::json!({"error": {"code":code,"repreview_required":true}})
+                        .to_string()
+                };
+                let multitrack =
+                    matches!(draft.as_ref(), crate::TranscriptionDraft::Multitrack { .. });
+                if !preview && multitrack && expected_revision.is_none() {
+                    return Err(rejection("transcription_revision_required"));
+                }
+                if !preview
+                    && expected_revision.as_ref().is_some_and(|expected| {
+                        self.agent_document_revision().as_ref() != Ok(expected)
+                    })
                 {
-                    return Err("Transcription preview is stale; inspect/preview the current document again".into());
+                    return Err(rejection("transcription_revision_mismatch"));
+                }
+                let digest = draft.preview_digest(&name, at_tick)?;
+                if !preview && multitrack && preview_digest.as_deref() != Some(&digest) {
+                    return Err(rejection(if preview_digest.is_none() {
+                        "transcription_preview_required"
+                    } else {
+                        "transcription_preview_mismatch"
+                    }));
                 }
                 if preview {
                     draft.validate()?;
-                    if let crate::TranscriptionDraft::Multitrack { transcription } = draft.as_ref()
+                    let report = if let crate::TranscriptionDraft::Multitrack { transcription } =
+                        draft.as_ref()
                     {
                         self.import_multitrack_transcription(transcription, &name, at_tick, true)
                     } else {
                         Ok(serde_json::json!({"preview":true,"notes":draft.note_count(),"at_tick":at_tick,"revision":self.agent_document_revision()?}).to_string())
-                    }
+                    }?;
+                    let mut report: serde_json::Value =
+                        serde_json::from_str(&report).map_err(|e| e.to_string())?;
+                    report["preview_digest"] = digest.into();
+                    Ok(report.to_string())
                 } else {
                     self.agent_import_draft(*draft, name, at_tick)
                 }

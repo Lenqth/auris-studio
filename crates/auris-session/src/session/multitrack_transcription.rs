@@ -22,23 +22,38 @@ impl Session {
             );
         }
         let start = Ticks(at_tick);
-        let origin = self.project.tempo_map.ticks_to_seconds(start).0;
+        let replacement = draft
+            .performance
+            .as_ref()
+            .filter(|p| {
+                p.timeline_policy
+                    == crate::transcription_draft::performance::TimelinePolicy::ReplaceDestination
+            })
+            .map(|p| p.maps(draft.source.start_seconds))
+            .transpose()?;
+        if replacement.is_some() && (at_tick != 0 || draft.source.start_seconds != 0.0) {
+            return Err(
+                "Replacing global maps requires at_tick=0 and source.start_seconds=0".into(),
+            );
+        }
+        let tempo = replacement
+            .as_ref()
+            .map(|maps| &maps.0)
+            .unwrap_or(&self.project.tempo_map);
+        let origin = tempo.ticks_to_seconds(start).0;
         if !origin.is_finite()
             || origin + draft.source.end_seconds - draft.source.start_seconds > 86_400.0
         {
             return Err("Draft placement exceeds the 24-hour timeline".into());
         }
         let mut groups = Vec::new();
-        for part in &draft.tracks {
+        let mut performances = Vec::new();
+        for (index, part) in draft.tracks.iter().enumerate() {
             let mut notes = Vec::new();
             for event in &part.notes {
-                let from = self
-                    .project
-                    .tempo_map
+                let from = tempo
                     .seconds_to_ticks(Seconds(origin + event.start - draft.source.start_seconds));
-                let to = self
-                    .project
-                    .tempo_map
+                let to = tempo
                     .seconds_to_ticks(Seconds(origin + event.end - draft.source.start_seconds));
                 if to <= from || from < start {
                     return Err(
@@ -50,21 +65,45 @@ impl Session {
                 note.velocity = event.strength;
                 notes.push(note);
             }
+            let performance = draft
+                .performance
+                .as_ref()
+                .map(|p| {
+                    p.parts[index].prepare(&mut notes, |seconds| {
+                        tempo.seconds_to_ticks(Seconds(
+                            origin + seconds - draft.source.start_seconds,
+                        )) - start
+                    })
+                })
+                .transpose()?;
+            performances.push(performance);
             groups.push(notes);
         }
         let preview_parts:Vec<_> = draft.tracks.iter().zip(&groups).map(|(part,notes)|json!({"name":part.name,
             "instrument":part.instrument,"program":part.program,"drums":part.drums,"notes":notes.len(),
             "sound_id":part.sound_id,"guide_sound":part.sound_id.is_none()})).collect();
         if preview {
-            return Ok(json!({"preview":true,"revision":self.agent_document_revision()?,"parts":preview_parts,"at_tick":at_tick,"provenance_authenticity":"declared_not_verified"}).to_string());
+            return Ok(json!({"preview":true,"revision":self.agent_document_revision()?,"parts":preview_parts,"at_tick":at_tick,"replaces_global_maps":replacement.is_some(),"provenance_authenticity":"declared_not_verified"}).to_string());
         }
         self.begin_transaction(Edit::AddInstrumentTrack);
         let result = (|| {
+            if let Some((tempo, signatures)) = replacement {
+                self.project.tempo_map = tempo;
+                self.project.signatures = signatures;
+            }
             let mut created = Vec::new();
             let mut provenance_clip = None;
-            for (index, (part, notes)) in draft.tracks.iter().zip(groups).enumerate() {
+            for (index, ((part, notes), performance)) in draft
+                .tracks
+                .iter()
+                .zip(groups)
+                .zip(performances)
+                .enumerate()
+            {
                 let track_name = format!("{name}: {}", part.name);
-                let track = if part.drums {
+                let track = if performance.as_ref().is_some_and(|p| p.singer) {
+                    Ok(self.add_singer_track(&track_name))
+                } else if part.drums {
                     self.add_default_drum_track(&track_name)
                 } else {
                     self.add_default_instrument_track(&track_name)
@@ -73,14 +112,21 @@ impl Session {
                 if let Some(sound) = &part.sound_id {
                     self.use_library_sound(track, sound, &[])?;
                 }
-                let length = notes.iter().map(Note::end).max().ok_or("Empty part")?;
+                let length = notes
+                    .iter()
+                    .map(Note::end)
+                    .max()
+                    .ok_or("Empty part")?
+                    .max(performance.as_ref().map_or(Ticks::ZERO, |p| p.end));
                 let clip = self
                     .add_midi_clip(track, &part.name, start, length)
                     .map_err(|e| e.to_string())?;
-                self.project
-                    .midi_clip_mut(clip)
-                    .ok_or("Missing new clip")?
-                    .notes = notes;
+                let imported = self.project.midi_clip_mut(clip).ok_or("Missing new clip")?;
+                imported.notes = notes;
+                if let Some(performance) = performance {
+                    imported.bend = performance.bend;
+                    imported.controllers = performance.controllers;
+                }
                 provenance_clip.get_or_insert(clip);
                 created.push(json!({"track":track.0,"clip":clip.0,"source_track":index,"sound_id":part.sound_id,"guide_sound":part.sound_id.is_none()}));
             }
@@ -95,6 +141,9 @@ impl Session {
         })();
         match result {
             Ok(created) => {
+                self.invalidate_graph();
+                self.meter_is_stale = true;
+                self.publish_loop();
                 self.end_transaction();
                 Ok(json!({"created":created,"parts":preview_parts,"notes":draft.tracks.iter().map(|t|t.notes.len()).sum::<usize>(),
                     "revision":self.agent_document_revision()?,"provenance_authenticity":"declared_not_verified","unsaved":self.is_dirty()}).to_string())
@@ -110,6 +159,105 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_two_maps_control_tails_and_japanese_lyrics_survive_save_and_history() {
+        let draft: MultitrackTranscription =
+            serde_json::from_str(include_str!("../../tests/fixtures/transcription-v2.json"))
+                .unwrap();
+        let mut session = Session::new(SessionOptions::headless()).unwrap();
+        let before = session.project().clone();
+        session
+            .import_multitrack_transcription(&draft, "Performance", 0, false)
+            .unwrap();
+        let mut imported = session.project().clone();
+        assert_eq!(imported.tempo_map.points().len(), 2);
+        assert_eq!(imported.signatures.points().len(), 2);
+        let piano = &imported.tracks[0].kind.note_clips().unwrap()[0];
+        assert_eq!(piano.bend[1].value, 1.5);
+        assert_eq!(piano.controllers[&64].last().unwrap().at, Ticks(5760));
+        assert_eq!(piano.length, Ticks(5761));
+        assert!(
+            piano.controllers[&64].last().unwrap().at
+                > piano.notes.iter().map(Note::end).max().unwrap()
+        );
+        let singer = &imported.tracks[1].kind.as_singer().unwrap().clips[0];
+        assert_eq!(singer.name, "桜、咲く！");
+        assert_eq!(singer.notes[0].lyric, "桜、咲く！");
+        assert_eq!(singer.notes[1].lyric, "+");
+        assert_eq!(singer.notes[1].phonemes, ["s", "a", "k", "ɯ"]);
+        let provenance: serde_json::Value =
+            serde_json::from_str(imported.transcription_provenance.values().next().unwrap())
+                .unwrap();
+        assert_eq!(
+            provenance["draft"]["performance"]["parts"][1]["lyrics"][0]["reading"],
+            "さくら、さく"
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Performance.auris");
+        session.save(&path).unwrap();
+        imported.saved_by = session.project().saved_by.clone();
+        let mut reopened = Session::new(SessionOptions::headless()).unwrap();
+        reopened.open(&path).unwrap();
+        assert_eq!(reopened.project(), session.project());
+        session.undo();
+        assert_eq!(session.project(), &before);
+        session.redo();
+        assert_eq!(session.project(), &imported);
+
+        let mut preserved = draft.clone();
+        preserved.performance.as_mut().unwrap().timeline_policy =
+            crate::transcription_draft::performance::TimelinePolicy::PreserveDestination;
+        let mut destination = Session::new(SessionOptions::headless()).unwrap();
+        destination.set_bpm(90.0);
+        let tempo = destination.project().tempo_map.clone();
+        let meter = destination.project().signatures.clone();
+        destination
+            .import_multitrack_transcription(&preserved, "Preserved", 960, false)
+            .unwrap();
+        assert_eq!(destination.project().tempo_map, tempo);
+        assert_eq!(destination.project().signatures, meter);
+    }
+
+    #[test]
+    fn version_two_rejects_unsupported_or_invalid_performance_before_editing() {
+        let original: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/transcription-v2.json"))
+                .unwrap();
+        for (pointer, value) in [
+            ("/schema_version", json!(1)),
+            ("/performance/parts/0/channel", json!(16)),
+            (
+                "/performance/parts/0/controllers/64/points/1/value",
+                json!(1.1),
+            ),
+            ("/performance/parts/0/controllers/64/end_value", json!(1.0)),
+            ("/performance/parts/0/bend/range_semitones", json!(13.0)),
+            (
+                "/performance/parts/0/bend/curve/interpolation",
+                json!("cubic"),
+            ),
+            ("/performance/tempos/1/seconds", json!(2.1)),
+            ("/performance/meters/1/tick", json!(3841)),
+            ("/performance/parts/1/lyrics/0/notes", json!([0, 0])),
+            ("/performance/parts/1/lyrics/0/confidence", json!(-0.1)),
+        ] {
+            let mut invalid = original.clone();
+            *invalid.pointer_mut(pointer).unwrap() = value;
+            let mut session = Session::new(SessionOptions::headless()).unwrap();
+            let before = session.project().clone();
+            if let Ok(draft) = serde_json::from_value::<MultitrackTranscription>(invalid) {
+                assert!(
+                    session
+                        .import_multitrack_transcription(&draft, "Invalid", 0, false)
+                        .is_err(),
+                    "{pointer}"
+                );
+            }
+            assert_eq!(session.project(), &before);
+            assert!(!session.can_undo());
+        }
+    }
 
     fn draft() -> MultitrackTranscription {
         serde_json::from_value(json!({"schema_version":1,"source":{"audio_sha256":"a".repeat(64),"start_seconds":10.0,"end_seconds":12.0},

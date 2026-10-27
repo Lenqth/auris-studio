@@ -60,7 +60,7 @@ separate. Ordinary protected `render` output also reports its source measurement
 and actual attenuation. Render snapshots capture current hosted patch states and
 parameters without changing the source document. Plugin metadata includes format,
 vendor/version when available and state identity. Source files, SoundFonts, plugin
-files/bundles and singer model/connection references are hashed without copying
+files/bundles and singer entry configurations are hashed without copying
 their contents into the manifest. `loaded_audio` fingerprints decoded buffers
 actually available to the render, separately from files on disk. Missing/unreadable
 references and guide/stale vocals are reported; unavailable render processors fail
@@ -90,6 +90,11 @@ handling. A client-side agreement does not prove that a server or model uses bot
 channels. Verify decoded values at that server's model boundary. The bundled
 16 kHz mono review models retain their own preprocessing; they are different input
 contracts from a custom 48 kHz stereo model.
+
+The expanded performance schema also consumes model context. Configure enough
+context for the catalog and audio together; the native guard refuses an estimated
+over-budget request. CPU full-catalog transport fixtures use a 64k context setting;
+this does not establish the real model's audio-context capacity.
 
 Under an agreement, complete original WAV bytes are validated and passed unchanged
 in one request. Mono/stereo order, sample representation, duration and byte limits
@@ -131,8 +136,20 @@ For example, the multitrack value is:
 }
 ```
 
-Pass `preview:true` first, then supply its `revision` as `expected_revision` when
-accepting to reject intervening edits. `at_tick` maps `source.start_seconds` onto the destination
+Pass `preview:true` first, then supply both its `revision` as `expected_revision`
+and its `preview_digest` when applying. Both are mandatory for multitrack versions
+1 and 2, including file inputs. The digest binds the normalized complete draft,
+name, insertion tick, instrument assignments and performance settings. Whitespace
+changes to JSON are harmless; changed notes, source identity, mappings, placement
+or file contents require another preview. Preview always returns the current
+revision without editing or requiring a person to approve it. Apply errors contain
+`error.code` (`transcription_revision_required`, `transcription_revision_mismatch`,
+`transcription_preview_required`, `transcription_preview_mismatch`) and
+`error.repreview_required:true`. Rejection leaves the document and history unchanged.
+Legacy `transcription` piano drafts retain optional revision checking and do not
+require a digest. This compatibility boundary does not apply to multitrack files.
+
+`at_tick` maps `source.start_seconds` onto the destination
 timeline, retaining its tempo/meter maps, overlap and velocity. `sound_id` on each
 part explicitly maps a playback sound from instrument search. Unknown instrument
 labels remain unknown; an omitted sound uses a reported guide. All notes are
@@ -142,6 +159,61 @@ confidence, model hashes, constraints and provenance persist in the project's
 `transcription_provenance`, keyed by its first imported clip. They establish neither
 recognizer authenticity nor musical accuracy. Unknown fields are rejected. Legacy
 piano drafts remain accepted through their existing boundary.
+
+### Version-two performance
+
+Version 1 remains notes-only. Version 2 requires `performance`; its complete
+fixed example is [transcription-v2.json](../crates/auris-session/tests/fixtures/transcription-v2.json).
+All event seconds refer to the original audio. Source tempo anchors explicitly pair
+seconds and source-relative musical ticks at 960 ticks per quarter; anchors must
+agree within one microsecond. Tempo is piecewise constant, 10..999 BPM. Meter
+changes must fall on exact source bar boundaries; invalid maps are rejected.
+`preserve_destination` maps seconds through the existing destination tempo map and
+keeps both destination maps. `replace_destination` explicitly replaces both global
+maps, affecting existing music too, and requires source second zero and insertion
+tick zero. Preview reports `replaces_global_maps`. No map changes are implicit.
+
+Each `performance.parts` entry corresponds to one root part and declares its
+original zero-based MIDI channel (0..15). Parts become separate instrument routes;
+channel identity remains in provenance. Bend values are absolute semitone offsets
+within the declared positive range, at most 12 semitones. MIDI CC numbers are
+0..127 and values are normalized 0..1. CC 64 is the sustain pedal. Curves use
+explicit `linear` interpolation with endpoint holds. Other interpolation modes
+are rejected. Every curve includes source start and source end, with an explicit
+matching `end_value`; no reset is invented. Control points must remain distinct
+after conversion to destination ticks. Clip length includes all controls and one
+tick after the terminal control, retaining pedal/control tails after note-off.
+
+Lyric spans identify ordered, nonoverlapping source notes and their exact outer
+time bounds. `written`, optional `reading`, per-note IPA `phonemes`, confidence
+and recognizer identity stay distinct in persisted provenance. Lyric parts create
+singer tracks with a guide voice, preserving the complete written lyric on the
+first addressed note and `+` on continuations. Supplied IPA is retained per note;
+no reading or phoneme text replaces the written lyric. An explicit instrument
+sound assignment or drums cannot also request singer lyrics. Importing control
+or lyric events establishes score semantics, not an instrument's acoustic response.
+
+## Synthesis evidence
+
+New singer takes retain immutable `provenance`, which analysis manifests also
+expose as `synthesis_provenance`. Evidence includes backend, engine/model/speaker/
+style components, available versions/builds/model SHA-256, requested seed and its
+support status, synthesis settings, complete input identity, native sample hash
+and the encoded take WAV hash. Native sample hashes cover mono float32
+little-endian sample bytes at the recorded sample rate. `local_hash`,
+`local_observation`, `server_declaration` and `unknown` distinguish the evidence.
+Missing fields remain explicit; old takes report unknown without contacting a server.
+
+Local acoustic/vocoder and available variance model hashes are captured when
+loading. Configuration hashes are separate from model hashes. VOICEVOX samples
+optional, bounded `/version`, `/engine_manifest` and `/singers` metadata after
+each synthesis, with short timeouts. Speaker UUID/version, selected decoder style
+and query style are retained. Servers may additionally declare `model_id`,
+`model_version`, `model_sha256` on the selected style or speaker, plus `build_id`
+on the engine manifest. These are server claims observed after synthesis, not an
+attestation that a server used a particular artifact for every request or chunk.
+Unavailable metadata stays unknown. A changing server updates a new take's record;
+loading an older take never refreshes its identity. No model files are copied.
 
 ## Transition evidence
 
@@ -159,3 +231,12 @@ Arguments, response bodies, prompts, credentials and unrelated file contents are
 excluded. The collector owns authorized exact call payloads needed for replay,
 human preference attribution and dataset policy. Replay must compare current schema
 hashes and stop/report incompatibility before executing recorded calls.
+
+Trace schema version 2 separates `permission_request` / `permission_outcome` from
+terminal `host_outcome`. Permission events carry the independent `permission_id`,
+original `call_id` and tool, explicit origin and normalized operation name.
+Multiple checks can reference one invocation; allowing or denying a check does
+not remove its pending call. Cancellation closes outstanding checks and calls
+separately. Permissions without a transport-provided invocation use an explicit
+`independent` origin and null call ID. Embedded MCP execution uses its own
+`live-mcp-*` invocation IDs, distinct from CLI model-side observations.

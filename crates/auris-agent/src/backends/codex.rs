@@ -577,10 +577,18 @@ async fn receive_turn(rpc: &mut Rpc, bridge: &Bridge, thread: &str) -> Result<St
                 let item = params["itemId"]
                     .as_str()
                     .and_then(|id| native_items.get(id));
-                let result = crate::permissions::authorize(
-                    Some(bridge),
+                let origin = crate::permissions::call_origin(
+                    params["itemId"].as_str(),
                     operation,
-                    &json!({"backend":"codex","request":params,"item":item}).to_string(),
+                    "codex_approval",
+                );
+                let result = crate::permissions::with_origin(
+                    origin,
+                    crate::permissions::authorize(
+                        Some(bridge),
+                        operation,
+                        &json!({"backend":"codex","request":params,"item":item}).to_string(),
+                    ),
                 )
                 .await;
                 rpc.send(json!({"id":message["id"],"result":{"decision":if result.is_ok() { "accept" } else { "decline" }}})).await?;
