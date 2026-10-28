@@ -82,7 +82,7 @@ impl Session {
         let (start, end) = bar_range(project, start_bar, bars)?;
         Ok(InspectionJob {
             revision: self.revision(),
-            render: self.render_job(),
+            render: self.render_job_at(Some(48_000.0)),
             track: track.map(TrackId),
             start,
             end,
