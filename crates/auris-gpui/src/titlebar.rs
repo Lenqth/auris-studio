@@ -5,9 +5,9 @@
 //! turn a button inside it into a window drag on Windows.
 
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, CursorStyle, Decorations, Div, ElementId, IntoElement,
-    PathBuilder, Pixels, ResizeEdge, SharedString, Stateful, TitlebarOptions, Window,
-    WindowControlArea, WindowDecorations, WindowOptions, canvas, div, point, prelude::*, px,
+    AnyElement, App, ClickEvent, CursorStyle, Decorations, Div, ElementId, IntoElement, Pixels,
+    ResizeEdge, SharedString, Stateful, TitlebarOptions, Window, WindowControlArea,
+    WindowDecorations, WindowOptions, div, point, prelude::*, px, svg,
 };
 
 use crate::theme::Theme;
@@ -17,6 +17,7 @@ pub const HEIGHT: Pixels = px(40.0);
 
 const CONTROL_WIDTH: Pixels = px(46.0);
 const TRAFFIC_LIGHT_INSET: Pixels = px(78.0);
+const GLYPH_SIZE: Pixels = px(10.0);
 
 /// The narrowest a centred title is squeezed to before the controls beside it give way.
 const MIN_TITLE_WIDTH: Pixels = px(72.0);
@@ -415,9 +416,8 @@ fn control(
         .w(CONTROL_WIDTH)
         .h_full()
         .flex_shrink_0()
-        .text_color(theme.text_muted)
-        .hover(move |this| this.bg(hover_background).text_color(hover_foreground))
-        .active(move |this| this.bg(hover_background).text_color(hover_foreground))
+        .hover(move |this| this.bg(hover_background))
+        .active(move |this| this.bg(hover_background))
         .when(cfg!(target_os = "windows"), |this| {
             this.window_control_area(area)
         })
@@ -438,59 +438,24 @@ fn control(
                 })
             })
         })
-        .child(control_icon(area, maximized))
+        .group(id)
+        .child(
+            control_icon(area, maximized)
+                .text_color(theme.text_muted)
+                .group_hover(id, move |this| this.text_color(hover_foreground)),
+        )
 }
 
-fn control_icon(area: WindowControlArea, maximized: bool) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |bounds, _, window, _| paint_control_icon(bounds, area, maximized, window),
-    )
-    .size(px(12.0))
-}
-
-fn paint_control_icon(
-    bounds: Bounds<Pixels>,
-    area: WindowControlArea,
-    maximized: bool,
-    window: &mut Window,
-) {
-    let at = |x: f32, y: f32| bounds.origin + point(px(x), px(y));
-    let mut path = PathBuilder::stroke(px(1.0));
-    match area {
-        WindowControlArea::Min => {
-            path.move_to(at(1.0, 6.0));
-            path.line_to(at(11.0, 6.0));
-        }
-        WindowControlArea::Max if maximized => {
-            path.move_to(at(4.0, 1.0));
-            path.line_to(at(11.0, 1.0));
-            path.line_to(at(11.0, 8.0));
-            path.move_to(at(1.0, 4.0));
-            path.line_to(at(8.0, 4.0));
-            path.line_to(at(8.0, 11.0));
-            path.line_to(at(1.0, 11.0));
-            path.close();
-        }
-        WindowControlArea::Max => {
-            path.move_to(at(1.0, 1.0));
-            path.line_to(at(11.0, 1.0));
-            path.line_to(at(11.0, 11.0));
-            path.line_to(at(1.0, 11.0));
-            path.close();
-        }
-        WindowControlArea::Close => {
-            path.move_to(at(1.0, 1.0));
-            path.line_to(at(11.0, 11.0));
-            path.move_to(at(11.0, 1.0));
-            path.line_to(at(1.0, 11.0));
-        }
-        WindowControlArea::Drag => return,
-    }
-    if let Ok(path) = path.build() {
-        let color = window.text_style().color;
-        window.paint_path(path, color);
-    }
+/// The caption glyph as an icon, not a stroked path: on a maximized Windows window GPUI's path
+/// pass drew these twice, a few pixels apart, while sprites land where they are laid out.
+fn control_icon(area: WindowControlArea, maximized: bool) -> gpui::Svg {
+    let path = match area {
+        WindowControlArea::Min => "icons/caption-minimize.svg",
+        WindowControlArea::Max if maximized => "icons/caption-restore.svg",
+        WindowControlArea::Max => "icons/caption-maximize.svg",
+        WindowControlArea::Close | WindowControlArea::Drag => "icons/caption-close.svg",
+    };
+    svg().path(path).size(GLYPH_SIZE).flex_none()
 }
 
 #[cfg(test)]

@@ -38,6 +38,22 @@ const MARKS: &[(&str, &[u8])] = &[
         include_bytes!("../../assets/icons/auris-bolt.svg"),
     ),
     (
+        "icons/caption-minimize.svg",
+        include_bytes!("../../assets/icons/caption-minimize.svg"),
+    ),
+    (
+        "icons/caption-maximize.svg",
+        include_bytes!("../../assets/icons/caption-maximize.svg"),
+    ),
+    (
+        "icons/caption-restore.svg",
+        include_bytes!("../../assets/icons/caption-restore.svg"),
+    ),
+    (
+        "icons/caption-close.svg",
+        include_bytes!("../../assets/icons/caption-close.svg"),
+    ),
+    (
         "providers/openai.svg",
         include_bytes!("../../assets/providers/openai.svg"),
     ),
