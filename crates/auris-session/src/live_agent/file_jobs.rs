@@ -421,7 +421,7 @@ impl Session {
                     },
                     ..Default::default()
                 };
-                let job = self.job_for(render_project);
+                let job = self.job_for_at(render_project, options.sample_rate);
                 let (mut targets, folder) = match destination {
                     AudioDestination::Mix { path } => (vec![(local_path(&path)?, None)], None),
                     AudioDestination::Stems { folder } => {
@@ -498,7 +498,7 @@ impl Session {
                         NEXT.fetch_add(1, Ordering::Relaxed)
                     ));
                 Work::Audio {
-                    job: self.render_job(),
+                    job: self.render_job_at(options.sample_rate),
                     guard: self.export_guard(),
                     targets: vec![(path, None)],
                     folder: None,

@@ -926,6 +926,7 @@ fn compose(
     )?;
     let deadline = Instant::now() + Duration::from_secs(900);
     let mut edits = 0;
+    let mut denials = 0;
     let mut last_failure = String::new();
     let completion = loop {
         if cancel.load(Ordering::Acquire) {
@@ -958,9 +959,19 @@ fn compose(
                             .iter()
                             .any(|t| t.name == op.name)
                 });
-                worker.send(&json!({"event":"permission_result","id":event["id"],"ok":allowed,"reason":"Isolated candidate music operations only"}).to_string())?;
+                // A refusal is an answer the composer can act on: CLI runtimes reach for their
+                // own shell and file tools (Claude Code reads oversized tool output back from a
+                // file), and one such reach should not discard the whole candidate.
+                worker.send(&json!({"event":"permission_result","id":event["id"],"ok":allowed,
+                    "reason":"Isolated candidate: only Auris music tools are available. Do not use shell or file tools; continue with the Auris tools."}).to_string())?;
                 if !allowed {
-                    return Err(AttemptError::permanent("Candidate operation was denied"));
+                    denials += 1;
+                    if denials > 8 {
+                        return Err(AttemptError::permanent(format!(
+                            "Candidate operation was denied: {}",
+                            event["tool"].as_str().unwrap_or_default()
+                        )));
+                    }
                 }
             }
             "edit" => {
