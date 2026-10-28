@@ -30,7 +30,6 @@ impl Session {
             .transpose()?;
         let start = self.project().signatures.bar_start(start_bar);
         let end = self.project().signatures.bar_start(after);
-        let previous = self.project().harmony.key_at(end);
         let previous_section = self.project().sections.label_at(end).map(str::to_owned);
         let internal_sections = self
             .project()
@@ -52,24 +51,7 @@ impl Session {
             })
             .transpose()?;
         self.begin_transaction(crate::Edit::StampProgression);
-        if let Some(key) = key {
-            self.set_key(start, key);
-            self.set_key(end, previous);
-        }
-        if clear_chords || chart.is_some() {
-            self.clear_harmony(start, end);
-        }
-        if let Some(mut chart) = chart {
-            let progression = std::mem::take(&mut chart.bars);
-            for offset in 0..bars {
-                let at = self.project().signatures.bar_start(start_bar + offset);
-                chart.bars.clear();
-                chart
-                    .bars
-                    .push(progression[offset as usize % progression.len()].clone());
-                self.stamp_progression(&chart, at, 1);
-            }
-        }
+        self.write_bounded_harmony(start_bar, bars, key, chart.as_ref(), clear_chords);
         if let Some(label) = section {
             for tick in internal_sections {
                 self.remove_section(tick);
@@ -85,6 +67,101 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_chords_restore_silence_after_the_range() {
+        let mut s = Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        s.agent_edit_harmony(2, 2, None, Some("| I | V |"), false, None)
+            .unwrap();
+        assert!(s.harmony().numeral_at(Ticks::ZERO).is_none());
+        assert_eq!(
+            s.harmony()
+                .chord_at(Ticks::QUARTER * 8)
+                .unwrap()
+                .to_string(),
+            "G"
+        );
+        assert!(s.harmony().numeral_at(Ticks::QUARTER * 12).is_none());
+    }
+
+    #[test]
+    fn bar_addressed_harmony_ignores_the_pointer_grid() {
+        let mut s = Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        s.set_grid(Ticks::QUARTER * 8);
+        s.agent_edit_harmony(2, 2, Some("D major"), Some("| I V vi | IV |"), false, None)
+            .unwrap();
+        let start = Ticks::QUARTER * 4;
+        for (offset, chord) in [(0, "D"), (1280, "A"), (2560, "Bm"), (3840, "G")] {
+            assert_eq!(
+                s.harmony()
+                    .chord_at(start + Ticks(offset))
+                    .map(|c| c.to_string()),
+                Some(chord.into())
+            );
+        }
+        assert_eq!(s.harmony().key_at(start).to_text(), "D major");
+        assert_eq!(s.harmony().key_at(Ticks::QUARTER * 12).to_text(), "C major");
+        assert!(s.harmony().numeral_at(start - Ticks(1)).is_none());
+        assert!(s.harmony().numeral_at(Ticks::QUARTER * 12).is_none());
+    }
+
+    #[test]
+    fn a_bounded_key_replaces_internal_modulations() {
+        let mut s = Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        s.set_key(Ticks::QUARTER * 8, MusicalKey::parse("E major").unwrap());
+        let before = s.project().clone();
+        s.agent_edit_harmony(2, 3, Some("D major"), Some("| I |"), false, None)
+            .unwrap();
+        for bar in 2..5 {
+            assert_eq!(
+                s.harmony()
+                    .chord_at(s.project().signatures.bar_start(bar))
+                    .unwrap()
+                    .to_string(),
+                "D"
+            );
+        }
+        assert_eq!(s.harmony().key_at(Ticks::QUARTER * 16).to_text(), "E major");
+        let after = s.project().clone();
+        s.undo();
+        assert_eq!(s.project(), &before);
+        s.redo();
+        assert_eq!(s.project(), &after);
+    }
+
+    #[test]
+    fn bounded_harmony_follows_meter_changes_and_preserves_outside_chords() {
+        let mut s = Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        s.set_signature_point(Ticks::QUARTER * 4, TimeSignature::new(7, 8));
+        s.set_signature_point(Ticks(10560), TimeSignature::new(3, 4));
+        s.stamp_progression(&Chart::parse("| vi |").unwrap(), Ticks::ZERO, 8);
+        s.set_grid(Ticks::QUARTER * 8);
+        let before = s.project().clone();
+        s.agent_edit_harmony(2, 3, None, Some("| I V | IV | ii |"), false, None)
+            .unwrap();
+        for (tick, chord) in [
+            (3839, "Am"),
+            (3840, "C"),
+            (5520, "G"),
+            (7200, "F"),
+            (10560, "Dm"),
+            (13440, "Am"),
+        ] {
+            assert_eq!(
+                s.harmony().chord_at(Ticks(tick)).unwrap().to_string(),
+                chord
+            );
+        }
+        s.undo();
+        assert_eq!(s.project(), &before);
+        s.agent_edit_harmony(2, 3, None, None, true, None).unwrap();
+        assert!(s.harmony().numeral_at(Ticks(3840)).is_none());
+        assert!(s.harmony().numeral_at(Ticks(13439)).is_none());
+        assert_eq!(
+            s.harmony().chord_at(Ticks(13440)).unwrap().to_string(),
+            "Am"
+        );
+    }
 
     #[test]
     fn section_only_edits_bound_the_form_preserve_music_and_undo_together() {

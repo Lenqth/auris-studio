@@ -298,9 +298,9 @@ pub enum Command {
         /// Duration in bars, 1..4096. Charts repeat to fill this range.
         #[schemars(range(min = 1, max = 4096))]
         bars: u32,
-        /// Optional key such as D major or A minor; restored to the prior key after the range.
+        /// Optional key such as D major or A minor; replaces internal key changes and restores the prior key after the range.
         key: Option<String>,
-        /// Roman chart, e.g. | I | vi | IV | V |; interpreted in the supplied or current key.
+        /// Roman chart, e.g. | I | vi | IV | V |; each pipe-delimited group is one bar, with chords inside a bar sharing it equally. Interpreted in the supplied or current key. Placement follows meter changes, ignores the editing grid, and preserves harmony outside the range.
         chords: Option<String>,
         /// Optional section name for this range, e.g. Intro or Chorus. Replaces internal section changes and restores the previous section after the range. Supply section alone to write structure without changing harmony.
         section: Option<String>,
