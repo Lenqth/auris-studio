@@ -6,10 +6,16 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-/// Peak levels for every track plus the master bus.
+/// Peak levels for every track plus the master bus, one reading per channel.
 #[derive(Debug)]
 pub struct MeterBank {
-    tracks: Vec<AtomicU32>,
+    tracks: Vec<[AtomicU32; 2]>,
+    /// Whether each track's material is stereo, so a meter knows to show the two sides apart.
+    ///
+    /// Published beside the readings rather than worked out by whoever draws the meter, because
+    /// the graph is the one place that has seen the decoded clips; see
+    /// [`RenderSource::is_stereo`](crate::graph::RenderSource::is_stereo).
+    stereo: Vec<AtomicBool>,
     master: [AtomicU32; 2],
     /// Whether each track has been at or over full scale since the flag was last cleared.
     ///
@@ -43,7 +49,12 @@ impl MeterBank {
     /// allocate; reports for indices beyond it are dropped.
     pub fn new(track_capacity: usize) -> Self {
         Self {
-            tracks: (0..track_capacity).map(|_| AtomicU32::new(0)).collect(),
+            tracks: (0..track_capacity)
+                .map(|_| [AtomicU32::new(0), AtomicU32::new(0)])
+                .collect(),
+            stereo: (0..track_capacity)
+                .map(|_| AtomicBool::new(false))
+                .collect(),
             master: [AtomicU32::new(0), AtomicU32::new(0)],
             clipped: (0..track_capacity)
                 .map(|_| AtomicBool::new(false))
@@ -57,15 +68,28 @@ impl MeterBank {
         self.tracks.len()
     }
 
-    /// Records a track's peak for a block of `frames`, applying the decay.
+    /// Records a track's left and right peaks for a block of `frames`, applying the decay, and
+    /// whether its material is stereo.
     ///
     /// Safe to call from the audio callback: it neither allocates nor locks.
-    pub fn report_track(&self, index: usize, peak: f32, frames: usize, sample_rate: f64) {
-        let peak = Self::sanitized_peak(peak);
-        if let Some(slot) = self.tracks.get(index) {
-            Self::report(slot, peak, frames, sample_rate);
+    pub fn report_track(
+        &self,
+        index: usize,
+        peaks: [f32; 2],
+        stereo: bool,
+        frames: usize,
+        sample_rate: f64,
+    ) {
+        let peaks = peaks.map(Self::sanitized_peak);
+        if let Some(slots) = self.tracks.get(index) {
+            for (slot, peak) in slots.iter().zip(peaks) {
+                Self::report(slot, peak, frames, sample_rate);
+            }
         }
-        if peak >= FULL_SCALE
+        if let Some(flag) = self.stereo.get(index) {
+            flag.store(stereo, Ordering::Relaxed);
+        }
+        if peaks[0].max(peaks[1]) >= FULL_SCALE
             && let Some(flag) = self.clipped.get(index)
         {
             flag.store(true, Ordering::Relaxed);
@@ -85,11 +109,25 @@ impl MeterBank {
         }
     }
 
-    /// Current peak reading for a track, or 0 for an out-of-range index.
+    /// Current peak reading for a track, the louder of its two channels, or 0 for an
+    /// out-of-range index.
     pub fn track_peak(&self, index: usize) -> f32 {
-        self.tracks
+        let [left, right] = self.track_channel_peaks(index);
+        left.max(right)
+    }
+
+    /// Current left and right peak readings for a track, or silence for an out-of-range index.
+    pub fn track_channel_peaks(&self, index: usize) -> [f32; 2] {
+        self.tracks.get(index).map_or([0.0, 0.0], |slots| {
+            [0, 1].map(|channel| f32::from_bits(slots[channel].load(Ordering::Relaxed)))
+        })
+    }
+
+    /// Whether a track's material is stereo, so its meter shows each side.
+    pub fn track_stereo(&self, index: usize) -> bool {
+        self.stereo
             .get(index)
-            .map_or(0.0, |slot| f32::from_bits(slot.load(Ordering::Relaxed)))
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
     }
 
     /// Current peak reading for one master channel.
@@ -144,7 +182,7 @@ impl MeterBank {
     /// with somebody else's evidence.
     pub fn reset(&self) {
         self.clear_clipped();
-        for slot in &self.tracks {
+        for slot in self.tracks.iter().flatten() {
             slot.store(0, Ordering::Relaxed);
         }
         for slot in &self.master {
@@ -158,10 +196,13 @@ impl MeterBank {
     /// level of a deleted track for ever. Called when a smaller graph is installed. Allocation-
     /// and lock-free, so it is safe from the audio thread.
     pub fn clear_tracks_from(&self, index: usize) {
-        for slot in self.tracks.iter().skip(index) {
+        for slot in self.tracks.iter().skip(index).flatten() {
             slot.store(0, Ordering::Relaxed);
         }
         for flag in self.clipped.iter().skip(index) {
+            flag.store(false, Ordering::Relaxed);
+        }
+        for flag in self.stereo.iter().skip(index) {
             flag.store(false, Ordering::Relaxed);
         }
     }
@@ -201,7 +242,7 @@ mod tests {
     #[test]
     fn a_non_finite_peak_is_silence_for_both_meter_and_clip_latch() {
         let bank = MeterBank::new(1);
-        bank.report_track(0, f32::INFINITY, 512, 48_000.0);
+        bank.report_track(0, [f32::INFINITY, f32::INFINITY], true, 512, 48_000.0);
         bank.report_master(0, f32::NAN, 512, 48_000.0);
         assert_eq!(bank.track_peak(0), 0.0);
         assert_eq!(bank.master_channel_peak(0), 0.0);
@@ -212,12 +253,12 @@ mod tests {
     #[test]
     fn a_peak_is_held_then_falls_at_the_documented_rate() {
         let bank = MeterBank::new(2);
-        bank.report_track(0, 1.0, 480, 48_000.0);
+        bank.report_track(0, [1.0, 1.0], true, 480, 48_000.0);
         assert_eq!(bank.track_peak(0), 1.0);
 
         // One full second of silence at 48 kHz, in 100 blocks of 480 frames.
         for _ in 0..100 {
-            bank.report_track(0, 0.0, 480, 48_000.0);
+            bank.report_track(0, [0.0, 0.0], true, 480, 48_000.0);
         }
         // 20 dB down from 1.0 is 0.1.
         let level = bank.track_peak(0);
@@ -230,15 +271,15 @@ mod tests {
     #[test]
     fn a_louder_block_overrides_the_held_value_immediately() {
         let bank = MeterBank::new(1);
-        bank.report_track(0, 0.25, 512, 48_000.0);
-        bank.report_track(0, 0.75, 512, 48_000.0);
+        bank.report_track(0, [0.25, 0.25], true, 512, 48_000.0);
+        bank.report_track(0, [0.75, 0.75], true, 512, 48_000.0);
         assert_eq!(bank.track_peak(0), 0.75);
     }
 
     #[test]
     fn out_of_range_reports_and_reads_are_ignored() {
         let bank = MeterBank::new(1);
-        bank.report_track(9, 1.0, 512, 48_000.0);
+        bank.report_track(9, [1.0, 1.0], true, 512, 48_000.0);
         assert_eq!(bank.track_peak(9), 0.0);
         assert_eq!(bank.track_capacity(), 1);
     }
@@ -256,14 +297,14 @@ mod tests {
     #[test]
     fn non_finite_levels_are_treated_as_silence() {
         let bank = MeterBank::new(1);
-        bank.report_track(0, f32::NAN, 512, 48_000.0);
+        bank.report_track(0, [f32::NAN, f32::NAN], true, 512, 48_000.0);
         assert_eq!(bank.track_peak(0), 0.0);
     }
 
     #[test]
     fn a_clip_stays_lit_after_the_reading_that_caused_it_has_fallen_away() {
         let bank = MeterBank::new(2);
-        bank.report_track(0, 1.0, 512, 48_000.0);
+        bank.report_track(0, [1.0, 1.0], true, 512, 48_000.0);
         assert!(bank.track_clipped(0));
         assert!(bank.anything_clipped());
         assert!(!bank.track_clipped(1), "only the track that clipped");
@@ -271,7 +312,7 @@ mod tests {
         // A second of silence. The reading falls to nothing; the latch does not move, which is
         // the whole point — a clip seen for one frame at sixty hertz is a clip nobody sees.
         for _ in 0..94 {
-            bank.report_track(0, 0.0, 512, 48_000.0);
+            bank.report_track(0, [0.0, 0.0], true, 512, 48_000.0);
         }
         assert!(bank.track_peak(0) < 0.2);
         assert!(bank.track_clipped(0));
@@ -284,11 +325,26 @@ mod tests {
     #[test]
     fn a_level_short_of_full_scale_does_not_light_anything() {
         let bank = MeterBank::new(1);
-        bank.report_track(0, 0.999, 512, 48_000.0);
+        bank.report_track(0, [0.999, 0.999], true, 512, 48_000.0);
         bank.report_master(0, 0.999, 512, 48_000.0);
         assert!(!bank.anything_clipped());
 
         bank.report_master(1, 1.5, 512, 48_000.0);
         assert!(bank.master_clipped());
+    }
+
+    #[test]
+    fn each_side_of_a_track_is_read_on_its_own_and_the_track_says_whether_it_has_two() {
+        let bank = MeterBank::new(2);
+        bank.report_track(0, [0.5, 0.125], true, 512, 48_000.0);
+        bank.report_track(1, [0.25, 0.25], false, 512, 48_000.0);
+        assert_eq!(bank.track_channel_peaks(0), [0.5, 0.125]);
+        assert_eq!(bank.track_peak(0), 0.5);
+        assert!(bank.track_stereo(0));
+        assert!(!bank.track_stereo(1));
+        // A deleted track forgets that it was stereo along with its readings.
+        bank.clear_tracks_from(0);
+        assert_eq!(bank.track_channel_peaks(0), [0.0, 0.0]);
+        assert!(!bank.track_stereo(0));
     }
 }

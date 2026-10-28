@@ -2761,9 +2761,13 @@ impl AurisApp {
 
     // ---------------------------------------------------------------- metering
 
-    /// Linear peak level of a track.
-    pub(crate) fn track_level(&self, index: usize) -> f32 {
-        self.session.meters().track_peak(index)
+    /// What a track's meter reads: both sides, and whether its material is stereo.
+    pub(crate) fn track_meter(&self, index: usize) -> crate::ui::widgets::MeterReading {
+        let meters = self.session.meters();
+        crate::ui::widgets::MeterReading {
+            peaks: meters.track_channel_peaks(index),
+            stereo: meters.track_stereo(index),
+        }
     }
 
     /// The keystroke shown beside a command, written the way this platform writes it.
@@ -2842,9 +2846,13 @@ impl AurisApp {
         self.input_clipped || self.session.meters().anything_clipped()
     }
 
-    /// Linear peak level of the master bus.
-    pub(crate) fn master_level(&self) -> f32 {
-        self.session.meters().master_peak()
+    /// What the master meter reads. The master bus is stereo whatever feeds it.
+    pub(crate) fn master_meter(&self) -> crate::ui::widgets::MeterReading {
+        let meters = self.session.meters();
+        crate::ui::widgets::MeterReading {
+            peaks: [0, 1].map(|channel| meters.master_channel_peak(channel)),
+            stereo: true,
+        }
     }
 
     // ---------------------------------------------------------------- audition

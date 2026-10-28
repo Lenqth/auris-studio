@@ -57,6 +57,25 @@ pub enum RenderSource {
     Silence,
 }
 
+impl RenderSource {
+    /// Whether the material itself has two channels.
+    ///
+    /// Every track renders into a stereo buffer, because the pan has to put a mono source
+    /// somewhere, so the buffer cannot say this. The material can: a clip is as wide as the file
+    /// it was decoded from, while an instrument and a bus are stereo by construction — an
+    /// instrument writes both channels of the block it is handed, and a bus is a sum of stereo
+    /// tracks. Decided once, when the graph is built, so the audio thread never asks.
+    pub fn is_stereo(&self) -> bool {
+        match self {
+            Self::Instrument { .. } | Self::Bus { .. } => true,
+            Self::Audio { clips } | Self::Sung { clips, .. } => {
+                clips.iter().any(|clip| clip.buffer.channel_count() >= 2)
+            }
+            Self::Silence => false,
+        }
+    }
+}
+
 /// A short pre-rendered voice, playing once over whatever the track renders.
 ///
 /// The singer's audition: a dragged note is sung by the model off the audio thread, and this
@@ -128,8 +147,11 @@ pub struct RenderTrack {
     /// the playhead jumped — a seek, a loop wrap or a fresh start — and the notes that should be
     /// sounding there have to be chased.
     pub(crate) continued_from: Option<u64>,
-    /// Post-fader peak of the last block, published to the meters by the engine.
-    pub(crate) peak: f32,
+    /// Post-fader peak of each channel over the last block, published to the meters by the
+    /// engine.
+    pub(crate) peaks: [f32; 2],
+    /// Whether what the track plays has two channels of its own; see [`RenderSource::is_stereo`].
+    pub(crate) stereo: bool,
     /// Which of the graph's sidechain taps this track's output is copied into, if any chain in
     /// the project keys from it.
     ///
@@ -176,9 +198,19 @@ impl RenderTrack {
         &self.source
     }
 
-    /// Post-fader peak of the most recently rendered block.
+    /// Post-fader peak of the most recently rendered block, over both channels.
     pub fn peak(&self) -> f32 {
-        self.peak
+        self.peaks[0].max(self.peaks[1])
+    }
+
+    /// Post-fader peak of one channel of the most recently rendered block.
+    pub fn channel_peak(&self, channel: usize) -> f32 {
+        self.peaks.get(channel).copied().unwrap_or(0.0)
+    }
+
+    /// Whether the track's material is stereo, so its meter shows each side.
+    pub fn is_stereo(&self) -> bool {
+        self.stereo
     }
 
     /// Number of scheduled note events, or 0 for a track with no instrument.

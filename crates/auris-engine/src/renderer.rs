@@ -36,7 +36,7 @@ pub fn render_block(
         graph.signal_meters.begin_block(total, graph.sample_rate());
     }
     for track in graph.tracks_mut() {
-        track.peak = 0.0;
+        track.peaks = [0.0, 0.0];
     }
     graph.master_peak = [0.0, 0.0];
     if total == 0 {
@@ -238,7 +238,9 @@ fn render_segment(
             tap.copy_from(&track.scratch);
         }
 
-        track.peak = track.peak.max(track.scratch.peak());
+        for (channel, peak) in track.peaks.iter_mut().enumerate() {
+            *peak = peak.max(track.scratch.channel_peak(channel));
+        }
         if let Some(scope) = &track.overview_scope {
             scope.publish_stereo(
                 track.scratch.channel(0),
@@ -1489,6 +1491,48 @@ mod tests {
         transport.position_frames = 9_600;
         render_block(&mut graph, &mut transport, &mut out, false);
         assert_eq!(out.peak(), 0.0);
+    }
+
+    /// One audio track playing a clip of `channels` channels: the left at 0.5, any right at 0.25.
+    fn clip_track(channels: usize) -> RenderGraph {
+        let mut project = Project::new("Width", SAMPLE_RATE);
+        let track = project.add_audio_track("Clip");
+        let source = project.add_audio_source(
+            "s",
+            auris_core::AssetPath::inside("Audio/s.wav"),
+            4_800,
+            SAMPLE_RATE,
+            channels,
+        );
+        project.add_audio_clip(track, source, Ticks::ZERO).unwrap();
+        let mut buffer = AudioBuffer::new(channels, 4_800, SAMPLE_RATE);
+        buffer.channel_mut(0).fill(0.5);
+        if channels > 1 {
+            buffer.channel_mut(1).fill(0.25);
+        }
+        let mut bank = AudioSourceBank::new();
+        bank.insert(source, Arc::new(buffer));
+        RenderGraph::build(&project, &bank, &testkit::registry(), 512)
+    }
+
+    #[test]
+    fn a_track_is_metered_per_side_and_is_stereo_only_when_its_material_is() {
+        for (channels, stereo) in [(1, false), (2, true)] {
+            let mut graph = clip_track(channels);
+            assert_eq!(graph.track_is_stereo(0), stereo, "{channels}-channel clip");
+            let mut transport = Transport::playing_from(0);
+            let mut out = AudioBuffer::new(RENDER_CHANNELS, 512, SAMPLE_RATE);
+            render_block(&mut graph, &mut transport, &mut out, false);
+            let [left, right] = graph.track_channel_peaks(0);
+            assert_eq!(graph.track_peak(0), left.max(right));
+            if stereo {
+                // Each side is read on its own: the right is half the left, as in the file.
+                assert!((right / left - 0.5).abs() < 1e-4, "{left} / {right}");
+            } else {
+                // A mono clip at the centre comes out of both sides alike.
+                assert!((left - right).abs() < 1e-6, "{left} / {right}");
+            }
+        }
     }
 
     #[test]

@@ -1513,6 +1513,60 @@ pub fn level_meter(
         .when(clipped, |this| this.child(clip_light.bg(theme.danger)))
 }
 
+/// What a channel's meter reads: each side's linear peak, and whether to show the two apart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MeterReading {
+    /// Left and right linear peaks.
+    pub peaks: [f32; 2],
+    /// Whether the material is stereo. Mono material panned somewhere still comes out of two
+    /// channels, but it is one signal, and two bars for it would say there were two.
+    pub stereo: bool,
+}
+
+impl MeterReading {
+    /// The louder side, which is what a single bar shows.
+    pub fn peak(&self) -> f32 {
+        self.peaks[0].max(self.peaks[1])
+    }
+}
+
+/// A channel's level meter: one bar for mono material, one for each side of stereo material.
+///
+/// The pair shares the single bar's footprint, left before right — left-to-right across a
+/// vertical meter, top-to-bottom along a horizontal one, the way a console stacks them — and
+/// each side is coloured by its own level, so a hard-panned signal reads as one side running hot.
+pub fn channel_meter(
+    reading: MeterReading,
+    clipped: bool,
+    axis: Axis,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    let bar = |gain: f32| {
+        let db = auris_session::prelude::gain_to_db(gain);
+        let position = db_to_meter_position(db);
+        div().flex_1().min_w_0().min_h_0().child(level_meter(
+            position,
+            position,
+            clipped,
+            axis,
+            theme.meter_color(db),
+            theme,
+        ))
+    };
+    let frame = div().flex().size_full().gap(px(1.0));
+    let frame = match axis {
+        Axis::Vertical => frame.flex_row(),
+        Axis::Horizontal => frame.flex_col(),
+    };
+    if reading.stereo {
+        frame
+            .child(bar(reading.peaks[0]))
+            .child(bar(reading.peaks[1]))
+    } else {
+        frame.child(bar(reading.peak()))
+    }
+}
+
 /// Quietest level a meter draws anything for.
 ///
 /// Named because a readout beside a meter has to agree with it about what counts as silence: a

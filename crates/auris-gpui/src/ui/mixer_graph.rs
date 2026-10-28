@@ -16,9 +16,7 @@ use crate::app::AurisApp;
 use crate::theme::{Metrics, Theme};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 use crate::ui::plugin_window::PluginSubject;
-use crate::ui::widgets::{
-    ButtonState, ButtonStyle, button, button_enabled, db_to_meter_position, level_meter,
-};
+use crate::ui::widgets::{ButtonState, ButtonStyle, button, button_enabled, channel_meter};
 
 const NODE_WIDTH: f32 = 176.0;
 const COLUMN: f32 = 360.0;
@@ -1206,7 +1204,7 @@ impl AurisApp {
                         .flat_map(|track| &track.sends)
                         .cloned()
                         .collect();
-                    let level_db = gain_to_db(self.track_level(index));
+                    let meter = self.track_meter(index);
                     card = card
                         .child(
                             div()
@@ -1245,12 +1243,10 @@ impl AurisApp {
                                     .tooltip(self.tip(Key::CmdToggleTrackSolo, "track.solo")),
                                 ),
                         )
-                        .child(div().h(px(6.0 * zoom)).child(level_meter(
-                            db_to_meter_position(level_db),
-                            db_to_meter_position(level_db),
+                        .child(div().h(px(6.0 * zoom)).child(channel_meter(
+                            meter,
                             self.session.meters().track_clipped(index),
                             Axis::Horizontal,
-                            theme.meter_color(level_db),
                             &theme,
                         )))
                         .child(node_button(
@@ -1289,13 +1285,11 @@ impl AurisApp {
                         ));
                     }
                 } else {
-                    let level_db = gain_to_db(self.master_level());
-                    card = card.child(div().h(px(6.0 * zoom)).child(level_meter(
-                        db_to_meter_position(level_db),
-                        db_to_meter_position(level_db),
+                    let meter = self.master_meter();
+                    card = card.child(div().h(px(6.0 * zoom)).child(channel_meter(
+                        meter,
                         self.session.meters().master_clipped(),
                         Axis::Horizontal,
-                        theme.meter_color(level_db),
                         &theme,
                     )));
                 }
