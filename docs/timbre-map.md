@@ -42,14 +42,18 @@ zero. Euclidean distance in this space drives nearest-neighbor search and determ
 (rounded square root of the sound count, bounded to 1–12 requested groups). These are exploratory
 groups whose usefulness should be checked by listening.
 
-The map displays two principal components, with the fraction of standardized variance retained.
-Axes are statistical directions without fixed labels such as brightness or decay. Two-dimensional
+The map displays three principal components in an Atelier `Plot3d` scatter plot, with the fraction
+of standardized variance retained. Drag to rotate, use the rotation buttons from the keyboard,
+or choose 3D, Top, Front or Side. A cross marks the selected sound. The sound lists remain
+available for coincident or hidden points, and the group legend identifies the point colors.
+Axes are statistical directions without fixed labels such as brightness or decay. Displayed
 distance is only an approximation; similarity ordering always uses all 558 dimensions. Rescanning
 a changed catalogue can change both coordinates and groups. The computation needs no pretrained
-weights, Python runtime, network service or GPU.
+weights, Python runtime or network service. Plot rendering uses Atelier's GPU path when available
+and its CPU fallback otherwise.
 
 Implementation: `auris_dsp::timbre` extracts and projects features; `Session::timbre_map_job`
 snapshots sources for a worker, `TimbreMap::nearest` answers similarity queries, and
 `Session::use_timbre_sound` adopts a result. Numeric tests cover level/polarity invariance,
-silence and invalid PCM, PCA distance preservation for rank-two fixtures, deterministic grouping,
+silence and invalid PCM, PCA distance preservation for rank-two and rank-three fixtures, deterministic grouping,
 and degenerate catalogues. A desktop harness test checks read-only browsing and undoable adoption.

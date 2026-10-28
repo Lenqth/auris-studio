@@ -1144,6 +1144,11 @@ pub const SLIDER_PERCENT_STEP: f32 = 0.01;
 #[action(namespace = auris_disclosure, no_json)]
 pub(crate) struct ClaimDisclosureActivation;
 
+/// Reserves Enter/Space for focused visualization controls instead of transport shortcuts.
+#[derive(Clone, Debug, PartialEq, gpui::Action)]
+#[action(namespace = auris_visualization, no_json)]
+pub(crate) struct ClaimVisualizationActivation;
+
 /// A slider-local action carrying the standard key that requested an adjustment.
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = auris_slider, no_json)]
@@ -1155,7 +1160,7 @@ pub(crate) struct AdjustSlider {
 ///
 /// Control contexts are below pane and window contexts in the focus path. Sliders claim their
 /// adjustment keys, and disclosures reserve Enter/Space for activation instead of transport.
-pub(crate) fn key_bindings() -> [gpui::KeyBinding; 10] {
+pub(crate) fn key_bindings() -> [gpui::KeyBinding; 12] {
     [
         gpui::KeyBinding::new("left", AdjustSlider { key: "left" }, Some("AurisSlider")),
         gpui::KeyBinding::new("down", AdjustSlider { key: "down" }, Some("AurisSlider")),
@@ -1175,6 +1180,16 @@ pub(crate) fn key_bindings() -> [gpui::KeyBinding; 10] {
         gpui::KeyBinding::new("end", AdjustSlider { key: "end" }, Some("AurisSlider")),
         gpui::KeyBinding::new("enter", ClaimDisclosureActivation, Some("AurisDisclosure")),
         gpui::KeyBinding::new("space", ClaimDisclosureActivation, Some("AurisDisclosure")),
+        gpui::KeyBinding::new(
+            "enter",
+            ClaimVisualizationActivation,
+            Some("AurisVisualizationControls"),
+        ),
+        gpui::KeyBinding::new(
+            "space",
+            ClaimVisualizationActivation,
+            Some("AurisVisualizationControls"),
+        ),
     ]
 }
 

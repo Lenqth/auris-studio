@@ -180,6 +180,14 @@ strings! {
     ToolbarVisualizer { en: "Audio visualizer", ja: "オーディオビジュアライザー" }
     ToolbarSpectrum { en: "Spectrum…", ja: "スペクトラム…" }
     PhysicalMotion { en: "Model motion", ja: "物理モデルの動き" }
+    PhysicalInstrumentView { en: "Instrument", ja: "楽器" }
+    PhysicalVoicesView { en: "Voices", ja: "声部" }
+    PhysicalDisplacement { en: "Displacement", ja: "変位" }
+    PhysicalModes { en: "Resonant modes 1–8", ja: "共鳴モード 1–8" }
+    PhysicalParameters { en: "Sound parameters", ja: "音色パラメーター" }
+    PhysicalObserved { en: "Captured model state · amplitude enlarged", ja: "モデルの観測値 · 振幅を拡大表示" }
+    PhysicalLive { en: "Live", ja: "観測中" }
+    PhysicalFrozen { en: "Frozen", ja: "表示停止中" }
     PhysicalResume { en: "Resume display", ja: "表示を再開" }
     PhysicalWaiting { en: "Play a test note or start playback to see the model move", ja: "試奏または再生すると、モデルの動きを確認できます" }
     PhysicalProjection { en: "Motion enlarged · Marker: contact · Bars: resonant modes", ja: "振動を拡大表示 · マーカー：接触位置 · 棒：共鳴モード" }
@@ -259,13 +267,24 @@ strings! {
     SongSearchApply { en: "Apply Best & Play", ja: "最良候補を適用して再生" }
     SongSearchApplyHint { en: "Replaces the project with the best score and starts playback. Undo restores the previous project.", ja: "最良候補でプロジェクトを置き換えて再生します。元に戻す操作で、適用前のプロジェクトに戻せます。" }
     TimbreMap { en: "Timbre Map", ja: "音色マップ" }
-    TimbreMapHint { en: "Melodic built-ins and loaded SoundFonts · click a point to audition", ja: "内蔵楽器と読み込み済みSoundFontのメロディ音色 · 点をクリックして試聴" }
-    TimbreMapGeometry { en: "Color: acoustic group · axes: PCA · nearest sounds use full features", ja: "色：音響クラスタ · 軸：PCA · 類似音は元の特徴量で検索" }
+    TimbreMapHint { en: "Drag to rotate · click a point or choose a sound to audition", ja: "ドラッグで回転 · 点または一覧の音色を選んで試聴" }
+    TimbreMapGeometry { en: "Color: acoustic group · axes: PC1–PC3 · similarity uses full features", ja: "色：音響クラスタ · 軸：PC1–PC3 · 類似音は元の特徴量で検索" }
+    TimbreMapSelect { en: "Select a sound to audition and compare its neighbors", ja: "音色を選ぶと試聴し、似ている音色を確認できます" }
+    TimbreMapReady { en: "Scan the library to explore its sounds", ja: "ライブラリを解析すると音色を探索できます" }
+    TimbreMapGroup { en: "Group", ja: "グループ" }
+    TimbreMapView3d { en: "3D", ja: "3D" }
+    TimbreMapViewTop { en: "Top", ja: "上面" }
+    TimbreMapViewFront { en: "Front", ja: "正面" }
+    TimbreMapViewSide { en: "Side", ja: "側面" }
+    TimbreMapTurnLeft { en: "Rotate left", ja: "左に回転" }
+    TimbreMapTurnRight { en: "Rotate right", ja: "右に回転" }
+    TimbreMapTiltUp { en: "Tilt up", ja: "上に傾ける" }
+    TimbreMapTiltDown { en: "Tilt down", ja: "下に傾ける" }
     TimbreMapRescan { en: "Rescan Library", ja: "ライブラリを再解析" }
     TimbreMapNearest { en: "Similar Sounds", ja: "似ている音色" }
     TimbreMapAll { en: "All Sounds", ja: "すべての音色" }
     TimbreMapUse { en: "Use on Selected Track", ja: "選択トラックに適用" }
-    TimbreMapVariance { en: "Variance shown", ja: "平面に保持した情報量" }
+    TimbreMapVariance { en: "Variance shown", ja: "3D空間に保持した情報量" }
     TimbreMapSkipped { en: "Silent references skipped", ja: "基準音が無音のため除外" }
     TimbreMapAudition { en: "Audition through track (including its mixer settings)", ja: "試聴先トラック（ミキサー設定も反映）" }
     TimbreMapEmpty { en: "No audible sounds. Load a SoundFont and rescan.", ja: "測定できる音色がありません。SoundFontを読み込んで再解析してください。" }
@@ -2461,6 +2480,8 @@ mod tests {
             Key::FormatWav,
             Key::FormatFlac,
             Key::FormatMp3,
+            // Dimensional notation is the same in both languages.
+            Key::TimbreMapView3d,
             // Product names, which the navigation column shows as names rather than as the
             // sentence 「…設定」 the old tab row needed.
             Key::VoiceSetupVoicevox,

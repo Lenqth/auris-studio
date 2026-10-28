@@ -1,18 +1,25 @@
 //! Library timbre exploration with a background session job and explicit adoption.
 
-use crate::{
-    app::AurisApp,
-    theme::Theme,
-    ui::widgets::{ButtonStyle, button},
+use crate::{app::AurisApp, theme::Theme};
+use atelier::plot::Plot3d;
+use atelier::{
+    Button, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar, SectionHeader,
+    Segment, SegmentedControl, StatusBar, StatusDot, TextColor, TextSize,
 };
 use auris_i18n::Key;
 use auris_session::{TimbreMap, TimbreMapControl, prelude::*};
-use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, px, relative};
+use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
+#[path = "timbre_plot.rs"]
+mod plot;
+use plot::{TimbreCamera, plot_data};
 
 #[derive(Default)]
 pub(crate) struct TimbreMapState {
     pub(crate) open: bool,
+    camera: TimbreCamera,
+    hovered: Option<usize>,
+    list_nearest: bool,
     pub(crate) map: Option<Arc<TimbreMap>>,
     pub(crate) control: Option<TimbreMapControl>,
     generation: u64,
@@ -47,6 +54,7 @@ impl AurisApp {
     pub(crate) fn scan_timbre_map(&mut self, cx: &mut Context<Self>) {
         self.timbre_map.cancel();
         self.timbre_map.selected = None;
+        self.timbre_map.hovered = None;
         self.timbre_map.error = None;
         if let Some(track) = self.timbre_map.preview_track.take() {
             self.session.stop_singer_preview(track);
@@ -146,275 +154,489 @@ impl AurisApp {
         }
     }
 
-    pub(crate) fn render_timbre_map(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(crate) fn render_timbre_map(
+        &self,
+        window: &gpui::Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         if !self.timbre_map.open {
             return None;
         }
-        let theme = &self.theme;
-        let mut body = div().flex().flex_col().gap_2().min_h_0();
+        let theme = &self.theme.atelier;
+        let spacing = theme.spacing;
+        let busy = self.timbre_map.control.is_some();
+        let mut content = div().flex().flex_col().flex_1().min_h_0().gap(spacing.md);
         if let Some(control) = &self.timbre_map.control {
-            body = body
-                .child(format!(
-                    "{} {}/{}",
-                    self.t(Key::AnalysisRunning),
-                    control.completed(),
-                    self.timbre_map.total
-                ))
-                .child(button(
-                    "timbre-cancel",
-                    self.t(Key::Cancel),
-                    ButtonStyle::Normal,
-                    false,
-                    theme.accent,
-                    theme,
-                    cx.listener(|this, _, _, cx| {
-                        this.timbre_map.cancel();
-                        cx.notify();
-                    }),
-                ));
+            content = content.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(spacing.sm)
+                    .child(
+                        SectionHeader::new(self.t(Key::AnalysisRunning))
+                            .description(format!(
+                                "{}/{}",
+                                control.completed(),
+                                self.timbre_map.total
+                            ))
+                            .action(Button::new("timbre-cancel", self.t(Key::Cancel)).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.timbre_map.cancel();
+                                    cx.notify();
+                                }),
+                            )),
+                    )
+                    .child(ProgressBar::new(
+                        control.completed() as f32 / self.timbre_map.total.max(1) as f32,
+                    )),
+            );
         }
         if let Some(error) = &self.timbre_map.error {
-            body = body.child(error.clone());
+            content = content.child(
+                Label::new(format!("! {error}"))
+                    .color(TextColor::Danger)
+                    .size(TextSize::Small),
+            );
         }
         if let Some(map) = &self.timbre_map.map {
             if map.sounds.is_empty() {
-                body = body.child(self.t(Key::TimbreMapEmpty));
-            }
-            let positions = plot_positions(map.positions());
-            let neighbors = self
-                .timbre_map
-                .selected
-                .map(|i| map.nearest(i, 8))
-                .unwrap_or_default();
-            let mut plot = div()
-                .id("timbre-plot")
-                .relative()
-                .w_full()
-                .h(px(290.0))
-                .flex_shrink_0()
-                .bg(theme.surface_sunken)
-                .border_1()
-                .border_color(theme.border)
-                .overflow_hidden();
-            for (i, position) in positions.iter().enumerate() {
-                let selected = self.timbre_map.selected == Some(i);
-                let nearby = neighbors.iter().any(|(index, _)| *index == i);
-                let color = cluster_color(map.clusters()[i], theme);
-                plot = plot.child(
-                    div()
-                        .id(("timbre-point", i))
-                        .debug_selector(move || format!("timbre-point-{i}"))
-                        .absolute()
-                        .left(relative(position[0]))
-                        .top(relative(position[1]))
-                        .size(px(if selected { 16.0 } else { 11.0 }))
-                        .rounded_full()
-                        .bg(color)
-                        .border_2()
-                        .border_color(if selected {
-                            theme.text
-                        } else if nearby {
-                            theme.accent
-                        } else {
-                            color
-                        })
-                        .cursor_pointer()
-                        .tooltip(crate::ui::tooltip::keyed_tip(
-                            map.sounds[i].name.clone(),
-                            "",
-                            theme,
-                        ))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.select_timbre(i);
-                            cx.notify();
-                        })),
-                );
-            }
-            body = body
-                .child(plot)
-                .child(div().text_xs().text_color(theme.text_muted).child(format!(
-                    "{} · {}: {:.0}% · {}: {}",
-                    self.t(Key::TimbreMapGeometry),
-                    self.t(Key::TimbreMapVariance),
-                    map.explained_variance() * 100.0,
-                    self.t(Key::TimbreMapSkipped),
-                    map.skipped.len()
-                )));
-            if let Some(index) = self.timbre_map.selected {
-                body = body.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .child(map.sounds[index].name.clone()),
-                        )
-                        .child(button(
-                            "timbre-use",
-                            self.t(Key::TimbreMapUse),
-                            ButtonStyle::Primary,
-                            false,
-                            theme.accent,
-                            theme,
-                            cx.listener(|this, _, _, cx| {
-                                this.adopt_timbre();
-                                cx.notify();
-                            }),
-                        )),
-                );
-            }
-            if let Some(track) = self
-                .session
-                .audition_track(self.selected_track)
-                .and_then(|id| self.project().track(id))
-            {
-                body = body.child(div().text_xs().text_color(theme.text_muted).child(format!(
-                    "{}: {}",
-                    self.t(Key::TimbreMapAudition),
-                    track.name
-                )));
-            }
-            let mut lists = div().flex().gap_3().h(px(145.0)).min_h_0();
-            for (id, heading, entries) in [
-                (
-                    "timbre-neighbors",
-                    Key::TimbreMapNearest,
-                    neighbors
-                        .iter()
-                        .map(|(i, d)| (*i, format!("{:.2} · {}", d, map.sounds[*i].name)))
-                        .collect::<Vec<_>>(),
-                ),
-                (
-                    "timbre-all",
-                    Key::TimbreMapAll,
-                    map.sounds
+                content = content.child(EmptyState::new(
+                    IconName::Music,
+                    self.t(Key::TimbreMapEmpty),
+                ));
+            } else {
+                let (positions, extent) = plot_data(map.positions());
+                let neighbors = self
+                    .timbre_map
+                    .selected
+                    .map(|i| map.nearest(i, 8))
+                    .unwrap_or_default();
+                let mut plot = Plot3d::new()
+                    .labels("PC1", "PC2", "PC3")
+                    .x_range(-extent, extent)
+                    .y_range(-extent, extent)
+                    .z_range(-extent, extent)
+                    .view(
+                        self.timbre_map.camera.azimuth,
+                        self.timbre_map.camera.elevation,
+                    );
+                for cluster in 0..=map.clusters().iter().copied().max().unwrap_or(0) {
+                    let points = positions
                         .iter()
                         .enumerate()
-                        .map(|(i, s)| (i, s.name.clone()))
-                        .collect(),
-                ),
-            ] {
-                lists = lists.child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(self.t(heading))
-                        .child(div().id(id).overflow_y_scroll().min_h_0().children(
-                            entries.into_iter().map(|(i, label)| {
-                                button(
-                                    SharedString::from(format!("{id}-{i}")),
-                                    label,
-                                    ButtonStyle::Ghost,
-                                    self.timbre_map.selected == Some(i),
-                                    theme.accent,
-                                    theme,
-                                    cx.listener(move |this, _, _, cx| {
+                        .filter(|(i, _)| map.clusters()[*i] == cluster)
+                        .map(|(_, p)| *p)
+                        .collect();
+                    plot = plot.scatter(points, Some(cluster_color(cluster, &self.theme)));
+                }
+                // Small three-axis crosses identify the selected source without relying on hue.
+                if let Some(index) = self.timbre_map.selected {
+                    for axis in 0..3 {
+                        let mut a = positions[index];
+                        let mut b = a;
+                        a[axis] -= extent * 0.035;
+                        b[axis] += extent * 0.035;
+                        plot = plot.curve(vec![a, b], Some(theme.colors.text));
+                    }
+                    for (i, _) in &neighbors {
+                        plot = plot.scatter(vec![positions[*i]], Some(theme.colors.accent));
+                    }
+                }
+                let bounds = self.timbre_map.camera.bounds.clone();
+                let picking = positions.clone();
+                let hovering = positions;
+                let mut well = div()
+                    .id("timbre-plot")
+                    .debug_selector(|| "timbre-plot".into())
+                    .relative()
+                    .flex_1()
+                    .min_h(gpui::rems(16.))
+                    .w_full()
+                    .rounded(theme.shape.radius_sm)
+                    .bg(theme.colors.sunken)
+                    .overflow_hidden()
+                    .cursor_grab()
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+                            this.timbre_map.camera.press(event.position);
+                            cx.stop_propagation();
+                        }),
+                    )
+                    .on_mouse_move(
+                        cx.listener(move |this, event: &gpui::MouseMoveEvent, _, cx| {
+                            if this
+                                .timbre_map
+                                .camera
+                                .drag(event.position, event.dragging())
+                            {
+                                this.timbre_map.hovered = None;
+                                cx.notify();
+                            } else {
+                                let hovered =
+                                    this.timbre_map
+                                        .camera
+                                        .pick(&hovering, extent, event.position);
+                                if this.timbre_map.hovered != hovered {
+                                    this.timbre_map.hovered = hovered;
+                                    cx.notify();
+                                }
+                            }
+                        }),
+                    )
+                    .on_mouse_up(
+                        gpui::MouseButton::Left,
+                        cx.listener(move |this, event: &gpui::MouseUpEvent, _, cx| {
+                            if this.timbre_map.camera.release()
+                                && let Some(i) =
+                                    this.timbre_map
+                                        .camera
+                                        .pick(&picking, extent, event.position)
+                            {
+                                this.select_timbre(i);
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .on_mouse_up_out(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, _| {
+                            this.timbre_map.camera.release();
+                        }),
+                    )
+                    .child(plot)
+                    .child(
+                        gpui::canvas(
+                            move |rect, _, _| {
+                                bounds.set(rect);
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full(),
+                    );
+                if let Some(i) = self.timbre_map.hovered.and_then(|i| map.sounds.get(i)) {
+                    well = well.tooltip(crate::ui::tooltip::keyed_tip(
+                        i.name.clone(),
+                        "",
+                        &self.theme,
+                    ));
+                }
+                let camera = &self.timbre_map.camera;
+                let views = SegmentedControl::new(
+                    "timbre-views",
+                    [
+                        Key::TimbreMapView3d,
+                        Key::TimbreMapViewTop,
+                        Key::TimbreMapViewFront,
+                        Key::TimbreMapViewSide,
+                    ]
+                    .map(|key| Segment::label(self.t(key))),
+                    camera.preset.unwrap_or(usize::MAX),
+                )
+                .size(ControlSize::Small)
+                .on_select(cx.listener(|this, index: &usize, _, cx| {
+                    this.timbre_map.camera.set_view(*index);
+                    cx.notify();
+                }));
+                let mut turns = div().flex().items_center().gap(spacing.xs);
+                for (id, icon, label, azimuth, elevation) in [
+                    (
+                        "timbre-left",
+                        IconName::ChevronLeft,
+                        Key::TimbreMapTurnLeft,
+                        -15.,
+                        0.,
+                    ),
+                    (
+                        "timbre-right",
+                        IconName::ChevronRight,
+                        Key::TimbreMapTurnRight,
+                        15.,
+                        0.,
+                    ),
+                    (
+                        "timbre-up",
+                        IconName::ChevronUp,
+                        Key::TimbreMapTiltUp,
+                        0.,
+                        15.,
+                    ),
+                    (
+                        "timbre-down",
+                        IconName::ChevronDown,
+                        Key::TimbreMapTiltDown,
+                        0.,
+                        -15.,
+                    ),
+                ] {
+                    turns = turns.child(
+                        Button::icon_only(id, icon)
+                            .ghost()
+                            .size(ControlSize::Small)
+                            .tooltip(self.t(label))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.timbre_map.camera.turn(azimuth, elevation);
+                                cx.notify();
+                            })),
+                    );
+                }
+                let mut legend = div().flex().flex_wrap().gap(spacing.sm);
+                for cluster in 0..=map.clusters().iter().copied().max().unwrap_or(0) {
+                    legend = legend.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(spacing.xs)
+                            .child(StatusDot::new(cluster_color(cluster, &self.theme)))
+                            .child(
+                                Label::new(format!(
+                                    "{} {}",
+                                    self.t(Key::TimbreMapGroup),
+                                    cluster + 1
+                                ))
+                                .size(TextSize::XSmall)
+                                .color(TextColor::Muted),
+                            ),
+                    );
+                }
+                let figure = Card::new()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h(gpui::rems(24.))
+                    .p(spacing.lg)
+                    .gap(spacing.md)
+                    .child(
+                        SectionHeader::new(self.t(Key::TimbreMap))
+                            .description(self.t(Key::TimbreMapHint)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(spacing.sm)
+                            .child(views)
+                            .child(turns)
+                            .child(
+                                Label::new(format!(
+                                    "{:.0}° / {:.0}°",
+                                    camera.azimuth, camera.elevation
+                                ))
+                                .mono()
+                                .size(TextSize::XSmall)
+                                .color(TextColor::Muted),
+                            ),
+                    )
+                    .child(well)
+                    .child(legend)
+                    .child(
+                        Label::new(self.t(Key::TimbreMapGeometry))
+                            .size(TextSize::XSmall)
+                            .color(TextColor::Muted),
+                    );
+                let selected = self.timbre_map.selected.and_then(|i| map.sounds.get(i));
+                let target = self
+                    .selected_track
+                    .filter(|id| self.session.audition_track(Some(*id)) == Some(*id));
+                let list_nearest = self.timbre_map.list_nearest;
+                let entries: Vec<_> = if list_nearest {
+                    neighbors
+                        .iter()
+                        .map(|(i, distance)| (*i, Some(*distance)))
+                        .collect()
+                } else {
+                    (0..map.sounds.len()).map(|i| (i, None)).collect()
+                };
+                let list_id = if list_nearest {
+                    "timbre-neighbors"
+                } else {
+                    "timbre-all"
+                };
+                let narrow = window.viewport_size().width < window.rem_size() * 48.;
+                let inspector = div()
+                    .flex()
+                    .flex_col()
+                    .gap(spacing.md)
+                    .w(gpui::rems(20.))
+                    .when(narrow, |column| {
+                        column.w_full().h(gpui::rems(24.)).flex_shrink_0()
+                    })
+                    .max_w_full()
+                    .min_w_0()
+                    .min_h(gpui::rems(18.))
+                    .child(SectionHeader::new(selected.map_or_else(
+                        || self.t(Key::TimbreMapSelect).to_owned(),
+                        |s| s.name.clone(),
+                    )))
+                    .children(
+                        self.session
+                            .audition_track(self.selected_track)
+                            .and_then(|id| self.project().track(id))
+                            .map(|track| {
+                                Label::new(format!(
+                                    "{}: {}",
+                                    self.t(Key::TimbreMapAudition),
+                                    track.name
+                                ))
+                                .size(TextSize::Small)
+                                .color(TextColor::Muted)
+                            }),
+                    )
+                    .child(
+                        Button::new("timbre-use", self.t(Key::TimbreMapUse))
+                            .primary()
+                            .disabled(selected.is_none() || target.is_none())
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.adopt_timbre();
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        SegmentedControl::new(
+                            "timbre-lists",
+                            [
+                                Segment::label(self.t(Key::TimbreMapAll)),
+                                Segment::label(self.t(Key::TimbreMapNearest)),
+                            ],
+                            usize::from(list_nearest),
+                        )
+                        .size(ControlSize::Small)
+                        .on_select(cx.listener(
+                            |this, i: &usize, _, cx| {
+                                this.timbre_map.list_nearest = *i == 1;
+                                cx.notify();
+                            },
+                        )),
+                    )
+                    .child(
+                        div()
+                            .id(list_id)
+                            .flex_1()
+                            .min_h(gpui::rems(10.))
+                            .p(spacing.xs)
+                            .overflow_y_scroll()
+                            .children(entries.into_iter().map(|(i, distance)| {
+                                ListItem::new(
+                                    SharedString::from(format!("{list_id}-{i}")),
+                                    map.sounds[i].name.clone(),
+                                )
+                                .selected(self.timbre_map.selected == Some(i))
+                                .icon(IconName::Music)
+                                .icon_color(cluster_color(map.clusters()[i], &self.theme))
+                                .trailing(
+                                    Label::new(distance.map_or_else(
+                                        || {
+                                            format!(
+                                                "{} {}",
+                                                self.t(Key::TimbreMapGroup),
+                                                map.clusters()[i] + 1
+                                            )
+                                        },
+                                        |d| format!("{d:.2}"),
+                                    ))
+                                    .mono()
+                                    .size(TextSize::XSmall)
+                                    .color(TextColor::Muted),
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
                                         this.select_timbre(i);
                                         cx.notify();
-                                    }),
-                                )
-                                .w_full()
-                                .justify_start()
-                                .into_any_element()
-                            }),
-                        )),
+                                    },
+                                ))
+                            })),
+                    );
+                content = content.child(
+                    div()
+                        .id("timbre-map-body")
+                        .flex()
+                        .flex_1()
+                        .min_h_0()
+                        .gap(spacing.lg)
+                        .when(narrow, |row| row.flex_col().overflow_y_scroll())
+                        .child(figure)
+                        .child(inspector),
                 );
             }
-            body = body.child(lists);
+        } else if !busy {
+            content = content.child(EmptyState::new(
+                IconName::Music,
+                self.t(Key::TimbreMapReady),
+            ));
         }
+        let summary = self
+            .timbre_map
+            .map
+            .as_ref()
+            .map(|map| {
+                format!(
+                    "{}: {:.0}% · {}: {}",
+                    self.t(Key::TimbreMapVariance),
+                    map.explained_variance() * 100.,
+                    self.t(Key::TimbreMapSkipped),
+                    map.skipped.len()
+                )
+            })
+            .unwrap_or_default();
         Some(
             div()
                 .id("timbre-map")
+                .key_context("AurisVisualizationControls")
+                .on_action(|_: &super::widgets::ClaimVisualizationActivation, _, _| {})
                 .size_full()
                 .flex()
                 .flex_col()
-                .gap_2()
-                .p_3()
-                .bg(theme.surface)
-                .text_color(theme.text)
-                .border_1()
-                .border_color(theme.border)
-                .shadow_lg()
+                .bg(theme.window_fill())
+                .text_color(theme.colors.text)
+                .font(theme.typography.ui.clone())
                 .occlude()
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
-                        .justify_between()
-                        .child(self.t(Key::TimbreMap))
+                        .justify_end()
+                        .gap(spacing.sm)
+                        .p(spacing.md)
+                        .flex_shrink_0()
+                        .border_b_1()
+                        .border_color(theme.colors.separator)
                         .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(button(
-                                    "timbre-rescan",
-                                    self.t(Key::TimbreMapRescan),
-                                    ButtonStyle::Normal,
-                                    false,
-                                    theme.accent,
-                                    theme,
-                                    cx.listener(|this, _, _, cx| {
-                                        this.scan_timbre_map(cx);
-                                        cx.notify();
-                                    }),
-                                ))
-                                .child(button(
-                                    "timbre-close",
-                                    self.t(Key::Close),
-                                    ButtonStyle::Normal,
-                                    false,
-                                    theme.accent,
-                                    theme,
-                                    cx.listener(|this, _, _, cx| {
-                                        this.close_timbre_map();
-                                        cx.notify();
-                                    }),
-                                )),
+                            Button::new("timbre-rescan", self.t(Key::TimbreMapRescan))
+                                .size(ControlSize::Small)
+                                .disabled(busy)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.scan_timbre_map(cx);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new("timbre-close", self.t(Key::Close))
+                                .ghost()
+                                .size(ControlSize::Small)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.close_timbre_map();
+                                    cx.notify();
+                                })),
                         ),
                 )
                 .child(
                     div()
-                        .text_xs()
-                        .text_color(theme.text_muted)
-                        .child(self.t(Key::TimbreMapHint)),
-                )
-                .child(
-                    div()
-                        .id("timbre-map-body")
-                        .overflow_y_scroll()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
                         .min_h_0()
-                        .child(body),
+                        .p(spacing.lg)
+                        .child(content),
                 )
+                .child(StatusBar::new().message(summary).busy(busy))
                 .into_any_element(),
         )
     }
-}
-
-fn plot_positions(positions: &[[f64; 2]]) -> Vec<[f32; 2]> {
-    let mut low = [f64::INFINITY; 2];
-    let mut high = [f64::NEG_INFINITY; 2];
-    for p in positions {
-        for axis in 0..2 {
-            low[axis] = low[axis].min(p[axis]);
-            high[axis] = high[axis].max(p[axis]);
-        }
-    }
-    let span = (high[0] - low[0]).max(high[1] - low[1]).max(1e-9);
-    positions
-        .iter()
-        .map(|p| {
-            std::array::from_fn(|axis| {
-                (0.48 + 0.88 * (p[axis] - (low[axis] + high[axis]) * 0.5) / span) as f32
-            })
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -475,6 +697,55 @@ mod tests {
         paint(&app, cx);
         // GPUI's debug selector API requires a static string, including for dynamic rows.
         let mut utility = map_window(&app, cx);
+        // Picking rotates the display only; it must never author instrument changes.
+        let (picked, at) = app.read_with(&utility, |this, _| {
+            let map = this.timbre_map.map.as_ref().unwrap();
+            let (positions, extent) = plot_data(map.positions());
+            let camera = &this.timbre_map.camera;
+            camera
+                .projected(&positions, extent)
+                .iter()
+                .enumerate()
+                .find_map(|(i, (at, _))| {
+                    (camera.pick(&positions, extent, *at) == Some(i)).then_some((i, *at))
+                })
+                .unwrap()
+        });
+        utility.simulate_click(at, gpui::Modifiers::none());
+        app.read_with(&utility, |this, _| {
+            assert_eq!(this.timbre_map.selected, Some(picked));
+            assert_eq!(this.project(), &before);
+        });
+        let center = utility.debug_bounds("timbre-plot").unwrap().center();
+        crate::harness::drag(
+            &mut utility,
+            center,
+            center + gpui::point(gpui::px(50.), gpui::px(20.)),
+        );
+        app.read_with(&utility, |this, _| {
+            assert_eq!(this.timbre_map.selected, Some(picked));
+            assert_eq!(this.timbre_map.camera.preset, None);
+            assert_eq!(this.project(), &before);
+        });
+        // View presets and turn buttons remain reachable without pointer gestures.
+        paint(&app, &mut utility);
+        click("timbre-views-1", &mut utility);
+        app.read_with(&utility, |this, _| {
+            assert_eq!(this.timbre_map.camera.elevation, 90.)
+        });
+        click("timbre-right", &mut utility);
+        let azimuth = app.read_with(&utility, |this, _| this.timbre_map.camera.azimuth);
+        utility.update(|window, cx| window.focus(&app.read(cx).focus));
+        // Rescan, Close, four standard views, then left and right rotation.
+        utility.simulate_keystrokes("tab tab tab tab tab tab tab tab");
+        utility.simulate_keystrokes("space");
+        utility.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
+        app.read_with(&utility, |this, _| {
+            assert_eq!(this.timbre_map.camera.azimuth, azimuth + 15.)
+        });
+        paint(&app, &mut utility);
         click(
             Box::leak(format!("timbre-all-{index}").into_boxed_str()),
             &mut utility,
@@ -483,6 +754,36 @@ mod tests {
             assert_eq!(this.project(), &before);
             assert_eq!(this.timbre_map.selected, Some(index));
         });
+        for direction in [
+            atelier::Direction::Studio,
+            atelier::Direction::Glass,
+            atelier::Direction::Mono,
+        ] {
+            for appearance in [atelier::Appearance::Light, atelier::Appearance::Dark] {
+                app.update(&mut utility, |this, cx| {
+                    this.theme.atelier = atelier::Theme::new(direction, appearance);
+                    this.theme.install(cx);
+                    cx.notify();
+                });
+                crate::harness::resize(
+                    &app,
+                    &mut utility,
+                    gpui::size(gpui::px(900.), gpui::px(700.)),
+                );
+                assert!(utility.debug_bounds("timbre-plot").is_some());
+                crate::harness::resize(
+                    &app,
+                    &mut utility,
+                    gpui::size(gpui::px(640.), gpui::px(540.)),
+                );
+                assert!(utility.debug_bounds("timbre-plot").is_some());
+            }
+        }
+        crate::harness::resize(
+            &app,
+            &mut utility,
+            gpui::size(gpui::px(900.), gpui::px(700.)),
+        );
         paint(&app, cx);
         click("timbre-use", &mut utility);
         app.update(cx, |this, _| {

@@ -130,16 +130,16 @@ pub fn timbre_features(
     Ok(Some(features))
 }
 
-/// Standardized features, a two-component PCA display and deterministic k-means memberships.
+/// Standardized features, a three-component PCA display and deterministic k-means memberships.
 #[derive(Clone, Debug)]
 pub struct TimbreProjection {
     /// Coordinates centered and scaled per feature; use these for nearest-neighbor queries.
     pub standardized: Vec<Vec<f64>>,
-    /// Two principal component scores, in the input order. Axes have no fixed perceptual label.
-    pub positions: Vec<[f64; 2]>,
+    /// Three principal component scores, in input order. Axes have no fixed perceptual label.
+    pub positions: Vec<[f64; 3]>,
     /// Zero-based k-means groups fitted in feature space, not display coordinates.
     pub clusters: Vec<usize>,
-    /// Fraction of total standardized variance represented in this plane.
+    /// Fraction of total standardized variance represented in this volume.
     pub explained_variance: f64,
 }
 
@@ -172,7 +172,7 @@ pub fn standardize_timbres(rows: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, &'static 
 /// Fits a bounded, reproducible exploratory map. Empty input produces an empty map.
 ///
 /// Constant features become zero. Deterministically restarted, matrix-free power iteration finds
-/// two PCA axes without a dense covariance matrix. Stable ties make both the map and k-means
+/// three PCA axes without a dense covariance matrix. Stable ties make both the map and k-means
 /// with farthest-first seeds repeatable.
 pub fn project_timbres(
     rows: &[Vec<f64>],
@@ -183,9 +183,9 @@ pub fn project_timbres(
     }
     let data = standardize_timbres(rows)?;
     let dims = rows.first().map_or(0, Vec::len);
-    let mut positions = vec![[0.0; 2]; rows.len()];
+    let mut positions = vec![[0.0; 3]; rows.len()];
     let mut axes: Vec<Vec<f64>> = Vec::new();
-    for component in 0..2 {
+    for component in 0..3 {
         // The largest residual row provides a seed even for low-rank catalogues. It can be
         // orthogonal to a stronger shared direction, so also try two mixed feature seeds.
         let mut largest = vec![0.0; dims];
@@ -413,6 +413,32 @@ mod tests {
     }
 
     #[test]
+    fn projection_keeps_three_independent_directions_without_inventing_a_fourth() {
+        let rows: Vec<_> = (0..8)
+            .map(|i| {
+                vec![
+                    if i & 1 == 0 { -1. } else { 1. },
+                    if i & 2 == 0 { -1. } else { 1. },
+                    if i & 4 == 0 { -1. } else { 1. },
+                ]
+            })
+            .collect();
+        let map = project_timbres(&rows, 2).unwrap();
+        assert!((map.explained_variance - 1.).abs() < 1e-9);
+        for i in 0..rows.len() {
+            for j in 0..rows.len() {
+                assert!(
+                    (distance(&map.standardized[i], &map.standardized[j])
+                        - distance(&map.positions[i], &map.positions[j]))
+                    .abs()
+                        < 1e-6
+                );
+            }
+        }
+        assert!(map.positions.iter().any(|p| p[2].abs() > 0.5));
+    }
+
+    #[test]
     fn projection_prefers_shared_variance_over_an_orthogonal_outlier() {
         let mut rows = Vec::new();
         for _ in 0..3 {
@@ -429,9 +455,16 @@ mod tests {
         ]);
         let map = project_timbres(&rows, 3).unwrap();
         // Standardization gives eigenvalues 28, 28 and 14. The largest individual rows
-        // occupy only the weaker fifth axis, which neither principal component should keep.
-        assert!((map.explained_variance - 0.8).abs() < 1e-9);
-        assert!(map.positions[12..].iter().all(|p| dot(p, p) < 1e-9));
+        // occupy only the weaker fifth axis, which belongs to the third component.
+        assert!((map.explained_variance - 1.0).abs() < 1e-9);
+        assert!(
+            map.positions[12..]
+                .iter()
+                .all(|p| p[0].powi(2) + p[1].powi(2) < 1e-9),
+            "outlier coordinates: {:?}",
+            &map.positions[12..]
+        );
+        assert!(map.positions[12..].iter().all(|p| p[2].abs() > 1.0));
         assert_eq!(map.positions, project_timbres(&rows, 3).unwrap().positions);
     }
 
@@ -439,7 +472,7 @@ mod tests {
     fn constant_empty_and_invalid_catalogues_are_handled() {
         assert!(project_timbres(&[], 4).unwrap().positions.is_empty());
         let map = project_timbres(&[vec![1.0; 3]; 1], 5).unwrap();
-        assert_eq!(map.positions, vec![[0.0; 2]]);
+        assert_eq!(map.positions, vec![[0.0; 3]]);
         assert!(project_timbres(&[vec![f64::INFINITY]], 1).is_err());
         assert!(project_timbres(&[vec![1.0], vec![]], 1).is_err());
     }

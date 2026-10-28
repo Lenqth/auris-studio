@@ -251,15 +251,15 @@ impl TimbreMapJob {
 }
 
 impl TimbreMap {
-    /// Raw two-component PCA coordinates in source order.
-    pub fn positions(&self) -> &[[f64; 2]] {
+    /// Raw three-component PCA coordinates in source order.
+    pub fn positions(&self) -> &[[f64; 3]] {
         &self.projection.positions
     }
     /// Zero-based group labels computed in standardized feature space.
     pub fn clusters(&self) -> &[usize] {
         &self.projection.clusters
     }
-    /// Fraction of feature variance retained by the two displayed components.
+    /// Fraction of feature variance retained by the three displayed components.
     pub fn explained_variance(&self) -> f64 {
         self.projection.explained_variance
     }

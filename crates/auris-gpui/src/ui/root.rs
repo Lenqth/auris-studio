@@ -376,9 +376,10 @@ impl AurisApp {
     pub(crate) fn input_root(&self, cx: &mut Context<Self>) -> gpui::Div {
         let modal_blocks_document_actions = self.modal_blocks_document_actions();
         div()
-            .capture_any_mouse_down(
-                cx.listener(|this, _, window, _| this.claim_event_window(window)),
-            )
+            .capture_any_mouse_down(cx.listener(|this, _, window, cx| {
+                this.claim_event_window(window);
+                atelier::set_focus_visible(false, cx);
+            }))
             .on_action(Self::window_listener(
                 cx,
                 |this, action: &crate::auxiliary_window::TogglePanelWindow, _, cx| {
