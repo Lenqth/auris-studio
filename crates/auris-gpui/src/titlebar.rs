@@ -5,8 +5,8 @@
 //! turn a button inside it into a window drag on Windows.
 
 use gpui::{
-    AnyElement, App, ClickEvent, CursorStyle, Decorations, Div, ElementId, IntoElement, Pixels,
-    ResizeEdge, SharedString, Stateful, TitlebarOptions, Window, WindowControlArea,
+    AnyElement, App, ClickEvent, CursorStyle, Decorations, Div, ElementId, Hsla, IntoElement,
+    Pixels, ResizeEdge, SharedString, Stateful, TitlebarOptions, Window, WindowControlArea,
     WindowDecorations, WindowOptions, div, point, prelude::*, px, svg,
 };
 
@@ -199,12 +199,29 @@ pub fn titlebar(window: &Window, theme: &Theme) -> Stateful<Div> {
         .pt(resize_inset(window))
         .border_b_1()
         .border_color(theme.border_subtle)
-        .bg(theme.atelier.colors.chrome)
+        .bg(bar_fill(
+            theme.atelier.colors.chrome,
+            cfg!(target_os = "windows"),
+        ))
         .text_color(if window.is_window_active() {
             theme.text
         } else {
             theme.text_muted
         })
+}
+
+/// The title bar's fill: the theme's chrome, made solid on Windows.
+///
+/// To put its acrylic behind the whole window, Atelier extends the DWM frame over the client
+/// area, and DWM then draws the native caption buttons in it. gpui's content sits above them,
+/// so they only show through translucent chrome — exactly under ours on a normal window, a few
+/// pixels off on a maximized one, where every glyph is seen twice.
+fn bar_fill(chrome: Hsla, windows: bool) -> Hsla {
+    if windows {
+        Hsla { a: 1.0, ..chrome }
+    } else {
+        chrome
+    }
 }
 
 /// What goes in a title bar laid out the way Atelier's `TitleBar` lays it out.
@@ -446,8 +463,7 @@ fn control(
         )
 }
 
-/// The caption glyph as an icon, not a stroked path: on a maximized Windows window GPUI's path
-/// pass drew these twice, a few pixels apart, while sprites land where they are laid out.
+/// The caption glyph, drawn as an icon like every other glyph in the window.
 fn control_icon(area: WindowControlArea, maximized: bool) -> gpui::Svg {
     let path = match area {
         WindowControlArea::Min => "icons/caption-minimize.svg",
@@ -460,7 +476,21 @@ fn control_icon(area: WindowControlArea, maximized: bool) -> gpui::Svg {
 
 #[cfg(test)]
 mod tests {
+    use gpui::hsla;
+
     use crate::harness::{open, paint, press, release};
+
+    #[test]
+    fn translucent_chrome_turns_solid_only_where_native_caption_buttons_lie_beneath() {
+        let glass = hsla(0.7, 0.05, 0.18, 0.42);
+        assert_eq!(super::bar_fill(glass, true).a, 1.0);
+        assert_eq!(
+            super::bar_fill(glass, true).l,
+            glass.l,
+            "same colour, only solid"
+        );
+        assert_eq!(super::bar_fill(glass, false), glass);
+    }
 
     #[gpui::test]
     fn a_caption_press_does_not_let_the_focusable_root_cancel_native_dragging(
