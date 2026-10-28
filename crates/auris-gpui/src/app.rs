@@ -2761,7 +2761,8 @@ impl AurisApp {
 
     // ---------------------------------------------------------------- metering
 
-    /// What a track's meter reads: both sides, and whether its material is stereo.
+    /// What a track's meter reads: both sides, and whether they have been carrying different
+    /// signals.
     pub(crate) fn track_meter(&self, index: usize) -> crate::ui::widgets::MeterReading {
         let meters = self.session.meters();
         crate::ui::widgets::MeterReading {
@@ -2846,12 +2847,13 @@ impl AurisApp {
         self.input_clipped || self.session.meters().anything_clipped()
     }
 
-    /// What the master meter reads. The master bus is stereo whatever feeds it.
+    /// What the master meter reads: both sides, and whether they have been carrying different
+    /// signals.
     pub(crate) fn master_meter(&self) -> crate::ui::widgets::MeterReading {
         let meters = self.session.meters();
         crate::ui::widgets::MeterReading {
             peaks: [0, 1].map(|channel| meters.master_channel_peak(channel)),
-            stereo: true,
+            stereo: meters.master_stereo(),
         }
     }
 

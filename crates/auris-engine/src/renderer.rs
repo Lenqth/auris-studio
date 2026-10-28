@@ -37,8 +37,10 @@ pub fn render_block(
     }
     for track in graph.tracks_mut() {
         track.peaks = [0.0, 0.0];
+        track.sides_differ = false;
     }
     graph.master_peak = [0.0, 0.0];
+    graph.master_sides_differ = false;
     if total == 0 {
         return;
     }
@@ -241,6 +243,7 @@ fn render_segment(
         for (channel, peak) in track.peaks.iter_mut().enumerate() {
             *peak = peak.max(track.scratch.channel_peak(channel));
         }
+        track.sides_differ |= sides_differ(track.scratch.channel(0), track.scratch.channel(1));
         if let Some(scope) = &track.overview_scope {
             scope.publish_stereo(
                 track.scratch.channel(0),
@@ -315,6 +318,7 @@ fn render_segment(
     }
     graph.master_peak[0] = graph.master_peak[0].max(master_scratch.channel_peak(0));
     graph.master_peak[1] = graph.master_peak[1].max(master_scratch.channel_peak(1));
+    graph.master_sides_differ |= sides_differ(master_scratch.channel(0), master_scratch.channel(1));
 
     // The click, last of all and never offline. Everything above it is the mix; this is a thing
     // laid over the top of the mix for somebody to play along to, so it is past the master fader,
@@ -597,6 +601,38 @@ fn mix_clip(clip: &RenderAudioClip, out: &mut AudioBuffer, position: u64, frames
             *sample += *input * clip.gain * clip.fade_gain(into_clip + index as u64);
         }
     }
+}
+
+/// Whether two channels carry different signals rather than one signal at two levels.
+///
+/// Every track renders two channels, because the pan has to put even a mono source somewhere, so
+/// the channel count cannot say whether there is stereo material in them. The samples can: one
+/// signal panned anywhere comes out as the same waveform scaled differently on each side, and
+/// two waveforms that are scaled copies of each other correlate perfectly. Anything else — a
+/// stereo recording, a chorus, a reverb's tail — does not. A side with nothing on it is a copy
+/// scaled by zero, so a hard-panned mono source is still one signal.
+///
+/// Three multiply-adds a frame and no allocation, so it runs on the audio thread for every
+/// track and every block.
+pub(crate) fn sides_differ(left: &[f32], right: &[f32]) -> bool {
+    /// Energy per sample below which a side counts as empty: -100 dBFS.
+    const SILENT: f64 = 1e-10;
+    /// How far from perfect correlation two sides may be and still be one signal. Generous
+    /// enough for rounding in the pan law and an effect's denormal noise, far tighter than any
+    /// real stereo material, which sits well below 0.99.
+    const ONE_SIGNAL: f64 = 1.0 - 1e-4;
+    let (mut ll, mut rr, mut lr) = (0.0_f64, 0.0_f64, 0.0_f64);
+    for (&l, &r) in left.iter().zip(right) {
+        let (l, r) = (f64::from(l), f64::from(r));
+        ll += l * l;
+        rr += r * r;
+        lr += l * r;
+    }
+    let frames = left.len().min(right.len()) as f64;
+    if ll <= SILENT * frames || rr <= SILENT * frames {
+        return false;
+    }
+    lr * lr < ONE_SIGNAL * ll * rr
 }
 
 /// Copies the stereo mix bus into `out` at `offset`, adapting to its channel count.
@@ -1493,46 +1529,80 @@ mod tests {
         assert_eq!(out.peak(), 0.0);
     }
 
-    /// One audio track playing a clip of `channels` channels: the left at 0.5, any right at 0.25.
-    fn clip_track(channels: usize) -> RenderGraph {
+    /// One audio track playing `sides` as its clip, panned to `pan`.
+    fn clip_track(sides: Vec<Vec<f32>>, pan: f32) -> RenderGraph {
         let mut project = Project::new("Width", SAMPLE_RATE);
         let track = project.add_audio_track("Clip");
+        let frames = sides[0].len();
         let source = project.add_audio_source(
             "s",
             auris_core::AssetPath::inside("Audio/s.wav"),
-            4_800,
+            frames as u64,
             SAMPLE_RATE,
-            channels,
+            sides.len(),
         );
         project.add_audio_clip(track, source, Ticks::ZERO).unwrap();
-        let mut buffer = AudioBuffer::new(channels, 4_800, SAMPLE_RATE);
-        buffer.channel_mut(0).fill(0.5);
-        if channels > 1 {
-            buffer.channel_mut(1).fill(0.25);
-        }
+        project.tracks[0].mixer.pan = pan;
         let mut bank = AudioSourceBank::new();
-        bank.insert(source, Arc::new(buffer));
+        bank.insert(
+            source,
+            Arc::new(AudioBuffer::from_planar(sides, SAMPLE_RATE).expect("planar")),
+        );
         RenderGraph::build(&project, &bank, &testkit::registry(), 512)
     }
 
     #[test]
-    fn a_track_is_metered_per_side_and_is_stereo_only_when_its_material_is() {
-        for (channels, stereo) in [(1, false), (2, true)] {
-            let mut graph = clip_track(channels);
-            assert_eq!(graph.track_is_stereo(0), stereo, "{channels}-channel clip");
+    fn two_bars_are_asked_for_only_when_the_sides_carry_different_signals() {
+        let wave = |hz: f32| -> Vec<f32> {
+            (0..4_800)
+                .map(|i| 0.5 * (std::f32::consts::TAU * hz * i as f32 / SAMPLE_RATE as f32).sin())
+                .collect()
+        };
+        let half: Vec<f32> = wave(440.0).iter().map(|s| s * 0.5).collect();
+        for (case, sides, pan, differ) in [
+            ("a mono clip", vec![wave(440.0)], 0.0, false),
+            (
+                "a mono clip panned hard left",
+                vec![wave(440.0)],
+                -1.0,
+                false,
+            ),
+            (
+                "one signal at two levels",
+                vec![wave(440.0), half],
+                0.0,
+                false,
+            ),
+            (
+                "two different signals",
+                vec![wave(440.0), wave(660.0)],
+                0.0,
+                true,
+            ),
+        ] {
+            let mut graph = clip_track(sides, pan);
             let mut transport = Transport::playing_from(0);
             let mut out = AudioBuffer::new(RENDER_CHANNELS, 512, SAMPLE_RATE);
             render_block(&mut graph, &mut transport, &mut out, false);
+            assert_eq!(graph.track_sides_differ(0), differ, "{case}");
             let [left, right] = graph.track_channel_peaks(0);
-            assert_eq!(graph.track_peak(0), left.max(right));
-            if stereo {
-                // Each side is read on its own: the right is half the left, as in the file.
-                assert!((right / left - 0.5).abs() < 1e-4, "{left} / {right}");
-            } else {
-                // A mono clip at the centre comes out of both sides alike.
-                assert!((left - right).abs() < 1e-6, "{left} / {right}");
-            }
+            assert_eq!(graph.track_peak(0), left.max(right), "{case}");
         }
+    }
+
+    #[test]
+    fn sides_are_one_signal_when_either_is_empty_or_one_is_a_scaled_copy() {
+        let left: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin()).collect();
+        let inverted: Vec<f32> = left.iter().map(|s| -0.3 * s).collect();
+        let other: Vec<f32> = (0..512).map(|i| (i as f32 * 0.071).cos()).collect();
+        assert!(!sides_differ(&left, &left));
+        assert!(
+            !sides_differ(&left, &inverted),
+            "a polarity flip is still one signal"
+        );
+        assert!(!sides_differ(&left, &[0.0; 512]));
+        assert!(!sides_differ(&[0.0; 512], &[0.0; 512]));
+        assert!(sides_differ(&left, &other));
     }
 
     #[test]

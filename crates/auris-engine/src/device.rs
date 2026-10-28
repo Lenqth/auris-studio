@@ -1158,7 +1158,7 @@ impl AudioEngine {
             self.meters.report_track(
                 index,
                 graph.track_channel_peaks(index),
-                graph.track_is_stereo(index),
+                graph.track_sides_differ(index),
                 frames,
                 self.sample_rate,
             );
@@ -1171,6 +1171,8 @@ impl AudioEngine {
                 self.sample_rate,
             );
         }
+        self.meters
+            .report_master_width(graph.master_sides_differ(), frames, self.sample_rate);
     }
 
     fn poll_commands(&mut self) {

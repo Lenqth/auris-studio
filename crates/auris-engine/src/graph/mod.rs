@@ -187,6 +187,8 @@ pub struct RenderGraph {
     pub(crate) metronome: crate::metronome::Metronome,
     pub(crate) master_scratch: AudioBuffer,
     pub(crate) master_peak: [f32; 2],
+    /// Whether the master's two sides carried different signals over the last block.
+    pub(crate) master_sides_differ: bool,
     /// Where a spectrum display, if one is open, gets its samples.
     ///
     /// Shared with the UI rather than owned by it, because only the render path ever sees a
@@ -543,7 +545,6 @@ impl RenderGraph {
                 })
                 .collect();
 
-            let stereo = source.is_stereo();
             tracks.push(RenderTrack {
                 id: track.id,
                 name: track.name.clone(),
@@ -560,7 +561,7 @@ impl RenderGraph {
                 one_shot: None,
                 continued_from: None,
                 peaks: [0.0, 0.0],
-                stereo,
+                sides_differ: false,
                 // Filled in below, once every strip in the project has been asked what it is
                 // listening to.
                 tap: None,
@@ -685,6 +686,7 @@ impl RenderGraph {
             },
             master_scratch,
             master_peak: [0.0, 0.0],
+            master_sides_differ: false,
             scope: Arc::new(crate::scope::Scope::new()),
             visualizer_scope: Arc::new(crate::scope::Scope::new()),
             signal_meters,
@@ -864,9 +866,11 @@ impl RenderGraph {
             .map_or([0.0, 0.0], |track| track.peaks)
     }
 
-    /// Whether a track's material is stereo; see [`RenderSource::is_stereo`].
-    pub fn track_is_stereo(&self, index: usize) -> bool {
-        self.tracks.get(index).is_some_and(RenderTrack::is_stereo)
+    /// Whether the two channels of a track's last rendered block carried different signals.
+    pub fn track_sides_differ(&self, index: usize) -> bool {
+        self.tracks
+            .get(index)
+            .is_some_and(RenderTrack::sides_differ)
     }
 
     /// Peak of one master channel over the last rendered block.
@@ -877,6 +881,11 @@ impl RenderGraph {
     /// Loudest master channel over the last rendered block.
     pub fn master_peak(&self) -> f32 {
         self.master_peak[0].max(self.master_peak[1])
+    }
+
+    /// Whether the master's two sides carried different signals over the last rendered block.
+    pub fn master_sides_differ(&self) -> bool {
+        self.master_sides_differ
     }
 
     /// How long the graph keeps producing sound after its last event, in frames.
@@ -1139,12 +1148,14 @@ impl RenderGraph {
                 send.delay.reset();
             }
             track.peaks = [0.0, 0.0];
+            track.sides_differ = false;
         }
         for input in &mut self.bus_inputs {
             input.clear();
         }
         self.master.reset();
         self.master_peak = [0.0, 0.0];
+        self.master_sides_differ = false;
     }
 }
 

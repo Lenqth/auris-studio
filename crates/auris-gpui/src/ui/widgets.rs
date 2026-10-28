@@ -1518,8 +1518,9 @@ pub fn level_meter(
 pub struct MeterReading {
     /// Left and right linear peaks.
     pub peaks: [f32; 2],
-    /// Whether the material is stereo. Mono material panned somewhere still comes out of two
-    /// channels, but it is one signal, and two bars for it would say there were two.
+    /// Whether the two sides have been carrying different signals. Mono material panned
+    /// somewhere still comes out of two channels, but it is one signal, and two bars for it
+    /// would say there were two.
     pub stereo: bool,
 }
 
