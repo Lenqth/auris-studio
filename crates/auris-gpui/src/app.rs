@@ -3493,7 +3493,8 @@ impl AurisApp {
         let panels = self.panels.clone();
         let agent = self.settings.agent.clone();
 
-        let bounds = Bounds::centered(None, size(px(560.), px(620.)), cx);
+        // Wide enough for the navigation column and a page beside it at its reading width.
+        let bounds = Bounds::centered(None, size(px(820.), px(640.)), cx);
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),

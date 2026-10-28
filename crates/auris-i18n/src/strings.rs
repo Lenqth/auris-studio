@@ -542,6 +542,22 @@ strings! {
     TabGeneral { en: "General", ja: "一般" }
     TabAudio { en: "Audio", ja: "オーディオ" }
     TabKeys { en: "Key Bindings", ja: "キー割り当て" }
+    SettingsGeneralHelp {
+        en: "Language, appearance, the toolbar and how the editor behaves.",
+        ja: "言語、外観、ツールバー、エディターの動作を設定します。"
+    }
+    SettingsAudioHelp {
+        en: "Where sound comes from and goes to, and how much the device buffers.",
+        ja: "音の入出力先と、デバイスのバッファサイズを設定します。"
+    }
+    SettingsAgentHelp {
+        en: "Which model the agent talks to and what it may change without asking.",
+        ja: "エージェントが使うモデルと、確認なしで変更できる範囲を設定します。"
+    }
+    SettingsKeysHelp {
+        en: "Click a shortcut, then press the keys you want instead.",
+        ja: "ショートカットをクリックして、割り当てたいキーを押してください。"
+    }
     LanguageHeading { en: "Language", ja: "言語" }
     LanguageFollowSystem { en: "System", ja: "システムに合わせる" }
     LanguageNote {
@@ -2288,9 +2304,24 @@ new のオプション
     BrowserSetupDiffSinger { en: "Set Up DiffSinger…", ja: "DiffSingerを設定…" }
     BrowserSetupLeapSinger { en: "Set Up LeapSinger…", ja: "LeapSingerを設定…" }
     VoiceSetupTitle { en: "Singing Backend Setup", ja: "歌声合成バックエンド設定" }
-    VoiceSetupVoicevox { en: "VOICEVOX Engine", ja: "VOICEVOX Engine設定" }
-    VoiceSetupDiffSinger { en: "DiffSinger", ja: "DiffSinger設定" }
-    VoiceSetupLeapSinger { en: "LeapSinger", ja: "LeapSinger設定" }
+    VoiceSetupVoicevox { en: "VOICEVOX Engine", ja: "VOICEVOX Engine" }
+    VoiceSetupDiffSinger { en: "DiffSinger", ja: "DiffSinger" }
+    VoiceSetupLeapSinger { en: "LeapSinger", ja: "LeapSinger" }
+    VoiceSetupVoicevoxBrief { en: "Sing through a running Engine", ja: "起動中のEngineで歌わせる" }
+    VoiceSetupDiffSingerBrief { en: "An OpenUtau voicebank", ja: "OpenUtau形式の音源" }
+    VoiceSetupLeapSingerBrief { en: "Exported ONNX models", ja: "書き出したONNXモデル" }
+    VoiceSetupVoicevoxHelp {
+        en: "Connect to VOICEVOX Engine, load its singers and choose who sings. If the Engine is not running, start it from here.",
+        ja: "VOICEVOX Engineに接続して歌い手を読み込み、歌わせる声を選びます。Engineが起動していなければ、ここから起動できます。"
+    }
+    VoiceSetupDiffSingerHelp {
+        en: "Choose the folder of an OpenUtau-compatible DiffSinger voicebank and name the files it uses. Writing the configuration registers the voice.",
+        ja: "OpenUtau互換のDiffSinger音源フォルダーを選び、使うファイルを指定します。設定を書き込むと声が登録されます。"
+    }
+    VoiceSetupConnection { en: "Connection", ja: "接続" }
+    VoiceSetupSingers { en: "Singers", ja: "歌い手" }
+    VoiceSetupFiles { en: "Files", ja: "ファイル" }
+    VoiceSetupModel { en: "Model", ja: "モデル" }
     VoiceSetupEntry { en: "Voice entry", ja: "ボイス設定ファイル" }
     VoiceSetupOpenEntry { en: "Open entry…", ja: "設定を開く…" }
     VoiceSetupChooseFile { en: "Choose…", ja: "選択…" }
@@ -2430,6 +2461,11 @@ mod tests {
             Key::FormatWav,
             Key::FormatFlac,
             Key::FormatMp3,
+            // Product names, which the navigation column shows as names rather than as the
+            // sentence 「…設定」 the old tab row needed.
+            Key::VoiceSetupVoicevox,
+            Key::VoiceSetupDiffSinger,
+            Key::VoiceSetupLeapSinger,
         ];
         for key in Key::ALL {
             if SHARED.contains(key) {

@@ -19,6 +19,10 @@ messages, status and error notices, thinking indicators, the composer frame, its
 lane, and keyboard-operable send/stop commands. The adapter keeps
 the existing Auris session state, editable fields, attachments, and permission handling in their
 own views while giving both workflows the same Atelier agent presentation primitives.
+An agent answer is drawn without Atelier's avatar-and-name line: a conversation has exactly two
+voices, the person's is the accent bubble on the trailing edge, and whatever is not in a bubble
+is the agent. The agent itself is marked by Atelier's sparkle wherever it is opened, and the
+composer's fast mode is a single bolt.
 
 Glass Dark is the first-run default; Glass Light is available in Appearance. Previously saved
 schemes and custom palettes retain their identifiers and document colours. Interface surfaces
@@ -33,7 +37,7 @@ same introductory state, message forms and inset composer. Saved dock widths rem
 
 Every window's title bar is composed by `titlebar::composed` the way Atelier's `TitleBar` is:
 the title sits on the window's centre line with a short subtitle beside it, Back (or, in the
-editor, Undo and Redo) leads at the left, and frequent commands sit at the trailing edge. The two
+editor, Undo and Redo) leads at the left, and nothing else sits in it. The two
 sides grow from bases that make up for the native traffic lights and caption buttons, so the
 title stays centred on the window rather than on whatever space the controls leave.
 
@@ -56,6 +60,14 @@ reflows. The workshop follows the upstream compose screen: one centred column of
 candidate cards (elevated, accent-bordered when chosen, agent-washed only while being written),
 the Atelier composer with the send button as its one primary, and a row of workshop options
 beneath it with "Use my preferences" as a `Switch`.
+
+Settings and the singing-backend setup are preferences windows in one shape: a leading
+`Sidebar` names every page in full (the settings search sits at its head, the setup guide at its
+foot), and each page opens with a `SectionHeader` saying what it covers, on a surface at a
+reading width with its own actions and status underneath. Atelier has no form pattern yet, so
+fields follow its `TextField` metrics with the label above the field and groups under a
+section-weight heading. The rows are `ui::widgets::nav_item` rather than Atelier's `ListItem`,
+which is pointer-only, so every page stays in the Tab order.
 
 Toolbar icon buttons are Atelier ghost buttons: no fill or hairline until hovered, and filled
 with their signal colour when latched.

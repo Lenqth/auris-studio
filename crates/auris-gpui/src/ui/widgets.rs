@@ -413,6 +413,88 @@ where
         .child(label)
 }
 
+/// One page of a navigation column: Atelier's `ListItem`, made reachable from the keyboard.
+///
+/// Atelier's row is drawn for the pointer only; a window whose pages are chosen from a sidebar
+/// still has to be operable with Tab and Enter, so this is the same row (icon lane, label, an
+/// optional faint description, the selected fill) with a focus stop and the shared focus ring.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn nav_item<F>(
+    id: &'static str,
+    label: impl Into<SharedString>,
+    description: Option<SharedString>,
+    glyph: atelier::IconName,
+    selected: bool,
+    enabled: bool,
+    theme: &Theme,
+    on_click: F,
+) -> gpui::Stateful<gpui::Div>
+where
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+{
+    let atelier = &theme.atelier;
+    let colors = &atelier.colors;
+    let height = match description {
+        Some(_) => atelier.density.row + atelier.typography.size_sm,
+        None => atelier.density.row,
+    };
+    let hover = colors.hover;
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(atelier.spacing.sm)
+        .h(height)
+        .px(atelier.spacing.sm)
+        .rounded(atelier.shape.radius_sm)
+        .border_1()
+        .border_color(gpui::transparent_black())
+        .text_size(atelier.typography.size_md)
+        .text_color(if selected {
+            colors.text
+        } else {
+            colors.text_muted
+        })
+        .when(selected, |row| {
+            row.bg(colors.selected)
+                .font_weight(atelier.typography.label_weight)
+        })
+        .when(enabled && !selected, |row| {
+            row.hover(move |style| style.bg(hover))
+        })
+        .when(enabled, |row| {
+            row.tab_index(0)
+                .focus(|row| row.border_color(theme.selection))
+                .on_click(on_click)
+        })
+        .when(!enabled, |row| row.opacity(0.62))
+        .child(div().flex().flex_none().justify_center().w(px(16.0)).child(
+            atelier::Icon::new(glyph).size(px(15.0)).color(if selected {
+                colors.accent_text
+            } else {
+                colors.text_faint
+            }),
+        ))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .child(div().truncate().child(label.into()))
+                .children(description.map(|description| {
+                    div()
+                        .truncate()
+                        .text_size(atelier.typography.size_sm)
+                        .font_weight(gpui::FontWeight::NORMAL)
+                        .text_color(colors.text_faint)
+                        .child(description)
+                })),
+        )
+}
+
 /// A square button holding one drawn icon, used in the transport bar.
 ///
 /// The icon is painted rather than typed so a row of them shares one weight and colour; see

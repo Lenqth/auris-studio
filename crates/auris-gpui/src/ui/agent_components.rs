@@ -4,7 +4,7 @@
 //! the same two voices. Keeping those voices in one adapter makes the Atelier design language
 //! visible in both places and prevents a new entry point from inventing a third chat treatment.
 
-use atelier::agent::{AssistantMessage, ChatNotice, ThinkingIndicator, UserMessage};
+use atelier::agent::{ChatNotice, ThinkingIndicator, UserMessage};
 use gpui::prelude::*;
 use gpui::{AnyElement, ElementId, IntoElement, ParentElement, SharedString, div};
 
@@ -44,21 +44,50 @@ pub(crate) fn user_message(id: impl Into<ElementId>, text: impl Into<SharedStrin
     UserMessage::new(text).id(id).into_any_element()
 }
 
-/// Draws an agent answer with the shared identity line and optional real Markdown body.
+/// Draws an agent answer: the prose alone, with no avatar or name above it.
+///
+/// Both conversations have exactly two voices, and the person's own sits in an accent bubble on
+/// the trailing edge; whatever is not in a bubble is the agent. Atelier's `AssistantMessage`
+/// always draws an identity line, which here only repeats what the layout already says, so the
+/// answer is drawn directly with the same type, spacing, arrival and streaming caret.
 pub(crate) fn assistant_message(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
     body: Option<AnyElement>,
     streaming: bool,
+    theme: &Theme,
+    cx: &gpui::App,
 ) -> AnyElement {
-    let mut message = AssistantMessage::new(text)
-        .id(id)
-        .name("Auris Agent")
-        .streaming(streaming);
-    if let Some(body) = body {
-        message = message.body(body);
-    }
-    message.into_any_element()
+    let id = id.into();
+    let text = text.into();
+    let atelier = &theme.atelier;
+    let body = body.unwrap_or_else(|| div().child(text).into_any_element());
+    let caret = streaming.then(|| {
+        atelier::motion::looping(
+            div()
+                .w(gpui::px(7.0))
+                .h(atelier.typography.size_md)
+                .rounded(gpui::px(1.0))
+                .bg(atelier.colors.agent),
+            (id.clone(), "caret"),
+            std::time::Duration::from_millis(1000),
+            1.0,
+            cx,
+            |caret, delta| caret.opacity(gpui::pulsating_between(0.2, 1.0)(delta)),
+        )
+    });
+    let message = div()
+        .flex()
+        .flex_col()
+        .gap(atelier.spacing.sm)
+        .text_size(atelier.typography.size_md)
+        .text_color(atelier.colors.text)
+        .child(body)
+        .children(caret);
+    atelier::motion::appear(message, id, cx, |row, delta| {
+        row.opacity(delta)
+            .mt(gpui::px(atelier::motion::lerp(8.0, 0.0, delta)))
+    })
 }
 
 /// Draws a workshop message through the same shared agent transcript primitives.
@@ -66,6 +95,8 @@ pub(crate) fn workshop_message(
     id: impl Into<ElementId>,
     user: bool,
     text: impl Into<SharedString>,
+    theme: &Theme,
+    cx: &gpui::App,
 ) -> AnyElement {
     let id = id.into();
     if user {
@@ -76,6 +107,8 @@ pub(crate) fn workshop_message(
             "",
             Some(div().child(text.into()).into_any_element()),
             false,
+            theme,
+            cx,
         )
     }
 }

@@ -3951,6 +3951,8 @@ impl AurisApp {
                     cx,
                 )),
                 streaming,
+                theme,
+                cx,
             ),
             ChatEntry::You { .. } => {
                 agent_components::user_message(("agent-message", index), text.clone())
@@ -4341,9 +4343,11 @@ impl AurisApp {
             )
             .when(self.agent_chat.preferences().supports_fast_mode(), |row| {
                 row.child(
+                    // A latching icon, like the transport's: lit when fast mode is on, with its
+                    // name and its cost in the tooltip.
                     button_enabled(
                         "agent-fast-mode",
-                        self.t(Key::AgentFastMode).to_owned(),
+                        "",
                         ButtonStyle::Ghost,
                         ButtonState::available(self.agent_chat.fast_mode, enabled),
                         theme.accent,
@@ -4353,8 +4357,23 @@ impl AurisApp {
                             cx.notify();
                         }),
                     )
+                    .w(theme.atelier.density.control_sm)
+                    .px_0()
+                    .child(icon(
+                        Icon::Bolt,
+                        theme.atelier.typography.size_md,
+                        if self.agent_chat.fast_mode {
+                            theme.text_on_accent
+                        } else {
+                            theme.text_muted
+                        },
+                    ))
                     .tooltip(crate::ui::tooltip::keyed_tip(
-                        self.t(Key::AgentFastModeHelp).to_owned(),
+                        format!(
+                            "{} — {}",
+                            self.t(Key::AgentFastMode),
+                            self.t(Key::AgentFastModeHelp)
+                        ),
                         "",
                         &theme,
                     )),

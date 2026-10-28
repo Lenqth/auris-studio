@@ -209,13 +209,13 @@ pub fn titlebar(window: &Window, theme: &Theme) -> Stateful<Div> {
 /// What goes in a title bar laid out the way Atelier's `TitleBar` lays it out.
 ///
 /// The title sits on the window's centre line, a short subtitle beside it rather than under it,
-/// with frequent commands at the two edges and draggable space between them and the title.
+/// with frequent commands at the leading edge and draggable space between them and the title.
+/// Nothing in Auris needs a trailing command yet: a page's own actions belong to the page.
 pub struct Parts {
     id: &'static str,
     title: SharedString,
     subtitle: Option<SharedString>,
     leading: Vec<AnyElement>,
-    trailing: Vec<AnyElement>,
 }
 
 impl Parts {
@@ -226,7 +226,6 @@ impl Parts {
             title: title.into(),
             subtitle: None,
             leading: Vec::new(),
-            trailing: Vec::new(),
         }
     }
 
@@ -239,12 +238,6 @@ impl Parts {
     /// A control at the leading edge, such as Back.
     pub fn leading(mut self, element: impl IntoElement) -> Self {
         self.leading.push(element.into_any_element());
-        self
-    }
-
-    /// A control at the trailing edge, before the window buttons.
-    pub fn trailing(mut self, element: impl IntoElement) -> Self {
-        self.trailing.push(element.into_any_element());
         self
     }
 }
@@ -284,13 +277,7 @@ pub fn composed(window: &Window, theme: &Theme, parts: Parts, controls: Div) -> 
         .child(drag_region(SharedString::from(format!("{id}-leading"))).flex_1());
     let trailing = side(leading_edge - trailing_edge)
         .pr(inset)
-        .child(drag_region(SharedString::from(format!("{id}-trailing"))).flex_1())
-        .children(
-            parts
-                .trailing
-                .into_iter()
-                .map(|child| div().flex().flex_none().child(child)),
-        );
+        .child(drag_region(SharedString::from(format!("{id}-trailing"))).flex_1());
     let subtitle = parts.subtitle.map(|subtitle| {
         let mut part = div();
         part.style().flex_shrink = Some(YIELD_SHRINK);

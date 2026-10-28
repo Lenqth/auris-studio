@@ -477,6 +477,8 @@ impl AurisApp {
                     ("song-workshop-message", i),
                     message.user,
                     message.text.clone(),
+                    &theme,
+                    cx,
                 ));
                 for (round_index, round) in snapshot
                     .document
