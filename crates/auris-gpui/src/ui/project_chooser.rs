@@ -19,9 +19,16 @@ use gpui::{
 
 use crate::app::{AurisApp, Pane};
 
-/// The start panel's largest size; it shrinks with the window below that.
-const PANEL_WIDTH: Pixels = px(1040.0);
-const PANEL_HEIGHT: Pixels = px(560.0);
+/// The start panel's largest size.
+const PANEL_WIDTH: Pixels = px(880.0);
+const PANEL_HEIGHT: Pixels = px(480.0);
+/// The size below which the panel stops yielding to the metal and takes the window instead, so
+/// its two cards and footer still fit side by side.
+const PANEL_MIN_WIDTH: Pixels = px(640.0);
+const PANEL_MIN_HEIGHT: Pixels = px(400.0);
+/// How much of the body the panel takes between those sizes. The rest is the liquid metal,
+/// which is the screen's welcome and should be seen rather than glimpsed at the edges.
+const PANEL_SHARE: f32 = 0.56;
 
 /// Which page of the start panel is showing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -56,6 +63,9 @@ pub(crate) struct WelcomeTransition {
     serial: u64,
     started: Instant,
     pub(crate) to_workshop: bool,
+    /// How opaque the shape is once it covers the whole body: the workshop's veil over the
+    /// metal, as it is on arrival or as it was when Back was pressed.
+    settle: f32,
 }
 
 impl WelcomeTransition {
@@ -64,11 +74,37 @@ impl WelcomeTransition {
     }
 }
 
+/// The start panel's size inside a body of `area` with at least `margin` around it.
+///
+/// A share of the body, so a bigger window shows more metal rather than a bigger panel, between
+/// a floor that keeps the panel usable and a ceiling past which it would only hold empty space.
+fn panel_size(area: Size<Pixels>, margin: Pixels) -> Size<Pixels> {
+    let fit = |extent: Pixels, least: Pixels, most: Pixels| {
+        (extent * PANEL_SHARE)
+            .max(least)
+            .min(most)
+            .min(extent - margin * 2.0)
+            .max(px(0.0))
+    };
+    size(
+        fit(area.width, PANEL_MIN_WIDTH, PANEL_WIDTH),
+        fit(area.height, PANEL_MIN_HEIGHT, PANEL_HEIGHT),
+    )
+}
+
 /// Where the start panel sits inside a body of `area`: its horizontal and vertical insets.
 fn panel_insets(area: Size<Pixels>, margin: Pixels) -> (Pixels, Pixels) {
-    let width = (area.width - margin * 2.0).min(PANEL_WIDTH).max(px(0.0));
-    let height = (area.height - margin * 2.0).min(PANEL_HEIGHT).max(px(0.0));
-    ((area.width - width) / 2.0, (area.height - height) / 2.0)
+    let panel = panel_size(area, margin);
+    (
+        (area.width - panel.width) / 2.0,
+        (area.height - panel.height) / 2.0,
+    )
+}
+
+/// The body below the title bar, which the backdrop fills and the panel is centred in.
+fn body_area(window: &Window) -> Size<Pixels> {
+    let viewport = window.viewport_size();
+    size(viewport.width, viewport.height - crate::titlebar::HEIGHT)
 }
 
 /// How opaque the arriving screen is at `delta`: it waits for the shape to have mostly arrived,
@@ -86,7 +122,12 @@ impl AurisApp {
     }
 
     /// Starts the hand-over between the start panel and the workshop, unless motion is off.
-    pub(crate) fn begin_welcome_transition(&mut self, to_workshop: bool, cx: &mut Context<Self>) {
+    pub(crate) fn begin_welcome_transition(
+        &mut self,
+        to_workshop: bool,
+        settle: f32,
+        cx: &mut Context<Self>,
+    ) {
         let motion = self.theme.atelier.motion;
         if !motion.enabled {
             self.welcome_transition = None;
@@ -99,6 +140,7 @@ impl AurisApp {
             serial,
             started: Instant::now(),
             to_workshop,
+            settle,
         });
         // The animation asks for frames only while it runs. Wake once after it, so the backdrop
         // is unmounted even when nothing else is drawing — a paused metal frame, for one.
@@ -145,15 +187,17 @@ impl AurisApp {
     }
 
     /// The panel-coloured shape that travels between the start panel and the whole body.
+    ///
+    /// Opaque as the panel and as opaque as the workshop's veil over the metal as the whole
+    /// body, so the shape becomes the veil rather than covering it and then vanishing.
     pub(crate) fn welcome_morph(
         &self,
         transition: WelcomeTransition,
         window: &Window,
     ) -> AnyElement {
+        let settle = transition.settle;
         let theme = &self.theme;
-        let viewport = window.viewport_size();
-        let area = size(viewport.width, viewport.height - crate::titlebar::HEIGHT);
-        let (inset_x, inset_y) = panel_insets(area, theme.atelier.spacing.xl);
+        let (inset_x, inset_y) = panel_insets(body_area(window), theme.atelier.spacing.xl);
         let radius = theme.atelier.shape.radius_xl;
         let to_workshop = transition.to_workshop;
         div()
@@ -175,6 +219,7 @@ impl AurisApp {
                         .top(inset_y * rest)
                         .bottom(inset_y * rest)
                         .rounded(radius * rest)
+                        .opacity(atelier::motion::lerp(1.0, settle, open))
                 },
             )
             .into_any_element()
@@ -209,7 +254,8 @@ impl AurisApp {
                 }
             }
             ChooserPage::New if chooser.ai => {
-                self.begin_welcome_transition(true, cx);
+                let arriving = super::song_workshop::workshop_veil(false, px(0.0));
+                self.begin_welcome_transition(true, arriving, cx);
                 self.open_song_workshop(window, cx);
             }
             ChooserPage::New => {
@@ -279,10 +325,10 @@ impl AurisApp {
         };
         Sidebar::new(Edge::Left)
             // Narrow windows give the cards the room; the sidebar is what yields first.
-            .w(if window.viewport_size().width < px(900.0) {
+            .w(if window.viewport_size().width < px(1200.0) {
                 px(176.0)
             } else {
-                px(232.0)
+                px(208.0)
             })
             .p(theme.atelier.spacing.sm)
             .gap(theme.atelier.spacing.xxs)
@@ -541,13 +587,13 @@ impl AurisApp {
             .border_t_1()
             .border_color(theme.border_subtle)
             .children(self.chooser_footer(cx));
+        let panel_size = panel_size(body_area(window), spacing.xl);
         let panel = div()
             .occlude()
             .relative()
             .flex()
-            .size_full()
-            .max_w(PANEL_WIDTH)
-            .max_h(PANEL_HEIGHT)
+            .w(panel_size.width)
+            .h(panel_size.height)
             .min_w_0()
             .min_h_0()
             .overflow_hidden()
@@ -632,6 +678,20 @@ impl AurisApp {
 
 #[cfg(test)]
 mod tests {
+    use gpui::{px, size};
+
+    #[test]
+    fn the_panel_leaves_most_of_a_large_window_to_the_metal_and_still_fits_a_small_one() {
+        let margin = px(24.0);
+        let large = super::panel_size(size(px(1600.0), px(1000.0)), margin);
+        assert_eq!(large, size(super::PANEL_WIDTH, super::PANEL_HEIGHT));
+        assert!(f32::from(large.width) * f32::from(large.height) < 1600.0 * 1000.0 * 0.3);
+        let medium = super::panel_size(size(px(1300.0), px(820.0)), margin);
+        assert!(medium.width < px(1300.0) * 0.6 && medium.height < px(820.0) * 0.6);
+        let small = super::panel_size(size(px(600.0), px(380.0)), margin);
+        assert_eq!(small, size(px(552.0), px(332.0)), "never past the margin");
+    }
+
     #[gpui::test]
     fn choosing_a_start_card_waits_for_the_explicit_commit(cx: &mut gpui::TestAppContext) {
         let (app, cx) = crate::harness::open(cx);

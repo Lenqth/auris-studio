@@ -546,6 +546,11 @@ impl AurisApp {
         if let Some(error) = &s.error {
             transcript = transcript.child(agent_components::error_notice(error.clone()));
         }
+        let has_messages = s
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.document.messages.is_empty());
+        let veil = workshop_veil(has_messages, -s.scroll.offset().y);
         let body = div()
             .id("song-workshop-body")
             .debug_selector(|| "song-workshop-body".into())
@@ -554,6 +559,9 @@ impl AurisApp {
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&s.scroll)
+            // The veil follows the scroll position, which the view reads while drawing; a wheel
+            // that moves the transcript has to ask for the next drawing.
+            .on_scroll_wheel(cx.listener(|_, _, _, cx| cx.notify()))
             .px(spacing.xxl)
             .py(spacing.xl)
             .flex()
@@ -633,10 +641,10 @@ impl AurisApp {
             Button::new("song-back", self.t(Key::WorkshopBack))
                 .ghost()
                 .icon(IconName::ChevronLeft)
-                .on_click(cx.listener(|this, _, window, cx| {
+                .on_click(cx.listener(move |this, _, window, cx| {
                     this.song_workshop = None;
                     this.session.stop_output_preview();
-                    this.begin_welcome_transition(false, cx);
+                    this.begin_welcome_transition(false, veil, cx);
                     this.focus.focus(window);
                     cx.notify();
                 })),
@@ -700,12 +708,17 @@ impl AurisApp {
                     .min_h_0()
                     .flex()
                     .flex_col()
-                    // While the start panel grows into this screen the metal stays beneath it and
-                    // the travelling shape supplies the surface; afterwards the surface is ours.
-                    .when(transition.is_none(), |area| area.bg(theme.surface))
-                    .when_some(transition, |area, transition| {
+                    // The metal the start panel floated over stays beneath this screen, behind a
+                    // veil of the surface colour: thin while the conversation is empty, thicker
+                    // once there is text to read, and solid once the transcript has been
+                    // scrolled. While the start panel grows into this screen the travelling
+                    // shape is the veil, and it arrives at the veil's thickness.
+                    .when(veil < 1.0 || transition.is_some(), |area| {
                         area.children(self.welcome_backdrop(window))
-                            .child(self.welcome_morph(transition, window))
+                    })
+                    .child(match transition {
+                        Some(transition) => self.welcome_morph(transition, window),
+                        None => workshop_veil_layer(has_messages, veil, &theme),
                     })
                     .child(match transition {
                         Some(transition) => self.welcome_arrival(transition, screen),
@@ -1030,9 +1043,61 @@ impl AurisApp {
     }
 }
 
+/// How thick the surface-coloured veil over the metal is, from 0 (bare metal) to 1 (solid).
+///
+/// An empty conversation is the welcome continued, so the metal shows through. Once there is a
+/// transcript the veil thickens enough to read over, and scrolling it — which is reading it —
+/// takes the veil the rest of the way to solid over the first [`VEIL_SCROLL`] of travel.
+pub(crate) fn workshop_veil(has_messages: bool, scrolled: gpui::Pixels) -> f32 {
+    if !has_messages {
+        return EMPTY_VEIL;
+    }
+    let travel = (f32::from(scrolled) / f32::from(VEIL_SCROLL)).clamp(0.0, 1.0);
+    atelier::motion::lerp(LOG_VEIL, 1.0, travel)
+}
+
+/// The veil over an empty conversation.
+const EMPTY_VEIL: f32 = 0.4;
+/// The veil over a transcript that has not been scrolled.
+const LOG_VEIL: f32 = 0.78;
+/// How far the transcript scrolls before the veil is solid.
+const VEIL_SCROLL: gpui::Pixels = gpui::px(160.0);
+
+/// The veil itself. Its first thickening, when the first message arrives, eases in rather than
+/// jumping; after that it follows the scroll position directly.
+fn workshop_veil_layer(has_messages: bool, veil: f32, theme: &crate::theme::Theme) -> AnyElement {
+    let layer = div().absolute().inset_0().bg(theme.surface);
+    if !has_messages {
+        return layer.opacity(veil).into_any_element();
+    }
+    gpui::AnimationExt::with_animation(
+        layer,
+        "workshop-veil-thickens",
+        gpui::Animation::new(theme.atelier.motion.normal).with_easing(atelier::motion::ease_out),
+        move |layer, delta| layer.opacity(atelier::motion::lerp(EMPTY_VEIL, veil, delta)),
+    )
+    .into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_metal_shows_through_an_empty_conversation_and_is_veiled_as_the_log_is_read() {
+        let empty = workshop_veil(false, gpui::px(0.0));
+        let unread = workshop_veil(true, gpui::px(0.0));
+        let partway = workshop_veil(true, VEIL_SCROLL / 2.0);
+        let read = workshop_veil(true, VEIL_SCROLL * 3.0);
+        assert!(empty < unread && unread < partway && partway < read);
+        assert!(
+            empty <= 0.5,
+            "an empty conversation leaves the metal visible"
+        );
+        assert_eq!(read, 1.0, "a scrolled transcript reads on a plain surface");
+        // Scrolling an empty conversation, if it ever overflowed, keeps the welcome.
+        assert_eq!(workshop_veil(false, VEIL_SCROLL * 3.0), empty);
+    }
     use auris_session::SongIdea;
     use std::sync::atomic::AtomicBool;
 

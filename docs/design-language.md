@@ -44,7 +44,7 @@ title stays centred on the window rather than on whatever space the controls lea
 The chooser is built from Atelier's own components, as in the upstream `auris_screens` example:
 a `Sidebar` of `ListItem`s (new, recent, and the setup guide at the foot), `OptionCard`s for how
 to start, an `EmptyState` when there are no recent projects, and a toolbar-height footer holding
-the one primary commit. The panel floats over `MetalBackdrop`, as in the liquid-metal variant of
+the one primary commit. The panel takes about half the body (up to 880×480), so a larger window shows more of the metal rather than a larger panel. It floats over `MetalBackdrop`, as in the liquid-metal variant of
 the upstream `ambient` example, and occludes pointer events so its controls do not also
 manipulate the metal beneath it. A card selects a starting method; Create or Enter commits it,
 and double-click also opens it. The setup guide is the panel's third page rather than a window
@@ -54,7 +54,10 @@ policy stills it entirely.
 
 Choosing "Create with AI" hands the panel over to the song workshop: for one `motion.normal` the
 metal stays mounted while a panel-coloured shape grows from the chooser panel to the whole body
-and the workshop fades in over it; Back plays the same hand-over in reverse. Only the shape
+and the workshop fades in over it; Back plays the same hand-over in reverse. The metal stays
+under the workshop too, behind a veil of the surface colour that the shape turns into as it
+arrives: thin while the conversation is empty, thicker once there is a transcript, and solid
+once the transcript has been scrolled, so reading is never done over the moving metal. Only the shape
 moves — the arriving screen is laid out at its final size from the first frame — so nothing
 reflows. The workshop follows the upstream compose screen: one centred column of transcript and
 candidate cards (elevated, accent-bordered when chosen, agent-washed only while being written),
