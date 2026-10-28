@@ -1480,24 +1480,14 @@ impl Render for VoiceSetupWindow {
             window.focus(&self.focus);
         }
         let theme = self.theme.clone();
-        let titlebar = titlebar::titlebar(window, &theme)
-            .child(
-                titlebar::drag_region("voice-setup-title")
-                    .flex_1()
-                    .min_w(px(40.0))
-                    .px_3()
-                    .child(
-                        div()
-                            .min_w_0()
-                            .truncate()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .child(self.t(Key::VoiceSetupTitle)),
-                    ),
-            )
-            .child(titlebar::controls(window, &theme, |_, window, _| {
+        let titlebar = titlebar::composed(
+            window,
+            &theme,
+            titlebar::Parts::new("voice-setup-title", self.t(Key::VoiceSetupTitle)),
+            titlebar::controls(window, &theme, |_, window, _| {
                 window.remove_window();
-            }));
+            }),
+        );
         let body = match self.tab {
             VoiceSetupTab::Voicevox => self.render_voicevox(cx),
             VoiceSetupTab::DiffSinger => self.render_diffsinger(cx),

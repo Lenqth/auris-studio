@@ -1524,6 +1524,9 @@ pub struct AurisApp {
     pub(crate) pending_audition: Option<crate::project_windows::AuditionRequest>,
     pub(crate) opening_project: Option<std::path::PathBuf>,
     pub(crate) project_chooser: Option<crate::ui::project_chooser::ProjectChooser>,
+    /// The start screen handing over to the song workshop, or back; see
+    /// [`crate::ui::project_chooser::WelcomeTransition`].
+    pub(crate) welcome_transition: Option<crate::ui::project_chooser::WelcomeTransition>,
     pub(crate) song_workshop: Option<crate::ui::song_workshop::SongWorkshop>,
     pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
@@ -1870,7 +1873,6 @@ pub struct AurisApp {
     pub(crate) rhythm_window: Option<WindowHandle<crate::ui::rhythm_grid::RhythmWindow>>,
     /// The external singing-backend setup window, while it is open.
     pub(crate) voice_setup_window: Option<WindowHandle<VoiceSetupWindow>>,
-    pub(crate) setup_guide_window: Option<WindowHandle<crate::setup_guide::SetupGuide>>,
     /// The key the pointer is holding down on the drawn keyboard, if any.
     pub(crate) clicked_key: Option<&'static str>,
 
@@ -1963,7 +1965,6 @@ impl AurisApp {
             let windows: Vec<gpui::AnyWindowHandle> = [
                 this.settings_window.map(Into::into),
                 this.voice_setup_window.map(Into::into),
-                this.setup_guide_window.map(Into::into),
                 this.rhythm_window.map(Into::into),
             ]
             .into_iter()
@@ -2133,6 +2134,7 @@ impl AurisApp {
             pending_audition: None,
             opening_project: None,
             project_chooser: None,
+            welcome_transition: None,
             song_workshop: None,
             project_window: None,
             session,
@@ -2250,7 +2252,6 @@ impl AurisApp {
             titled: String::new(),
             native_menu_snapshot: None,
             voice_setup_window: None,
-            setup_guide_window: None,
             choosing_export: false,
             status_failed: false,
             external_change: None,

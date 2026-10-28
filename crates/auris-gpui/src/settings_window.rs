@@ -1993,25 +1993,15 @@ impl Render for SettingsWindow {
         }
 
         let theme = self.theme.clone();
-        let titlebar = titlebar::titlebar(window, &theme)
-            .child(
-                titlebar::drag_region("settings-title")
-                    .flex_1()
-                    .min_w(px(40.0))
-                    .px_3()
-                    .child(
-                        div()
-                            .min_w_0()
-                            .truncate()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .child(self.t(Key::Settings)),
-                    ),
-            )
-            .child(self.render_tabs(cx))
-            .child(titlebar::controls(window, &theme, |_, window, _| {
+        let titlebar = titlebar::composed(
+            window,
+            &theme,
+            titlebar::Parts::new("settings-title", self.t(Key::Settings))
+                .trailing(self.render_tabs(cx)),
+            titlebar::controls(window, &theme, |_, window, _| {
                 window.remove_window();
-            }));
+            }),
+        );
         let body = if self.searching() {
             self.render_results(cx)
         } else {

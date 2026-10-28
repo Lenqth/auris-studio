@@ -120,17 +120,20 @@ pub(crate) fn composer_frame(
         .min_w_0()
         .m(theme.atelier.spacing.md)
         .p(theme.atelier.spacing.sm)
-        .gap(theme.atelier.spacing.sm)
-        .rounded(theme.atelier.shape.radius_xl)
-        .bg(theme.surface_raised)
+        .gap(theme.atelier.spacing.xs)
+        // Atelier's `Composer`: a raised, hairlined well with the large radius, lit by the accent
+        // while it has focus.
+        .rounded(theme.atelier.shape.radius_lg)
+        .bg(theme.atelier.colors.elevated)
         .border_1()
         .border_color(if focused {
-            theme.accent
+            theme.accent.opacity(0.7)
         } else if warning {
             theme.warning
         } else {
-            theme.border_subtle
+            theme.atelier.colors.border_strong
         })
+        .shadow(theme.atelier.elevation.low.clone())
 }
 
 /// The commands shared by both composers; each workflow owns their availability and effects.
@@ -163,11 +166,12 @@ pub(crate) fn composer_action(
     on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> gpui::Stateful<gpui::Div> {
     let label = label.into();
+    // As in Atelier's `Composer`: send is the box's one primary commit, stop an ordinary action.
     let (glyph, style, color) = match action {
         ComposerAction::Send => (
             atelier::IconName::ArrowUp,
-            ButtonStyle::Agent,
-            theme.atelier.colors.agent,
+            ButtonStyle::Primary,
+            theme.text_on_accent,
         ),
         ComposerAction::Stop => (atelier::IconName::Stop, ButtonStyle::Normal, theme.text),
     };
@@ -182,7 +186,12 @@ pub(crate) fn composer_action(
     )
     .gap(theme.atelier.spacing.xs)
     .when(icon_only, |button| {
-        button.w(theme.atelier.density.control_sm).px_0()
+        // The square follows the composer's corner, as Atelier's send button does.
+        let size = theme.atelier.density.control_md;
+        button.size(size).px_0().rounded(
+            atelier::Theme::concentric(theme.atelier.shape.radius_lg, theme.atelier.spacing.sm)
+                .min(size / 2.0),
+        )
     })
     .child(
         atelier::Icon::new(glyph)

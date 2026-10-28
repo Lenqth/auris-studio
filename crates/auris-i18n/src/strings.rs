@@ -49,6 +49,8 @@ strings! {
     WorkshopContinue { en: "Continue with this song", ja: "この曲で続ける" }
     WorkshopSelected { en: "Current song", ja: "制作中の曲" }
     WorkshopOpenEditor { en: "Open editor", ja: "エディタで開く" }
+    WorkshopOpenEditorHint { en: "Continue with a song to open it", ja: "曲を選ぶと開けます" }
+    WorkshopGenerating { en: "Generating", ja: "生成中" }
     WorkshopMemory { en: "Use my preferences", ja: "好みを記録・活用" }
     WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
     WorkshopForget { en: "Clear preference history", ja: "好みの履歴を消去" }
@@ -157,8 +159,6 @@ strings! {
     ChooseStartHelp { en: "Choose how to begin your song.", ja: "曲の始め方を選んでください。" }
     ChooseAiHelp { en: "Describe your idea and compare three song candidates.", ja: "作りたい曲を伝えて、3つの候補を聴き比べます。" }
     ChooseStartAi { en: "Start with AI…", ja: "AIで作り始める…" }
-    ChoosePauseBackground { en: "Pause background", ja: "背景を一時停止" }
-    ChooseAnimateBackground { en: "Animate background", ja: "背景を動かす" }
     ChooseRecentEmpty { en: "No recent projects. Open an existing project to get started.", ja: "最近使ったプロジェクトはありません。既存のプロジェクトを開いて始められます。" }
     ChooseExisting { en: "Open existing project…", ja: "既存のプロジェクトを開く…" }
     ChooseCreate { en: "Create", ja: "作成" }

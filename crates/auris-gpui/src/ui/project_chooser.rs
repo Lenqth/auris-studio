@@ -1,17 +1,80 @@
 //! Startup project selection, before the editor claims realtime audio.
+//!
+//! Drawn with Atelier's own pieces, as in its `auris_screens` example: a navigation [`Sidebar`]
+//! of [`ListItem`]s, [`OptionCard`]s for how to start, and a footer that holds the one primary
+//! commit. The panel floats over the liquid-metal backdrop, and the setup guide is the panel's
+//! third page rather than a window of its own.
 
+use std::time::{Duration, Instant};
+
+use atelier::{
+    Button, Edge, EmptyState, IconName, Label, ListItem, OptionCard, SectionHeader, Sidebar,
+    TextColor, TextSize,
+};
 use auris_i18n::Key;
-use gpui::{AnyElement, Context, IntoElement, KeyDownEvent, Window, div, prelude::*};
+use gpui::{
+    Animation, AnimationExt, AnyElement, Context, IntoElement, KeyDownEvent, Pixels, Size, Window,
+    div, prelude::*, px, size,
+};
 
-use super::icons::{Icon, icon};
-use super::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled};
 use crate::app::{AurisApp, Pane};
+
+/// The start panel's largest size; it shrinks with the window below that.
+const PANEL_WIDTH: Pixels = px(1040.0);
+const PANEL_HEIGHT: Pixels = px(560.0);
+
+/// Which page of the start panel is showing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ChooserPage {
+    /// Ways to start a new project.
+    #[default]
+    New,
+    /// Recently opened projects.
+    Recent,
+    /// The first-run setup guide.
+    Setup,
+}
 
 #[derive(Default)]
 pub(crate) struct ProjectChooser {
-    recent: bool,
+    pub(crate) page: ChooserPage,
     selected: usize,
     ai: bool,
+    pub(crate) setup_step: usize,
+    pub(crate) setup_error: Option<String>,
+}
+
+/// The start panel growing into the song workshop, or the workshop settling back into it.
+///
+/// gpui has no implicit transitions, so the hand-over is drawn: for one `motion.normal` the
+/// liquid metal stays mounted and a panel-coloured shape travels between the start panel's
+/// rectangle and the whole body, while the arriving screen fades in on top of it. Only the
+/// shape moves; the arriving content is laid out at its final size from the first frame, so
+/// nothing reflows — Atelier's rule against animating layout holds.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WelcomeTransition {
+    serial: u64,
+    started: Instant,
+    pub(crate) to_workshop: bool,
+}
+
+impl WelcomeTransition {
+    fn running(&self, duration: Duration) -> bool {
+        self.started.elapsed() < duration
+    }
+}
+
+/// Where the start panel sits inside a body of `area`: its horizontal and vertical insets.
+fn panel_insets(area: Size<Pixels>, margin: Pixels) -> (Pixels, Pixels) {
+    let width = (area.width - margin * 2.0).min(PANEL_WIDTH).max(px(0.0));
+    let height = (area.height - margin * 2.0).min(PANEL_HEIGHT).max(px(0.0));
+    ((area.width - width) / 2.0, (area.height - height) / 2.0)
+}
+
+/// How opaque the arriving screen is at `delta`: it waits for the shape to have mostly arrived,
+/// so its text never shows over the metal outside the shape.
+fn arriving_opacity(delta: f32) -> f32 {
+    ((delta - 0.4) / 0.6).clamp(0.0, 1.0)
 }
 
 impl AurisApp {
@@ -22,6 +85,116 @@ impl AurisApp {
         cx.notify();
     }
 
+    /// Starts the hand-over between the start panel and the workshop, unless motion is off.
+    pub(crate) fn begin_welcome_transition(&mut self, to_workshop: bool, cx: &mut Context<Self>) {
+        let motion = self.theme.atelier.motion;
+        if !motion.enabled {
+            self.welcome_transition = None;
+            return;
+        }
+        let serial = self
+            .welcome_transition
+            .map_or(0, |transition| transition.serial + 1);
+        self.welcome_transition = Some(WelcomeTransition {
+            serial,
+            started: Instant::now(),
+            to_workshop,
+        });
+        // The animation asks for frames only while it runs. Wake once after it, so the backdrop
+        // is unmounted even when nothing else is drawing — a paused metal frame, for one.
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(motion.normal + Duration::from_millis(32))
+                .await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+
+    /// The hand-over in progress, if any; forgets one that has finished.
+    pub(crate) fn welcome_transition(&mut self) -> Option<WelcomeTransition> {
+        let duration = self.theme.atelier.motion.normal;
+        if self
+            .welcome_transition
+            .is_some_and(|transition| !transition.running(duration))
+        {
+            self.welcome_transition = None;
+        }
+        self.welcome_transition
+    }
+
+    /// The liquid metal behind the start panel, filling the body below the title bar.
+    ///
+    /// The backdrop owns its GPU cache and animation lifetime under this one id, so the workshop
+    /// can keep it mounted through the hand-over without a second shader warm-up. Inactive
+    /// windows hold a still frame; Atelier's motion policy stills it entirely.
+    pub(crate) fn welcome_backdrop(&self, window: &Window) -> Option<AnyElement> {
+        if cfg!(test) {
+            return None;
+        }
+        Some(
+            div()
+                .absolute()
+                .inset_0()
+                .child(
+                    atelier::MetalBackdrop::new("chooser-metal")
+                        .when(!window.is_window_active(), |backdrop| backdrop.phase(0.12)),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// The panel-coloured shape that travels between the start panel and the whole body.
+    pub(crate) fn welcome_morph(
+        &self,
+        transition: WelcomeTransition,
+        window: &Window,
+    ) -> AnyElement {
+        let theme = &self.theme;
+        let viewport = window.viewport_size();
+        let area = size(viewport.width, viewport.height - crate::titlebar::HEIGHT);
+        let (inset_x, inset_y) = panel_insets(area, theme.atelier.spacing.xl);
+        let radius = theme.atelier.shape.radius_xl;
+        let to_workshop = transition.to_workshop;
+        div()
+            .absolute()
+            .inset_0()
+            .bg(theme.surface)
+            .border_1()
+            .border_color(theme.border_subtle)
+            .with_animation(
+                ("welcome-morph", transition.serial as usize),
+                Animation::new(theme.atelier.motion.normal).with_easing(atelier::motion::ease_out),
+                move |shape, delta| {
+                    // 0 is the start panel, 1 the whole body.
+                    let open = if to_workshop { delta } else { 1.0 - delta };
+                    let rest = 1.0 - open;
+                    shape
+                        .left(inset_x * rest)
+                        .right(inset_x * rest)
+                        .top(inset_y * rest)
+                        .bottom(inset_y * rest)
+                        .rounded(radius * rest)
+                },
+            )
+            .into_any_element()
+    }
+
+    /// Fades the arriving screen in over [`Self::welcome_morph`].
+    pub(crate) fn welcome_arrival<E: IntoElement + Styled + 'static>(
+        &self,
+        transition: WelcomeTransition,
+        element: E,
+    ) -> AnyElement {
+        element
+            .with_animation(
+                ("welcome-arrival", transition.serial as usize),
+                Animation::new(self.theme.atelier.motion.normal),
+                |element, delta| element.opacity(arriving_opacity(delta)),
+            )
+            .into_any_element()
+    }
+
     fn choose_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.opening_project.is_some() {
             return;
@@ -29,15 +202,28 @@ impl AurisApp {
         let Some(chooser) = &self.project_chooser else {
             return;
         };
-        if chooser.recent {
-            if let Some(path) = self.settings.recent.get(chooser.selected).cloned() {
-                self.open_project_window(path, cx);
+        match chooser.page {
+            ChooserPage::Recent => {
+                if let Some(path) = self.settings.recent.get(chooser.selected).cloned() {
+                    self.open_project_window(path, cx);
+                }
             }
-        } else if chooser.ai {
-            self.open_song_workshop(window, cx);
-        } else {
-            self.project_chooser = None;
-            self.focus_pane(Pane::Arrangement, window);
+            ChooserPage::New if chooser.ai => {
+                self.begin_welcome_transition(true, cx);
+                self.open_song_workshop(window, cx);
+            }
+            ChooserPage::New => {
+                self.project_chooser = None;
+                self.focus_pane(Pane::Arrangement, window);
+            }
+            ChooserPage::Setup => self.step_setup_guide(true, cx),
+        }
+        cx.notify();
+    }
+
+    fn set_chooser_page(&mut self, page: ChooserPage, cx: &mut Context<Self>) {
+        if let Some(chooser) = &mut self.project_chooser {
+            chooser.page = page;
         }
         cx.notify();
     }
@@ -47,14 +233,22 @@ impl AurisApp {
             return;
         };
         match event.keystroke.key.as_str() {
-            "left" => chooser.recent = false,
-            "right" => chooser.recent = true,
+            "left" if chooser.page == ChooserPage::Setup => {
+                chooser.setup_step = chooser.setup_step.saturating_sub(1)
+            }
+            "right" if chooser.page == ChooserPage::Setup => {
+                chooser.setup_step =
+                    (chooser.setup_step + 1).min(crate::setup_guide::STEPS.len() - 1)
+            }
+            "left" => chooser.page = ChooserPage::New,
+            "right" => chooser.page = ChooserPage::Recent,
             "up" => chooser.selected = chooser.selected.saturating_sub(1),
             "down" => {
                 chooser.selected =
                     (chooser.selected + 1).min(self.settings.recent.len().saturating_sub(1))
             }
             "enter" => self.choose_project(window, cx),
+            "escape" if chooser.page == ChooserPage::Setup => self.setup_escape(window, cx),
             "escape" if self.opening_project.is_none() => window.remove_window(),
             _ => return,
         }
@@ -62,327 +256,321 @@ impl AurisApp {
         cx.notify();
     }
 
-    pub(crate) fn render_project_chooser(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        if self.song_workshop.is_some() {
-            return self.render_song_workshop(window, cx);
-        }
-        let theme = self.theme.clone();
+    fn chooser_sidebar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = &self.theme;
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
-        let recent = chooser.recent;
-        let selected = chooser.selected;
-        let ai_selected = chooser.ai;
-        let animate = self.appearance.animate_welcome;
+        let page = chooser.page;
         let busy = self.opening_project.is_some();
-        let can_choose = !busy && (!recent || selected < self.settings.recent.len());
-        let mut content = div()
-            .id("chooser-content")
-            .debug_selector(|| "chooser-content".into())
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .p(theme.atelier.spacing.xl)
-            .flex()
-            .flex_col()
-            .gap(theme.atelier.spacing.lg);
-        let content_header = div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .pb_2()
-            .child(div().text_xl().child(self.t(if recent {
-                Key::ChooseRecent
+        let recent_count = self.settings.recent.len();
+        let item = |id: &'static str, label: Key, icon: IconName, target: ChooserPage| {
+            div().debug_selector(move || id.into()).child(
+                ListItem::new(id, self.t(label))
+                    .icon(icon)
+                    .selected(page == target)
+                    .when(target == ChooserPage::Recent && recent_count > 0, |item| {
+                        item.trailing(
+                            Label::new(recent_count.to_string())
+                                .size(TextSize::XSmall)
+                                .color(TextColor::Faint),
+                        )
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| this.set_chooser_page(target, cx))),
+            )
+        };
+        Sidebar::new(Edge::Left)
+            // Narrow windows give the cards the room; the sidebar is what yields first.
+            .w(if window.viewport_size().width < px(900.0) {
+                px(176.0)
             } else {
-                Key::ChooseNew
-            })))
-            .when(!recent || self.settings.recent.is_empty(), |header| {
-                header.child(div().text_sm().text_color(theme.text_muted).child(self.t(
-                    if recent {
-                        Key::ChooseRecentEmpty
-                    } else {
-                        Key::ChooseStartHelp
-                    },
-                )))
-            });
-        content = content.child(content_header);
-        if recent {
-            for (index, path) in self.settings.recent.iter().enumerate() {
+                px(232.0)
+            })
+            .p(theme.atelier.spacing.sm)
+            .gap(theme.atelier.spacing.xxs)
+            .child(item(
+                "chooser-new",
+                Key::ChooseNew,
+                IconName::Plus,
+                ChooserPage::New,
+            ))
+            .child(item(
+                "chooser-recents",
+                Key::ChooseRecent,
+                IconName::History,
+                ChooserPage::Recent,
+            ))
+            .child(div().flex_1())
+            // Setup is help, not a way to start: it lives with navigation, not with the commit.
+            .child(
+                div().debug_selector(|| "chooser-setup".into()).child(
+                    Button::new("chooser-setup", self.t(Key::SetupGuide))
+                        .ghost()
+                        .icon(IconName::Info)
+                        .selected(page == ChooserPage::Setup)
+                        .disabled(busy)
+                        .full_width()
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.set_chooser_page(ChooserPage::Setup, cx)
+                        })),
+                ),
+            )
+    }
+
+    fn chooser_new_page(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = &self.theme;
+        let chooser = self.project_chooser.as_ref().expect("chooser is visible");
+        let ai_selected = chooser.ai;
+        let card = |id: &'static str, ai: bool| {
+            let card = OptionCard::new(
+                id,
+                if ai {
+                    IconName::Sparkles
+                } else {
+                    IconName::Music
+                },
+                self.t(if ai {
+                    Key::WorkshopTitle
+                } else {
+                    Key::ChooseEmpty
+                }),
+            )
+            .description(self.t(if ai {
+                Key::ChooseAiHelp
+            } else {
+                Key::ChooseEmptyHelp
+            }))
+            .selected(ai == ai_selected)
+            .on_click(cx.listener(
+                move |this, event: &gpui::ClickEvent, window, cx| {
+                    if this.opening_project.is_some() {
+                        return;
+                    }
+                    if let Some(chooser) = &mut this.project_chooser {
+                        chooser.ai = ai;
+                    }
+                    if event.click_count() == 2 {
+                        this.choose_project(window, cx);
+                    }
+                    cx.notify();
+                },
+            ));
+            div()
+                .debug_selector(move || id.into())
+                .flex_1()
+                .min_w(px(220.0))
+                .max_w(px(340.0))
+                .child(if ai { card.agent() } else { card })
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(theme.atelier.spacing.xl)
+            .child(
+                SectionHeader::new(self.t(Key::ChooseNew))
+                    .description(self.t(Key::ChooseStartHelp)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap(theme.atelier.spacing.lg)
+                    .child(card("chooser-empty", false))
+                    .child(card("chooser-ai", true)),
+            )
+            .into_any_element()
+    }
+
+    fn chooser_recent_page(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = &self.theme;
+        let chooser = self.project_chooser.as_ref().expect("chooser is visible");
+        let selected = chooser.selected;
+        if self.settings.recent.is_empty() {
+            return div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .justify_center()
+                .child(
+                    EmptyState::new(IconName::History, self.t(Key::ChooseRecent))
+                        .description(self.t(Key::ChooseRecentEmpty)),
+                )
+                .into_any_element();
+        }
+        let rows = self
+            .settings
+            .recent
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
                 let title = path
                     .file_stem()
                     .unwrap_or_default()
                     .to_string_lossy()
                     .into_owned();
-                content = content.child(
-                    button(
-                        ("chooser-recent", index),
-                        title,
-                        ButtonStyle::Normal,
-                        selected == index,
-                        theme.accent_soft,
-                        &theme,
-                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                            if let Some(chooser) = &mut this.project_chooser {
-                                chooser.selected = index;
-                            }
-                            if event.click_count() == 2 {
-                                this.choose_project(window, cx);
-                            }
-                            cx.notify();
-                        }),
-                    )
-                    .h_auto()
-                    .text_sm()
-                    .w_full()
-                    .min_w_0()
-                    .flex_shrink_0()
-                    .rounded(theme.atelier.shape.radius_md)
-                    .bg(if selected == index {
-                        theme.accent_soft
-                    } else {
-                        theme.surface
-                    })
-                    .py_3()
-                    .items_start()
-                    .flex_col()
-                    .gap_1()
+                div()
+                    .debug_selector(move || format!("chooser-recent-{index}"))
                     .child(
-                        div()
-                            .text_xs()
-                            .w_full()
-                            .overflow_hidden()
-                            .text_color(theme.text_muted)
-                            .child(path.display().to_string()),
-                    ),
-                );
-            }
-        } else {
-            let mut tiles = div().flex().flex_wrap().gap(theme.atelier.spacing.lg);
-            for (id, key, ai) in [
-                ("chooser-empty", Key::ChooseEmpty, false),
-                ("chooser-ai", Key::WorkshopTitle, true),
-            ] {
-                tiles = tiles.child(
-                    super::widgets::button_with_content(
-                        id,
-                        div()
-                            .flex()
-                            .flex_col()
-                            .w_full()
-                            .items_start()
-                            .gap(theme.atelier.spacing.md)
-                            .child(
-                                div()
-                                    .size(theme.atelier.spacing.xxl + theme.atelier.spacing.lg)
-                                    .flex_shrink_0()
-                                    .rounded(theme.atelier.shape.radius_lg)
-                                    .bg(if ai {
-                                        theme.atelier.colors.agent_wash
-                                    } else {
-                                        theme.accent_soft
-                                    })
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(icon(
-                                        if ai { Icon::Sparkles } else { Icon::Notes },
-                                        theme.atelier.spacing.xl,
-                                        if ai {
-                                            theme.atelier.colors.agent
-                                        } else {
-                                            theme.accent
-                                        },
-                                    )),
-                            )
-                            .child(
-                                div()
-                                    .text_size(theme.atelier.typography.size_lg)
-                                    .font_weight(theme.atelier.typography.heading_weight)
-                                    .child(self.t(key)),
-                            )
-                            .child(
-                                div()
-                                    .text_size(theme.atelier.typography.size_sm)
-                                    .text_color(theme.text_muted)
-                                    .child(self.t(if ai {
-                                        Key::ChooseAiHelp
-                                    } else {
-                                        Key::ChooseEmptyHelp
-                                    })),
-                            ),
-                        ButtonStyle::Normal,
-                        ButtonState::available(ai == ai_selected, !busy),
-                        theme.accent_soft,
-                        &theme,
-                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                            if let Some(chooser) = &mut this.project_chooser {
-                                chooser.ai = ai;
-                            }
-                            if event.click_count() == 2 {
-                                this.choose_project(window, cx);
-                            }
-                            cx.notify();
-                        }),
+                        ListItem::new(("chooser-recent", index), title)
+                            .icon(IconName::File)
+                            .description(path.display().to_string())
+                            .selected(selected == index)
+                            .on_click(cx.listener(
+                                move |this, event: &gpui::ClickEvent, window, cx| {
+                                    if let Some(chooser) = &mut this.project_chooser {
+                                        chooser.selected = index;
+                                    }
+                                    if event.click_count() == 2 {
+                                        this.choose_project(window, cx);
+                                    }
+                                    cx.notify();
+                                },
+                            )),
                     )
-                    .w(theme.atelier.spacing.xxl * 10.0)
-                    .max_w_full()
-                    .h_auto()
-                    .min_h(theme.atelier.spacing.xxl * 5.0)
-                    .p(theme.atelier.spacing.lg)
-                    .flex_shrink_0()
-                    .rounded(theme.atelier.shape.radius_lg)
-                    .bg(theme.surface_raised)
-                    .border_color(if ai == ai_selected {
-                        theme.accent
-                    } else {
-                        theme.border_subtle
-                    })
-                    .text_base()
-                    .flex_col()
-                    .gap_4(),
-                );
-            }
-            content = content.child(tiles);
-        }
-
-        let sidebar = div()
-            .w(if window.viewport_size().width < gpui::px(900.0) {
-                gpui::px(176.0)
-            } else {
-                gpui::px(232.0)
-            })
-            .flex_shrink_0()
-            .p_4()
+            });
+        div()
             .flex()
             .flex_col()
-            .gap_2()
-            .border_r_1()
-            .border_color(theme.border_subtle)
+            .gap(theme.atelier.spacing.md)
+            .child(SectionHeader::new(self.t(Key::ChooseRecent)))
             .child(
-                button(
-                    "chooser-new",
-                    self.t(Key::ChooseNew),
-                    ButtonStyle::Ghost,
-                    !recent,
-                    theme.accent_soft,
-                    &theme,
-                    cx.listener(|this, _, _, cx| {
-                        if let Some(chooser) = &mut this.project_chooser {
-                            chooser.recent = false;
-                        }
-                        cx.notify();
-                    }),
-                )
-                .h_10()
-                .text_sm()
-                .justify_start(),
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(theme.atelier.spacing.xxs)
+                    .children(rows),
             )
-            .child(
-                button(
-                    "chooser-recents",
-                    self.t(Key::ChooseRecent),
-                    ButtonStyle::Ghost,
-                    recent,
-                    theme.accent_soft,
-                    &theme,
-                    cx.listener(|this, _, _, cx| {
-                        if let Some(chooser) = &mut this.project_chooser {
-                            chooser.recent = true;
-                        }
-                        cx.notify();
-                    }),
+            .into_any_element()
+    }
+
+    fn chooser_footer(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let chooser = self.project_chooser.as_ref().expect("chooser is visible");
+        if chooser.page == ChooserPage::Setup {
+            return self.render_setup_footer(chooser.setup_step, cx);
+        }
+        let busy = self.opening_project.is_some();
+        let recent = chooser.page == ChooserPage::Recent;
+        let can_choose = !busy && (!recent || chooser.selected < self.settings.recent.len());
+        let commit = self.t(if recent {
+            Key::ChooseOpen
+        } else if chooser.ai {
+            Key::ChooseStartAi
+        } else {
+            Key::ChooseCreate
+        });
+        vec![
+            div()
+                .debug_selector(|| "chooser-browse".into())
+                .child(
+                    Button::new("chooser-browse", self.t(Key::ChooseExisting))
+                        .icon(IconName::Folder)
+                        .disabled(busy)
+                        .on_click(cx.listener(|this, _, _, cx| this.pick_and_open_project(cx))),
                 )
-                .h_10()
-                .text_sm()
-                .justify_start(),
-            )
-            .child(div().flex_1())
-            .child(
-                button_enabled(
-                    "chooser-setup",
-                    self.t(Key::SetupGuide),
-                    ButtonStyle::Ghost,
-                    ButtonState::available(false, !busy),
-                    theme.accent,
-                    &theme,
-                    cx.listener(|this, _, _, cx| this.open_setup_guide(cx)),
+                .into_any_element(),
+            div().flex_1().into_any_element(),
+            div()
+                .debug_selector(|| "chooser-close".into())
+                .child(
+                    Button::new("chooser-close", self.t(Key::ChooseClose))
+                        .disabled(busy)
+                        .on_click(cx.listener(|_, _, window, _| window.remove_window())),
                 )
-                .w_full()
-                .h_auto()
-                .min_h(theme.atelier.density.control_md)
-                .whitespace_normal(),
-            );
+                .into_any_element(),
+            div()
+                .debug_selector(|| "chooser-confirm".into())
+                .child(
+                    Button::new("chooser-confirm", commit)
+                        .primary()
+                        .disabled(!can_choose)
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.choose_project(window, cx)),
+                        ),
+                )
+                .into_any_element(),
+        ]
+    }
+
+    pub(crate) fn render_project_chooser(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let transition = self.welcome_transition();
+        if self.song_workshop.is_some() {
+            return self.render_song_workshop(transition.filter(|t| t.to_workshop), window, cx);
+        }
+        let transition = transition.filter(|t| !t.to_workshop);
+        let theme = self.theme.clone();
+        let spacing = theme.atelier.spacing;
+        let chooser = self.project_chooser.as_ref().expect("chooser is visible");
+        let page = chooser.page;
+        let setup_step = chooser.setup_step;
+        let body = match page {
+            ChooserPage::New => self.chooser_new_page(cx),
+            ChooserPage::Recent => self.chooser_recent_page(cx),
+            ChooserPage::Setup => self.render_setup_page(setup_step, cx),
+        };
+        let content = div()
+            .id("chooser-content")
+            .debug_selector(|| "chooser-content".into())
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .p(spacing.xxl)
+            .flex()
+            .flex_col()
+            .child(body);
+        let status = (!self.status.is_empty()).then(|| {
+            div()
+                .px(spacing.xxl)
+                .pb(spacing.md)
+                .text_size(theme.atelier.typography.size_sm)
+                .text_color(if self.status_failed {
+                    theme.danger
+                } else {
+                    theme.text_muted
+                })
+                .child(self.status.clone())
+        });
         let footer = div()
-            .p_4()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(spacing.sm)
+            .h(theme.atelier.density.toolbar)
+            .px(spacing.lg)
             .border_t_1()
             .border_color(theme.border_subtle)
+            .children(self.chooser_footer(cx));
+        let panel = div()
+            .occlude()
+            .relative()
             .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
+            .size_full()
+            .max_w(PANEL_WIDTH)
+            .max_h(PANEL_HEIGHT)
+            .min_w_0()
+            .min_h_0()
+            .overflow_hidden()
+            .rounded(theme.atelier.shape.radius_xl)
+            .bg(theme.surface)
+            .border_1()
+            .border_color(theme.border_subtle)
+            .shadow(theme.atelier.elevation.high.clone())
+            .child(self.chooser_sidebar(window, cx))
             .child(
-                button_enabled(
-                    "chooser-browse",
-                    self.t(Key::ChooseExisting),
-                    ButtonStyle::Normal,
-                    if busy {
-                        ButtonState::Disabled
-                    } else {
-                        ButtonState::Enabled(Latch::Off)
-                    },
-                    theme.accent,
-                    &theme,
-                    cx.listener(|this, _, _, cx| this.pick_and_open_project(cx)),
-                )
-                .h_9()
-                .px_4()
-                .text_sm(),
-            )
-            .child(div().flex_1())
-            .child(
-                button_enabled(
-                    "chooser-close",
-                    self.t(Key::ChooseClose),
-                    ButtonStyle::Normal,
-                    if busy {
-                        ButtonState::Disabled
-                    } else {
-                        ButtonState::Enabled(Latch::Off)
-                    },
-                    theme.accent,
-                    &theme,
-                    cx.listener(|_, _, window, _| window.remove_window()),
-                )
-                .h_9()
-                .px_4()
-                .text_sm(),
-            )
-            .child(
-                button_enabled(
-                    "chooser-confirm",
-                    self.t(if recent {
-                        Key::ChooseOpen
-                    } else if ai_selected {
-                        Key::ChooseStartAi
-                    } else {
-                        Key::ChooseCreate
-                    }),
-                    ButtonStyle::Primary,
-                    if can_choose {
-                        ButtonState::Enabled(Latch::Off)
-                    } else {
-                        ButtonState::Disabled
-                    },
-                    theme.accent,
-                    &theme,
-                    cx.listener(|this, _, window, cx| this.choose_project(window, cx)),
-                )
-                .h_9()
-                .px_4()
-                .text_sm(),
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .child(content)
+                    .children(status)
+                    .child(footer),
             );
+        let panel = match transition {
+            Some(transition) => self.welcome_arrival(transition, panel),
+            None => panel.into_any_element(),
+        };
         div()
             .id("project-chooser")
             .debug_selector(|| "project-chooser".into())
@@ -413,39 +601,17 @@ impl AurisApp {
             .on_action(cx.listener(|this, _: &crate::actions::Quit, window, cx| {
                 this.quit_asking(window, cx)
             }))
-            .child(
-                crate::titlebar::titlebar(window, &theme)
-                    .child(
-                        crate::titlebar::drag_region("chooser-title")
-                            .flex_1()
-                            .justify_center()
-                            .child(self.t(Key::ChooseProject)),
-                    )
-                    .child(button(
-                        "chooser-motion",
-                        self.t(if animate {
-                            Key::ChoosePauseBackground
-                        } else {
-                            Key::ChooseAnimateBackground
-                        }),
-                        ButtonStyle::Ghost,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.appearance.animate_welcome = !this.appearance.animate_welcome;
-                            if let Err(error) = this.appearance.save() {
-                                log::warn!("could not save welcome motion preference: {error}");
-                            }
-                            cx.notify();
-                        }),
-                    ))
-                    .child(crate::titlebar::controls(
-                        window,
-                        &theme,
-                        cx.listener(|_, _, window, _| window.remove_window()),
-                    )),
-            )
+            .child(crate::titlebar::composed(
+                window,
+                &theme,
+                crate::titlebar::Parts::new("chooser-title", self.t(Key::ChooseProject))
+                    .subtitle("Auris Studio"),
+                crate::titlebar::controls(
+                    window,
+                    &theme,
+                    cx.listener(|_, _, window, _| window.remove_window()),
+                ),
+            ))
             .child(
                 div()
                     .relative()
@@ -454,58 +620,10 @@ impl AurisApp {
                     .min_h_0()
                     .items_center()
                     .justify_center()
-                    .p(theme.atelier.spacing.xl)
-                    // The backdrop owns its GPU cache and animation lifetime. It is not mounted
-                    // in the editor or workshop; inactive welcome windows hold a still frame.
-                    .when(!cfg!(test), |view| {
-                        view.child(
-                            div().absolute().inset_0().child(
-                                atelier::MetalBackdrop::new("chooser-metal")
-                                    .when(!animate || !window.is_window_active(), |backdrop| {
-                                        backdrop.phase(0.12)
-                                    }),
-                            ),
-                        )
-                    })
-                    .child(
-                        div()
-                            .occlude()
-                            .relative()
-                            .flex()
-                            .size_full()
-                            .max_w(gpui::px(1040.0))
-                            .max_h(gpui::px(560.0))
-                            .min_w_0()
-                            .min_h_0()
-                            .overflow_hidden()
-                            .rounded(theme.atelier.shape.radius_xl)
-                            .bg(theme.surface)
-                            .border_1()
-                            .border_color(theme.border_subtle)
-                            .shadow(theme.atelier.elevation.high.clone())
-                            .child(sidebar)
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(content)
-                                    .when(!self.status.is_empty(), |view| {
-                                        view.child(
-                                            div()
-                                                .px_6()
-                                                .py_3()
-                                                .text_color(theme.text_muted)
-                                                .when(self.status_failed, |view| {
-                                                    view.text_color(theme.danger)
-                                                })
-                                                .child(self.status.clone()),
-                                        )
-                                    })
-                                    .child(footer),
-                            ),
-                    ),
+                    .p(spacing.xl)
+                    .children(self.welcome_backdrop(window))
+                    .children(transition.map(|transition| self.welcome_morph(transition, window)))
+                    .child(panel),
             )
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()

@@ -102,8 +102,6 @@ pub enum ButtonStyle {
     Normal,
     /// Filled with the accent colour; for the primary action in a dialog.
     Primary,
-    /// Hands work to the agent, using Atelier's dedicated agent treatment.
-    Agent,
     /// Filled with the danger colour; for irreversible commitment in a dialog.
     Danger,
     /// Borderless, for dense toolbars.
@@ -358,11 +356,6 @@ where
         // reads as the same button rather than as a second latched one in a row of them.
         (_, Latch::Ready) => (theme.surface_raised, active_color, active_color),
         (ButtonStyle::Primary, Latch::Off) => (theme.accent, theme.text_on_accent, theme.accent),
-        (ButtonStyle::Agent, Latch::Off) => (
-            theme.atelier.colors.agent_wash,
-            theme.atelier.colors.agent,
-            Theme::translucent(theme.atelier.colors.agent, 0.35),
-        ),
         (ButtonStyle::Danger, Latch::Off) => {
             (theme.danger, theme.text_on(theme.danger), theme.danger)
         }
@@ -438,17 +431,23 @@ where
     I: Into<ElementId>,
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
+    // Atelier draws toolbar icons as ghost buttons: no fill or hairline until the pointer is
+    // over them, and a latched one filled with its own colour.
     let background = if active {
         active_color
     } else {
-        theme.surface_raised
+        gpui::transparent_black()
     };
     let foreground = if active {
         theme.text_on(active_color)
     } else {
-        theme.text
+        theme.text_muted
     };
-    let hover = theme.hovered(background, 0.14);
+    let hover = if active {
+        theme.hovered(background, 0.14)
+    } else {
+        theme.surface_hover
+    };
 
     // The id again, this time as a name a test can find the button by. `debug_selector` compiles
     // to nothing unless gpui is built with `test-support`, which only `cargo test` does — so the
@@ -472,7 +471,11 @@ where
                 .control_radius(theme.atelier.density.control_md),
         )
         .border_1()
-        .border_color(if active { active_color } else { theme.border })
+        .border_color(if active {
+            active_color
+        } else {
+            gpui::transparent_black()
+        })
         .bg(background)
         .hover(|this| this.bg(hover))
         .active(|this| this.opacity(0.75))

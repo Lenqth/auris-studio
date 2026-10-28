@@ -108,6 +108,21 @@ fn apply_window_theme(window: &mut gpui::Window, cx: &App) {
     }
 }
 
+/// Opens a start screen showing its setup guide, for a request made where none is showing.
+pub(crate) fn open_setup_guide(cx: &mut App) {
+    match create(cx) {
+        Ok(handle) => {
+            let _ = handle.update(cx, |view, window, cx| {
+                view.show_project_chooser(window, cx);
+                if let Some(chooser) = &mut view.project_chooser {
+                    chooser.page = crate::ui::project_chooser::ChooserPage::Setup;
+                }
+            });
+        }
+        Err(error) => log::error!("could not open project window: {error}"),
+    }
+}
+
 pub(crate) fn create(cx: &mut App) -> Result<WindowHandle<AurisApp>, String> {
     let remembered = auris_session::Settings::load().window;
     let handle = cx

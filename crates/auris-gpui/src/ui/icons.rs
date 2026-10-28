@@ -63,8 +63,11 @@ pub enum Icon {
     Wave,
     /// The agent: a speech bubble, which is what a conversation is drawn as everywhere.
     Agent,
-    /// AI-assisted creation: a large sparkle and two smaller glints.
-    Sparkles,
+    /// Step back one edit: an arrow turning back on itself.
+    Undo,
+    /// Step forward one edit: Undo's arrow, mirrored. Atelier has no redo glyph, so this one is
+    /// drawn here with the same stroke.
+    Redo,
 }
 
 /// An element that draws `icon` at `size`, centred in whatever box it is given.
@@ -92,6 +95,7 @@ impl Icon {
             Self::Notes => Some("icons/auris-notes.svg"),
             Self::Keyboard => Some("icons/auris-keyboard.svg"),
             Self::Knob => Some("icons/auris-knob.svg"),
+            Self::Redo => Some("icons/auris-redo.svg"),
             _ => None,
         }
     }
@@ -129,7 +133,8 @@ impl Icon {
             Self::Microphone => AtelierIconName::Mic,
             Self::Wave => AtelierIconName::Waveform,
             Self::Agent => AtelierIconName::Brain,
-            Self::Sparkles => AtelierIconName::Sparkles,
+            Self::Undo => AtelierIconName::Undo,
+            Self::Redo => AtelierIconName::Undo,
         }
     }
 }

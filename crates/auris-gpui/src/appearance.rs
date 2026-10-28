@@ -160,8 +160,6 @@ pub struct Appearance {
     pub font_family: Option<String>,
     /// Whether live mixer signals show moving directional highlights in addition to level glow.
     pub animate_mixer_signals: bool,
-    /// Whether the project chooser's ambient backdrop moves while the window is active.
-    pub animate_welcome: bool,
     /// Palettes created in the settings window.
     pub custom_schemes: Vec<CustomScheme>,
 }
@@ -172,7 +170,6 @@ impl Default for Appearance {
             scheme: DEFAULT_SCHEME.to_string(),
             font_family: None,
             animate_mixer_signals: true,
-            animate_welcome: true,
             custom_schemes: Vec::new(),
         }
     }
@@ -321,7 +318,6 @@ mod tests {
             font_family: Some("Example UI".to_owned()),
             custom_schemes: vec![custom],
             animate_mixer_signals: false,
-            animate_welcome: false,
         };
         let text = serde_json::to_string(&appearance).unwrap();
         let loaded = serde_json::from_str::<Appearance>(&text)
@@ -455,7 +451,6 @@ mod tests {
             font_family: Some("  Example UI  ".to_owned()),
             custom_schemes: vec![invalid, valid.clone()],
             animate_mixer_signals: false,
-            animate_welcome: false,
         }
         .normalised();
         assert_eq!(appearance.scheme, DEFAULT_SCHEME);

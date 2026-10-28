@@ -5,9 +5,9 @@
 //! turn a button inside it into a window drag on Windows.
 
 use gpui::{
-    App, Bounds, ClickEvent, CursorStyle, Decorations, Div, ElementId, IntoElement, PathBuilder,
-    Pixels, ResizeEdge, SharedString, Stateful, TitlebarOptions, Window, WindowControlArea,
-    WindowDecorations, WindowOptions, canvas, div, point, prelude::*, px,
+    AnyElement, App, Bounds, ClickEvent, CursorStyle, Decorations, Div, ElementId, IntoElement,
+    PathBuilder, Pixels, ResizeEdge, SharedString, Stateful, TitlebarOptions, Window,
+    WindowControlArea, WindowDecorations, WindowOptions, canvas, div, point, prelude::*, px,
 };
 
 use crate::theme::Theme;
@@ -17,6 +17,13 @@ pub const HEIGHT: Pixels = px(40.0);
 
 const CONTROL_WIDTH: Pixels = px(46.0);
 const TRAFFIC_LIGHT_INSET: Pixels = px(78.0);
+
+/// The narrowest a centred title is squeezed to before the controls beside it give way.
+const MIN_TITLE_WIDTH: Pixels = px(72.0);
+
+/// How much faster than the title the two balancing sides shrink. Atelier's `TitleBar` uses the
+/// same ratio: the empty drag space goes first, then the subtitle, and the title last.
+const YIELD_SHRINK: f32 = 1000.0;
 
 /// Window defaults for application-drawn chrome on every desktop platform.
 pub fn options(title: impl Into<SharedString>) -> WindowOptions {
@@ -197,6 +204,124 @@ pub fn titlebar(window: &Window, theme: &Theme) -> Stateful<Div> {
         } else {
             theme.text_muted
         })
+}
+
+/// What goes in a title bar laid out the way Atelier's `TitleBar` lays it out.
+///
+/// The title sits on the window's centre line, a short subtitle beside it rather than under it,
+/// with frequent commands at the two edges and draggable space between them and the title.
+pub struct Parts {
+    id: &'static str,
+    title: SharedString,
+    subtitle: Option<SharedString>,
+    leading: Vec<AnyElement>,
+    trailing: Vec<AnyElement>,
+}
+
+impl Parts {
+    /// A bar whose title region is found by tests as `id`.
+    pub fn new(id: &'static str, title: impl Into<SharedString>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            subtitle: None,
+            leading: Vec::new(),
+            trailing: Vec::new(),
+        }
+    }
+
+    /// Muted text after the title on the same line.
+    pub fn subtitle(mut self, subtitle: impl Into<SharedString>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// A control at the leading edge, such as Back.
+    pub fn leading(mut self, element: impl IntoElement) -> Self {
+        self.leading.push(element.into_any_element());
+        self
+    }
+
+    /// A control at the trailing edge, before the window buttons.
+    pub fn trailing(mut self, element: impl IntoElement) -> Self {
+        self.trailing.push(element.into_any_element());
+        self
+    }
+}
+
+/// A complete title bar: `parts` balanced around the window's centre line, then `controls`.
+///
+/// The two sides grow by the same amount from bases that make up for the uneven native edges —
+/// the traffic lights at one end, the caption buttons at the other — so the title is centred
+/// on the *window*, not on whatever space the controls happen to leave. A side whose controls
+/// need more room keeps them and pushes the title over, which then truncates.
+pub fn composed(window: &Window, theme: &Theme, parts: Parts, controls: Div) -> Stateful<Div> {
+    let leading_edge = traffic_light_inset(window);
+    let trailing_edge = controls_width(window);
+    let gap = theme.atelier.spacing.xs;
+    let inset = theme.atelier.spacing.sm;
+    // The basis includes the side's padding: a basis smaller than its padding is rounded up to
+    // it, and the two sides would no longer differ by exactly the native edges.
+    let side = |basis: Pixels| {
+        let mut side = div();
+        side.style().flex_shrink = Some(YIELD_SHRINK);
+        side.flex()
+            .flex_grow()
+            .flex_basis(basis.max(px(0.0)) + inset)
+            .h_full()
+            .items_center()
+            .gap(gap)
+    };
+    let id = parts.id;
+    let leading = side(trailing_edge - leading_edge)
+        .pl(inset)
+        .children(
+            parts
+                .leading
+                .into_iter()
+                .map(|child| div().flex().flex_none().child(child)),
+        )
+        .child(drag_region(SharedString::from(format!("{id}-leading"))).flex_1());
+    let trailing = side(leading_edge - trailing_edge)
+        .pr(inset)
+        .child(drag_region(SharedString::from(format!("{id}-trailing"))).flex_1())
+        .children(
+            parts
+                .trailing
+                .into_iter()
+                .map(|child| div().flex().flex_none().child(child)),
+        );
+    let subtitle = parts.subtitle.map(|subtitle| {
+        let mut part = div();
+        part.style().flex_shrink = Some(YIELD_SHRINK);
+        part.min_w_0()
+            .truncate()
+            .text_size(theme.atelier.typography.size_sm)
+            .text_color(theme.text_faint)
+            .child(subtitle)
+    });
+    let heading = drag_region(id)
+        .flex_shrink()
+        .min_w(MIN_TITLE_WIDTH)
+        .overflow_hidden()
+        .justify_center()
+        .gap(theme.atelier.spacing.sm)
+        .px(theme.atelier.spacing.sm)
+        .child(
+            div()
+                .flex_shrink()
+                .min_w_0()
+                .truncate()
+                .text_size(theme.atelier.typography.size_md)
+                .font_weight(theme.atelier.typography.label_weight)
+                .child(parts.title),
+        )
+        .children(subtitle);
+    titlebar(window, theme)
+        .child(leading)
+        .child(heading)
+        .child(trailing)
+        .child(controls)
 }
 
 /// A native window-drag target containing only a label or empty space.

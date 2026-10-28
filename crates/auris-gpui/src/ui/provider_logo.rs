@@ -30,6 +30,10 @@ const MARKS: &[(&str, &[u8])] = &[
         include_bytes!("../../assets/icons/auris-knob.svg"),
     ),
     (
+        "icons/auris-redo.svg",
+        include_bytes!("../../assets/icons/auris-redo.svg"),
+    ),
+    (
         "providers/openai.svg",
         include_bytes!("../../assets/providers/openai.svg"),
     ),
@@ -141,7 +145,7 @@ mod tests {
             .map(|(path, _)| *path)
             .filter(|path| path.starts_with("icons/auris-"))
             .collect();
-        assert_eq!(paths.len(), 6);
+        assert_eq!(paths.len(), 7);
         assert_eq!(
             paths.iter().collect::<std::collections::HashSet<_>>().len(),
             paths.len()
