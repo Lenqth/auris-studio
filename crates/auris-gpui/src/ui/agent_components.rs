@@ -91,25 +91,30 @@ pub(crate) fn assistant_message(
 }
 
 /// Draws a workshop message through the same shared agent transcript primitives.
+///
+/// The agent's side is Markdown, rendered the way the editor's transcript renders it; the
+/// person's side is shown as typed.
 pub(crate) fn workshop_message(
     id: impl Into<ElementId>,
     user: bool,
     text: impl Into<SharedString>,
     theme: &Theme,
-    cx: &gpui::App,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
 ) -> AnyElement {
     let id = id.into();
+    let text = text.into();
     if user {
         user_message(id, text)
     } else {
-        assistant_message(
-            id,
-            "",
-            Some(div().child(text.into()).into_any_element()),
-            false,
+        let body = super::agent_markdown::render(
+            SharedString::from(format!("workshop-markdown-{id}")),
+            text.clone(),
             theme,
+            window,
             cx,
-        )
+        );
+        assistant_message(id, text, Some(body), false, theme, cx)
     }
 }
 

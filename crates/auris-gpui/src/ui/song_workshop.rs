@@ -481,6 +481,7 @@ impl AurisApp {
                     message.user,
                     message.text.clone(),
                     &theme,
+                    window,
                     cx,
                 );
                 // The person's own words are already in an opaque bubble.
@@ -1217,6 +1218,42 @@ mod tests {
             assert!(cx.debug_bounds("song-candidate-activity-0").is_some());
             assert!(cx.debug_bounds("song-candidate-activity-1").is_none());
             assert!(cx.debug_bounds("song-planning-activity").is_some());
+        }
+    }
+
+    #[gpui::test]
+    fn the_agents_answers_are_rendered_as_markdown(cx: &mut gpui::TestAppContext) {
+        use auris_session::workshop::Message;
+
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let snapshot = this
+                .song_workshop
+                .as_mut()
+                .unwrap()
+                .snapshot
+                .as_mut()
+                .unwrap();
+            snapshot.document.messages.push(Message {
+                user: false,
+                text: "Plan\n\n- **Tempo:** 150 BPM\n- **Key:** C minor".into(),
+            });
+        });
+        crate::harness::resize(&app, cx, gpui::size(gpui::px(1200.0), gpui::px(800.0)));
+        // The same blocks the editor's transcript draws for a list: one per item, not one line of
+        // asterisks and dashes.
+        for selector in [
+            "workshop-markdown-song-workshop-message-0-1-0-0-block",
+            "workshop-markdown-song-workshop-message-0-1-1-0-block",
+        ] {
+            assert!(cx.debug_bounds(selector).is_some(), "{selector} is drawn");
         }
     }
 
