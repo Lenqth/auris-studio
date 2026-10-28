@@ -765,6 +765,7 @@ fn shape_picker_label(
     width: Pixels,
     window: &Window,
 ) -> (gpui::ShapedLine, Pixels) {
+    let value = super::paint::single_line_text(value);
     let style = window.text_style();
     let font_size = style.font_size.to_pixels(window.rem_size());
     let line_height = style
@@ -1754,15 +1755,25 @@ mod tests {
     ) {
         let (_, cx) = crate::harness::open(cx);
         cx.update(|window, _| {
-            for value in ["1番 Aメロ", "雨上がりの街を歩きながら聴く曲"] {
+            for (value, expected) in [
+                ("1番 Aメロ", "1番 Aメロ"),
+                (
+                    "雨上がりの街を歩きながら聴く曲",
+                    "雨上がりの街を歩きながら聴く曲",
+                ),
+                (
+                    "雨のしずくが\r\n傘を離れ\n空が揺れる",
+                    "雨のしずくが 傘を離れ 空が揺れる",
+                ),
+            ] {
                 let value = SharedString::from(value);
                 for _ in 0..3 {
                     let (narrow, _) = shape_picker_label(value.clone(), px(1.0), window);
                     assert_eq!(narrow.text.as_ref(), "…");
                     assert_eq!(narrow.len(), narrow.text.len());
                     let (wide, _) = shape_picker_label(value.clone(), px(10000.0), window);
-                    assert_eq!(wide.text, value);
-                    assert_eq!(wide.len(), value.len());
+                    assert_eq!(wide.text.as_ref(), expected);
+                    assert_eq!(wide.len(), expected.len());
                 }
             }
         });

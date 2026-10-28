@@ -42,6 +42,7 @@ pub(crate) struct SongWorkshop {
     snapshot: Option<Snapshot>,
     view_round: Option<usize>,
     candidates: [Option<Arc<SongCandidate>>; 3],
+    played_audio: [Option<Arc<auris_session::prelude::AudioBuffer>>; 3],
     saved: [Option<std::path::PathBuf>; 3],
     errors: [Option<String>; 3],
     pub(crate) players: [PlayerState; 3],
@@ -81,6 +82,7 @@ impl SongWorkshop {
         self.preview_serial += 1;
         self.preparing = None;
         self.view_round = Some(index);
+        self.played_audio = std::array::from_fn(|_| None);
         self.saved = std::array::from_fn(|_| None);
         self.errors = std::array::from_fn(|_| None);
         self.refresh_candidates();
@@ -98,6 +100,20 @@ impl SongWorkshop {
                 s.candidates.get(&candidate.id).cloned()
             })
         });
+    }
+    fn audition(&self, index: usize) -> Option<Arc<auris_session::prelude::AudioBuffer>> {
+        if let Some(candidate) = &self.candidates[index] {
+            return Some(Arc::clone(&candidate.audio));
+        }
+        let snapshot = self.snapshot.as_ref()?;
+        let id = snapshot
+            .document
+            .rounds
+            .get(self.view_round?)?
+            .candidates
+            .get(index)?
+            .id;
+        snapshot.previews.get(&id).map(|p| Arc::clone(&p.audio))
     }
     fn text(&self, _: usize) -> &TextField {
         &self.brief
@@ -160,6 +176,7 @@ impl AurisApp {
             snapshot: None,
             view_round: None,
             candidates: std::array::from_fn(|_| None),
+            played_audio: std::array::from_fn(|_| None),
             saved: std::array::from_fn(|_| None),
             errors: std::array::from_fn(|_| None),
             players: std::array::from_fn(|_| PlayerState::default()),
@@ -770,6 +787,7 @@ impl AurisApp {
         let s = self.song_workshop.as_ref().expect("visible workshop");
         let id = candidate.id;
         let ready = s.candidates[index].is_some();
+        let audition = s.audition(index);
         let running = snapshot.progress.contains_key(&id);
         let selected = snapshot.document.selected == Some(id);
         let mut badges = div().flex().flex_wrap().gap(spacing.xs);
@@ -780,9 +798,12 @@ impl AurisApp {
                     .icon(IconName::Check),
             );
         }
-        if let Some(audio) = s.candidates[index].as_ref() {
-            let seconds = audio.audio.duration_seconds().round() as u64;
+        if let Some(audio) = audition.as_ref() {
+            let seconds = audio.duration_seconds().round() as u64;
             badges = badges.child(Badge::new(format!("{}:{:02}", seconds / 60, seconds % 60)));
+            if !ready {
+                badges = badges.child(Badge::new(self.t(Key::WorkshopDraftPreview)));
+            }
         }
         let mut card = div()
             .id(("song-candidate", index))
@@ -867,9 +888,13 @@ impl AurisApp {
                     .color(TextColor::Muted),
             );
         }
-        for error in [candidate.error.as_ref(), s.errors[index].as_ref()]
-            .into_iter()
-            .flatten()
+        for error in [
+            candidate.error.as_ref(),
+            s.errors[index].as_ref(),
+            snapshot.preview_errors.get(&id),
+        ]
+        .into_iter()
+        .flatten()
         {
             card = card.child(
                 div()
@@ -917,14 +942,39 @@ impl AurisApp {
         card = card.child(
             self.render_audio_player(
                 PlayerTarget::Workshop(index),
-                s.candidates[index]
+                audition
                     .as_ref()
-                    .map_or(0.0, |c| c.audio.duration_seconds()),
-                ready && !running && s.preparing.is_none(),
+                    .map_or(0.0, |audio| audio.duration_seconds()),
+                audition.is_some() && s.preparing.is_none(),
                 s.preparing == Some(index),
                 cx,
             ),
         );
+        if audition.as_ref().is_some_and(|latest| {
+            s.played_audio[index]
+                .as_ref()
+                .is_some_and(|played| !Arc::ptr_eq(latest, played))
+        }) {
+            card = card.child(
+                div()
+                    .debug_selector(move || format!("song-preview-latest-{index}"))
+                    .child(
+                        Button::new(
+                            ("song-preview-latest", index),
+                            self.t(Key::WorkshopLatestPreview),
+                        )
+                        .ghost()
+                        .icon(IconName::Refresh)
+                        .disabled(s.preparing.is_some())
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if let Some(state) = &mut this.song_workshop {
+                                state.players[index].reset_audio();
+                            }
+                            this.preview_song_candidate(index, cx);
+                        })),
+                    ),
+            );
+        }
         let usable = ready && !running;
         let retry_enabled = running || (!snapshot.planning && snapshot.progress.len() < 3);
         let unfinished = !candidate.ready;
@@ -1157,6 +1207,8 @@ mod tests {
             s.snapshot = Some(Snapshot {
                 document: Default::default(),
                 candidates: Default::default(),
+                previews: Default::default(),
+                preview_errors: Default::default(),
                 progress: Default::default(),
                 planning: false,
                 preferences: Default::default(),
@@ -1323,6 +1375,119 @@ mod tests {
             s.view(1);
             assert!(s.preparing.is_none());
             assert_ne!(serial, s.preview_serial);
+        });
+    }
+
+    #[gpui::test]
+    fn unfinished_music_can_play_and_refresh_without_becoming_adoptable(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use auris_session::{
+            prelude::AudioBuffer,
+            workshop::{Candidate, Direction, Round},
+        };
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        let tone = |frames| {
+            let mut audio = AudioBuffer::stereo(frames, 22_050.0);
+            for channel in audio.channels_mut() {
+                for (i, sample) in channel.iter_mut().enumerate() {
+                    *sample = (i as f32 * 0.1).sin() * 0.1;
+                }
+            }
+            Arc::new(audio)
+        };
+        let first = tone(22_050);
+        let latest = tone(44_100);
+        let before = app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.view_round = Some(0);
+            let snapshot = s.snapshot.as_mut().unwrap();
+            snapshot
+                .document
+                .messages
+                .push(auris_session::workshop::Message {
+                    user: false,
+                    text: "Writing this candidate".into(),
+                });
+            snapshot.document.rounds.push(Round {
+                after_message: 1,
+                candidates: vec![Candidate {
+                    id: 1,
+                    parent: None,
+                    ready: false,
+                    error: None,
+                    recoveries: 0,
+                    direction: Direction {
+                        title: "Draft".into(),
+                        description: "A melody being written".into(),
+                        instructions: "Continue".into(),
+                        protected_tracks: vec![],
+                    },
+                }],
+            });
+            snapshot.progress.insert(1, "melody".into());
+            snapshot.previews.insert(
+                1,
+                auris_agent::workshop::Preview {
+                    revision: 1,
+                    audio: Arc::clone(&first),
+                },
+            );
+            this.session.project().clone()
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-preview-0-play", cx);
+        cx.run_until_parked();
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            assert!(
+                s.played_audio[0]
+                    .as_ref()
+                    .is_some_and(|audio| Arc::ptr_eq(audio, &first))
+            );
+            s.snapshot.as_mut().unwrap().previews.insert(
+                1,
+                auris_agent::workshop::Preview {
+                    revision: 2,
+                    audio: Arc::clone(&latest),
+                },
+            );
+            // Arrival of new audio does not swap the buffer the user chose to hear.
+            assert!(Arc::ptr_eq(s.played_audio[0].as_ref().unwrap(), &first));
+            assert!(s.candidates[0].is_none());
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-adopt-0", cx);
+        app.read_with(cx, |this, _| {
+            assert!(
+                this.song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .snapshot
+                    .as_ref()
+                    .unwrap()
+                    .document
+                    .selected
+                    .is_none()
+            )
+        });
+        crate::harness::click("song-preview-latest-0", cx);
+        cx.run_until_parked();
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert!(
+                s.played_audio[0]
+                    .as_ref()
+                    .is_some_and(|audio| Arc::ptr_eq(audio, &latest))
+            );
+            assert_eq!(this.session.project(), &before);
         });
     }
 

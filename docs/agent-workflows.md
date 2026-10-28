@@ -414,17 +414,15 @@ input support to listen to it. Deliver the playable file and report the score an
 
 ## Live agent system prompt
 
-The standard live prompt starts with musical decisions: motif development,
-phrase direction, lyric prosody, harmonic motion, section contrasts, arrangement
-roles and a complete ending. The model chooses a writing order suited to the brief
-and can author accompaniment or use a generation recipe. It completes the requested
-form before repeated local polishing, checks the actual score and rendered passages,
-and distinguishes those observations from listening preference.
+The standard prompt gives the agent a short production sequence: inspect, establish
+form/harmony, author notes, arrange/mix, then verify and deliver. Explicit constraints
+take priority over creative choices. It completes the requested form before repeated
+local polishing and distinguishes score/audio measurements from listening preference.
 
 Musical knowledge lives in `crates/auris-agent/src/prompts/musical-design.md`, shared by
 both live prompt profiles, the startup song-direction planner and standalone lyric generation.
-It covers motif rhythm/development, phrase releases, harmonic colour, chorus register,
-prosody, arrangement, interludes, effects and interpreting component-specific feedback.
+It prioritizes motif development, phrase destinations/releases, section contrast,
+lyric fit, foreground support and balancing the actual sounds.
 The startup planner selects three directions. Each then runs the configured tool-using agent
 in an isolated, note-free session, with the same resolved composition prompt as the panel.
 Selected instruments and singers are prepared first. The agent authors expressive notes,
@@ -439,11 +437,14 @@ denials. Note replacement is allowed inside the new disposable candidate; operat
 interactive approval remain unavailable. No external evaluator or shell setup is required.
 Lyric generation applies it to words and phrase structure without claiming known pitches.
 
-Live editing instructions remain in `crates/auris-agent/src/prompts/composition.md`; the standard
-profile also includes `prompts/live-tools.md` for operation contracts. Shared vocal
-form, phrasing and performance guidance is appended by `default_system_prompt`.
-The experimental modular profile uses the same musical guidance with its workflow
-instructions. Codex and Claude Code receive the same resolved composition prompt.
+The production sequence lives in `crates/auris-agent/src/prompts/composition.md`;
+`prompts/live-tools.md` retains essential operation contracts such as IDs, revisions,
+note units, lyrics, singer takes and final-render verification. Exact schemas and
+detailed task guidance are obtained through discovery and `tool_help` when needed.
+The experimental modular profile additionally selects a production-record workflow.
+The editor panel and workshop composers resolve the same shared prompt; the workshop
+adds its private-session and host-owned export constraints. Codex and Claude Code
+receive the same resolved composition prompt.
 
 Settings → Agent includes a multiline **System prompt** editor shared by Codex,
 Claude Code and Rig models. It starts with the current standard prompt in full.
