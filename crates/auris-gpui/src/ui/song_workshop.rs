@@ -466,20 +466,29 @@ impl AurisApp {
             .max_w(COLUMN_WIDTH);
         if let Some(snapshot) = &s.snapshot {
             if snapshot.document.messages.is_empty() {
-                transcript = transcript.child(agent_components::conversation_intro(
-                    title_of(self.t(Key::WorkshopTitle)),
-                    self.t(Key::WorkshopChatHint),
+                transcript = transcript.child(text_panel(
+                    agent_components::conversation_intro(
+                        title_of(self.t(Key::WorkshopTitle)),
+                        self.t(Key::WorkshopChatHint),
+                        &theme,
+                    ),
                     &theme,
                 ));
             }
             for (i, message) in snapshot.document.messages.iter().enumerate() {
-                transcript = transcript.child(agent_components::workshop_message(
+                let entry = agent_components::workshop_message(
                     ("song-workshop-message", i),
                     message.user,
                     message.text.clone(),
                     &theme,
                     cx,
-                ));
+                );
+                // The person's own words are already in an opaque bubble.
+                transcript = transcript.child(if message.user {
+                    entry
+                } else {
+                    text_panel(entry, &theme)
+                });
                 for (round_index, round) in snapshot
                     .document
                     .rounds
@@ -488,29 +497,28 @@ impl AurisApp {
                     .filter(|(_, r)| r.after_message == i + 1)
                 {
                     if s.view_round != Some(round_index) {
-                        transcript = transcript.child(
-                            div().child(
-                                Button::new(
-                                    ("song-round", round_index),
-                                    round
-                                        .candidates
-                                        .iter()
-                                        .map(|c| c.direction.title.as_str())
-                                        .collect::<Vec<_>>()
-                                        .join(" · "),
-                                )
-                                .ghost()
-                                .icon(IconName::History)
-                                .on_click(cx.listener(
-                                    move |this, _, _, cx| {
-                                        if let Some(s) = &mut this.song_workshop {
-                                            s.view(round_index);
-                                        }
-                                        cx.notify();
-                                    },
-                                )),
-                            ),
-                        );
+                        transcript = transcript.child(text_panel(
+                            Button::new(
+                                ("song-round", round_index),
+                                round
+                                    .candidates
+                                    .iter()
+                                    .map(|c| c.direction.title.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(" · "),
+                            )
+                            .ghost()
+                            .icon(IconName::History)
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    if let Some(s) = &mut this.song_workshop {
+                                        s.view(round_index);
+                                    }
+                                    cx.notify();
+                                },
+                            )),
+                            &theme,
+                        ));
                         continue;
                     }
                     let mut cards = div()
@@ -529,22 +537,32 @@ impl AurisApp {
                 }
             }
             if snapshot.planning {
-                transcript = transcript.child(agent_components::thinking_indicator(
-                    "song-planning-activity",
-                    self.t(Key::WorkshopPlanning),
+                transcript = transcript.child(text_panel(
+                    agent_components::thinking_indicator(
+                        "song-planning-activity",
+                        self.t(Key::WorkshopPlanning),
+                    ),
+                    &theme,
                 ));
             }
             if s.show_memory {
-                transcript = transcript.child(self.workshop_memory(snapshot, cx));
+                transcript =
+                    transcript.child(text_panel(self.workshop_memory(snapshot, cx), &theme));
             }
         } else {
-            transcript = transcript.child(agent_components::thinking_indicator(
-                "song-loading-activity",
-                self.t(Key::WorkshopLoadingModels),
+            transcript = transcript.child(text_panel(
+                agent_components::thinking_indicator(
+                    "song-loading-activity",
+                    self.t(Key::WorkshopLoadingModels),
+                ),
+                &theme,
             ));
         }
         if let Some(error) = &s.error {
-            transcript = transcript.child(agent_components::error_notice(error.clone()));
+            transcript = transcript.child(text_panel(
+                agent_components::error_notice(error.clone()),
+                &theme,
+            ));
         }
         let has_messages = s
             .snapshot
@@ -574,12 +592,19 @@ impl AurisApp {
             .is_some_and(|s| s.document.selected.is_some());
         let memory = s.snapshot.as_ref().is_some_and(|s| s.preferences.enabled);
         let can_open = selected && !s.busy();
+        // On a surface of its own for the same reason the transcript's text is: see `text_panel`.
         let options = div()
             .flex()
             .flex_wrap()
             .items_center()
             .gap(spacing.md)
             .w_full()
+            .px(spacing.md)
+            .py(spacing.xs)
+            .rounded(theme.atelier.shape.radius_lg)
+            .bg(theme.surface)
+            .border_1()
+            .border_color(theme.border_subtle)
             .child(
                 div().debug_selector(|| "song-memory".into()).child(
                     atelier::Switch::new("song-memory", memory)
@@ -771,8 +796,10 @@ impl AurisApp {
             .border_1()
             // The agent's colour marks only work the agent is doing: a card being written. The
             // song the person chose is their choice, and carries the accent.
+            // Mixed into the card's own fill rather than laid over it, so the card stays opaque
+            // over the metal beneath the transcript.
             .when(running, |card| {
-                card.bg(colors.agent_wash)
+                card.bg(atelier::mix(colors.elevated, colors.agent, 0.12))
                     .border_color(colors.agent.opacity(0.35))
             })
             .when(!running, |card| {
@@ -1054,6 +1081,26 @@ pub(crate) fn workshop_veil(has_messages: bool, scrolled: gpui::Pixels) -> f32 {
     }
     let travel = (f32::from(scrolled) / f32::from(VEIL_SCROLL)).clamp(0.0, 1.0);
     atelier::motion::lerp(LOG_VEIL, 1.0, travel)
+}
+
+/// An opaque surface under text in the transcript.
+///
+/// The transcript sits over the metal behind a thin veil, which is there to let the welcome show
+/// through, not to be read on. Whatever carries words gets a surface of its own, as the person's
+/// bubbles, the candidate cards and the composer already have, so text never lies on the metal.
+fn text_panel(content: impl IntoElement, theme: &crate::theme::Theme) -> AnyElement {
+    let atelier = &theme.atelier;
+    div()
+        .w_full()
+        .min_w_0()
+        .px(atelier.spacing.lg)
+        .py(atelier.spacing.md)
+        .rounded(atelier.shape.radius_lg)
+        .bg(theme.surface)
+        .border_1()
+        .border_color(theme.border_subtle)
+        .child(content)
+        .into_any_element()
 }
 
 /// The veil over an empty conversation.
