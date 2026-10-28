@@ -79,6 +79,17 @@ fn command(
     native: bool,
 ) -> Result<Command, String> {
     let mut command = Command::new(executable(prefs)?);
+    // A file, not an argument: the preamble outgrows Windows' 32 767-character command line.
+    let prompt = cwd.join("system-prompt.md");
+    std::fs::write(
+        &prompt,
+        if native {
+            super::cli_preamble(prefs)
+        } else {
+            crate::approval_review::INSTRUCTIONS.into()
+        },
+    )
+    .map_err(|error| format!("Cannot write the Claude Code system prompt: {error}"))?;
     command
         .args([
             "--print",
@@ -110,7 +121,8 @@ fn command(
             "permissions":{"allow":["mcp__auris_live__*"],"ask":if native { NATIVE_TOOLS } else { &[] }}})
             .to_string(),
         )
-        .args(["--system-prompt", &if native { super::cli_preamble(prefs) } else { crate::approval_review::INSTRUCTIONS.into() }])
+        .arg("--system-prompt-file")
+        .arg(&prompt)
         .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -902,21 +914,25 @@ mod tests {
                 .any(|arg| arg.contains("Bearer") || arg.contains("bypassPermissions"))
         );
         assert_eq!(command.as_std().get_current_dir(), Some(cwd.path()));
-        assert!(
-            args.windows(2)
-                .any(|pair| pair == ["--system-prompt", crate::approval_review::INSTRUCTIONS])
-        );
+        let prompt = |args: &[String]| {
+            let pair = args
+                .windows(2)
+                .find(|pair| pair[0] == "--system-prompt-file")
+                .unwrap();
+            std::fs::read_to_string(&pair[1]).unwrap()
+        };
+        assert_eq!(prompt(&args), crate::approval_review::INSTRUCTIONS);
+        assert!(!args.iter().any(|arg| arg == "--system-prompt"));
         let native = super::command(&prefs, cwd.path(), true).unwrap();
         let args: Vec<_> = native
             .as_std()
             .get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
-        assert!(
-            args.windows(2).any(|pair| pair[0] == "--system-prompt"
-                && pair[1] == super::super::cli_preamble(&prefs))
-        );
-        assert!(args.iter().any(|arg| arg.starts_with(&prefs.system_prompt)));
+        assert_eq!(prompt(&args), super::super::cli_preamble(&prefs));
+        assert!(prompt(&args).starts_with(&prefs.system_prompt));
+        // The whole command line stays far below Windows' 32 767-character limit.
+        assert!(args.iter().map(|arg| arg.len() + 1).sum::<usize>() < 8 * 1024);
         assert!(
             args.windows(2)
                 .any(|args| args == ["--permission-mode", "default"])
