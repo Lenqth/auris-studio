@@ -1155,8 +1155,13 @@ impl AudioEngine {
         };
         let metered = graph.track_count().min(self.meters.track_capacity());
         for index in 0..metered {
-            self.meters
-                .report_track(index, graph.track_peak(index), frames, self.sample_rate);
+            self.meters.report_track(
+                index,
+                graph.track_channel_peaks(index),
+                graph.track_sides_differ(index),
+                frames,
+                self.sample_rate,
+            );
         }
         for channel in 0..2 {
             self.meters.report_master(
@@ -1166,6 +1171,8 @@ impl AudioEngine {
                 self.sample_rate,
             );
         }
+        self.meters
+            .report_master_width(graph.master_sides_differ(), frames, self.sample_rate);
     }
 
     fn poll_commands(&mut self) {

@@ -332,14 +332,11 @@ impl Render for AuxiliaryWindow {
             let theme = app.theme.clone();
             let title = surface.title(app);
             window.set_window_title(&title);
-            let chrome = titlebar::titlebar(window, &theme)
-                .child(
-                    titlebar::drag_region("utility-title")
-                        .flex_1()
-                        .px_3()
-                        .child(div().min_w_0().truncate().text_xs().child(title)),
-                )
-                .child(titlebar::controls(
+            let chrome = titlebar::composed(
+                window,
+                &theme,
+                titlebar::Parts::new("utility-title", title),
+                titlebar::controls(
                     window,
                     &theme,
                     cx.listener(move |app, _, window, cx| {
@@ -351,7 +348,8 @@ impl Render for AuxiliaryWindow {
                         window.remove_window();
                         cx.notify();
                     }),
-                ));
+                ),
+            );
             let content = match surface {
                 Surface::Panel(panel) => {
                     let content = app.render_panel(panel, window, cx);

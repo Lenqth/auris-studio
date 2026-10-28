@@ -102,8 +102,6 @@ pub enum ButtonStyle {
     Normal,
     /// Filled with the accent colour; for the primary action in a dialog.
     Primary,
-    /// Hands work to the agent, using Atelier's dedicated agent treatment.
-    Agent,
     /// Filled with the danger colour; for irreversible commitment in a dialog.
     Danger,
     /// Borderless, for dense toolbars.
@@ -358,11 +356,6 @@ where
         // reads as the same button rather than as a second latched one in a row of them.
         (_, Latch::Ready) => (theme.surface_raised, active_color, active_color),
         (ButtonStyle::Primary, Latch::Off) => (theme.accent, theme.text_on_accent, theme.accent),
-        (ButtonStyle::Agent, Latch::Off) => (
-            theme.atelier.colors.agent_wash,
-            theme.atelier.colors.agent,
-            Theme::translucent(theme.atelier.colors.agent, 0.35),
-        ),
         (ButtonStyle::Danger, Latch::Off) => {
             (theme.danger, theme.text_on(theme.danger), theme.danger)
         }
@@ -420,6 +413,88 @@ where
         .child(label)
 }
 
+/// One page of a navigation column: Atelier's `ListItem`, made reachable from the keyboard.
+///
+/// Atelier's row is drawn for the pointer only; a window whose pages are chosen from a sidebar
+/// still has to be operable with Tab and Enter, so this is the same row (icon lane, label, an
+/// optional faint description, the selected fill) with a focus stop and the shared focus ring.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn nav_item<F>(
+    id: &'static str,
+    label: impl Into<SharedString>,
+    description: Option<SharedString>,
+    glyph: atelier::IconName,
+    selected: bool,
+    enabled: bool,
+    theme: &Theme,
+    on_click: F,
+) -> gpui::Stateful<gpui::Div>
+where
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+{
+    let atelier = &theme.atelier;
+    let colors = &atelier.colors;
+    let height = match description {
+        Some(_) => atelier.density.row + atelier.typography.size_sm,
+        None => atelier.density.row,
+    };
+    let hover = colors.hover;
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(atelier.spacing.sm)
+        .h(height)
+        .px(atelier.spacing.sm)
+        .rounded(atelier.shape.radius_sm)
+        .border_1()
+        .border_color(gpui::transparent_black())
+        .text_size(atelier.typography.size_md)
+        .text_color(if selected {
+            colors.text
+        } else {
+            colors.text_muted
+        })
+        .when(selected, |row| {
+            row.bg(colors.selected)
+                .font_weight(atelier.typography.label_weight)
+        })
+        .when(enabled && !selected, |row| {
+            row.hover(move |style| style.bg(hover))
+        })
+        .when(enabled, |row| {
+            row.tab_index(0)
+                .focus(|row| row.border_color(theme.selection))
+                .on_click(on_click)
+        })
+        .when(!enabled, |row| row.opacity(0.62))
+        .child(div().flex().flex_none().justify_center().w(px(16.0)).child(
+            atelier::Icon::new(glyph).size(px(15.0)).color(if selected {
+                colors.accent_text
+            } else {
+                colors.text_faint
+            }),
+        ))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .child(div().truncate().child(label.into()))
+                .children(description.map(|description| {
+                    div()
+                        .truncate()
+                        .text_size(atelier.typography.size_sm)
+                        .font_weight(gpui::FontWeight::NORMAL)
+                        .text_color(colors.text_faint)
+                        .child(description)
+                })),
+        )
+}
+
 /// A square button holding one drawn icon, used in the transport bar.
 ///
 /// The icon is painted rather than typed so a row of them shares one weight and colour; see
@@ -438,17 +513,23 @@ where
     I: Into<ElementId>,
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
+    // Atelier draws toolbar icons as ghost buttons: no fill or hairline until the pointer is
+    // over them, and a latched one filled with its own colour.
     let background = if active {
         active_color
     } else {
-        theme.surface_raised
+        gpui::transparent_black()
     };
     let foreground = if active {
         theme.text_on(active_color)
     } else {
-        theme.text
+        theme.text_muted
     };
-    let hover = theme.hovered(background, 0.14);
+    let hover = if active {
+        theme.hovered(background, 0.14)
+    } else {
+        theme.surface_hover
+    };
 
     // The id again, this time as a name a test can find the button by. `debug_selector` compiles
     // to nothing unless gpui is built with `test-support`, which only `cargo test` does — so the
@@ -472,7 +553,11 @@ where
                 .control_radius(theme.atelier.density.control_md),
         )
         .border_1()
-        .border_color(if active { active_color } else { theme.border })
+        .border_color(if active {
+            active_color
+        } else {
+            gpui::transparent_black()
+        })
         .bg(background)
         .hover(|this| this.bg(hover))
         .active(|this| this.opacity(0.75))
@@ -1426,6 +1511,61 @@ pub fn level_meter(
         .child(fill)
         .when(peak > 0.001, |this| this.child(peak_marker))
         .when(clipped, |this| this.child(clip_light.bg(theme.danger)))
+}
+
+/// What a channel's meter reads: each side's linear peak, and whether to show the two apart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MeterReading {
+    /// Left and right linear peaks.
+    pub peaks: [f32; 2],
+    /// Whether the two sides have been carrying different signals. Mono material panned
+    /// somewhere still comes out of two channels, but it is one signal, and two bars for it
+    /// would say there were two.
+    pub stereo: bool,
+}
+
+impl MeterReading {
+    /// The louder side, which is what a single bar shows.
+    pub fn peak(&self) -> f32 {
+        self.peaks[0].max(self.peaks[1])
+    }
+}
+
+/// A channel's level meter: one bar for mono material, one for each side of stereo material.
+///
+/// The pair shares the single bar's footprint, left before right — left-to-right across a
+/// vertical meter, top-to-bottom along a horizontal one, the way a console stacks them — and
+/// each side is coloured by its own level, so a hard-panned signal reads as one side running hot.
+pub fn channel_meter(
+    reading: MeterReading,
+    clipped: bool,
+    axis: Axis,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    let bar = |gain: f32| {
+        let db = auris_session::prelude::gain_to_db(gain);
+        let position = db_to_meter_position(db);
+        div().flex_1().min_w_0().min_h_0().child(level_meter(
+            position,
+            position,
+            clipped,
+            axis,
+            theme.meter_color(db),
+            theme,
+        ))
+    };
+    let frame = div().flex().size_full().gap(px(1.0));
+    let frame = match axis {
+        Axis::Vertical => frame.flex_row(),
+        Axis::Horizontal => frame.flex_col(),
+    };
+    if reading.stereo {
+        frame
+            .child(bar(reading.peaks[0]))
+            .child(bar(reading.peaks[1]))
+    } else {
+        frame.child(bar(reading.peak()))
+    }
 }
 
 /// Quietest level a meter draws anything for.

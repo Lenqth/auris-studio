@@ -19,6 +19,10 @@ messages, status and error notices, thinking indicators, the composer frame, its
 lane, and keyboard-operable send/stop commands. The adapter keeps
 the existing Auris session state, editable fields, attachments, and permission handling in their
 own views while giving both workflows the same Atelier agent presentation primitives.
+An agent answer is drawn without Atelier's avatar-and-name line: a conversation has exactly two
+voices, the person's is the accent bubble on the trailing edge, and whatever is not in a bubble
+is the agent. The agent itself is marked by Atelier's sparkle wherever it is opened, and the
+composer's fast mode is a single bolt.
 
 Glass Dark is the first-run default; Glass Light is available in Appearance. Previously saved
 schemes and custom palettes retain their identifiers and document colours. Interface surfaces
@@ -31,14 +35,45 @@ selected track headers use the accent fill, clips use rounded coloured bodies an
 outlines, and the trailing agent dock opens at 380 px. Both conversation entry points share the
 same introductory state, message forms and inset composer. Saved dock widths remain intact.
 
-The chooser places the navigation, descriptive start cards and commit footer on an opaque panel
-over `MetalBackdrop`, as in the liquid-metal variant of the upstream `ambient` example. The
-panel occludes pointer events so its controls do not also manipulate the metal beneath it. A card
-selects a starting method; Create or Enter commits it, and double-click also opens it. Background
-motion can be paused in the title bar; the choice persists as `animate_welcome` in
-`appearance.json`. Inactive windows hold a still frame. The backdrop is unmounted on entering
-the editor or workshop, respects Atelier's motion policy and uses its static CPU fallback when
-hardware rendering is unavailable.
+Every window's title bar is composed by `titlebar::composed` the way Atelier's `TitleBar` is:
+the title sits on the window's centre line with a short subtitle beside it, Back (or, in the
+editor, Undo and Redo) leads at the left, and nothing else sits in it. The two
+sides grow from bases that make up for the native traffic lights and caption buttons, so the
+title stays centred on the window rather than on whatever space the controls leave.
+
+The chooser is built from Atelier's own components, as in the upstream `auris_screens` example:
+a `Sidebar` of `ListItem`s (new, recent, and the setup guide at the foot), `OptionCard`s for how
+to start, an `EmptyState` when there are no recent projects, and a toolbar-height footer holding
+the one primary commit. The panel takes about half the body (up to 880×480), so a larger window shows more of the metal rather than a larger panel. It floats over `MetalBackdrop`, as in the liquid-metal variant of
+the upstream `ambient` example, and occludes pointer events so its controls do not also
+manipulate the metal beneath it. A card selects a starting method; Create or Enter commits it,
+and double-click also opens it. The setup guide is the panel's third page rather than a window
+of its own; a first run opens the chooser on it, and Settings brings it forward in whichever
+window shows the chooser. Inactive windows hold a still frame of the metal, and Atelier's motion
+policy stills it entirely.
+
+Choosing "Create with AI" hands the panel over to the song workshop: for one `motion.normal` the
+metal stays mounted while a panel-coloured shape grows from the chooser panel to the whole body
+and the workshop fades in over it; Back plays the same hand-over in reverse. The metal stays
+under the workshop too, behind a veil of the surface colour that the shape turns into as it
+arrives: thin while the conversation is empty, thicker once there is a transcript, and solid
+once the transcript has been scrolled, so reading is never done over the moving metal. Only the shape
+moves — the arriving screen is laid out at its final size from the first frame — so nothing
+reflows. The workshop follows the upstream compose screen: one centred column of transcript and
+candidate cards (elevated, accent-bordered when chosen, agent-washed only while being written),
+the Atelier composer with the send button as its one primary, and a row of workshop options
+beneath it with "Use my preferences" as a `Switch`.
+
+Settings and the singing-backend setup are preferences windows in one shape: a leading
+`Sidebar` names every page in full (the settings search sits at its head, the setup guide at its
+foot), and each page opens with a `SectionHeader` saying what it covers, on a surface at a
+reading width with its own actions and status underneath. Atelier has no form pattern yet, so
+fields follow its `TextField` metrics with the label above the field and groups under a
+section-weight heading. The rows are `ui::widgets::nav_item` rather than Atelier's `ListItem`,
+which is pointer-only, so every page stays in the Tab order.
+
+Toolbar icon buttons are Atelier ghost buttons: no fill or hairline until hovered, and filled
+with their signal colour when latched.
 
 On Windows, `gpu-allocator` 0.27 must resolve to `windows` 0.58, matching Atelier's `wgpu-hal` 25.
 The committed lockfile includes that resolution; after regenerating it, check `cargo tree -p

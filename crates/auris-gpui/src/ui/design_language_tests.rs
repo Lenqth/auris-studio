@@ -60,4 +60,73 @@ mod tests {
             assert!(bounds.bottom() <= chooser.bottom(), "{action}");
         }
     }
+
+    #[gpui::test]
+    fn start_screen_titles_sit_on_the_window_centre_line(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| this.show_project_chooser(window, cx));
+        });
+        for width in [1200.0, 900.0] {
+            resize(&app, cx, size(px(width), px(700.0)));
+            let title = cx.debug_bounds("chooser-title").unwrap();
+            // The caption buttons on one side used to pull the title towards the other.
+            assert!(
+                (title.center().x - px(width / 2.0)).abs() <= px(1.0),
+                "{width}"
+            );
+            assert!(cx.debug_bounds("chooser-motion").is_none());
+        }
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| this.open_song_workshop(window, cx));
+        });
+        paint(&app, cx);
+        let title = cx.debug_bounds("song-workshop-title").unwrap();
+        assert!((title.center().x - px(450.0)).abs() <= px(1.0));
+        // Back leads the bar, ahead of the title.
+        let back = cx.debug_bounds("song-back").unwrap();
+        assert!(back.right() <= title.left());
+        assert!(back.bottom() <= crate::titlebar::HEIGHT);
+    }
+
+    #[gpui::test]
+    fn choosing_ai_hands_the_panel_over_and_back_returns_it(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| this.show_project_chooser(window, cx));
+        });
+        paint(&app, cx);
+        crate::harness::click("chooser-ai", cx);
+        crate::harness::click("chooser-confirm", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.song_workshop.is_some());
+            let transition = this.welcome_transition.expect("the hand-over runs");
+            assert!(transition.to_workshop);
+        });
+        paint(&app, cx);
+        crate::harness::click("song-back", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.song_workshop.is_none());
+            assert!(this.project_chooser.is_some());
+            assert!(!this.welcome_transition.unwrap().to_workshop);
+        });
+    }
+
+    #[gpui::test]
+    fn undo_and_redo_lead_the_editor_title_bar(cx: &mut gpui::TestAppContext) {
+        let (app, cx, _, clip) = crate::harness::with_a_clip(cx);
+        let undo = cx.debug_bounds("titlebar-undo").unwrap();
+        let redo = cx.debug_bounds("titlebar-redo").unwrap();
+        let title = cx.debug_bounds("project-title").unwrap();
+        assert!(undo.right() <= redo.left());
+        assert!(redo.right() <= title.left());
+        crate::harness::click("titlebar-undo", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.session.midi_clip(clip).is_none())
+        });
+        crate::harness::click("titlebar-redo", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.session.midi_clip(clip).is_some())
+        });
+    }
 }

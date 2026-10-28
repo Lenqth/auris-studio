@@ -61,10 +61,15 @@ pub enum Icon {
     Knob,
     /// A sound — a font's preset, or the shelf a set of them sits on.
     Wave,
-    /// The agent: a speech bubble, which is what a conversation is drawn as everywhere.
+    /// The agent: Atelier's sparkle, the mark every AI entry point shares.
     Agent,
-    /// AI-assisted creation: a large sparkle and two smaller glints.
-    Sparkles,
+    /// Step back one edit: an arrow turning back on itself.
+    Undo,
+    /// Speed: a lightning bolt, for the agent's fast mode.
+    Bolt,
+    /// Step forward one edit: Undo's arrow, mirrored. Atelier has no redo glyph, so this one is
+    /// drawn here with the same stroke.
+    Redo,
 }
 
 /// An element that draws `icon` at `size`, centred in whatever box it is given.
@@ -92,6 +97,8 @@ impl Icon {
             Self::Notes => Some("icons/auris-notes.svg"),
             Self::Keyboard => Some("icons/auris-keyboard.svg"),
             Self::Knob => Some("icons/auris-knob.svg"),
+            Self::Redo => Some("icons/auris-redo.svg"),
+            Self::Bolt => Some("icons/auris-bolt.svg"),
             _ => None,
         }
     }
@@ -128,8 +135,10 @@ impl Icon {
             Self::Keyboard => AtelierIconName::Music,
             Self::Microphone => AtelierIconName::Mic,
             Self::Wave => AtelierIconName::Waveform,
-            Self::Agent => AtelierIconName::Brain,
-            Self::Sparkles => AtelierIconName::Sparkles,
+            Self::Agent => AtelierIconName::Sparkles,
+            Self::Undo => AtelierIconName::Undo,
+            Self::Redo => AtelierIconName::Undo,
+            Self::Bolt => AtelierIconName::Sparkles,
         }
     }
 }
