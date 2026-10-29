@@ -37,7 +37,7 @@ mod composition_eval;
 pub(crate) mod controls;
 mod conversations;
 pub(crate) mod midi;
-mod model_search;
+pub(super) mod model_search;
 pub(crate) mod music;
 #[cfg(test)]
 mod performance_eval;
@@ -1977,7 +1977,7 @@ impl AurisApp {
     /// What would stop a send right now. A model picked in a settings form that is still open
     /// counts as chosen, because `agent_send` applies that form before it asks.
     fn agent_send_blocker(&self) -> Option<SendBlocker> {
-        if controls::is_control_command(self.agent_chat.input.content().trim()) {
+        if crate::ui::chat_commands::is_control_command(self.agent_chat.input.content().trim()) {
             return None;
         }
         let model_chosen = self.settings.agent.is_configured()
@@ -2282,7 +2282,7 @@ impl AurisApp {
         if text.is_empty() {
             return;
         }
-        if controls::is_control_command(&text) && !self.agent_operation_busy() {
+        if crate::ui::chat_commands::is_control_command(&text) && !self.agent_operation_busy() {
             self.agent_control_command(&text);
             return;
         }
@@ -3254,55 +3254,28 @@ impl AurisApp {
         let completions = if !composing
             && focused == AgentField::Chat
             && self.agent_chat.pending_send.is_none()
-            && self.agent_chat.controls.slash_dismissed.as_deref()
-                != Some(self.agent_chat.input.content())
         {
-            controls::slash_matches(self.agent_chat.input.content(), &self.agent_chat.models)
+            self.agent_chat.controls.slash.matches(
+                self.agent_chat.input.content(),
+                &self.agent_chat.models,
+                crate::ui::chat_commands::Scope::Agent,
+            )
         } else {
             Vec::new()
         };
-        if !completions.is_empty() {
-            let selected = self.agent_chat.controls.slash_selected % completions.len();
-            match key {
-                "escape" => {
-                    self.agent_chat.controls.slash_dismissed =
-                        Some(self.agent_chat.input.content().to_owned());
+        match self.agent_chat.controls.slash.key(
+            self.agent_chat.input.content(),
+            &completions,
+            event,
+        ) {
+            crate::ui::chat_commands::CompletionKey::Handled => return true,
+            crate::ui::chat_commands::CompletionKey::Complete { fill, submit } => {
+                self.accept_agent_completion(&fill);
+                if !submit {
                     return true;
                 }
-                "up" => {
-                    self.agent_chat.controls.slash_selected =
-                        (selected + completions.len() - 1) % completions.len();
-                    self.agent_chat
-                        .controls
-                        .slash_scroll
-                        .scroll_to_item(self.agent_chat.controls.slash_selected);
-                    return true;
-                }
-                "down" => {
-                    self.agent_chat.controls.slash_selected = (selected + 1) % completions.len();
-                    self.agent_chat
-                        .controls
-                        .slash_scroll
-                        .scroll_to_item(self.agent_chat.controls.slash_selected);
-                    return true;
-                }
-                "tab" => {
-                    self.accept_agent_completion(&completions[selected].fill);
-                    return true;
-                }
-                "enter"
-                    if !event.keystroke.modifiers.shift
-                        && completions[selected].fill != self.agent_chat.input.content() =>
-                {
-                    self.accept_agent_completion(&completions[selected].fill);
-                    // A trailing space asks for an argument; a complete candidate can use
-                    // the same submission path as an already fully typed command.
-                    if completions[selected].fill.ends_with(' ') {
-                        return true;
-                    }
-                }
-                _ => {}
             }
+            crate::ui::chat_commands::CompletionKey::Ignored => {}
         }
         if !composing && key == "tab" {
             if let Some(field) = self.agent_chat.field_mut() {
@@ -3344,19 +3317,15 @@ impl AurisApp {
             .field_mut()
             .map(|field| field.apply_key_with_clipboard(key, shift, secondary, true, cx));
         if effect == Some(crate::ui::text_field::KeyEffect::Changed) {
-            self.agent_chat.controls.slash_selected = 0;
-            self.agent_chat.controls.slash_dismissed = None;
-            self.agent_chat.controls.slash_scroll.scroll_to_item(0);
+            self.agent_chat.controls.slash.reset();
         }
         effect.is_some_and(|effect| effect != crate::ui::text_field::KeyEffect::Ignored)
     }
 
-    fn accept_agent_completion(&mut self, fill: &str) {
+    pub(super) fn accept_agent_completion(&mut self, fill: &str) {
         let length = self.agent_chat.input.content().len();
         self.agent_chat.input.replace(0..length, fill);
-        self.agent_chat.controls.slash_selected = 0;
-        self.agent_chat.controls.slash_dismissed = None;
-        self.agent_chat.controls.slash_scroll.scroll_to_item(0);
+        self.agent_chat.controls.slash.reset();
         self.focus_agent_field(AgentField::Chat);
     }
 
@@ -4932,66 +4901,26 @@ impl AurisApp {
     }
 
     fn agent_slash_completions(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
-        if self.agent_chat.controls.slash_dismissed.as_deref()
-            == Some(self.agent_chat.input.content())
-        {
-            return div().into_any_element();
-        }
-        let matches =
-            controls::slash_matches(self.agent_chat.input.content(), &self.agent_chat.models);
-        if matches.is_empty() {
-            return div().into_any_element();
-        }
-        let selected = self.agent_chat.controls.slash_selected % matches.len();
-        let theme = &self.theme;
-        div()
-            .id("agent-slash-completions")
-            .track_scroll(&self.agent_chat.controls.slash_scroll)
-            .debug_selector(|| "agent-slash-completions".into())
-            .flex()
-            .flex_col()
-            .max_h(px(180.0))
-            .overflow_y_scroll()
-            .border_t_1()
-            .border_color(theme.border)
-            .bg(theme.surface_raised)
-            .children(matches.into_iter().enumerate().map(|(index, candidate)| {
-                let fill = candidate.fill.clone();
-                div()
-                    .id(("agent-slash-option", index))
-                    .debug_selector(move || format!("agent-slash-option-{index}"))
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .px_2()
-                    .py_1()
-                    .when(index == selected, |this| this.bg(theme.surface_hover))
-                    .hover(|this| this.bg(theme.surface_hover))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                            this.accept_agent_completion(&fill);
-                            cx.notify();
-                        }),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.text)
-                            .child(candidate.label),
-                    )
-                    .child(
-                        div()
-                            .flex_shrink_0()
-                            .text_xs()
-                            .text_color(theme.text_faint)
-                            .child(self.t(candidate.description)),
-                    )
-            }))
-            .into_any_element()
+        let matches = if self.agent_chat.input.marked().is_none() {
+            self.agent_chat.controls.slash.matches(
+                self.agent_chat.input.content(),
+                &self.agent_chat.models,
+                crate::ui::chat_commands::Scope::Agent,
+            )
+        } else {
+            Vec::new()
+        };
+        self.agent_chat
+            .controls
+            .slash
+            .render(
+                matches,
+                crate::ui::chat_commands::Scope::Agent,
+                &self.theme,
+                self.language(),
+                cx,
+            )
+            .unwrap_or_else(|| div().into_any_element())
     }
 
     /// A single composer surface containing references, prose and a compact command row.
@@ -5013,7 +4942,9 @@ impl AurisApp {
         let can_send = self.agent_composer_can_submit();
         let cancelable = self.agent_cancelable();
         let queueing = (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
-            && !controls::is_control_command(self.agent_chat.input.content().trim());
+            && !crate::ui::chat_commands::is_control_command(
+                self.agent_chat.input.content().trim(),
+            );
         let send_label = self
             .t(if queueing {
                 Key::AgentQueue
@@ -5825,7 +5756,7 @@ mod tests {
         crate::harness::paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
-                this.agent_chat.controls.slash_dismissed.as_deref(),
+                this.agent_chat.controls.slash.dismissed.as_deref(),
                 Some("/model "),
                 "focus={:?}, input={:?}, marked={:?}, models={}",
                 this.agent_chat.focused,
@@ -5929,6 +5860,22 @@ mod tests {
         cx.simulate_keystrokes("shift-enter");
         app.read_with(cx, |this, _| {
             assert_eq!(this.agent_chat.input.content(), "/perm\n");
+        });
+    }
+
+    #[gpui::test]
+    fn slash_help_runs_locally_without_a_model(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent = Default::default();
+            this.agent_chat.input = TextField::new("/help");
+            this.agent_send();
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(this.agent_chat.pending_send.is_none());
+            assert!(this.agent_chat.entries.iter().any(|entry| matches!(entry,
+                ChatEntry::Status(help) if help.contains("/model") && help.contains("/permissions")
+            )));
         });
     }
 

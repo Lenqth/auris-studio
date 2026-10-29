@@ -2343,6 +2343,7 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     /// character, which is what lets an IME compose into the field.
     fn text_changed(&mut self) {
         self.reset_agent_completions();
+        self.reset_workshop_completions();
         if let Some(palette) = self.palette.as_mut() {
             palette.selected = 0;
         }
