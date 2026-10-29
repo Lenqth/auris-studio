@@ -14,6 +14,7 @@ pub use provider_status::{ProviderStatus, check_providers_background};
 mod attachments;
 pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
 pub mod approval_review;
+mod completion;
 pub mod song_authoring;
 pub mod song_ideas;
 pub mod timbre_names;

@@ -86,7 +86,7 @@ fn command(
         if native {
             super::cli_preamble(prefs)
         } else {
-            crate::approval_review::INSTRUCTIONS.into()
+            prefs.system_prompt.clone()
         },
     )
     .map_err(|error| format!("Cannot write the Claude Code system prompt: {error}"))?;
@@ -327,7 +327,7 @@ pub(crate) async fn list_models(prefs: &auris_session::AgentPreferences) -> Resu
     Ok(json!({"models":models}).to_string())
 }
 
-pub(crate) async fn review(
+pub(crate) async fn complete(
     prefs: &auris_session::AgentPreferences,
     prompt: &str,
 ) -> Result<String, String> {
@@ -349,23 +349,23 @@ pub(crate) async fn review(
                     .as_array()
                     .is_none_or(|tools| !tools.is_empty())
             {
-                return Err("Approval reviewer exposed tools".into());
+                return Err("Text-only agent exposed tools".into());
             }
             if message["type"] == "assistant"
                 && message["message"]["content"]
                     .as_array()
                     .is_some_and(|parts| parts.iter().any(|part| part["type"] == "tool_use"))
             {
-                return Err("Approval reviewer attempted to use a tool".into());
+                return Err("Text-only agent attempted to use a tool".into());
             }
             if message["type"] == "result" {
                 return if message["subtype"] == "success" && message["is_error"] != true {
                     message["result"]
                         .as_str()
                         .map(str::to_owned)
-                        .ok_or("Missing reviewer answer".into())
+                        .ok_or("Missing text-only answer".into())
                 } else {
-                    Err("Approval reviewer failed".into())
+                    Err("Text-only agent failed".into())
                 };
             }
         }
@@ -921,7 +921,7 @@ mod tests {
                 .unwrap();
             std::fs::read_to_string(&pair[1]).unwrap()
         };
-        assert_eq!(prompt(&args), crate::approval_review::INSTRUCTIONS);
+        assert_eq!(prompt(&args), prefs.system_prompt);
         assert!(!args.iter().any(|arg| arg == "--system-prompt"));
         let native = super::command(&prefs, cwd.path(), true).unwrap();
         let args: Vec<_> = native
