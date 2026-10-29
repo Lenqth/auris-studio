@@ -592,16 +592,19 @@ mod tests {
     fn editing_an_approved_tab_requires_a_new_window_close_decision(cx: &mut gpui::TestAppContext) {
         let (tabs, cx) = crate::harness::open_tabs(cx);
         let first = tabs.read_with(cx, |tabs, _| tabs.active());
-        first.update(cx, |view, _| view.session.add_audio_track("First edits"));
-        let revision = first.read_with(cx, |view, _| view.session.revision());
+        first.update(cx, |view, _| {
+            view.panels.show(crate::dock::Panel::Mixer);
+            view.session.add_audio_track("First edits");
+        });
         cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.add(None, window, cx)));
         let second = tabs.read_with(cx, |tabs, _| tabs.active());
         second.update(cx, |view, _| view.session.add_audio_track("Second edits"));
-        cx.update(|window, cx| {
-            tabs.update(cx, |tabs, cx| {
-                tabs.approve_close_window(first.entity_id(), revision, window, cx)
-            })
-        });
+        // Paint the confirmation before answering so deferred mixer layout writes precede
+        // approval, just as they do when the user answers the sheet.
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.start_close_window(window, cx)));
+        paint(&first, cx);
+        click("prompt-deny", cx);
+        cx.run_until_parked();
         assert!(second.read_with(cx, |view, _| view.prompt.is_some()));
         first.update(cx, |view, _| view.session.add_audio_track("Later edit"));
         let revision = second.read_with(cx, |view, _| view.session.revision());
