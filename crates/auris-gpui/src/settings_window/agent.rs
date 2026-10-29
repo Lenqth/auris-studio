@@ -206,6 +206,20 @@ impl SettingsWindow {
                     ),
                 );
             }
+            match &status.update {
+                Some(auris_agent::ProviderUpdate::Available(version)) => {
+                    line = line.child(
+                        div().text_color(self.theme.warning).child(
+                            self.t(Key::AgentUpdateAvailable)
+                                .replace("{version}", version),
+                        ),
+                    );
+                }
+                Some(auris_agent::ProviderUpdate::Unavailable) => {
+                    line = line.child(self.t(Key::AgentUpdateUnknown));
+                }
+                _ => {}
+            }
         }
         line.into_any_element()
     }
@@ -556,6 +570,10 @@ impl SettingsWindow {
                     .gap_2()
                     .child(section_title(self.t(label), theme))
                     .child(self.agent_field(index, cx))
+                    .child(note(self.t(help), theme));
+                let (name, help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
+                details = details
+                    .child(crate::setup_guide::setup_link(name, name, url, theme))
                     .child(note(self.t(help), theme));
                 if let Some(status) = status {
                     if let Some(path) = &status.executable {
