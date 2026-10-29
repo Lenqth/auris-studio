@@ -60,7 +60,6 @@ impl ProjectTabs {
                 view.session.release_typed_notes();
                 view.stop_audition();
                 view.release_physical_preview();
-                view.clear_chord_preview();
                 view.drag = None;
                 // A menu belongs to the document that opened it. Do not let a hidden tab
                 // restore its trigger or activation release when it becomes active again.
@@ -122,9 +121,6 @@ impl ProjectTabs {
         }
         self.select(id, window, cx);
         let ready = self.active().update(cx, |view, cx| {
-            if view.compose_progress.is_some() {
-                return false;
-            }
             let ready = view.confirm_discard(PendingAction::CloseTab);
             cx.notify();
             ready
@@ -184,9 +180,6 @@ impl ProjectTabs {
             }
             self.select(project.entity_id(), window, cx);
             let ready = project.update(cx, |view, cx| {
-                if view.compose_progress.is_some() {
-                    return false;
-                }
                 let ready = view.confirm_discard(PendingAction::CloseWindow);
                 cx.notify();
                 ready

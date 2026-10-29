@@ -513,9 +513,6 @@ where
 pub enum RowColumn {
     /// Equal label and value lanes, matching the geometry of a labelled value slider.
     Equal,
-    /// The label is a column this wide. For a panel of a fixed width whose values are long — a
-    /// key, a groove, a progression — where the button wants every pixel the label does not.
-    Label(Pixels),
     /// The value button is a column this wide. For a panel the user can resize, where buttons
     /// that all end in the same place read as a column and a label free to stretch never
     /// squeezes one.
@@ -667,9 +664,6 @@ where
             .border_color(gpui::transparent_black())
             .child(caption.flex_1().min_w_0())
             .child(div().flex_1().min_w_0().child(control)),
-        RowColumn::Label(width) => row
-            .child(caption.w(width).flex_shrink_0())
-            .child(div().flex_1().min_w_0().child(control)),
         RowColumn::Value(width) => row
             .child(caption.flex_1().min_w_0())
             .child(div().w(width).flex_shrink_0().child(control)),
@@ -771,7 +765,7 @@ pub const ZOOM_SLIDER_WIDTH: Pixels = px(96.0);
 ///
 /// Wide enough that a parameter can be dialled in precisely, short enough that sweeping a filter
 /// end to end does not need two swipes. It belongs to the widget rather than to any one panel:
-/// a plugin's parameters, a clip's dials and the song sheet's are the same bar, and a plugin that
+/// plugin parameters and clip dials use the same bar, and a plugin that
 /// answered a drag twice as fast as the sheet did would be a bar that means something different
 /// depending on where it was drawn.
 pub const DRAG_RANGE_PIXELS: f32 = 220.0;
@@ -1021,7 +1015,7 @@ pub(crate) fn slider_fraction_after_key(fraction: f32, key: &str) -> Option<f32>
 ///
 /// A bar is dragged, and that is the whole of how it is edited. It used to take a scroll handler
 /// too, and every one of these lives inside a panel that scrolls — the mixer strips, the
-/// inspector, the song sheet. Rolling the wheel to get down a column of tracks changed the level
+/// inspector. Rolling the wheel to get down a column of tracks changed the level
 /// of whichever fader the pointer happened to cross on the way, silently, with no drag to
 /// remember having started and nothing on the screen saying which of them moved.
 ///
@@ -1604,7 +1598,7 @@ mod tests {
     #[test]
     fn a_full_sweep_of_a_bar_is_the_drag_range_and_stops_at_both_ends() {
         // Every bar in the application is dragged through this, so the number here is what makes
-        // a plugin's filter and the song sheet's tempo answer a hand at the same rate.
+        // a plugin's filter and a clip's density answer a hand at the same rate.
         assert!((dragged(0.0, DRAG_RANGE_PIXELS) - 1.0).abs() < 1e-6);
         assert!((dragged(1.0, -DRAG_RANGE_PIXELS)).abs() < 1e-6);
         assert!((dragged(0.5, DRAG_RANGE_PIXELS / 2.0) - 1.0).abs() < 1e-6);

@@ -670,34 +670,6 @@ pub(crate) fn wrapped_area_state() -> Option<(Pixels, usize)> {
 mod tests {
     use super::*;
 
-    #[gpui::test]
-    fn typing_a_second_line_does_not_scroll_the_rendered_lyrics_editor(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (app, cx) = crate::harness::open(cx);
-        app.update(cx, |this, _| {
-            this.open_song_sheet();
-            this.focus_section_lyrics(0);
-        });
-        crate::harness::paint(&app, cx);
-        cx.simulate_input("さくら");
-        cx.simulate_keystrokes("enter");
-        cx.simulate_input("さいた");
-        crate::harness::paint(&app, cx);
-        assert_eq!(
-            AREA.with(Cell::get)
-                .expect("the lyrics editor was painted")
-                .2,
-            px(0.0)
-        );
-        app.read_with(cx, |this, _| {
-            assert_eq!(
-                this.lyrics_edit.as_ref().unwrap().field.content(),
-                "さくら\nさいた"
-            );
-        });
-    }
-
     #[test]
     fn lines_carry_their_byte_ranges_and_an_empty_tail_is_a_line() {
         assert_eq!(lines("ab\ncd"), vec![0..2, 3..5]);

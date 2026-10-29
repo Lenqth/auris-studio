@@ -298,12 +298,7 @@ impl Render for AurisApp {
 
 impl AurisApp {
     pub(crate) fn modal_blocks_document_actions(&self) -> bool {
-        self.compose_progress.is_some()
-            || self.export_dialog.is_some()
-            || self.export.is_some()
-            || self.prompt.is_some()
-            || self.song_sheet.is_some()
-            || self.song_library.is_some()
+        self.export_dialog.is_some() || self.export.is_some() || self.prompt.is_some()
     }
 
     /// Transient editors stay in the window that opened them.
@@ -330,9 +325,6 @@ impl AurisApp {
         }
         let export_overlay = self.render_export_overlay(cx);
         let export_dialog = self.render_export_dialog(cx);
-        let song_sheet = self.render_song_sheet(window, cx);
-        let song_library = self.render_song_library_overlay(window, cx);
-        let compose_progress = self.render_compose_progress(window);
         let prompt = self.render_prompt(cx);
         let palette = self.render_palette(cx);
         let menu = self.render_context_menu(window, cx);
@@ -363,12 +355,7 @@ impl AurisApp {
         if let Some(element) = export_dialog {
             overlays.push(element);
         }
-        if let Some(element) = song_sheet {
-            overlays.push(element.into_any_element());
-        }
-        if let Some(element) = song_library {
-            overlays.push(element.into_any_element());
-        }
+
         if let Some(element) = prompt {
             overlays.push(element.into_any_element());
         }
@@ -378,9 +365,7 @@ impl AurisApp {
         if let Some(element) = menu {
             overlays.push(element.into_any_element());
         }
-        if let Some(element) = compose_progress {
-            overlays.push(element.into_any_element());
-        }
+
         overlays
     }
 
@@ -432,8 +417,6 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_new_project))
                     .on_action(Self::window_listener(cx, Self::on_open_project))
                     .on_action(Self::window_listener(cx, Self::on_quit))
-                    .on_action(Self::window_listener(cx, Self::on_compose_song))
-                    .on_action(Self::window_listener(cx, Self::on_compose_from_spec))
                     .on_action(Self::window_listener(cx, Self::on_accompany_melody))
                     .on_action(Self::window_listener(cx, Self::on_balance_levels))
                     .on_action(Self::window_listener(cx, Self::on_save_project))
@@ -1446,10 +1429,6 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.compose_progress.is_some() {
-            cx.stop_propagation();
-            return;
-        }
         if self.panels.is_open(Panel::Agent)
             && !self.panels.is_detached(Panel::Agent)
             && self
@@ -1483,9 +1462,6 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.compose_progress.is_some() {
-            return;
-        }
         // A key of the drawn keyboard held by a pointer that is no longer pressing anything is a
         // key whose release never arrived: letting go over another application, or off the edge of
         // the screen, is a mouse-up the platform hands to somebody else. Checked before the drag,
@@ -2003,20 +1979,6 @@ impl AurisApp {
             } => {
                 self.drag_volume_contour_point(clip, index, bounds, event.position);
             }
-            Drag::SongDial {
-                target,
-                start_fraction,
-                start_x,
-            } => {
-                let delta = crate::ui::widgets::fine_scaled(
-                    f32::from(event.position.x - start_x),
-                    event.modifiers,
-                );
-                self.drag_song_dial(target, start_fraction, delta);
-            }
-            Drag::SongPad { detail, bounds } => {
-                self.drag_song_pad(detail, bounds, event.position);
-            }
             Drag::TimeZoom {
                 start_fraction,
                 start_x,
@@ -2136,7 +2098,7 @@ impl AurisApp {
                 _ => {}
             }
             true
-        } else if self.compose_progress.is_some() || self.typing_key(event, cx) {
+        } else if self.typing_key(event, cx) {
             true
         } else if self.menu.is_some() {
             self.menu_key(event, window, cx)
@@ -2146,29 +2108,6 @@ impl AurisApp {
             self.palette_key(event, window, cx)
         } else if self.prompt.is_some() {
             self.prompt_key(event, window, cx)
-        } else if self.song_library.is_some() {
-            self.song_library_key(event, cx)
-        } else if self.song_sheet.is_some() {
-            self.reconcile_section_lyrics();
-            if self.lyrics_edit.is_some() {
-                self.lyrics_key(event, cx)
-            } else {
-                match event.keystroke.key.as_str() {
-                    "escape" => self.close_song_sheet(),
-                    "tab" => {
-                        Self::cycle_modal_focus(
-                            self.modal_focus.song_sheet(),
-                            self.modal_focus.song_sheet_last(),
-                            event.keystroke.modifiers.shift,
-                            window,
-                            cx,
-                        );
-                        self.modal_focus.reveal_song_sheet_focus(window, cx);
-                    }
-                    _ => {}
-                }
-                true
-            }
         } else if self.library_search_focused {
             self.library_search_key(event, cx)
         } else {
@@ -2177,35 +2116,6 @@ impl AurisApp {
         if handled {
             cx.stop_propagation();
             cx.notify();
-        }
-    }
-
-    /// Moves Tab only through one modal's tab group, wrapping at both ends.
-    fn cycle_modal_focus(
-        group: &gpui::FocusHandle,
-        last: &gpui::FocusHandle,
-        backwards: bool,
-        window: &mut Window,
-        cx: &gpui::App,
-    ) {
-        if backwards {
-            if group.is_focused(window) || !group.contains_focused(window, cx) {
-                window.focus(last);
-                return;
-            }
-            window.focus_prev();
-            if !group.contains_focused(window, cx) {
-                window.focus(last);
-            }
-        } else {
-            if !group.contains_focused(window, cx) {
-                window.focus(group);
-            }
-            window.focus_next();
-            if !group.contains_focused(window, cx) {
-                window.focus(group);
-                window.focus_next();
-            }
         }
     }
 
@@ -2740,9 +2650,7 @@ impl AurisApp {
             return;
         }
         crate::termination::activate(window, cx);
-        if self.compose_progress.is_some() {
-            return;
-        }
+
         // Handled here rather than on the application, because `App::quit` does not run the
         // window's close guard and a document with unsaved changes has to get its say.
         if self.confirm_discard(crate::ui::prompt::PendingAction::Quit) {
@@ -2759,25 +2667,6 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         self.open_project(window, cx);
-    }
-
-    fn on_compose_song(
-        &mut self,
-        _: &actions::ComposeSong,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_song_sheet();
-        cx.notify();
-    }
-
-    fn on_compose_from_spec(
-        &mut self,
-        _: &actions::ComposeFromSpec,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.compose_from_spec(window, cx);
     }
 
     fn on_save_project(
@@ -4028,61 +3917,6 @@ mod window_tests {
                 Some(AudioExportTarget::Stems)
             );
         });
-    }
-
-    #[gpui::test]
-    fn composition_sheet_traps_tab_and_closes_with_escape(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        resize(&app, cx, size(px(640.0), px(480.0)));
-
-        cx.dispatch_action(actions::ComposeSong);
-        app.update(cx, |this, _| {
-            this.language = auris_i18n::Language::Japanese;
-            this.song_advanced = true;
-        });
-        paint(&app, cx);
-        cx.update(|window, cx| {
-            app.read_with(cx, |this, _| {
-                assert!(this.modal_focus.song_sheet().is_focused(window));
-            });
-        });
-        cx.simulate_keystrokes("tab tab shift-tab");
-        cx.update(|window, cx| {
-            app.read_with(cx, |this, cx| {
-                assert!(this.modal_focus.song_sheet_contains_focused(window, cx));
-            });
-        });
-        let mut song_target = None;
-        for _ in 0..96 {
-            cx.simulate_keystrokes("tab");
-            paint(&app, cx);
-            let target = cx.update(|window, cx| {
-                app.read_with(cx, |this, cx| {
-                    (
-                        this.modal_focus.song_sheet_reveal_index(window, cx),
-                        this.modal_focus.song_sheet_scroll().offset().y,
-                    )
-                })
-            });
-            if target.0.is_some() && target.1 < px(-80.0) {
-                song_target = target.0;
-                break;
-            }
-        }
-        let song_target = song_target.expect("Tab reaches a song control below the viewport");
-        let song_selector: &'static str =
-            Box::leak(format!("song-focus-region-{song_target}").into_boxed_str());
-        let song_bounds = cx
-            .debug_bounds(song_selector)
-            .expect("focused song row is drawn");
-        let song_viewport = cx.debug_bounds("song-sheet-body").unwrap();
-        assert!(
-            song_bounds.top() >= song_viewport.top()
-                && song_bounds.bottom() <= song_viewport.bottom(),
-            "Tab reveals song row {song_target}: {song_bounds:?} in {song_viewport:?}"
-        );
-        cx.simulate_keystrokes("escape");
-        app.read_with(cx, |this, _| assert!(this.song_sheet.is_none()));
     }
 
     #[gpui::test]

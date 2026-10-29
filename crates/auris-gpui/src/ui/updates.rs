@@ -333,9 +333,7 @@ impl AurisApp {
             return;
         }
         crate::termination::activate(window, cx);
-        if self.compose_progress.is_some() {
-            return;
-        }
+
         if self.confirm_discard(PendingAction::RestartForUpdate) {
             self.complete_update_restart(cx);
         }
