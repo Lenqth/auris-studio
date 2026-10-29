@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::process::Child;
 
-use atelier::{Edge, IconName, SectionHeader, Sidebar};
+use atelier::{Edge, IconName, ListItem, SectionHeader, Sidebar};
 use auris_i18n::{Key, Language, messages};
 use auris_session::{
     DiffSingerSetup, LeapSingerCheck, LeapSingerSetup, LeapSingerVariant, VoicevoxCatalog,
@@ -24,7 +24,7 @@ use crate::theme::{Metrics, Theme};
 use crate::titlebar;
 use crate::ui::prompt::{editable_text, field_text};
 use crate::ui::text_field::{HasTextField, KeyEffect, TextField};
-use crate::ui::widgets::{ButtonState, ButtonStyle, button, button_enabled, disclosure, nav_item};
+use crate::ui::widgets::{ButtonState, ButtonStyle, button, button_enabled, disclosure};
 
 /// Which external backend is being configured.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -412,21 +412,18 @@ impl VoiceSetupWindow {
                 VoiceSetupTab::DiffSinger => IconName::Folder,
                 VoiceSetupTab::LeapSinger => IconName::Waveform,
             };
-            nav_item(
-                id,
-                self.t(label),
-                Some(self.t(brief).into()),
-                glyph,
-                self.tab == tab,
-                !self.saving,
-                &theme,
-                cx.listener(move |this, _, _, cx| {
+            ListItem::new(id, self.t(label))
+                .icon(glyph)
+                .description(self.t(brief))
+                .description_lines(2)
+                .selected(self.tab == tab)
+                .disabled(self.saving)
+                .on_click(cx.listener(move |this, _, _, cx| {
                     this.invalidate_request();
                     this.tab = tab;
                     this.active = Field::first(tab);
                     cx.notify();
-                }),
-            )
+                }))
         };
         let pages = [
             page(

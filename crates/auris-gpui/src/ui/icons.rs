@@ -1,10 +1,11 @@
 //! Shared icon vocabulary backed by Atelier's monochrome SVG assets.
 //!
 //! Atelier keeps familiar controls in one 24px SVG family; Auris's
-//! few domain-specific marks live beside the provider assets and use the same stroke geometry.
+//! two domain-specific marks (punch and notes) live beside the provider assets, use the same
+//! stroke geometry, and reach Atelier's `Icon` as an `IconSource`.
 
-use atelier::{Icon as AtelierIcon, IconName as AtelierIconName};
-use gpui::{Hsla, IntoElement, Pixels, div, prelude::*, svg};
+use atelier::{Icon as AtelierIcon, IconName as AtelierIconName, IconSource};
+use gpui::{Hsla, IntoElement, Pixels};
 
 /// An icon the UI can draw.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -67,58 +68,35 @@ pub enum Icon {
     Undo,
     /// Speed: a lightning bolt, for the agent's fast mode.
     Bolt,
-    /// Step forward one edit: Undo's arrow, mirrored. Atelier has no redo glyph, so this one is
-    /// drawn here with the same stroke.
+    /// Step forward one edit: Undo's arrow, mirrored.
     Redo,
 }
 
 /// An element that draws `icon` at `size`, centred in whatever box it is given.
 pub fn icon(icon: Icon, size: Pixels, color: Hsla) -> impl IntoElement + use<> {
-    if let Some(path) = icon.extension_path() {
-        div()
-            .size(size)
-            .text_color(color)
-            .child(svg().path(path).size_full().text_color(color))
-            .into_any_element()
-    } else {
-        AtelierIcon::new(icon.atelier_name())
-            .size(size)
-            .color(color)
-            .into_any_element()
-    }
+    AtelierIcon::new(icon.source()).size(size).color(color)
 }
 
 impl Icon {
-    fn extension_path(self) -> Option<&'static str> {
-        match self {
-            Self::Volume => Some("icons/auris-volume.svg"),
-            Self::VolumeMuted => Some("icons/auris-volume-muted.svg"),
-            Self::Punch => Some("icons/auris-punch.svg"),
-            Self::Notes => Some("icons/auris-notes.svg"),
-            Self::Keyboard => Some("icons/auris-keyboard.svg"),
-            Self::Knob => Some("icons/auris-knob.svg"),
-            Self::Redo => Some("icons/auris-redo.svg"),
-            Self::Bolt => Some("icons/auris-bolt.svg"),
-            _ => None,
-        }
-    }
-
     /// Maps Auris's domain vocabulary onto Atelier's shared 24px icon family.
     ///
     /// Atelier deliberately keeps the set small so icon weight, optical centring and state
     /// treatment stay consistent across the editor and agent surfaces. Domain-specific names
-    /// therefore resolve to the nearest established symbol instead of introducing another drawn
-    /// glyph with a different visual grammar.
-    fn atelier_name(self) -> AtelierIconName {
-        match self {
+    /// therefore resolve to the nearest established symbol; the two marks the set has no
+    /// counterpart for are Auris's own SVGs, drawn on the same grid and handed to Atelier as an
+    /// [`IconSource`].
+    pub fn source(self) -> IconSource {
+        let name = match self {
+            Self::Punch => return IconSource::svg("icons/auris-punch.svg"),
+            Self::Notes => return IconSource::svg("icons/auris-notes.svg"),
             Self::ToStart => AtelierIconName::SkipBack,
             Self::Play => AtelierIconName::Play,
             Self::Pause => AtelierIconName::Pause,
-            Self::Volume | Self::VolumeMuted => AtelierIconName::Music,
+            Self::Volume => AtelierIconName::Volume,
+            Self::VolumeMuted => AtelierIconName::VolumeOff,
             Self::Stop => AtelierIconName::Stop,
             Self::Record => AtelierIconName::Record,
             Self::Loop => AtelierIconName::Loop,
-            Self::Punch => AtelierIconName::Sliders,
             Self::Metronome => AtelierIconName::Metronome,
             Self::Plus => AtelierIconName::Plus,
             Self::ChevronUp => AtelierIconName::ChevronUp,
@@ -128,17 +106,18 @@ impl Icon {
             Self::More => AtelierIconName::More,
             Self::Check => AtelierIconName::Check,
             Self::Library => AtelierIconName::Folder,
-            Self::Notes => AtelierIconName::Music,
-            Self::Faders | Self::Knob => AtelierIconName::Sliders,
+            Self::Faders => AtelierIconName::Sliders,
+            Self::Knob => AtelierIconName::Knob,
             Self::Inspector => AtelierIconName::Info,
             Self::Log => AtelierIconName::File,
-            Self::Keyboard => AtelierIconName::Music,
+            Self::Keyboard => AtelierIconName::Keyboard,
             Self::Microphone => AtelierIconName::Mic,
             Self::Wave => AtelierIconName::Waveform,
             Self::Agent => AtelierIconName::Sparkles,
             Self::Undo => AtelierIconName::Undo,
-            Self::Redo => AtelierIconName::Undo,
-            Self::Bolt => AtelierIconName::Sparkles,
-        }
+            Self::Redo => AtelierIconName::Redo,
+            Self::Bolt => AtelierIconName::Bolt,
+        };
+        name.into()
     }
 }

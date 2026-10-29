@@ -4016,8 +4016,6 @@ impl AurisApp {
                     cx,
                 )),
                 streaming,
-                theme,
-                cx,
             ),
             ChatEntry::You { .. } => agent_components::user_message(
                 ("agent-message", index),
@@ -5913,6 +5911,8 @@ mod tests {
         let user = "**literal** <tag> & melody\n  日本語の歌詞";
         let answer = "A gentle piano melody";
         let detail = "{\n  \"tempo\": 120\n}";
+        // An answer rises into place as it arrives; this is about selecting it once it has.
+        cx.update(|_, cx| cx.global_mut::<atelier::Theme>().motion.enabled = false);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();
