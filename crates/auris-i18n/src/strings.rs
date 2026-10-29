@@ -867,6 +867,9 @@ strings! {
     CmdPanic { en: "Panic", ja: "パニック" }
     CmdNewProject { en: "New Project", ja: "新規プロジェクト" }
     CmdOpenProject { en: "Open Project", ja: "プロジェクトを開く" }
+    CmdCloseTab { en: "Close tab", ja: "タブを閉じる" }
+    CmdNextTab { en: "Next tab", ja: "次のタブ" }
+    CmdPreviousTab { en: "Previous tab", ja: "前のタブ" }
     CmdComposeSong { en: "Compose a Song…", ja: "曲を作る…" }
     CmdAccompanyMelody { en: "Accompany the Melody", ja: "旋律に伴奏をつける" }
     CmdComposeFromSpec { en: "Compose from Specification…", ja: "仕様ファイルから作曲…" }
