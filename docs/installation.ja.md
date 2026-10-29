@@ -39,6 +39,29 @@ DMG はシェルの `PATH` にコマンドを追加しません。ターミナ�
 
 `auris-v<version>-linux-x86_64.tar.gz` を展開し、`auris` を `Dictionary` ディレクトリの隣に置いたままにします。Linux リリースにはデスクトップアプリケーションと MCP サーバーは含まれません。
 
+<a id="building-and-installing-from-source"></a>
+## ソースからのビルドとインストール
+
+Rust 1.95 以降と Git を用意し、[開発ガイド](development.ja.md#building-on-each-platform)にある OS ごとの準備を済ませてください。リポジトリを取得し、デスクトップアプリを起動します。
+
+```sh
+git clone https://github.com/uthree/auris-studio.git
+cd auris-studio
+cargo run --release
+```
+
+macOS と Windows では、リポジトリのルートで次を実行すると、デスクトップ、CLI、MCP の実行ファイルを Cargo でインストールできます。
+
+```sh
+cargo install --locked --path crates/auris-gpui
+cargo install --locked --path crates/auris-cli
+cargo install --locked --path crates/auris-mcp
+```
+
+Linux を含め、CLI だけが必要なら上記の `auris-cli` のコマンドだけを実行してください。Cargo はリリース用の実行ファイルをビルドし、既定では `~/.cargo/bin`（Windows は `%USERPROFILE%\.cargo\bin`）に配置します。このディレクトリが `PATH` に含まれていれば、`auris-studio`、`auris help`、`auris-mcp` を実行できます。アプリバンドルや OS のショートカットは作成されません。更新するには、使いたいリビジョンのソースを取得し、インストールコマンドを再実行します。
+
+Cargo は日本語の歌詞用辞書をインストールしません。漢字の歌詞を使う場合は、[開発ガイド](development.ja.md#building-on-each-platform)の辞書の導入手順に従ってください。
+
 <a id="building-the-installers"></a>
 ## インストーラーのビルド
 
