@@ -1,6 +1,6 @@
 //! Library timbre exploration with a background session job and explicit adoption.
 
-use crate::{app::AurisApp, theme::Theme};
+use crate::app::AurisApp;
 use atelier::plot::{Plot3d, PlotPoint};
 use atelier::{
     Button, ButtonVariant, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar,
@@ -13,12 +13,40 @@ use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
 #[path = "timbre_plot.rs"]
 mod plot;
-use plot::{TimbreCamera, plot_data};
+use plot::{TimbreView, plot_data};
+
+/// A library row's note of the timbre cluster its sound belongs to.
+pub(crate) struct TimbreClusterTag {
+    /// The cluster's colour, the same in the map, its legend and the library.
+    pub color: gpui::Hsla,
+    /// The cluster's name.
+    pub name: String,
+    /// Whether "Name with AI" wrote the name, so it carries the agent's mark.
+    pub by_ai: bool,
+}
+
+/// A cluster's name in small muted text. The agent's mark follows it when the agent wrote it,
+/// so an AI name reads as one wherever it appears: legend, list or library. The rows that show
+/// it carry their own tooltip, which says who named it, so the label takes none of its own.
+pub(crate) fn cluster_label(name: impl Into<SharedString>, by_ai: bool) -> AnyElement {
+    let name = name.into();
+    if by_ai {
+        atelier::agent::AgentLabel::new(name)
+            .size(TextSize::XSmall)
+            .color(TextColor::Muted)
+            .into_any_element()
+    } else {
+        Label::new(name)
+            .size(TextSize::XSmall)
+            .color(TextColor::Muted)
+            .into_any_element()
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct TimbreMapState {
     pub(crate) open: bool,
-    camera: TimbreCamera,
+    camera: TimbreView,
     hovered: Option<usize>,
     list_nearest: bool,
     pub(crate) map: Option<Arc<TimbreMap>>,
@@ -68,10 +96,6 @@ impl TimbreMapState {
         }
         true
     }
-}
-
-fn cluster_color(cluster: usize, theme: &Theme) -> gpui::Hsla {
-    theme.atelier.categorical(cluster)
 }
 
 fn pick_source_index(series: &[Vec<usize>], point: Option<PlotPoint>) -> Option<usize> {
@@ -272,21 +296,28 @@ impl AurisApp {
             .unwrap_or_default()
     }
 
+    /// Whether the cluster's name is one "Name with AI" wrote, which is drawn with the agent's
+    /// mark wherever it appears. The fallback, a representative sound's name, is nobody's.
+    fn timbre_cluster_named_by_ai(&self, cluster: usize) -> bool {
+        self.timbre_map.names.iter().any(|name| name.id == cluster)
+    }
+
     /// Cluster annotation for an exact measured library choice, shared by tree and search rows.
     pub(crate) fn library_timbre_cluster(
         &self,
         instrument_id: &str,
         preset: Option<PresetRef>,
-    ) -> Option<(gpui::Hsla, String)> {
+    ) -> Option<TimbreClusterTag> {
         let cluster = self
             .timbre_map
             .map
             .as_ref()?
             .cluster_for(instrument_id, preset)?;
-        Some((
-            cluster_color(cluster, &self.theme),
-            self.timbre_cluster_name(cluster),
-        ))
+        Some(TimbreClusterTag {
+            color: self.theme.atelier.categorical(cluster),
+            name: self.timbre_cluster_name(cluster),
+            by_ai: self.timbre_cluster_named_by_ai(cluster),
+        })
     }
 
     fn name_timbre_clusters(&mut self, cx: &mut Context<Self>) {
@@ -569,7 +600,7 @@ impl AurisApp {
                         .filter_map(|(i, value)| (*value == cluster).then_some(i))
                         .collect();
                     let points = source_indices.iter().map(|i| positions[*i]).collect();
-                    plot = plot.scatter(points, Some(cluster_color(cluster, &self.theme)));
+                    plot = plot.scatter(points, Some(self.theme.atelier.categorical(cluster)));
                     pick_sources.push(source_indices);
                 }
                 // Small three-axis crosses identify the selected source without relying on hue.
@@ -710,6 +741,16 @@ impl AurisApp {
                 for summary in map.cluster_summaries() {
                     let cluster = summary.id;
                     let name = self.timbre_cluster_name(cluster);
+                    let by_ai = self.timbre_cluster_named_by_ai(cluster);
+                    let tip = if by_ai {
+                        format!(
+                            "{name} · {}\n{}",
+                            self.t(Key::TimbreMapNamedByAi),
+                            summary.examples.join(" · ")
+                        )
+                    } else {
+                        format!("{name}\n{}", summary.examples.join(" · "))
+                    };
                     legend = legend.child(
                         div()
                             .id(SharedString::from(format!("timbre-cluster-{cluster}")))
@@ -717,11 +758,7 @@ impl AurisApp {
                             .items_center()
                             .gap(spacing.xs)
                             .max_w(gpui::rems(15.))
-                            .tooltip(super::tooltip::keyed_tip(
-                                format!("{name}\n{}", summary.examples.join(" · ")),
-                                "",
-                                &self.theme,
-                            ))
+                            .tooltip(super::tooltip::keyed_tip(tip, "", &self.theme))
                             .child(
                                 atelier::Icon::new(atelier::IconSource::svg(
                                     super::icons::sound_icon_path(
@@ -729,11 +766,12 @@ impl AurisApp {
                                     ),
                                 ))
                                 .size(window.rem_size())
-                                .color(cluster_color(cluster, &self.theme)),
+                                .color(self.theme.atelier.categorical(cluster)),
                             )
+                            .child(div().min_w_0().truncate().child(cluster_label(name, by_ai)))
                             .child(
-                                div().min_w_0().truncate().child(
-                                    Label::new(format!("{name} · {}", summary.sound_count))
+                                div().flex_none().child(
+                                    Label::new(format!("· {}", summary.sound_count))
                                         .size(TextSize::XSmall)
                                         .color(TextColor::Muted),
                                 ),
@@ -933,7 +971,7 @@ impl AurisApp {
                                         &map.sounds[i].name,
                                     ),
                                 )))
-                                .icon_color(cluster_color(map.clusters()[i], &self.theme))
+                                .icon_color(self.theme.atelier.categorical(map.clusters()[i]))
                                 .description(self.timbre_cluster_name(map.clusters()[i]))
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.select_timbre(i);
@@ -1069,7 +1107,6 @@ impl AurisApp {
 mod tests {
     use super::*;
     use crate::harness::{click, open, paint};
-    use crate::theme::{SCHEMES, Theme};
     use gpui::{Entity, TestAppContext, VisualTestContext};
 
     #[gpui::test]
@@ -1177,21 +1214,6 @@ mod tests {
     }
 
     #[test]
-    fn cluster_colours_follow_every_theme_group_palette() {
-        for scheme in SCHEMES {
-            let theme = Theme::from_scheme(scheme);
-            for cluster in 0..8 {
-                assert_eq!(
-                    cluster_color(cluster, &theme),
-                    theme.atelier.categorical(cluster),
-                    "{} cluster {cluster}",
-                    scheme.name
-                );
-            }
-        }
-    }
-
-    #[test]
     fn plot_pick_series_map_includes_highlight_series() {
         let series = vec![vec![4, 7], vec![2, 2], vec![9]];
         assert_eq!(
@@ -1293,8 +1315,9 @@ mod tests {
             let annotation = this
                 .library_timbre_cluster(&sound.instrument_id, sound.preset)
                 .unwrap();
-            assert_eq!(annotation.0, cluster_color(cluster, &this.theme));
-            assert!(!annotation.1.is_empty());
+            assert_eq!(annotation.color, this.theme.atelier.categorical(cluster));
+            assert!(!annotation.name.is_empty());
+            assert!(!annotation.by_ai);
             assert!(this.library_timbre_cluster("unmeasured", None).is_none());
             (this.project().clone(), index)
         });
@@ -1449,12 +1472,11 @@ mod tests {
             let cluster = map.clusters()[index];
             let generation = this.timbre_map.naming_generation;
             assert!(this.timbre_map.finish_naming(generation, Ok(names)));
-            assert_eq!(
-                this.library_timbre_cluster(&sound.instrument_id, sound.preset)
-                    .unwrap()
-                    .1,
-                format!("Named cluster {cluster}")
-            );
+            let tag = this
+                .library_timbre_cluster(&sound.instrument_id, sound.preset)
+                .unwrap();
+            assert_eq!(tag.name, format!("Named cluster {cluster}"));
+            assert!(tag.by_ai, "an AI name carries the agent's mark");
             assert_eq!(this.project(), &before);
         });
         paint(&app, &mut utility);

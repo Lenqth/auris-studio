@@ -279,6 +279,44 @@ pub(crate) fn by_bank(presets: Vec<SoundFontPreset>) -> Vec<(i32, Vec<SoundFontP
     banks
 }
 
+/// A library row's second line: the timbre cluster's name (with the agent's mark when the agent
+/// named it), then whatever else the row says, truncated together on one line.
+fn cluster_line(
+    cluster: Option<&crate::ui::timbre_map::TimbreClusterTag>,
+    rest: String,
+    theme: &Theme,
+) -> AnyElement {
+    let Some(tag) = cluster else {
+        return div()
+            .text_xs()
+            .text_color(theme.text_muted)
+            .truncate()
+            .child(rest)
+            .into_any_element();
+    };
+    div()
+        .flex()
+        .items_center()
+        .min_w_0()
+        .overflow_hidden()
+        .gap(theme.atelier.spacing.xs)
+        .text_xs()
+        .text_color(theme.text_muted)
+        .child(div().flex_shrink().min_w_0().overflow_hidden().child(
+            crate::ui::timbre_map::cluster_label(tag.name.clone(), tag.by_ai),
+        ))
+        .when(!rest.is_empty(), |line| {
+            line.child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .child(format!("· {rest}")),
+            )
+        })
+        .into_any_element()
+}
+
 /// How far in a row at this depth sits.
 fn indent(depth: usize) -> Pixels {
     px(6.0) + INDENT * depth as f32
@@ -444,6 +482,15 @@ struct RowStyle {
 }
 
 impl AurisApp {
+    /// A cluster's name for a tooltip, saying so when the agent wrote it.
+    fn cluster_tip(&self, tag: &crate::ui::timbre_map::TimbreClusterTag) -> String {
+        if tag.by_ai {
+            format!("{} ({})", tag.name, self.t(Key::TimbreMapNamedByAi))
+        } else {
+            tag.name.clone()
+        }
+    }
+
     /// The left-hand library: everything the session can play, ready to load.
     ///
     /// Logic's arrangement, and the reason for it: choosing an instrument is something you do
@@ -2372,17 +2419,14 @@ impl AurisApp {
         } else {
             None
         };
-        let accent = cluster
-            .as_ref()
-            .map(|(color, _)| *color)
-            .unwrap_or_else(|| {
-                if role == LibraryRole::Instrument && category == PluginCategory::Drum {
-                    LibraryRole::Drum
-                } else {
-                    role
-                }
-                .color(&theme)
-            });
+        let accent = cluster.as_ref().map(|tag| tag.color).unwrap_or_else(|| {
+            if role == LibraryRole::Instrument && category == PluginCategory::Drum {
+                LibraryRole::Drum
+            } else {
+                role
+            }
+            .color(&theme)
+        });
         let searching = !self.library_query().content().trim().is_empty();
         let enabled = role != LibraryRole::Instrument || self.library_takes_instrument();
         let selected = role == LibraryRole::Instrument
@@ -2398,9 +2442,9 @@ impl AurisApp {
         } else {
             description
         };
-        let description = match &cluster {
-            Some((_, name)) => format!("{name} · {description}"),
-            None => description,
+        let tip_description = match &cluster {
+            Some(tag) => format!("{} · {description}", self.cluster_tip(tag)),
+            None => description.clone(),
         };
         let target_hint = if enabled {
             ""
@@ -2409,7 +2453,7 @@ impl AurisApp {
         };
         let tooltip = crate::ui::tooltip::keyed_tip(
             format!(
-                "{name} · {}{description} {target_hint}",
+                "{name} · {}{tip_description} {target_hint}",
                 plugin.format.map_or_else(String::new, |format| {
                     format!("{} · ", crate::i18n::plugin_format_label(format))
                 }),
@@ -2464,14 +2508,8 @@ impl AurisApp {
                             .truncate()
                             .child(name),
                     )
-                    .when(!description.is_empty(), |this| {
-                        this.child(
-                            div()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .truncate()
-                                .child(description),
-                        )
+                    .when(!description.is_empty() || cluster.is_some(), |this| {
+                        this.child(cluster_line(cluster.as_ref(), description, &theme))
                     }),
             )
             .when_some(plugin.format, |this, format| {
@@ -2512,17 +2550,14 @@ impl AurisApp {
             .any(|font| font.id == choice.font)
             .then(|| self.library_timbre_cluster(SAMPLER_ID, Some(choice)))
             .flatten();
-        let accent = cluster
-            .as_ref()
-            .map(|(color, _)| *color)
-            .unwrap_or_else(|| {
-                if choice.bank == PERCUSSION_BANK {
-                    LibraryRole::Drum
-                } else {
-                    LibraryRole::Instrument
-                }
-                .color(&theme)
-            });
+        let accent = cluster.as_ref().map(|tag| tag.color).unwrap_or_else(|| {
+            if choice.bank == PERCUSSION_BANK {
+                LibraryRole::Drum
+            } else {
+                LibraryRole::Instrument
+            }
+            .color(&theme)
+        });
         let searching = !self.library_query().content().trim().is_empty();
         let enabled = self.library_takes_instrument();
         let selected = {
@@ -2546,14 +2581,9 @@ impl AurisApp {
         } else {
             self.t(Key::LibraryNeedsInstrumentTrack)
         };
-        let cluster_label = cluster
-            .as_ref()
-            .map(|(_, name)| name.clone())
-            .unwrap_or_default();
-        let tooltip_detail = if cluster.is_some() {
-            format!("{cluster_label} · {detail}")
-        } else {
-            detail.clone()
+        let tooltip_detail = match &cluster {
+            Some(tag) => format!("{} · {detail}", self.cluster_tip(tag)),
+            None => detail.clone(),
         };
         let tooltip = crate::ui::tooltip::keyed_tip(
             format!("{} · {tooltip_detail} {target_hint}", preset.name),
@@ -2614,19 +2644,11 @@ impl AurisApp {
                             .child(preset.name.clone()),
                     )
                     .when(searching || cluster.is_some(), |this| {
-                        this.child(
-                            div()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .truncate()
-                                .child(if searching && cluster.is_some() {
-                                    format!("{cluster_label} · {detail}")
-                                } else if searching {
-                                    detail
-                                } else {
-                                    cluster_label
-                                }),
-                        )
+                        this.child(cluster_line(
+                            cluster.as_ref(),
+                            if searching { detail } else { String::new() },
+                            &theme,
+                        ))
                     }),
             )
             .child(

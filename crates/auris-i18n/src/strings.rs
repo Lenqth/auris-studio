@@ -286,6 +286,7 @@ strings! {
     TimbreMapReady { en: "Scan the library to explore its sounds", ja: "ライブラリを解析すると音色を探索できます" }
     TimbreMapNameWithAi { en: "Name and classify with AI", ja: "AIで名前とアイコンを付ける" }
     TimbreMapNaming { en: "Naming and classifying…", ja: "名前とアイコンを考えています…" }
+    TimbreMapNamedByAi { en: "Named by AI", ja: "AIが付けた名前" }
     TimbreMapNamingHint { en: "Send representative sound names, family counts and cluster sizes to the configured agent. No audio is sent.", ja: "代表音色の名前・楽器分類の集計・音色数を設定済みエージェントに送ります。音声は送信しません。" }
     TimbreMapEditIcon { en: "Correct sound category…", ja: "音色の分類を修正…" }
     TimbreMapAutoIcon { en: "Use automatic category", ja: "自動分類に戻す" }
@@ -616,6 +617,8 @@ strings! {
     }
     OutputDevice { en: "Output Device", ja: "出力デバイス" }
     AudioHost { en: "Audio Driver", ja: "オーディオドライバー" }
+    AudioDevicesGroup { en: "Devices", ja: "デバイス" }
+    AudioPlaybackGroup { en: "Playback", ja: "再生" }
     FirstAsioDevice { en: "First Available Driver", ja: "最初に見つかったドライバー" }
     FirstAsioDeviceDetail { en: "Uses the first available ASIO driver", ja: "最初に利用できるASIOドライバーを使用します" }
     AsioInputNote { en: "Input and output use the same ASIO driver.", ja: "入力と出力に同じASIOドライバーを使用します。" }

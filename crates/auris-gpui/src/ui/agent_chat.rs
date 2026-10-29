@@ -4950,10 +4950,24 @@ impl AurisApp {
                     div()
                         .id("agent-bypass-warning")
                         .debug_selector(|| "agent-bypass-warning".to_owned())
+                        .flex()
+                        .items_center()
+                        .gap(theme.atelier.spacing.xs)
                         .px_1p5()
                         .text_xs()
                         .text_color(theme.warning)
-                        .child(format!("⚠ {}", self.t(Key::AgentBypassWarning))),
+                        // The tone's mark, so the frame's colour is never the only sign.
+                        .child(
+                            atelier::Icon::new(atelier::IconName::Alert)
+                                .size(px(14.0))
+                                .color(theme.warning),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(self.t(Key::AgentBypassWarning).to_owned()),
+                        ),
                 )
             })
             .when_some(blocker, |this, blocker| {
@@ -5921,7 +5935,7 @@ mod tests {
         let answer = "A gentle piano melody";
         let detail = "{\n  \"tempo\": 120\n}";
         // An answer rises into place as it arrives; this is about selecting it once it has.
-        cx.update(|_, cx| cx.global_mut::<atelier::Theme>().motion.enabled = false);
+        cx.update(|_, cx| atelier::motion::reduce_motion(cx));
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();

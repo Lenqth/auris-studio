@@ -874,9 +874,9 @@ impl AurisApp {
             .child(
                 atelier::Switch::new("song-memory", memory)
                     .label(self.t(Key::WorkshopMemory))
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_change(cx.listener(move |this, on: &bool, _, cx| {
                         if let Some(s) = &this.song_workshop {
-                            s.send(Command::Memory(!memory));
+                            s.send(Command::Memory(*on));
                         }
                         cx.notify();
                     })),

@@ -224,14 +224,40 @@ pub(crate) fn composer_frame(
         .rounded(theme.atelier.shape.radius_lg)
         .bg(theme.atelier.colors.elevated)
         .border_1()
-        .border_color(if focused {
-            theme.accent.opacity(0.7)
-        } else if warning {
-            theme.warning
-        } else {
-            theme.atelier.colors.border_strong
-        })
+        .border_color(composer_border(theme, focused, warning))
         .shadow(theme.atelier.elevation.low.clone())
+}
+
+/// The composer frame's hairline: the warning tone outranks focus, as `Composer::tone` does,
+/// because the mode it marks matters most while the person is typing into the box.
+fn composer_border(theme: &Theme, focused: bool, warning: bool) -> gpui::Hsla {
+    if warning {
+        theme.warning
+    } else if focused {
+        theme.accent.opacity(0.7)
+    } else {
+        theme.atelier.colors.border_strong
+    }
+}
+
+#[cfg(test)]
+mod composer_tests {
+    use super::*;
+
+    #[test]
+    fn a_warning_frame_stays_a_warning_while_the_composer_has_focus() {
+        let theme = Theme::dark();
+        assert_eq!(composer_border(&theme, true, true), theme.warning);
+        assert_eq!(composer_border(&theme, false, true), theme.warning);
+        assert_eq!(
+            composer_border(&theme, true, false),
+            theme.accent.opacity(0.7)
+        );
+        assert_eq!(
+            composer_border(&theme, false, false),
+            theme.atelier.colors.border_strong
+        );
+    }
 }
 
 /// The commands shared by both composers; each workflow owns their availability and effects.

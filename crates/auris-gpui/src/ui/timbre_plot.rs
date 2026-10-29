@@ -3,32 +3,40 @@
 //! Plot projection, picking, depth ordering, and orbit gestures belong to [`atelier::plot::Plot3d`].
 //! This module only converts session coordinates and keeps the view angles used by the controls.
 
+use atelier::plot::ViewPreset;
+
 /// The current view angles and selected preset for the timbre map.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct TimbreCamera {
+pub(super) struct TimbreView {
     pub azimuth: f32,
     pub elevation: f32,
     pub preset: Option<usize>,
 }
 
-impl Default for TimbreCamera {
+/// The views the segmented control offers, in its order: 3-D, top, front, side. The angles are
+/// Atelier's, so a preset here is exactly the view [`ViewPreset`] names.
+pub(super) const VIEWS: [ViewPreset; 4] = [
+    ViewPreset::Oblique,
+    ViewPreset::Top,
+    ViewPreset::Front,
+    ViewPreset::Side,
+];
+
+impl Default for TimbreView {
     fn default() -> Self {
+        let (azimuth, elevation) = VIEWS[0].angles();
         Self {
-            azimuth: -37.5,
-            elevation: 30.,
+            azimuth,
+            elevation,
             preset: Some(0),
         }
     }
 }
 
-impl TimbreCamera {
+impl TimbreView {
     pub fn set_view(&mut self, preset: usize) {
-        (self.azimuth, self.elevation) = match preset {
-            1 => (0., 90.),
-            2 => (0., 0.),
-            3 => (90., 0.),
-            _ => (-37.5, 30.),
-        };
+        let preset = preset.min(VIEWS.len() - 1);
+        (self.azimuth, self.elevation) = VIEWS[preset].angles();
         self.preset = Some(preset);
     }
 
