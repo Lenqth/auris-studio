@@ -4750,7 +4750,9 @@ impl AurisApp {
                 .absolute()
                 .bottom_full()
                 .left_0()
-                .w_full()
+                // At least the trigger's width, and wider when a choice needs it: the trigger is
+                // a quarter of a narrow composer, which cut "Auto review" off mid-word.
+                .min_w_full()
                 .pb_1()
                 .child(list),
         )
@@ -4986,6 +4988,12 @@ impl AurisApp {
                         .px_1p5()
                         .text_xs()
                         .text_color(theme.warning)
+                        // A mark with the colour, so the state is not told by colour alone.
+                        .child(
+                            atelier::Icon::new(atelier::IconName::Alert)
+                                .size(px(14.0))
+                                .color(theme.warning),
+                        )
                         .child(div().flex_1().min_w(px(80.0)).child(self.t(message)))
                         .child(button(
                             "agent-send-blocked-action",
@@ -5014,10 +5022,18 @@ impl AurisApp {
                 |this, error| {
                     this.child(
                         div()
+                            .flex()
+                            .items_center()
+                            .gap(theme.atelier.spacing.xs)
                             .px_1p5()
                             .text_xs()
                             .text_color(theme.danger)
-                            .child(error),
+                            .child(
+                                atelier::Icon::new(atelier::IconName::Alert)
+                                    .size(px(14.0))
+                                    .color(theme.danger),
+                            )
+                            .child(div().flex_1().min_w_0().child(error)),
                     )
                 },
             )
