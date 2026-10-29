@@ -102,6 +102,21 @@ fn configuration_root_in(parent: &std::path::Path) -> std::path::PathBuf {
         .keep()
 }
 
+/// Opens the native window's tab container with the same isolated configuration as other tests.
+pub(crate) fn open_tabs(
+    cx: &mut TestAppContext,
+) -> (
+    Entity<crate::project_tabs::ProjectTabs>,
+    &mut VisualTestContext,
+) {
+    isolate_config();
+    cx.update(gpui_component::init);
+    cx.update(crate::project_windows::install);
+    let (tabs, cx) = cx.add_window_view(crate::project_tabs::ProjectTabs::new);
+    cx.run_until_parked();
+    (tabs, cx)
+}
+
 /// Opens the application in a test window, as `main` opens it in a real one.
 pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<AurisApp>, &mut VisualTestContext) {
     isolate_config();

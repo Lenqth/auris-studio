@@ -524,6 +524,8 @@ pub enum PendingAction {
     StartRecording,
     /// Shut the window.
     CloseWindow,
+    /// Close this document's tab.
+    CloseTab,
     /// Leave.
     Quit,
     /// Leave after saving and restart through the verified update helper.
@@ -1616,7 +1618,26 @@ impl AurisApp {
             PendingAction::ImportMidi(path) => self.import_midi_at(path, cx),
             PendingAction::ImportMidiPicked => self.pick_and_import_midi(cx),
             PendingAction::StartRecording => self.toggle_recording(window, cx),
-            PendingAction::CloseWindow => window.remove_window(),
+            PendingAction::CloseWindow => {
+                if let Some(tabs) = self.project_tabs.clone() {
+                    let id = cx.entity_id();
+                    let revision = self.session.revision();
+                    crate::project_tabs::update_window(tabs, cx, move |tabs, window, cx| {
+                        tabs.approve_close_window(id, revision, window, cx)
+                    });
+                } else {
+                    window.remove_window();
+                }
+            }
+            PendingAction::CloseTab => {
+                if let Some(tabs) = self.project_tabs.clone() {
+                    let id = cx.entity_id();
+                    let revision = self.session.revision();
+                    crate::project_tabs::update_window(tabs, cx, move |tabs, window, cx| {
+                        tabs.approve_close_tab(id, revision, window, cx)
+                    });
+                }
+            }
             PendingAction::Quit => self.approve_quit(cx),
             PendingAction::RestartForUpdate => self.complete_update_restart(cx),
         }

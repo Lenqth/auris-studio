@@ -102,9 +102,12 @@ fn panel_insets(area: Size<Pixels>, margin: Pixels) -> (Pixels, Pixels) {
 }
 
 /// The body below the title bar, which the backdrop fills and the panel is centred in.
-fn body_area(window: &Window) -> Size<Pixels> {
+fn body_area(window: &Window, tabs: Pixels) -> Size<Pixels> {
     let viewport = window.viewport_size();
-    size(viewport.width, viewport.height - crate::titlebar::HEIGHT)
+    size(
+        viewport.width,
+        viewport.height - crate::titlebar::HEIGHT - tabs,
+    )
 }
 
 /// How opaque the arriving screen is at `delta`: it waits for the shape to have mostly arrived,
@@ -197,7 +200,10 @@ impl AurisApp {
     ) -> AnyElement {
         let settle = transition.settle;
         let theme = &self.theme;
-        let (inset_x, inset_y) = panel_insets(body_area(window), theme.atelier.spacing.xl);
+        let (inset_x, inset_y) = panel_insets(
+            body_area(window, self.project_tabs_height()),
+            theme.atelier.spacing.xl,
+        );
         let radius = theme.atelier.shape.radius_xl;
         let to_workshop = transition.to_workshop;
         div()
@@ -295,7 +301,13 @@ impl AurisApp {
             }
             "enter" => self.choose_project(window, cx),
             "escape" if chooser.page == ChooserPage::Setup => self.setup_escape(window, cx),
-            "escape" if self.opening_project.is_none() => window.remove_window(),
+            "escape" if self.opening_project.is_none() => {
+                if self.project_tabs.is_some() {
+                    self.close_project_tab(cx);
+                } else {
+                    window.remove_window();
+                }
+            }
             _ => return,
         }
         cx.stop_propagation();
@@ -518,7 +530,13 @@ impl AurisApp {
                 .child(
                     Button::new("chooser-close", self.t(Key::ChooseClose))
                         .disabled(busy)
-                        .on_click(cx.listener(|_, _, window, _| window.remove_window())),
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if this.project_tabs.is_some() {
+                                this.close_project_tab(cx);
+                            } else {
+                                window.remove_window();
+                            }
+                        })),
                 )
                 .into_any_element(),
             div()
@@ -544,6 +562,7 @@ impl AurisApp {
         if self.song_workshop.is_some() {
             return self.render_song_workshop(transition.filter(|t| t.to_workshop), window, cx);
         }
+        let project_tabs = self.render_project_tabs(window, cx);
         let transition = transition.filter(|t| !t.to_workshop);
         let theme = self.theme.clone();
         let spacing = theme.atelier.spacing;
@@ -594,7 +613,7 @@ impl AurisApp {
             .border_t_1()
             .border_color(theme.border_subtle)
             .children(self.chooser_footer(cx));
-        let panel_size = panel_size(body_area(window), spacing.xl);
+        let panel_size = panel_size(body_area(window, self.project_tabs_height()), spacing.xl);
         let panel = div()
             .occlude()
             .relative()
@@ -654,6 +673,25 @@ impl AurisApp {
             .on_action(cx.listener(|this, _: &crate::actions::Quit, window, cx| {
                 this.quit_asking(window, cx)
             }))
+            .on_action(cx.listener(|this, _: &crate::actions::NewProject, _, cx| {
+                crate::project_windows::open_in(None, this.project_window, cx);
+                cx.notify();
+            }))
+            .on_action(
+                cx.listener(|this, _: &crate::actions::NextProjectTab, _, cx| {
+                    this.cycle_project_tab(true, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::actions::PreviousProjectTab, _, cx| {
+                    this.cycle_project_tab(false, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::actions::CloseProjectTab, _, cx| {
+                    this.close_project_tab(cx)
+                }),
+            )
             .child(crate::titlebar::composed(
                 window,
                 &theme,
@@ -662,9 +700,10 @@ impl AurisApp {
                 crate::titlebar::controls(
                     window,
                     &theme,
-                    cx.listener(|_, _, window, _| window.remove_window()),
+                    cx.listener(|this, _, window, cx| this.close_project_window(window, cx)),
                 ),
             ))
+            .children(project_tabs)
             .child(
                 div()
                     .relative()
