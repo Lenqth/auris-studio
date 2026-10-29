@@ -951,17 +951,32 @@ mod tests {
             assert_eq!(this.timbre_map.camera.elevation, 90.)
         });
         click("timbre-right", &mut utility);
-        let azimuth = app.read_with(&utility, |this, _| this.timbre_map.camera.azimuth);
-        utility.update(|window, cx| window.focus(&app.read(cx).focus));
-        // Rescan, Close, four standard views, then left and right rotation.
-        utility.simulate_keystrokes("tab tab tab tab tab tab tab tab");
-        utility.simulate_keystrokes("space");
-        utility.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse("space").unwrap(),
-        });
-        app.read_with(&utility, |this, _| {
-            assert_eq!(this.timbre_map.camera.azimuth, azimuth + 15.)
-        });
+        for configured in [false, true] {
+            // Other tests can persist a model into this run's shared preferences. Set the
+            // condition explicitly and cover both Tab paths: enabled AI naming adds one stop.
+            app.update(&mut utility, |this, _| {
+                this.settings.agent = Default::default();
+                if configured {
+                    this.settings.agent.model = "offline-fixture".into();
+                }
+            });
+            paint(&app, &mut utility);
+            let azimuth = app.read_with(&utility, |this, _| this.timbre_map.camera.azimuth);
+            utility.update(|window, cx| window.focus(&app.read(cx).focus));
+            // AI naming when enabled, Rescan, Close, four standard views, then left and right.
+            utility.simulate_keystrokes(if configured {
+                "tab tab tab tab tab tab tab tab tab"
+            } else {
+                "tab tab tab tab tab tab tab tab"
+            });
+            utility.simulate_keystrokes("space");
+            utility.simulate_event(gpui::KeyUpEvent {
+                keystroke: gpui::Keystroke::parse("space").unwrap(),
+            });
+            app.read_with(&utility, |this, _| {
+                assert_eq!(this.timbre_map.camera.azimuth, azimuth + 15.)
+            });
+        }
         paint(&app, &mut utility);
         click(
             Box::leak(format!("timbre-all-{index}").into_boxed_str()),

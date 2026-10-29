@@ -5,7 +5,7 @@ use crate::{Edit, SessionError};
 use auris_core::plugin::{NoteEvent, PluginState, PrepareContext, ProcessContext};
 use auris_core::project::PresetRef;
 use auris_core::{AudioBuffer, ParamTarget, PluginRegistry, TrackId};
-use auris_dsp::timbre::{TimbreProjection, project_timbres, timbre_features};
+use auris_dsp::timbre::{TimbreProjection, project_timbres_refined, timbre_features};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -253,7 +253,7 @@ impl TimbreMapJob {
         }
         control.check()?;
         let groups = (sounds.len() as f64).sqrt().round() as usize;
-        let projection = project_timbres(&rows, groups.clamp(1, 12)).map_err(failure)?;
+        let projection = project_timbres_refined(&rows, groups.clamp(1, 12)).map_err(failure)?;
         let summaries = cluster_summaries(&sounds, &projection);
         Ok(TimbreMap {
             sounds,

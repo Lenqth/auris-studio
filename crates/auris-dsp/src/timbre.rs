@@ -143,6 +143,31 @@ pub struct TimbreProjection {
     pub explained_variance: f64,
 }
 
+#[path = "timbre_clusters.rs"]
+mod clustering;
+
+/// Maximum number of groups in a refined library timbre map.
+pub const MAX_TIMBRE_CLUSTERS: usize = 24;
+
+/// Projects a library catalogue and refines populous groups without moving its PCA coordinates.
+///
+/// Starts with up to twelve coarse groups, then bisects groups larger than twice the average
+/// coarse population (at least twelve sounds). Splits need two children of at least three sounds
+/// and a five-percent reduction in within-group squared error. At most 24 groups are returned;
+/// identical or weakly separable sounds may stay together above the population target.
+pub fn project_timbres_refined(
+    rows: &[Vec<f64>],
+    initial_clusters: usize,
+) -> Result<TimbreProjection, &'static str> {
+    let mut projection = project_timbres(rows, initial_clusters.clamp(1, 12))?;
+    projection.clusters = clustering::refine(
+        &projection.standardized,
+        projection.clusters,
+        MAX_TIMBRE_CLUSTERS,
+    );
+    Ok(projection)
+}
+
 /// Centers and scales the full feature space for acoustic nearest-neighbor search.
 /// Constant features become zero; malformed or excessive matrices are rejected.
 pub fn standardize_timbres(rows: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, &'static str> {
@@ -253,7 +278,8 @@ pub fn project_timbres(
     } else {
         0.0
     };
-    let groups = kmeans(&data, clusters.clamp(1, rows.len().max(1)));
+    let references: Vec<_> = data.iter().map(Vec::as_slice).collect();
+    let groups = kmeans(&references, clusters.clamp(1, rows.len().max(1)));
     Ok(TimbreProjection {
         standardized: data,
         positions,
@@ -284,11 +310,11 @@ fn orthogonalize(v: &mut [f64], axes: &[Vec<f64>]) {
         }
     }
 }
-fn kmeans(rows: &[Vec<f64>], k: usize) -> Vec<usize> {
+fn kmeans(rows: &[&[f64]], k: usize) -> Vec<usize> {
     let Some(first) = rows.first() else {
         return Vec::new();
     };
-    let mut centers = vec![first.clone()];
+    let mut centers = vec![first.to_vec()];
     while centers.len() < k {
         let farthest = rows
             .iter()
@@ -305,8 +331,15 @@ fn kmeans(rows: &[Vec<f64>], k: usize) -> Vec<usize> {
         if centers.iter().any(|c| distance(c, farthest) < 1e-12) {
             break;
         }
-        centers.push(farthest.clone());
+        centers.push(farthest.to_vec());
     }
+    lloyd(rows, centers)
+}
+
+fn lloyd(rows: &[&[f64]], mut centers: Vec<Vec<f64>>) -> Vec<usize> {
+    let Some(first) = rows.first() else {
+        return Vec::new();
+    };
     let mut labels = vec![usize::MAX; rows.len()];
     for _ in 0..60 {
         let next: Vec<_> = rows
@@ -325,7 +358,7 @@ fn kmeans(rows: &[Vec<f64>], k: usize) -> Vec<usize> {
         let mut counts = vec![0; centers.len()];
         for (row, &label) in rows.iter().zip(&labels) {
             counts[label] += 1;
-            for (sum, value) in sums[label].iter_mut().zip(row) {
+            for (sum, value) in sums[label].iter_mut().zip(row.iter()) {
                 *sum += value;
             }
         }
@@ -475,6 +508,24 @@ mod tests {
         assert_eq!(map.positions, vec![[0.0; 3]]);
         assert!(project_timbres(&[vec![f64::INFINITY]], 1).is_err());
         assert!(project_timbres(&[vec![1.0], vec![]], 1).is_err());
+        assert!(
+            project_timbres_refined(&[], 12)
+                .unwrap()
+                .clusters
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn refinement_preserves_geometry_and_full_feature_similarity() {
+        let rows: Vec<_> = (0..40)
+            .map(|i| vec![(i as f64 * 0.2).sin(), (i as f64 * 0.4).cos()])
+            .collect();
+        let coarse = project_timbres(&rows, 6).unwrap();
+        let refined = project_timbres_refined(&rows, 6).unwrap();
+        assert_eq!(refined.standardized, coarse.standardized);
+        assert_eq!(refined.positions, coarse.positions);
+        assert_eq!(refined.explained_variance, coarse.explained_variance);
     }
 
     #[test]

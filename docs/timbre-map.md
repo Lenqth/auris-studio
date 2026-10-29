@@ -58,9 +58,26 @@ Each trigger contributes 93 deterministic DSP features:
 
 The six feature blocks are concatenated, preserving corresponding pitch/velocity conditions,
 then each of the 558 dimensions is standardized over this catalogue. Constant dimensions become
-zero. Euclidean distance in this space drives nearest-neighbor search and deterministic k-means
-(rounded square root of the sound count, bounded to 1–12 requested groups). These are exploratory
-groups whose usefulness should be checked by listening.
+zero. Euclidean distance in this space drives nearest-neighbor search and deterministic k-means.
+The initial group count is the rounded square root of the sound count, bounded to 1–12. Groups
+larger than twice the average initial population (with a floor of twelve sounds) are candidates
+for recursive binary refinement, up to 24 total groups. Each split uses farthest-first and eight
+fixed-seed D²-weighted initializations, retaining the smallest within-group squared error. Both
+children need at least three sounds and the split must reduce the parent's error by at least 5%.
+Smaller existing groups retain their membership. Duplicate or weakly separable groups can remain
+above the population target. These are exploratory groups whose usefulness should be checked by
+listening; a finer partition does not establish distinct instrument classes.
+
+Refinement changes group membership only. The global feature normalization, PCA coordinates,
+retained variance, audition recordings and nearest-neighbor distances stay the same. Cluster
+names and colors are assigned after refinement, including optional agent naming of all groups.
+
+A local comparison using 171 measured built-in and Fluid R3 GM sounds produced 16 groups instead
+of 12, with the largest group falling from 87 to 27 sounds. The former 87-sound group split into
+groups represented by Halo Pad (27), Strings (26), Trumpet (20) and Saw Wave (14). Total within-group
+squared error fell from 59,514 to 53,206 (10.6%). Mean silhouette fell from 0.106 to 0.048: these
+finer groups have overlapping boundaries, so the result demonstrates browsing granularity and
+lower internal error, not improved global separation or listening quality.
 
 The map displays three principal components in an Atelier `Plot3d` scatter plot, with the fraction
 of standardized variance retained. Drag to rotate, use the rotation buttons from the keyboard,
