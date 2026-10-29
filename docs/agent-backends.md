@@ -105,6 +105,24 @@ The selected endpoint/model can impose additional format, duration or request li
 Reduce the attachments or use a CLI local-reference route if the native request cannot fit.
 CLI image/text payloads retain their separate 25 MiB combined budget, excluding local audio.
 
+## Installation and updates
+
+The project chooser's **Setup Guide → AI Agent** links to installation instructions
+for Codex, Claude Code, OpenCode, Antigravity CLI and Ollama, with sign-in and update
+steps. After installing, use **Connect an AI agent…** and check connections; refresh
+the model list afterward. If PATH changed while Auris was open, restart Auris or
+select the native executable in Settings. Hosted OpenAI-compatible APIs only need
+their endpoint, model and API-key environment variable.
+
+The connection check also compares installed Codex, Claude Code and OpenCode versions
+with each project's latest public stable GitHub release. A newer release appears
+beside the installed version; expand the provider for installation/update guidance.
+Package-manager and managed release channels can lag behind public releases, so follow
+the update instructions for your installation method. Release queries are bounded,
+unauthenticated and independent of model discovery. An unavailable or unrecognized
+version is reported as unavailable rather than current; preview versions are not
+compared with the stable channel.
+
 ## Codex setup
 
 Install [Codex CLI](https://learn.chatgpt.com/docs/cli) and run `codex login` with

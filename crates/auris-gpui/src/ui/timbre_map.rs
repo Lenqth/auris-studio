@@ -249,6 +249,28 @@ impl AurisApp {
         }
     }
 
+    fn attach_timbre_to_chat(&mut self) {
+        let Some(sound) = self
+            .timbre_map
+            .map
+            .as_ref()
+            .and_then(|map| self.timbre_map.selected.and_then(|i| map.sounds.get(i)))
+            .cloned()
+        else {
+            return;
+        };
+        let value = auris_session::music_reference::sound_reference(&self.session, &sound);
+        match self.attach_agent_music_reference(&value, &format!("sound-{}", sound.name)) {
+            Ok(()) => {
+                self.close_timbre_map();
+                if self.song_workshop.is_none() {
+                    self.panels.show(crate::dock::Panel::Agent);
+                }
+            }
+            Err(error) => self.timbre_map.error = Some(error),
+        }
+    }
+
     fn adopt_timbre(&mut self) {
         let Some(sound) = self
             .timbre_map
@@ -682,6 +704,15 @@ impl AurisApp {
                             })),
                     )
                     .child(
+                        Button::new("timbre-attach-chat", self.t(Key::AgentSoundAttach))
+                            .disabled(selected.is_none() || !self.can_attach_agent_music())
+                            .full_width()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.attach_timbre_to_chat();
+                                cx.notify();
+                            })),
+                    )
+                    .child(
                         SegmentedControl::new(
                             "timbre-lists",
                             [
@@ -873,6 +904,32 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[gpui::test]
+    fn map_choice_can_be_attached_without_applying_it_to_a_track(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let before = app.update(cx, |this, _| {
+            let map = this
+                .session
+                .timbre_map_job()
+                .unwrap()
+                .run(&TimbreMapControl::default())
+                .unwrap();
+            assert!(!map.sounds.is_empty());
+            this.timbre_map.map = Some(Arc::new(map));
+            this.timbre_map.selected = Some(0);
+            this.timbre_map.open = true;
+            this.project().clone()
+        });
+        paint(&app, cx);
+        let mut utility = map_window(&app, cx);
+        click("timbre-attach-chat", &mut utility);
+        app.read_with(&utility, |this, _| {
+            assert!(!this.timbre_map.open);
+            assert!(this.panels.is_open(crate::dock::Panel::Agent));
+            assert_eq!(this.project(), &before);
+        });
     }
 
     #[gpui::test]

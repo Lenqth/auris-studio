@@ -33,6 +33,11 @@ use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled
 pub enum PromptTarget {
     /// Name of the agent conversation captured when the prompt opened.
     AgentConversationName,
+    /// Chord reference using the key and meter captured when the sheet opened.
+    AgentChordReference {
+        key: MusicalKey,
+        meter: TimeSignature,
+    },
     /// A reusable sound captured from a track.
     SaveSound(TrackId),
     /// The saved user sound retained by this prompt.
@@ -228,7 +233,7 @@ impl PromptTarget {
         Some(match self {
             PromptTarget::Key(_) | PromptTarget::SongKey => Notation::Key,
             PromptTarget::Chord(_) => Notation::Chord,
-            PromptTarget::SongSectionChart(_) => Notation::Progression,
+            PromptTarget::SongSectionChart(_) | PromptTarget::AgentChordReference { .. } => Notation::Progression,
             PromptTarget::Section(_) => Notation::Section,
             PromptTarget::Signature(_)
             | PromptTarget::SignatureFrom(_)
@@ -272,7 +277,11 @@ impl PromptTarget {
     /// said that the case of a numeral is what makes it major or minor, so the only way to find
     /// out was to type something, have it refused, and read the refusal.
     pub fn hint(self) -> Option<Key> {
-        self.notation().map(Notation::hint)
+        if matches!(self, Self::AgentChordReference { .. }) {
+            Some(Key::AgentChordsHint)
+        } else {
+            self.notation().map(Notation::hint)
+        }
     }
 }
 
@@ -864,6 +873,9 @@ impl AurisApp {
             let at = self.session.snap_harmony(at);
             prompt.set_chord_vocabulary(self.session.project().harmony.key_at(at));
         }
+        if let Some(PromptTarget::AgentChordReference { key, .. }) = prompt.target() {
+            prompt.set_chord_vocabulary(key);
+        }
         self.menu = None;
         self.menu_bar = None;
         self.prompt = Some(prompt);
@@ -903,6 +915,15 @@ impl AurisApp {
             return;
         }
         let outcome = match target {
+            PromptTarget::AgentChordReference { key, meter } => {
+                let result = auris_session::music_reference::chord_reference(&text, key, meter)
+                    .and_then(|value| self.attach_agent_music_reference(&value, "chords"));
+                if let Err(error) = result {
+                    self.reject_prompt(error);
+                    return;
+                }
+                Ok(())
+            }
             PromptTarget::AgentConversationName => {
                 self.rename_agent_conversation(text);
                 Ok(())
@@ -2225,6 +2246,9 @@ impl AurisApp {
         // the text typed into the workshop, or every letter vanishes while Backspace, which the
         // workshop handles as a key, still works.
         if self.project_chooser.is_some() {
+            if self.workshop_chord_prompt() {
+                return self.prompt.as_mut()?.field_mut();
+            }
             if let Some(browser) = self.song_library.as_mut() {
                 return browser.focused.then_some(&mut browser.search);
             }
@@ -2277,6 +2301,9 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         }
         // In step with `writable_field`.
         if self.project_chooser.is_some() {
+            if self.workshop_chord_prompt() {
+                return self.prompt.as_ref()?.field();
+            }
             if let Some(browser) = self.song_library.as_ref() {
                 return browser.focused.then_some(&browser.search);
             }
@@ -2316,6 +2343,7 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     /// character, which is what lets an IME compose into the field.
     fn text_changed(&mut self) {
         self.reset_agent_completions();
+        self.reset_workshop_completions();
         if let Some(palette) = self.palette.as_mut() {
             palette.selected = 0;
         }
@@ -2657,6 +2685,7 @@ mod tests {
             match target {
                 PromptTarget::SaveSound(_)
                 | PromptTarget::AgentConversationName
+                | PromptTarget::AgentChordReference { .. }
                 | PromptTarget::RenameSound
                 | PromptTarget::DuplicateSound
                 | PromptTarget::Track(_)

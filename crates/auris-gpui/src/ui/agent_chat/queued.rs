@@ -59,10 +59,11 @@ impl AurisApp {
     pub(super) fn agent_composer_can_submit(&self) -> bool {
         if self.agent_chat.input.content().trim().is_empty()
             || self.agent_chat.input.marked().is_some()
+            || self.agent_chat.references.midi_loading
         {
             return false;
         }
-        if controls::is_control_command(self.agent_chat.input.content().trim()) {
+        if crate::ui::chat_commands::is_control_command(self.agent_chat.input.content().trim()) {
             return !self.agent_operation_busy();
         }
         self.agent_queue_available()
@@ -71,15 +72,19 @@ impl AurisApp {
     }
 
     pub(super) fn enqueue_agent_message(&mut self) -> bool {
+        if !self.commit_agent_midi_draft() {
+            return false;
+        }
         if !self.agent_composer_can_submit()
-            || controls::is_control_command(self.agent_chat.input.content().trim())
+            || crate::ui::chat_commands::is_control_command(self.agent_chat.input.content().trim())
         {
             return false;
         }
-        if let Err(error) =
-            auris_agent::validate_attachments(&self.settings.agent, &self.agent_chat.attachments)
-        {
-            self.agent_chat.attachment_error = Some(error);
+        if let Err(error) = auris_agent::validate_attachments(
+            &self.settings.agent,
+            &self.agent_chat.references.attachments,
+        ) {
+            self.agent_chat.references.attachment_error = Some(error);
             return false;
         }
         if self.agent_chat.queued.is_empty() {
@@ -88,13 +93,13 @@ impl AurisApp {
         self.agent_chat.queued.push_back(
             QueuedMessage {
                 text: self.agent_chat.input.content().trim().to_owned(),
-                attachments: std::mem::take(&mut self.agent_chat.attachments),
+                attachments: std::mem::take(&mut self.agent_chat.references.attachments),
                 selection_context: self.agent_selection_context().to_string(),
             }
             .into(),
         );
         self.agent_chat.input = TextField::default();
-        self.agent_chat.attachment_error = None;
+        self.agent_chat.references.attachment_error = None;
         true
     }
 
@@ -102,7 +107,7 @@ impl AurisApp {
         message
             .attachments
             .iter()
-            .all(|path| self.agent_chat.attached_here.contains(path))
+            .all(|path| self.agent_chat.references.attached_here.contains(path))
     }
 
     pub(super) fn dispatch_queued_agent_message(&mut self, cx: &mut gpui::Context<Self>) {
@@ -125,7 +130,8 @@ impl AurisApp {
             return;
         };
         if !self.queued_attachments_available(message) {
-            self.agent_chat.attachment_error = Some(self.t(Key::AgentQueueReattach).into());
+            self.agent_chat.references.attachment_error =
+                Some(self.t(Key::AgentQueueReattach).into());
             self.agent_chat.queue_paused = true;
             cx.notify();
             return;
@@ -133,7 +139,7 @@ impl AurisApp {
         if let Err(error) =
             auris_agent::validate_attachments(&self.settings.agent, &message.attachments)
         {
-            self.agent_chat.attachment_error = Some(error);
+            self.agent_chat.references.attachment_error = Some(error);
             self.agent_chat.queue_paused = true;
             cx.notify();
             return;
@@ -158,14 +164,14 @@ impl AurisApp {
         };
         // Automatic dispatch must leave the next draft, selection and IME pre-edit alone.
         let draft = std::mem::take(&mut self.agent_chat.input);
-        let attachments = std::mem::take(&mut self.agent_chat.attachments);
+        let attachments = std::mem::take(&mut self.agent_chat.references.attachments);
         if self.send_agent_message(submission) {
             self.agent_chat.queued.pop_front();
         } else {
             self.agent_chat.queue_paused = true;
         }
         self.agent_chat.input = draft;
-        self.agent_chat.attachments = attachments;
+        self.agent_chat.references.attachments = attachments;
         cx.notify();
     }
 
@@ -177,7 +183,8 @@ impl AurisApp {
             return;
         };
         if !self.queued_attachments_available(message) {
-            self.agent_chat.attachment_error = Some(self.t(Key::AgentQueueReattach).into());
+            self.agent_chat.references.attachment_error =
+                Some(self.t(Key::AgentQueueReattach).into());
             return;
         }
         if let Some(message) = self.agent_chat.queued.remove(index) {
@@ -233,20 +240,23 @@ impl AurisApp {
     }
 
     fn edit_queued_agent_message(&mut self, index: usize) {
-        if !self.agent_chat.input.content().is_empty() || !self.agent_chat.attachments.is_empty() {
+        if !self.agent_chat.input.content().is_empty()
+            || !self.agent_chat.references.attachments.is_empty()
+        {
             return;
         }
         let Some(message) = self.agent_chat.queued.get(index) else {
             return;
         };
         if !self.queued_attachments_available(message) {
-            self.agent_chat.attachment_error = Some(self.t(Key::AgentQueueReattach).into());
+            self.agent_chat.references.attachment_error =
+                Some(self.t(Key::AgentQueueReattach).into());
             return;
         }
         if let Some(message) = self.agent_chat.queued.remove(index) {
             let message = message.message;
             self.agent_chat.input = TextField::new(message.text);
-            self.agent_chat.attachments = message.attachments;
+            self.agent_chat.references.attachments = message.attachments;
             self.focus_agent_field(AgentField::Chat);
         }
     }
@@ -257,7 +267,7 @@ impl AurisApp {
         let enabled = self.agent_queue_available() && !self.agent_chat.interrupting;
         let can_edit = enabled
             && self.agent_chat.input.content().is_empty()
-            && self.agent_chat.attachments.is_empty();
+            && self.agent_chat.references.attachments.is_empty();
         let title = self
             .t(if paused {
                 Key::AgentQueuePaused
@@ -699,7 +709,7 @@ mod tests {
             this.dispatch_queued_agent_message(cx);
             assert!(this.agent_chat.queue_paused);
             assert!(this.agent_chat.link.is_none());
-            assert!(this.agent_chat.attachment_error.is_some());
+            assert!(this.agent_chat.references.attachment_error.is_some());
             assert_eq!(this.agent_chat.queued.len(), 1);
         });
     }

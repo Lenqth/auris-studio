@@ -12,7 +12,67 @@ use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*};
 use crate::app::AurisApp;
 use crate::settings_window::SettingsTab;
 use crate::ui::project_chooser::ChooserPage;
+use crate::ui::provider_logo::provider_logo;
 use crate::voice_setup_window::VoiceSetupTab;
+
+/// Installation and follow-up guidance shared by the guide and provider settings.
+pub(crate) const AGENT_SETUP: &[(&str, &str, Key, &str)] = &[
+    (
+        "Codex CLI",
+        "openai",
+        Key::SetupInstallCodex,
+        "https://learn.chatgpt.com/docs/cli",
+    ),
+    (
+        "Claude Code",
+        "claude",
+        Key::SetupInstallClaude,
+        "https://code.claude.com/docs/en/setup",
+    ),
+    (
+        "OpenCode",
+        "opencode",
+        Key::SetupInstallOpenCode,
+        "https://opencode.ai/docs/",
+    ),
+    (
+        "Antigravity CLI",
+        "antigravity",
+        Key::SetupInstallAntigravity,
+        "https://antigravity.google/docs/getting-started?tab=cli",
+    ),
+    (
+        "Ollama",
+        "ollama",
+        Key::SetupInstallOllama,
+        "https://ollama.com/download",
+    ),
+];
+
+/// A browser link with a keyboard path and a visible focus indicator.
+pub(crate) fn setup_link(
+    id: &'static str,
+    label: &'static str,
+    url: &'static str,
+    theme: &crate::theme::Theme,
+) -> impl IntoElement + use<> {
+    let accent = theme.accent;
+    let ring = theme.atelier.focus_ring();
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .focusable()
+        .tab_stop(true)
+        .rounded(crate::theme::Metrics::RADIUS_SM)
+        .focus(move |style| style.bg(accent.opacity(0.12)).shadow(ring))
+        .on_key_down(move |event, _, cx| {
+            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                cx.open_url(url);
+                cx.stop_propagation();
+            }
+        })
+        .child(gpui_component::link::Link::new(url).href(url).child(label))
+}
 
 /// The guide's steps, in order.
 pub(crate) const STEPS: &[Key] = &[
@@ -153,6 +213,7 @@ impl AurisApp {
                 .heading_weight(),
         );
         let mut actions = div().flex().flex_wrap().gap(spacing.sm);
+        let mut guidance = div().flex().flex_col().gap(spacing.md);
         match step {
             0 => {
                 detail = detail.child(paragraph(Key::SetupAudioHelp));
@@ -182,6 +243,26 @@ impl AurisApp {
                     Destination::Settings(SettingsTab::Agent),
                     cx,
                 ));
+                for &(name, logo, help, url) in AGENT_SETUP {
+                    guidance = guidance.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(spacing.xs)
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(spacing.sm)
+                                    .child(provider_logo(logo, theme.text))
+                                    .child(setup_link(name, name, url, &theme)),
+                            )
+                            .child(paragraph(help)),
+                    );
+                }
+                guidance = guidance
+                    .child(paragraph(Key::SetupInstallApi))
+                    .child(paragraph(Key::SetupAgentAfterInstall));
             }
             2 => {
                 detail = detail
@@ -197,6 +278,43 @@ impl AurisApp {
             }
             3 => {
                 detail = detail.child(paragraph(Key::SetupSingingHelp));
+                for (name, help, url) in [
+                    (
+                        "VOICEVOX Engine",
+                        Key::SetupInstallVoicevox,
+                        "https://github.com/VOICEVOX/voicevox_engine/releases",
+                    ),
+                    (
+                        "DiffSinger",
+                        Key::SetupInstallDiffSinger,
+                        "https://github.com/openutau/OpenUtau/wiki/DiffSinger-support",
+                    ),
+                    (
+                        "LeapSinger",
+                        Key::SetupInstallLeapSinger,
+                        "https://github.com/wavtechyukky/LeapSinger",
+                    ),
+                ] {
+                    guidance = guidance.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(spacing.xs)
+                            .child(setup_link(name, name, url, &theme))
+                            .child(paragraph(help)),
+                    );
+                }
+                let instructions = if self.language == auris_i18n::Language::Japanese {
+                    "https://github.com/uthree/auris-studio/blob/main/docs/singing-backends.ja.md"
+                } else {
+                    "https://github.com/uthree/auris-studio/blob/main/docs/singing-backends.md"
+                };
+                guidance = guidance.child(setup_link(
+                    "setup-singing-instructions",
+                    self.t(Key::SetupSingingInstructions),
+                    instructions,
+                    &theme,
+                ));
                 actions = actions
                     .child(self.setup_action(
                         "setup-voicevox",
@@ -241,13 +359,20 @@ impl AurisApp {
         div()
             .flex()
             .flex_col()
+            .flex_shrink_0()
+            .w_full()
+            .min_w_0()
             .gap(spacing.xl)
             .child(
                 SectionHeader::new(self.t(Key::SetupWelcome))
                     .description(self.t(Key::SetupWelcomeHelp)),
             )
             .child(steps)
-            .child(detail.child(actions))
+            .child(
+                detail
+                    .child(actions)
+                    .when(matches!(step, 1 | 3), |detail| detail.child(guidance)),
+            )
             .child(
                 div()
                     .flex()
@@ -347,17 +472,36 @@ mod tests {
 
         crate::harness::click("setup-next", cx);
         crate::harness::paint(&app, cx);
+        crate::harness::click("Codex CLI", cx);
+        assert_eq!(cx.opened_url().as_deref(), Some(super::AGENT_SETUP[0].3));
+        app.read_with(cx, |app, _| {
+            assert_eq!(app.project_chooser.as_ref().unwrap().setup_step, 1);
+            assert_eq!(app.session.project(), &before);
+        });
         crate::harness::click("setup-agent", cx);
         app.read_with(cx, |app, _| {
             assert!(app.settings_window.is_some());
             assert!(!app.settings.setup_guide_seen);
             assert_eq!(app.session.project(), &before);
         });
+        // A long installation page must not leave the next backend's setup controls offscreen.
+        let position = cx.debug_bounds("chooser-content").unwrap().center();
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position,
+            delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.0), gpui::px(-10000.0))),
+            ..Default::default()
+        });
+        crate::harness::paint(&app, cx);
         app.update(cx, |app, cx| {
             app.project_chooser.as_mut().unwrap().setup_step = 3;
             cx.notify();
         });
         crate::harness::paint(&app, cx);
+        crate::harness::click("VOICEVOX Engine", cx);
+        assert_eq!(
+            cx.opened_url().as_deref(),
+            Some("https://github.com/VOICEVOX/voicevox_engine/releases")
+        );
         crate::harness::click("setup-voicevox", cx);
         app.read_with(cx, |app, _| assert!(app.voice_setup_window.is_some()));
 

@@ -54,6 +54,8 @@ pub mod conversations;
 pub mod execution_trace;
 mod export_inspection;
 pub mod live_agent;
+pub mod midi_reference;
+pub mod music_reference;
 pub mod production_record;
 pub use export_inspection::{ExportInspection, inspect_export};
 pub mod note_pitch;

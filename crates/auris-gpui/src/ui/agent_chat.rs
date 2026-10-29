@@ -36,7 +36,9 @@ mod articulation_eval;
 mod composition_eval;
 pub(crate) mod controls;
 mod conversations;
-mod model_search;
+pub(crate) mod midi;
+pub(super) mod model_search;
+pub(crate) mod music;
 #[cfg(test)]
 mod performance_eval;
 mod queued;
@@ -686,6 +688,8 @@ pub(crate) enum AgentField {
     Chat,
     /// Title search in the conversation browser.
     ConversationSearch,
+    /// Lyrics of the selected note in the inline score editor.
+    MidiLyric,
 }
 
 /// One model a provider reported serving.
@@ -1172,14 +1176,7 @@ pub(crate) struct AgentChat {
     /// The document whose folder and model history the running child belongs to.
     bound_project: Option<PathBuf>,
     /// Reference files selected by the user for the next message.
-    attachments: Vec<PathBuf>,
-    /// Every file the user attached in this window, whichever conversation it was for.
-    ///
-    /// A saved draft's attachments are restored only from this set. A transcript is a file in the
-    /// project folder, which travels with a project, and a planted one could otherwise put any
-    /// readable path on the next message for the user to send without noticing.
-    attached_here: std::collections::HashSet<PathBuf>,
-    attachment_error: Option<String>,
+    pub(crate) references: music::MusicReferences,
     /// Actual painted bounds used by the window's shared file-drop router.
     pub(crate) drop_bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
     /// A different project produced by the last turn, ready to open explicitly.
@@ -1263,9 +1260,7 @@ impl Default for AgentChat {
             pending_reload: None,
             turn_project: None,
             bound_project: None,
-            attachments: Vec::new(),
-            attached_here: Default::default(),
-            attachment_error: None,
+            references: Default::default(),
             drop_bounds: Default::default(),
             produced_project: None,
             fresh_history: false,
@@ -1370,7 +1365,9 @@ impl AgentChat {
 
     /// The message editor's actual focus target, once the panel has been painted.
     pub(crate) fn input_focus(&self) -> Option<&gpui::FocusHandle> {
-        if self.focused == Some(AgentField::ConversationSearch) {
+        if self.focused == Some(AgentField::MidiLyric) {
+            self.references.midi_lyric_focus.as_ref()
+        } else if self.focused == Some(AgentField::ConversationSearch) {
             self.conversations.focus.as_ref()
         } else {
             self.input_focus.as_ref()
@@ -1386,6 +1383,7 @@ impl AgentChat {
         }
         Some(match self.focused? {
             AgentField::Chat => &mut self.input,
+            AgentField::MidiLyric => &mut self.references.midi_draft.as_mut()?.lyric,
             AgentField::ConversationSearch => &mut self.conversations.search,
         })
     }
@@ -1397,6 +1395,7 @@ impl AgentChat {
         }
         Some(match self.focused? {
             AgentField::Chat => &self.input,
+            AgentField::MidiLyric => &self.references.midi_draft.as_ref()?.lyric,
             AgentField::ConversationSearch => &self.conversations.search,
         })
     }
@@ -1862,30 +1861,38 @@ impl AurisApp {
 
     /// Attach dropped reference files without importing them into the song.
     pub(crate) fn agent_attach_files(&mut self, paths: &[PathBuf], cx: &mut gpui::Context<Self>) {
-        if self.agent_chat.pending_send.is_some() {
+        if self.agent_chat.pending_send.is_some()
+            || self.agent_chat.conversations.changing_conversation()
+        {
             return;
         }
-        self.agent_chat.attachment_error = None;
+        self.agent_chat.references.attachment_error = None;
         for path in paths {
-            if self.agent_chat.attachments.contains(path) {
-                self.agent_chat.attached_here.insert(path.clone());
+            if self.agent_chat.references.attachments.contains(path) {
+                self.agent_chat
+                    .references
+                    .attached_here
+                    .insert(path.clone());
                 continue;
             }
             if auris_agent::attachment_kind(path).is_none() {
-                self.agent_chat.attachment_error =
+                self.agent_chat.references.attachment_error =
                     Some(self.t(Key::AgentAttachmentUnsupported).replace(
                         "{name}",
                         &path.file_name().unwrap_or_default().to_string_lossy(),
                     ));
                 continue;
             }
-            if self.agent_chat.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
-                self.agent_chat.attachment_error =
+            if self.agent_chat.references.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
+                self.agent_chat.references.attachment_error =
                     Some(self.t(Key::AgentAttachmentLimit).to_owned());
                 break;
             }
-            self.agent_chat.attached_here.insert(path.clone());
-            self.agent_chat.attachments.push(path.clone());
+            self.agent_chat
+                .references
+                .attached_here
+                .insert(path.clone());
+            self.agent_chat.references.attachments.push(path.clone());
         }
         cx.notify();
     }
@@ -1910,12 +1917,12 @@ impl AurisApp {
             }
             let navigation = std::mem::take(&mut self.agent_chat.conversations);
             let entries = std::mem::take(&mut self.agent_chat.entries);
-            let attachments = std::mem::take(&mut self.agent_chat.attachments);
+            let attachments = std::mem::take(&mut self.agent_chat.references.attachments);
             let queued = std::mem::take(&mut self.agent_chat.queued);
             self.agent_reset_conversation();
             self.agent_chat.conversations = navigation;
             self.agent_chat.entries = entries;
-            self.agent_chat.attachments = attachments;
+            self.agent_chat.references.attachments = attachments;
             self.agent_chat.queued = queued;
             self.agent_chat.queue_paused = true;
             if let Some(folder) = self.session.project_folder() {
@@ -1942,10 +1949,10 @@ impl AurisApp {
         // The composer belongs to the document the user just renamed, not to the old history
         // file. Preserve it while dropping the worker receiver so queued old-path events cannot
         // be observed under the new path.
-        let attachments = std::mem::take(&mut self.agent_chat.attachments);
+        let attachments = std::mem::take(&mut self.agent_chat.references.attachments);
         let queued = std::mem::take(&mut self.agent_chat.queued);
         self.agent_reset_conversation();
-        self.agent_chat.attachments = attachments;
+        self.agent_chat.references.attachments = attachments;
         self.agent_chat.queued = queued;
         self.agent_chat.queue_paused = true;
     }
@@ -1970,7 +1977,7 @@ impl AurisApp {
     /// What would stop a send right now. A model picked in a settings form that is still open
     /// counts as chosen, because `agent_send` applies that form before it asks.
     fn agent_send_blocker(&self) -> Option<SendBlocker> {
-        if controls::is_control_command(self.agent_chat.input.content().trim()) {
+        if crate::ui::chat_commands::is_control_command(self.agent_chat.input.content().trim()) {
             return None;
         }
         let model_chosen = self.settings.agent.is_configured()
@@ -2169,7 +2176,8 @@ impl AurisApp {
         self.agent_chat.produced_project = None;
         self.agent_chat.turn_project = None;
         self.agent_chat.pending_reload = None;
-        self.agent_chat.attachments.clear();
+        self.agent_chat.references.attachments.clear();
+        self.agent_chat.references.midi_draft = None;
         self.agent_chat.entries.clear();
         self.agent_chat.expanded.clear();
         self.agent_chat.expanded_tool_groups.clear();
@@ -2267,11 +2275,14 @@ impl AurisApp {
     /// The window saves first, so the model reads the document as it stands — the other half
     /// of the bargain is in [`AgentChat::absorb`], where the model's writes come back.
     pub(crate) fn agent_send(&mut self) {
+        if self.agent_chat.references.midi_loading || !self.commit_agent_midi_draft() {
+            return;
+        }
         let text = self.agent_chat.input.content().trim().to_string();
         if text.is_empty() {
             return;
         }
-        if controls::is_control_command(&text) && !self.agent_operation_busy() {
+        if crate::ui::chat_commands::is_control_command(&text) && !self.agent_operation_busy() {
             self.agent_control_command(&text);
             return;
         }
@@ -2317,18 +2328,19 @@ impl AurisApp {
             }
             return;
         }
-        if let Err(error) =
-            auris_agent::validate_attachments(&self.settings.agent, &self.agent_chat.attachments)
-        {
-            self.agent_chat.attachment_error = Some(
+        if let Err(error) = auris_agent::validate_attachments(
+            &self.settings.agent,
+            &self.agent_chat.references.attachments,
+        ) {
+            self.agent_chat.references.attachment_error = Some(
                 if self.settings.agent.backend == "antigravity"
-                    && self.agent_chat.attachments.iter().any(|path| {
+                    && self.agent_chat.references.attachments.iter().any(|path| {
                         auris_agent::attachment_kind(path)
                             == Some(auris_agent::AttachmentKind::Image)
                     })
                 {
                     self.t(Key::AgentAttachmentImageUnsupported).to_owned()
-                } else if self.agent_chat.attachments.iter().any(|path| {
+                } else if self.agent_chat.references.attachments.iter().any(|path| {
                     auris_agent::attachment_kind(path) == Some(auris_agent::AttachmentKind::Audio)
                 }) {
                     self.t(Key::AgentAttachmentAudioUnsupported).to_owned()
@@ -2338,7 +2350,7 @@ impl AurisApp {
             );
             return;
         }
-        self.agent_chat.attachment_error = None;
+        self.agent_chat.references.attachment_error = None;
         if self.agent_chat.link.is_some()
             && self.agent_chat.bound_project.as_deref() != self.session.path()
         {
@@ -2352,7 +2364,7 @@ impl AurisApp {
         let message = PendingAgentSend {
             token: self.agent_document_token(),
             text,
-            attachments: self.agent_chat.attachments.clone(),
+            attachments: self.agent_chat.references.attachments.clone(),
             preferences: self.settings.agent.clone(),
             selection_context: self.agent_selection_context().to_string(),
         };
@@ -2515,7 +2527,7 @@ impl AurisApp {
         self.agent_chat.speed.reset();
         self.agent_chat.streamed_answer = false;
         self.agent_chat.input = TextField::new(String::new());
-        self.agent_chat.attachments.clear();
+        self.agent_chat.references.attachments.clear();
         true
     }
 
@@ -3210,6 +3222,16 @@ impl AurisApp {
             // dispatch the window's focus-navigation binding and strand the candidate session.
             return true;
         }
+        if !composing && focused == AgentField::MidiLyric && key == "escape" {
+            self.close_midi_editor(window);
+            return true;
+        }
+        if !composing && focused == AgentField::MidiLyric && key == "enter" {
+            if self.commit_midi_draft() {
+                self.close_midi_editor(window);
+            }
+            return true;
+        }
         if !composing && focused == AgentField::Chat && self.agent_chat.controls.pending.is_some() {
             if key == "escape" {
                 self.agent_approval(controls::Approval::Deny);
@@ -3232,55 +3254,28 @@ impl AurisApp {
         let completions = if !composing
             && focused == AgentField::Chat
             && self.agent_chat.pending_send.is_none()
-            && self.agent_chat.controls.slash_dismissed.as_deref()
-                != Some(self.agent_chat.input.content())
         {
-            controls::slash_matches(self.agent_chat.input.content(), &self.agent_chat.models)
+            self.agent_chat.controls.slash.matches(
+                self.agent_chat.input.content(),
+                &self.agent_chat.models,
+                crate::ui::chat_commands::Scope::Agent,
+            )
         } else {
             Vec::new()
         };
-        if !completions.is_empty() {
-            let selected = self.agent_chat.controls.slash_selected % completions.len();
-            match key {
-                "escape" => {
-                    self.agent_chat.controls.slash_dismissed =
-                        Some(self.agent_chat.input.content().to_owned());
+        match self.agent_chat.controls.slash.key(
+            self.agent_chat.input.content(),
+            &completions,
+            event,
+        ) {
+            crate::ui::chat_commands::CompletionKey::Handled => return true,
+            crate::ui::chat_commands::CompletionKey::Complete { fill, submit } => {
+                self.accept_agent_completion(&fill);
+                if !submit {
                     return true;
                 }
-                "up" => {
-                    self.agent_chat.controls.slash_selected =
-                        (selected + completions.len() - 1) % completions.len();
-                    self.agent_chat
-                        .controls
-                        .slash_scroll
-                        .scroll_to_item(self.agent_chat.controls.slash_selected);
-                    return true;
-                }
-                "down" => {
-                    self.agent_chat.controls.slash_selected = (selected + 1) % completions.len();
-                    self.agent_chat
-                        .controls
-                        .slash_scroll
-                        .scroll_to_item(self.agent_chat.controls.slash_selected);
-                    return true;
-                }
-                "tab" => {
-                    self.accept_agent_completion(&completions[selected].fill);
-                    return true;
-                }
-                "enter"
-                    if !event.keystroke.modifiers.shift
-                        && completions[selected].fill != self.agent_chat.input.content() =>
-                {
-                    self.accept_agent_completion(&completions[selected].fill);
-                    // A trailing space asks for an argument; a complete candidate can use
-                    // the same submission path as an already fully typed command.
-                    if completions[selected].fill.ends_with(' ') {
-                        return true;
-                    }
-                }
-                _ => {}
             }
+            crate::ui::chat_commands::CompletionKey::Ignored => {}
         }
         if !composing && key == "tab" {
             if let Some(field) = self.agent_chat.field_mut() {
@@ -3322,19 +3317,15 @@ impl AurisApp {
             .field_mut()
             .map(|field| field.apply_key_with_clipboard(key, shift, secondary, true, cx));
         if effect == Some(crate::ui::text_field::KeyEffect::Changed) {
-            self.agent_chat.controls.slash_selected = 0;
-            self.agent_chat.controls.slash_dismissed = None;
-            self.agent_chat.controls.slash_scroll.scroll_to_item(0);
+            self.agent_chat.controls.slash.reset();
         }
         effect.is_some_and(|effect| effect != crate::ui::text_field::KeyEffect::Ignored)
     }
 
-    fn accept_agent_completion(&mut self, fill: &str) {
+    pub(super) fn accept_agent_completion(&mut self, fill: &str) {
         let length = self.agent_chat.input.content().len();
         self.agent_chat.input.replace(0..length, fill);
-        self.agent_chat.controls.slash_selected = 0;
-        self.agent_chat.controls.slash_dismissed = None;
-        self.agent_chat.controls.slash_scroll.scroll_to_item(0);
+        self.agent_chat.controls.slash.reset();
         self.focus_agent_field(AgentField::Chat);
     }
 
@@ -3395,7 +3386,17 @@ impl AurisApp {
             })
             .clone()
             .tab_stop(cancelable);
-        if !composer_locked && input_focus.is_focused(window) {
+        if !composer_locked
+            && self
+                .agent_chat
+                .references
+                .midi_lyric_focus
+                .as_ref()
+                .is_some_and(|f| f.is_focused(window))
+            && self.agent_chat.references.midi_draft.is_some()
+        {
+            self.focus_agent_field(AgentField::MidiLyric);
+        } else if !composer_locked && input_focus.is_focused(window) {
             self.focus_agent_field(AgentField::Chat);
         } else if !composer_locked
             && self.agent_chat.focused == Some(AgentField::Chat)
@@ -3706,7 +3707,12 @@ impl AurisApp {
                 |this| this.child(self.agent_status_row(&theme)),
             )
             .child(self.agent_slash_completions(cx))
-            .child(self.agent_input_row(input_focus, stop_focus, cx))
+            .child(self.agent_input_row(
+                input_focus,
+                stop_focus,
+                (window.viewport_size().height * 0.45).min(window.rem_size() * 24.0),
+                cx,
+            ))
             .child(self.render_attachment_preview(false, window, cx))
             // Drawn over everything, hidden until a drag carrying something attachable is over
             // the panel. A recolour of the panel itself was covered by the header and composer.
@@ -3925,9 +3931,13 @@ impl AurisApp {
             .into_any_element()
     }
 
-    /// Preview a reference only after explicit user activation.
-    fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
-        self.open_attachment_preview(path, false, cx);
+    /// Open an explicitly selected reference in its local editor or preview.
+    pub(crate) fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
+        if auris_agent::attachment_kind(&path) == Some(auris_agent::AttachmentKind::Midi) {
+            self.edit_midi_attachment(path, cx);
+        } else {
+            self.open_attachment_preview(path, self.song_workshop.is_some(), cx);
+        }
     }
     /// One transcript row. A tool row with an answer opens to the whole of it when activated —
     /// by pointer or keyboard — so the loop's log stays where the loop is shown.
@@ -4889,66 +4899,26 @@ impl AurisApp {
     }
 
     fn agent_slash_completions(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
-        if self.agent_chat.controls.slash_dismissed.as_deref()
-            == Some(self.agent_chat.input.content())
-        {
-            return div().into_any_element();
-        }
-        let matches =
-            controls::slash_matches(self.agent_chat.input.content(), &self.agent_chat.models);
-        if matches.is_empty() {
-            return div().into_any_element();
-        }
-        let selected = self.agent_chat.controls.slash_selected % matches.len();
-        let theme = &self.theme;
-        div()
-            .id("agent-slash-completions")
-            .track_scroll(&self.agent_chat.controls.slash_scroll)
-            .debug_selector(|| "agent-slash-completions".into())
-            .flex()
-            .flex_col()
-            .max_h(px(180.0))
-            .overflow_y_scroll()
-            .border_t_1()
-            .border_color(theme.border)
-            .bg(theme.surface_raised)
-            .children(matches.into_iter().enumerate().map(|(index, candidate)| {
-                let fill = candidate.fill.clone();
-                div()
-                    .id(("agent-slash-option", index))
-                    .debug_selector(move || format!("agent-slash-option-{index}"))
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .px_2()
-                    .py_1()
-                    .when(index == selected, |this| this.bg(theme.surface_hover))
-                    .hover(|this| this.bg(theme.surface_hover))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                            this.accept_agent_completion(&fill);
-                            cx.notify();
-                        }),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.text)
-                            .child(candidate.label),
-                    )
-                    .child(
-                        div()
-                            .flex_shrink_0()
-                            .text_xs()
-                            .text_color(theme.text_faint)
-                            .child(self.t(candidate.description)),
-                    )
-            }))
-            .into_any_element()
+        let matches = if self.agent_chat.input.marked().is_none() {
+            self.agent_chat.controls.slash.matches(
+                self.agent_chat.input.content(),
+                &self.agent_chat.models,
+                crate::ui::chat_commands::Scope::Agent,
+            )
+        } else {
+            Vec::new()
+        };
+        self.agent_chat
+            .controls
+            .slash
+            .render(
+                matches,
+                crate::ui::chat_commands::Scope::Agent,
+                &self.theme,
+                self.language(),
+                cx,
+            )
+            .unwrap_or_else(|| div().into_any_element())
     }
 
     /// A single composer surface containing references, prose and a compact command row.
@@ -4956,6 +4926,7 @@ impl AurisApp {
         &mut self,
         input_focus: gpui::FocusHandle,
         stop_focus: gpui::FocusHandle,
+        editor_height: gpui::Pixels,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
@@ -4964,12 +4935,14 @@ impl AurisApp {
             || self.agent_chat.conversations.changing_conversation();
         let empty = self.agent_chat.input.content().is_empty();
         let placeholder = self.t(Key::AgentComposerPlaceholder).to_owned();
-        let attachments = self.agent_chat.attachments.clone();
+        let attachments = self.agent_chat.references.attachments.clone();
         let blocker = self.agent_send_blocker();
         let can_send = self.agent_composer_can_submit();
         let cancelable = self.agent_cancelable();
         let queueing = (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
-            && !controls::is_control_command(self.agent_chat.input.content().trim());
+            && !crate::ui::chat_commands::is_control_command(
+                self.agent_chat.input.content().trim(),
+            );
         let send_label = self
             .t(if queueing {
                 Key::AgentQueue
@@ -5033,15 +5006,18 @@ impl AurisApp {
                         )),
                 )
             })
-            .when_some(self.agent_chat.attachment_error.clone(), |this, error| {
-                this.child(
-                    div()
-                        .px_1p5()
-                        .text_xs()
-                        .text_color(theme.danger)
-                        .child(error),
-                )
-            })
+            .when_some(
+                self.agent_chat.references.attachment_error.clone(),
+                |this, error| {
+                    this.child(
+                        div()
+                            .px_1p5()
+                            .text_xs()
+                            .text_color(theme.danger)
+                            .child(error),
+                    )
+                },
+            )
             .when(
                 matches!(
                     self.settings.agent.backend.as_str(),
@@ -5101,7 +5077,13 @@ impl AurisApp {
                                         theme.accent,
                                         &theme,
                                         cx.listener(move |this, _, _, cx| {
-                                            this.open_agent_attachment(path.clone(), cx);
+                                            if auris_agent::attachment_kind(&path)
+                                                == Some(auris_agent::AttachmentKind::Midi)
+                                            {
+                                                this.edit_midi_attachment(path.clone(), cx);
+                                            } else {
+                                                this.open_agent_attachment(path.clone(), cx);
+                                            }
                                         }),
                                     )
                                     .flex_1()
@@ -5125,9 +5107,15 @@ impl AurisApp {
                                         theme.accent,
                                         &theme,
                                         cx.listener(move |this, _, _, cx| {
-                                            if index < this.agent_chat.attachments.len() {
-                                                this.agent_chat.attachments.remove(index);
-                                                this.agent_chat.attachment_error = None;
+                                            if index < this.agent_chat.references.attachments.len()
+                                            {
+                                                let removed = this
+                                                    .agent_chat
+                                                    .references
+                                                    .attachments
+                                                    .remove(index);
+                                                this.cancel_midi_for_attachment(&removed);
+                                                this.agent_chat.references.attachment_error = None;
                                             }
                                             cx.notify();
                                         }),
@@ -5142,6 +5130,10 @@ impl AurisApp {
                                 )
                         })),
                 )
+            })
+            .child(self.midi_composer_controls(locked, cx))
+            .when(self.agent_chat.references.midi_draft.is_some(), |this| {
+                this.child(self.midi_editor(editor_height, cx))
             })
             .when(locked, |this| {
                 this.child(
@@ -5276,6 +5268,12 @@ impl AurisApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let value = match field {
+            AgentField::MidiLyric => {
+                let Some(draft) = &self.music_references().midi_draft else {
+                    return div().into_any_element();
+                };
+                &draft.lyric
+            }
             AgentField::Chat => &self.agent_chat.input,
             AgentField::ConversationSearch => &self.agent_chat.conversations.search,
         };
@@ -5285,7 +5283,7 @@ impl AurisApp {
         let marked = value.marked();
         let view = cx.entity();
         let pointer_focus = focus.clone();
-        let (minimum, maximum) = if field == AgentField::ConversationSearch {
+        let (minimum, maximum) = if field != AgentField::Chat {
             let height = crate::ui::text_area::area_height("", 1, 1);
             (height, height)
         } else {
@@ -5357,18 +5355,24 @@ impl AurisApp {
                     MouseButton::Left,
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                         if focused && !composing {
-                            let text = this.agent_chat.input.content().to_string();
+                            let text = crate::ui::text_field::HasTextField::readable_field(this)
+                                .map(|f| f.content().to_owned())
+                                .unwrap_or_default();
                             if let Some(offset) = crate::ui::text_area::wrapped_area_offset_at(
                                 window,
                                 &text,
                                 event.position,
-                            ) {
-                                this.agent_chat
-                                    .input
-                                    .place_caret(offset, event.modifiers.shift);
+                            ) && let Some(value) =
+                                crate::ui::text_field::HasTextField::field(this)
+                            {
+                                value.place_caret(offset, event.modifiers.shift);
                             }
                         }
-                        this.focus_agent_field(field);
+                        if field == AgentField::MidiLyric {
+                            this.focus_music_lyric();
+                        } else {
+                            this.focus_agent_field(field);
+                        }
                         window.focus(&pointer_focus);
                         cx.notify();
                     }),
@@ -5750,7 +5754,7 @@ mod tests {
         crate::harness::paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
-                this.agent_chat.controls.slash_dismissed.as_deref(),
+                this.agent_chat.controls.slash.dismissed.as_deref(),
                 Some("/model "),
                 "focus={:?}, input={:?}, marked={:?}, models={}",
                 this.agent_chat.focused,
@@ -5854,6 +5858,22 @@ mod tests {
         cx.simulate_keystrokes("shift-enter");
         app.read_with(cx, |this, _| {
             assert_eq!(this.agent_chat.input.content(), "/perm\n");
+        });
+    }
+
+    #[gpui::test]
+    fn slash_help_runs_locally_without_a_model(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent = Default::default();
+            this.agent_chat.input = TextField::new("/help");
+            this.agent_send();
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(this.agent_chat.pending_send.is_none());
+            assert!(this.agent_chat.entries.iter().any(|entry| matches!(entry,
+                ChatEntry::Status(help) if help.contains("/model") && help.contains("/permissions")
+            )));
         });
     }
 
@@ -6539,7 +6559,7 @@ mod tests {
             this.selected_track = Some(selected);
             this.agent_chat.input = TextField::new("continue the saved conversation");
             this.agent_chat.focused = Some(AgentField::Chat);
-            this.agent_chat.attachments = vec![PathBuf::from("reference.png")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("reference.png")];
             let (_sender, receiver) = std::sync::mpsc::channel();
             let token = this.agent_document_token();
             this.agent_chat.history_load = Some(PendingHistoryLoad { token, receiver });
@@ -6571,7 +6591,7 @@ mod tests {
             // second Send for the immutable submission already waiting on disk history. This
             // also models another Settings window and a canvas click changing live state.
             this.agent_chat.input = TextField::new("later mutation");
-            this.agent_chat.attachments = vec![PathBuf::from("later.png")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("later.png")];
             this.settings.agent.model = "changed-in-another-window".into();
             this.settings.agent.output_tokens = Some(8_192);
             this.settings.agent.policy.mode = auris_session::agent_policy::Mode::Bypass;
@@ -6645,7 +6665,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         app.update(cx, |this, _| {
             this.agent_chat.input = TextField::new("keep this draft");
-            this.agent_chat.attachments = vec![PathBuf::from("keep-reference.wav")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("keep-reference.wav")];
             this.agent_chat.entries = vec![ChatEntry::Agent("old path answer".into())];
             this.agent_chat.busy = true;
             let token = this.agent_document_token();
@@ -6667,7 +6687,7 @@ mod tests {
             );
             assert_eq!(this.agent_chat.input.content(), "keep this draft");
             assert_eq!(
-                this.agent_chat.attachments,
+                this.agent_chat.references.attachments,
                 vec![PathBuf::from("keep-reference.wav")]
             );
             assert!(sender.send(Err("stale load".into())).is_err());
@@ -6803,7 +6823,7 @@ mod tests {
                 ChatEntry::Agent("Project A answer".into()),
             ];
             this.agent_chat.input = TextField::new("draft for the next project");
-            this.agent_chat.attachments = vec![PathBuf::from("Project-A-reference.wav")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("Project-A-reference.wav")];
 
             this.new_project();
 
@@ -6817,7 +6837,7 @@ mod tests {
                 "the visible draft remains available for the next document"
             );
             assert!(
-                this.agent_chat.attachments.is_empty(),
+                this.agent_chat.references.attachments.is_empty(),
                 "attachments never cross a project boundary"
             );
         });
@@ -7602,20 +7622,20 @@ mod tests {
                 .map(PathBuf::from);
                 this.route_files_dropped(&paths, window, cx);
                 assert_eq!(this.project(), &before);
-                assert_eq!(this.agent_chat.attachments.len(), 3);
-                assert!(this.agent_chat.attachment_error.is_some());
+                assert_eq!(this.agent_chat.references.attachments.len(), 3);
+                assert!(this.agent_chat.references.attachment_error.is_some());
             })
         });
         crate::harness::paint(&app, cx);
         // Clicking a reference's name inspects it; only its cross takes it off the message.
         crate::harness::click("agent-attachment-open-1", cx);
         app.read_with(cx, |this, _| {
-            assert_eq!(this.agent_chat.attachments.len(), 3)
+            assert_eq!(this.agent_chat.references.attachments.len(), 3)
         });
         crate::harness::click("agent-attachment-remove-1", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
-                this.agent_chat.attachments,
+                this.agent_chat.references.attachments,
                 [PathBuf::from("reference.wav"), PathBuf::from("lyrics.md")]
             )
         });
@@ -7728,11 +7748,14 @@ mod tests {
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.input = TextField::new("Inspect this mix");
-            this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("mix.wav")];
             this.agent_send();
-            assert!(this.agent_chat.attachment_error.is_some());
+            assert!(this.agent_chat.references.attachment_error.is_some());
             assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
-            assert_eq!(this.agent_chat.attachments, [PathBuf::from("mix.wav")]);
+            assert_eq!(
+                this.agent_chat.references.attachments,
+                [PathBuf::from("mix.wav")]
+            );
             assert!(this.agent_chat.link.is_none());
         });
     }
@@ -7751,14 +7774,15 @@ mod tests {
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.input = TextField::new("Use these references");
-            this.agent_chat.attachments = vec!["image.png".into(), "reference.wav".into()];
+            this.agent_chat.references.attachments =
+                vec!["image.png".into(), "reference.wav".into()];
             this.agent_send();
             assert_eq!(
-                this.agent_chat.attachment_error.as_deref(),
+                this.agent_chat.references.attachment_error.as_deref(),
                 Some(this.t(Key::AgentAttachmentImageUnsupported))
             );
             assert_eq!(this.agent_chat.input.content(), "Use these references");
-            assert_eq!(this.agent_chat.attachments.len(), 2);
+            assert_eq!(this.agent_chat.references.attachments.len(), 2);
             assert!(this.agent_chat.link.is_none());
         });
     }
@@ -7784,14 +7808,14 @@ mod tests {
                 this.agent_chat
                     .load_preferences(&this.settings.agent.clone());
                 this.agent_chat.input = TextField::new("Inspect this mix");
-                this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+                this.agent_chat.references.attachments = vec![PathBuf::from("mix.wav")];
                 let (_sender, receiver) = std::sync::mpsc::channel();
                 this.agent_chat.history_load = Some(PendingHistoryLoad {
                     token: this.agent_document_token(),
                     receiver,
                 });
                 this.agent_send();
-                assert!(this.agent_chat.attachment_error.is_none());
+                assert!(this.agent_chat.references.attachment_error.is_none());
                 let pending = this.agent_chat.pending_send.as_ref().unwrap();
                 assert_eq!(pending.attachments, [PathBuf::from("mix.wav")]);
                 assert_eq!(pending.preferences.backend, backend);
@@ -7971,7 +7995,7 @@ mod tests {
                 ..Default::default()
             }];
             this.agent_chat.input = TextField::new("keep this queued draft");
-            this.agent_chat.attachments = vec![PathBuf::from("keep-reference.png")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("keep-reference.png")];
             let token = this.agent_document_token();
             this.agent_chat.history_load = Some(PendingHistoryLoad {
                 token,
@@ -8019,7 +8043,7 @@ mod tests {
                 assert!(this.agent_chat.history_load.is_none());
                 assert_eq!(this.agent_chat.input.content(), "keep this queued draft");
                 assert_eq!(
-                    this.agent_chat.attachments,
+                    this.agent_chat.references.attachments,
                     vec![PathBuf::from("keep-reference.png")]
                 );
                 assert_eq!(
@@ -8136,7 +8160,7 @@ mod tests {
                 .set_size(crate::dock::Dock::Right, crate::dock::PanelLayout::MIN_SIDE);
             this.agent_chat.models_loaded = true;
             this.agent_chat.models_error = Some("offline fixture".into());
-            this.agent_chat.attachments = vec![PathBuf::from(
+            this.agent_chat.references.attachments = vec![PathBuf::from(
                 "録音素材_ボーカルテイク_".repeat(12) + ".super-long-extension",
             )];
         });
@@ -8205,7 +8229,7 @@ mod tests {
             assert!(cx.debug_bounds("agent-attachment-remove-0").is_none());
         }
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.attachments.is_empty())
+            assert!(this.agent_chat.references.attachments.is_empty())
         });
     }
 
@@ -8249,8 +8273,8 @@ mod tests {
             assert_eq!(this.attachment_preview.as_ref().unwrap().path, paths[1])
         });
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.attachments.is_empty());
-            assert!(this.agent_chat.attached_here.is_empty());
+            assert!(this.agent_chat.references.attachments.is_empty());
+            assert!(this.agent_chat.references.attached_here.is_empty());
             assert_eq!(this.agent_chat.entries.len(), 1);
         });
     }

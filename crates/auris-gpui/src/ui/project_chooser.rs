@@ -538,7 +538,14 @@ impl AurisApp {
             ChooserPage::Setup => self.render_setup_page(setup_step, cx),
         };
         let content = div()
-            .id("chooser-content")
+            .id((
+                "chooser-content",
+                match page {
+                    ChooserPage::New => 0,
+                    ChooserPage::Recent => 1,
+                    ChooserPage::Setup => setup_step + 2,
+                },
+            ))
             .debug_selector(|| "chooser-content".into())
             .flex_1()
             .min_h_0()

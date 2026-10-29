@@ -25,21 +25,25 @@ fn title_of(label: &str) -> String {
 
 #[path = "song_workshop/chat_input.rs"]
 mod input;
+mod input_assist;
 #[path = "song_workshop/preview.rs"]
 mod preview;
 
 pub(crate) struct SongWorkshop {
-    pub(super) identity: u64,
+    pub(crate) identity: u64,
+    pub(crate) references: super::agent_chat::music::MusicReferences,
     pub(crate) brief: TextField,
-    attachments: Vec<std::path::PathBuf>,
-    pending_message: Option<(usize, String, Vec<std::path::PathBuf>)>,
-    foci: [FocusHandle; 1],
-    active_field: Option<usize>,
+    pub(crate) foci: [FocusHandle; 1],
+    pub(crate) active_field: Option<usize>,
     _focus_subscriptions: Vec<gpui::Subscription>,
     preferences: auris_session::AgentPreferences,
     models: Vec<super::agent_chat::ModelOption>,
     model_receiver: Option<mpsc::Receiver<Result<String, String>>>,
     model_error: Option<String>,
+    completions: super::chat_commands::Completions,
+    command_feedback: Option<Result<String, String>>,
+    input_assist: input_assist::InputAssist,
+    input_focused: bool,
     runtime: Option<Workshop>,
     snapshot: Option<Snapshot>,
     view_round: Option<usize>,
@@ -52,6 +56,7 @@ pub(crate) struct SongWorkshop {
     preparing: Option<usize>,
     error: Option<String>,
     submitted: bool,
+    chord_prompt_open: bool,
     show_memory: bool,
     copied: Option<(&'static str, usize)>,
     scroll: gpui::ScrollHandle,
@@ -126,16 +131,33 @@ impl SongWorkshop {
         &mut self.brief
     }
     pub(crate) fn field(&self) -> Option<&TextField> {
-        self.active_field.map(|_| &self.brief)
+        if self.submitted {
+            return None;
+        }
+        match self.active_field {
+            Some(1) => self.references.midi_draft.as_ref().map(|d| &d.lyric),
+            Some(_) => Some(&self.brief),
+            None => None,
+        }
     }
     pub(crate) fn field_mut(&mut self) -> Option<&mut TextField> {
-        self.active_field.map(|_| &mut self.brief)
+        if self.submitted {
+            return None;
+        }
+        match self.active_field {
+            Some(1) => self.references.midi_draft.as_mut().map(|d| &mut d.lyric),
+            Some(_) => Some(&mut self.brief),
+            None => None,
+        }
     }
 }
 
 impl Drop for SongWorkshop {
     fn drop(&mut self) {
-        self.send(Command::Draft(self.brief.content().to_owned()));
+        self.send(Command::Draft(
+            self.brief.content().to_owned(),
+            self.references.attachments.clone(),
+        ));
     }
 }
 
@@ -145,33 +167,9 @@ impl AurisApp {
         paths: &[std::path::PathBuf],
         cx: &mut Context<Self>,
     ) {
-        let language = self.language();
-        let Some(s) = &mut self.song_workshop else {
-            return;
-        };
-        if s.busy() {
-            return;
+        if self.song_workshop.is_some() {
+            self.attach_music_files(paths, cx);
         }
-        s.error = None;
-        for path in paths {
-            if s.attachments.contains(path) {
-                continue;
-            }
-            if auris_agent::attachment_kind(path).is_none() {
-                s.error = Some(
-                    Key::AgentAttachmentUnsupported
-                        .get(language)
-                        .replace("{name}", &path.to_string_lossy()),
-                );
-                continue;
-            }
-            if s.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
-                s.error = Some(Key::AgentAttachmentLimit.get(language).to_owned());
-                break;
-            }
-            s.attachments.push(path.clone());
-        }
-        cx.notify();
     }
     pub(crate) fn open_song_workshop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.attachment_preview = None;
@@ -180,6 +178,14 @@ impl AurisApp {
         let subscription = cx.on_focus(&focus, window, |this, _, cx| {
             if let Some(s) = &mut this.song_workshop {
                 s.active_field = Some(0);
+                s.input_focused = true;
+            }
+            cx.notify();
+        });
+        let blur = cx.on_blur(&focus, window, |this, _, cx| {
+            if let Some(s) = &mut this.song_workshop {
+                s.input_focused = false;
+                s.input_assist.pause();
             }
             cx.notify();
         });
@@ -198,20 +204,24 @@ impl AurisApp {
             Ok(runtime) => (Some(runtime), None),
             Err(e) => (None, Some(e)),
         };
+        let identity = NEXT.fetch_add(1, Ordering::Relaxed);
         self.song_workshop = Some(SongWorkshop {
-            identity: NEXT.fetch_add(1, Ordering::Relaxed),
+            identity,
             brief: TextField::default(),
-            attachments: Vec::new(),
-            pending_message: None,
+            references: Default::default(),
             foci: [focus.clone()],
             active_field: Some(0),
-            _focus_subscriptions: vec![subscription],
+            _focus_subscriptions: vec![subscription, blur],
             preferences: self.settings.agent.clone(),
             models: Vec::new(),
             model_receiver: Some(auris_agent::discover_models_background(
                 self.settings.agent.clone(),
             )),
             model_error: None,
+            completions: Default::default(),
+            command_feedback: None,
+            input_assist: input_assist::InputAssist::new(identity - 1, std::time::Instant::now()),
+            input_focused: true,
             runtime,
             snapshot: None,
             view_round: None,
@@ -224,6 +234,7 @@ impl AurisApp {
             preparing: None,
             error,
             submitted: false,
+            chord_prompt_open: false,
             show_memory: false,
             copied: None,
             scroll: gpui::ScrollHandle::new(),
@@ -233,6 +244,25 @@ impl AurisApp {
     }
 
     fn start_song_workshop(&mut self, cx: &mut Context<Self>) {
+        if self
+            .song_workshop
+            .as_ref()
+            .is_some_and(|s| s.brief.marked().is_some())
+        {
+            return;
+        }
+        if self.workshop_control_command() {
+            cx.notify();
+            return;
+        }
+        if self
+            .song_workshop
+            .as_ref()
+            .is_none_or(|s| s.busy() || s.references.midi_loading)
+            || !self.commit_midi_draft()
+        {
+            return;
+        }
         let Some(s) = &mut self.song_workshop else {
             return;
         };
@@ -242,32 +272,30 @@ impl AurisApp {
         if !s.preferences.is_configured() {
             return;
         }
-        if let Err(error) = auris_agent::validate_attachments(&s.preferences, &s.attachments) {
-            s.error = Some(error);
+        if !s
+            .references
+            .attachments
+            .iter()
+            .all(|path| s.references.attached_here.contains(path))
+        {
+            s.references.attachment_error = Some(Key::AgentQueueReattach.get(self.language).into());
             cx.notify();
             return;
         }
         if !s.send(Command::Send(
             s.brief.content().to_owned(),
             Box::new(s.preferences.clone()),
-            s.attachments.clone(),
+            s.references.attachments.clone(),
         )) {
             s.error =
                 Some("The song conversation is unavailable. Close and reopen it to retry.".into());
             cx.notify();
             return;
         }
-        s.pending_message = Some((
-            s.snapshot
-                .as_ref()
-                .map_or(0, |snapshot| snapshot.document.messages.len()),
-            s.brief.content().to_owned(),
-            s.attachments.clone(),
-        ));
-        s.brief = TextField::default();
-        s.attachments.clear();
         s.submitted = true;
         s.error = None;
+        s.command_feedback = None;
+        s.completions.reset();
         cx.notify();
     }
 
@@ -326,6 +354,7 @@ impl AurisApp {
     }
 
     pub(crate) fn poll_song_workshop(&mut self, cx: &mut Context<Self>) {
+        self.poll_workshop_input_assist(cx);
         let Some(s) = &mut self.song_workshop else {
             return;
         };
@@ -355,16 +384,18 @@ impl AurisApp {
                 < snapshot.document.rounds.len();
             if initial && s.brief.content().is_empty() {
                 s.brief = TextField::new(snapshot.document.draft.clone());
+                s.references.attachments = snapshot.document.draft_attachments.clone();
             }
             s.error = snapshot.error.clone();
-            if let Some((count, _, _)) = &s.pending_message
-                && (snapshot.error.is_some() || snapshot.document.messages.len() > *count)
+            if s.submitted
+                && snapshot.document.messages.len()
+                    > s.snapshot
+                        .as_ref()
+                        .map_or(0, |old| old.document.messages.len())
             {
-                let (count, text, attachments) = s.pending_message.take().unwrap();
-                if snapshot.document.messages.len() <= count {
-                    s.brief = TextField::new(text);
-                    s.attachments = attachments;
-                }
+                s.brief = TextField::default();
+                s.references.attachments.clear();
+                s.references.attachment_error = None;
             }
             if snapshot.document.messages.len()
                 > s.snapshot
@@ -414,6 +445,10 @@ impl AurisApp {
     }
 
     fn open_workshop_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.commit_midi_draft() {
+            cx.notify();
+            return;
+        }
         let Some(s) = &mut self.song_workshop else {
             return;
         };
@@ -443,6 +478,7 @@ impl AurisApp {
         let selected = snapshot.document.selected;
         let mut document = snapshot.document.clone();
         document.draft = s.brief.content().to_owned();
+        document.draft_attachments = s.references.attachments.clone();
         let identity = s.identity;
         s.submitted = true;
         let view = cx.entity().downgrade();
@@ -585,7 +621,35 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let input = self.render_workshop_input(cx);
+        self.sync_auxiliary_windows(cx);
+        let chord_prompt = self.workshop_chord_prompt();
+        if chord_prompt {
+            self.reconcile_focus(window, cx);
+        }
+        if let Some(s) = &mut self.song_workshop {
+            if s.chord_prompt_open && !chord_prompt {
+                s.active_field = Some(0);
+                window.focus(&s.foci[0]);
+            }
+            s.chord_prompt_open = chord_prompt;
+            if s.references
+                .midi_lyric_focus
+                .as_ref()
+                .is_some_and(|f| f.is_focused(window))
+            {
+                if s.references.midi_draft.is_some() {
+                    s.active_field = Some(1);
+                } else {
+                    s.active_field = Some(0);
+                    window.focus(&s.foci[0]);
+                }
+            }
+        }
+        let input = self.render_workshop_input(window, cx);
+        let prompt = chord_prompt
+            .then(|| self.render_prompt(cx))
+            .flatten()
+            .map(IntoElement::into_any_element);
         let attachment_preview = self.render_attachment_preview(true, window, cx);
         let menu = self
             .render_context_menu(window, cx)
@@ -645,7 +709,7 @@ impl AurisApp {
                                 .icon(IconName::File)
                                 .on_click(cx.listener(
                                     move |this, _, _, cx| {
-                                        this.open_attachment_preview(path.clone(), true, cx)
+                                        this.open_agent_attachment(path.clone(), cx)
                                     },
                                 ))
                             },
@@ -833,6 +897,8 @@ impl AurisApp {
             );
         let footer = div()
             .id("song-workshop-footer")
+            .max_h(window.viewport_size().height * 0.65)
+            .overflow_y_scroll()
             .debug_selector(|| "song-workshop-footer".into())
             .w_full()
             .max_w(COLUMN_WIDTH + spacing.xxl * 2.0)
@@ -856,6 +922,11 @@ impl AurisApp {
             .ghost()
             .icon(IconName::ChevronLeft)
             .on_click(cx.listener(move |this, _, window, cx| {
+                if !this.commit_midi_draft() {
+                    cx.notify();
+                    return;
+                }
+                this.close_timbre_map();
                 this.song_workshop = None;
                 this.attachment_preview = None;
                 this.session.stop_output_preview();
@@ -881,12 +952,21 @@ impl AurisApp {
             .font(theme.font.clone())
             .text_sm()
             .track_focus(&self.focus)
-            .key_context(crate::actions::KEY_CONTEXT)
-            .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
-                this.workshop_attach_files(paths.paths(), cx);
-                cx.stop_propagation();
-            }))
+            .key_context(
+                if chord_prompt
+                    || s.input_focused
+                    || self.music_lyric_focused()
+                    || self.menu.is_some()
+                {
+                    crate::actions::context::PROMPT
+                } else {
+                    crate::actions::KEY_CONTEXT
+                },
+            )
             .on_key_down(cx.listener(Self::workshop_key))
+            .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, _, cx| {
+                this.attach_music_files(paths.paths(), cx);
+            }))
             .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                 this.move_audio_player(event, cx);
             }))
@@ -944,6 +1024,7 @@ impl AurisApp {
                     }),
             )
             .children(menu)
+            .children(prompt)
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
@@ -1372,6 +1453,169 @@ fn workshop_veil_layer(has_messages: bool, veil: f32, theme: &crate::theme::Them
 mod tests {
     use super::*;
 
+    #[gpui::test]
+    fn workshop_edits_melody_lyrics_and_chords_without_touching_editor_drafts(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::harness::{click, open, paint, resize};
+        let (app, cx) = open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+                this.agent_chat
+                    .references
+                    .attachments
+                    .push(std::path::PathBuf::from("editor-only.mid"));
+            })
+        });
+        make_ready(&app, cx);
+        resize(&app, cx, gpui::size(gpui::px(1200.), gpui::px(1000.)));
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        click("agent-midi-new", cx);
+        paint(&app, cx);
+        click("agent-midi-add", cx);
+        paint(&app, cx);
+        click("agent-midi-lyric", cx);
+        cx.simulate_input("きみ");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            let paths = &this.song_workshop.as_ref().unwrap().references.attachments;
+            assert_eq!(paths.len(), 1);
+            let score = auris_session::midi_reference::MidiReference::read(&paths[0]).unwrap();
+            assert_eq!(score.tracks[0].notes[0].lyric, "きみ");
+            assert_eq!(
+                this.agent_chat.references.attachments,
+                vec![std::path::PathBuf::from("editor-only.mid")]
+            );
+        });
+        paint(&app, cx);
+        click("agent-chords", cx);
+        paint(&app, cx);
+        cx.simulate_input("| C | G | Am | F |");
+        cx.simulate_keystrokes("enter");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(
+                this.prompt.is_none(),
+                "prompt={:?}, text={:?}, status={}, locked={}",
+                this.prompt.as_ref().and_then(|p| p.target()),
+                this.prompt
+                    .as_ref()
+                    .and_then(|p| p.field())
+                    .map(|f| f.content()),
+                this.status,
+                this.music_composer_locked()
+            );
+            let paths = &this.song_workshop.as_ref().unwrap().references.attachments;
+            assert_eq!(paths.len(), 2);
+            let chords: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&paths[1]).unwrap()).unwrap();
+            assert_eq!(chords["chords"][2]["chord"], "Am");
+            assert_eq!(this.project(), &before);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_sound_map_returns_the_choice_to_the_song_composer(cx: &mut gpui::TestAppContext) {
+        use crate::harness::{click, open, paint};
+        let (app, cx) = open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+                this.timbre_map.map = Some(Arc::new(
+                    this.session
+                        .timbre_map_job()
+                        .unwrap()
+                        .run(&auris_session::TimbreMapControl::default())
+                        .unwrap(),
+                ));
+            })
+        });
+        make_ready(&app, cx);
+        paint(&app, cx);
+        click("agent-sound", cx);
+        paint(&app, cx);
+        let handle = app.read_with(cx, |this, _| {
+            this.auxiliary_windows[&crate::auxiliary_window::Surface::TimbreMap]
+        });
+        let mut utility = gpui::VisualTestContext::from_window(handle.into(), cx);
+        click("timbre-all-0", &mut utility);
+        paint(&app, &mut utility);
+        click("timbre-attach-chat", &mut utility);
+        app.read_with(&utility, |this, _| {
+            assert!(!this.timbre_map.open);
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.references.attachments.len(), 1);
+            assert!(this.agent_chat.references.attachments.is_empty());
+            let sound: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&s.references.attachments[0]).unwrap())
+                    .unwrap();
+            assert_eq!(sound["reference_type"], "instrument_choice");
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_references_survive_a_rejected_submission(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| app.update(cx, |this, cx| this.open_song_workshop(window, cx)));
+        make_ready(&app, cx);
+        app.update(cx, |this, cx| {
+            this.attach_agent_music_reference(&serde_json::json!({"chords": ["C", "G"]}), "chords")
+                .unwrap();
+            let s = this.song_workshop.as_mut().unwrap();
+            s.brief = TextField::new("Use these chords");
+            s.preferences.backend = "codex".into();
+            s.preferences.model = "test".into();
+            this.start_song_workshop(cx);
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.brief.content(), "Use these chords");
+            assert_eq!(s.references.attachments.len(), 1);
+            assert!(s.error.is_some());
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_midi_file_opens_an_independent_editable_copy(cx: &mut gpui::TestAppContext) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("phrase.mid");
+        let mut bytes = b"MThd\0\0\0\x06\0\0\0\x01\x01\xe0MTrk".to_vec();
+        let track = b"\0\xff\x05\x02la\0\x92\x40\x64\x83\x60\x82\x40\0\0\xff\x2f\0";
+        bytes.extend_from_slice(&(track.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(track);
+        std::fs::write(&path, &bytes).unwrap();
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, cx| {
+            this.attach_music_files(std::slice::from_ref(&path), cx);
+            this.edit_midi_attachment(path.clone(), cx);
+        });
+        cx.run_until_parked();
+        app.update(cx, |this, _| {
+            assert!(
+                this.song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .references
+                    .midi_draft
+                    .is_some()
+            );
+            assert!(this.commit_midi_draft());
+            let paths = &this.song_workshop.as_ref().unwrap().references.attachments;
+            assert_ne!(&paths[0], &path);
+            let score = auris_session::midi_reference::MidiReference::read(&paths[0]).unwrap();
+            assert_eq!(score.tracks[0].notes[0].lyric, "la");
+        });
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+
     #[test]
     fn the_metal_shows_through_an_empty_conversation_and_is_veiled_as_the_log_is_read() {
         let empty = workshop_veil(false, gpui::px(0.0));
@@ -1431,7 +1675,15 @@ mod tests {
                 ],
                 cx,
             );
-            assert_eq!(this.song_workshop.as_ref().unwrap().attachments.len(), 3);
+            assert_eq!(
+                this.song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .references
+                    .attachments
+                    .len(),
+                3
+            );
         });
         crate::harness::paint(&app, cx);
         crate::harness::click("song-draft-attachment-0", cx);
@@ -1442,7 +1694,7 @@ mod tests {
         crate::harness::paint(&app, cx);
         crate::harness::click("song-remove-attachment-0", cx);
         app.read_with(cx, |this, _| {
-            let attachments = &this.song_workshop.as_ref().unwrap().attachments;
+            let attachments = &this.song_workshop.as_ref().unwrap().references.attachments;
             assert_eq!(attachments.len(), 2);
             assert!(!attachments.contains(&text));
         });
@@ -1466,6 +1718,7 @@ mod tests {
             s.brief = TextField::new("もっと静かにしてください");
             let snapshot = s.snapshot.as_mut().unwrap();
             snapshot.document.messages.push(Message {
+                references: Vec::new(),
                 attachments: Vec::new(),
                 user: false,
                 text: "この方向で作ります。\nピアノを中心に。".into(),
@@ -1557,6 +1810,7 @@ mod tests {
             s.view_round = Some(0);
             let snapshot = s.snapshot.as_mut().unwrap();
             snapshot.document.messages.push(Message {
+                references: vec![],
                 attachments: Vec::new(),
                 user: false,
                 text: "Compare these songs".into(),
@@ -1618,6 +1872,7 @@ mod tests {
                 .as_mut()
                 .unwrap();
             snapshot.document.messages.push(Message {
+                references: vec![],
                 attachments: Vec::new(),
                 user: false,
                 text: "Plan\n\n- **Tempo:** 150 BPM\n- **Key:** C minor".into(),
@@ -1738,6 +1993,7 @@ mod tests {
                 .document
                 .messages
                 .push(auris_session::workshop::Message {
+                    references: vec![],
                     attachments: Vec::new(),
                     user: false,
                     text: "Writing this candidate".into(),
@@ -1814,6 +2070,317 @@ mod tests {
                     .is_some_and(|audio| Arc::ptr_eq(audio, &latest))
             );
             assert_eq!(this.session.project(), &before);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_slash_effort_completes_on_tab_and_executes_on_enter(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.preferences.backend = "rig".into();
+            s.preferences.thinking = Some(true);
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-brief", cx);
+        cx.simulate_input("/ef");
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("workshop-slash-completions").is_some());
+        cx.simulate_keystrokes("tab");
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().brief.content(),
+                "/effort "
+            )
+        });
+        cx.simulate_input("h");
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.preferences.effort, auris_session::ReasoningEffort::High);
+            assert_eq!(s.preferences.thinking, None);
+            assert!(s.brief.content().is_empty());
+            assert!(!s.submitted);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_slash_models_keep_provider_routes_and_global_preferences(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        let before = app.read_with(cx, |this, _| this.settings.agent.clone());
+        app.update(cx, |this, _| {
+            this.song_workshop.as_mut().unwrap().models = ["codex", "rig"]
+                .into_iter()
+                .map(|backend| super::super::agent_chat::ModelOption {
+                    name: "same-model".into(),
+                    connection: Some(auris_agent::ModelConnection {
+                        backend: backend.into(),
+                        provider: "ollama".into(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })
+                .collect();
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-brief", cx);
+        cx.simulate_input("/model ");
+        cx.simulate_keystrokes("escape");
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .completions
+                    .dismissed
+                    .as_deref(),
+                Some("/model ")
+            )
+        });
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert!(
+                s.completions
+                    .matches(
+                        s.brief.content(),
+                        &s.models,
+                        super::super::chat_commands::Scope::Workshop
+                    )
+                    .is_empty()
+            );
+        });
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.song_workshop.as_ref().unwrap().active_field, Some(0))
+        });
+        // Native text input reopens the list and resets its selection.
+        cx.simulate_keystrokes("backspace");
+        cx.simulate_input(" ");
+        cx.simulate_keystrokes("down enter");
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.preferences.backend, "rig");
+            assert_eq!(s.preferences.model, "same-model");
+            assert!(s.brief.content().is_empty());
+            assert_eq!(this.settings.agent, before);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_slash_click_completes_and_shift_enter_keeps_the_draft(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-brief", cx);
+        cx.simulate_input("/ef");
+        crate::harness::paint(&app, cx);
+        crate::harness::click("workshop-slash-option-0", cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(
+                    this.song_workshop.as_ref().unwrap().foci[0].is_focused(window),
+                    "Completion must retain input focus"
+                );
+            })
+        });
+        cx.simulate_keystrokes("shift-enter");
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.brief.content(), "/effort \n");
+            assert!(!s.submitted);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_slash_help_runs_without_a_model_and_preserves_attachments(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.preferences = Default::default();
+            s.references.attachments.push("draft.txt".into());
+            this.start_midi_draft(false);
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-brief", cx);
+        cx.simulate_input("/help");
+        // The send button uses the same local command route as Enter.
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-generate", cx);
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            let help = s.command_feedback.as_ref().unwrap().as_ref().unwrap();
+            assert!(help.contains("/model"));
+            assert!(help.contains("/effort"));
+            assert!(!help.contains("/permissions"));
+            assert!(
+                s.references.midi_draft.is_some(),
+                "Local commands keep the melody draft open"
+            );
+            assert_eq!(
+                s.references.attachments,
+                vec![std::path::PathBuf::from("draft.txt")]
+            );
+            assert!(s.brief.content().is_empty());
+            assert!(!s.submitted);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_slash_errors_preserve_input_and_busy_settings(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| app.update(cx, |this, cx| this.open_song_workshop(window, cx)));
+        make_ready(&app, cx);
+        app.update(cx, |this, cx| {
+            let before = this.song_workshop.as_ref().unwrap().preferences.clone();
+            for command in [
+                "/permissions",
+                "/unknown",
+                "/effort invalid",
+                "/model absent",
+            ] {
+                this.song_workshop.as_mut().unwrap().brief = TextField::new(command);
+                this.start_song_workshop(cx);
+                let s = this.song_workshop.as_ref().unwrap();
+                assert!(s.command_feedback.as_ref().unwrap().is_err(), "{command}");
+                assert_eq!(s.brief.content(), command);
+                assert_eq!(s.preferences, before);
+                assert!(!s.submitted);
+            }
+            let s = this.song_workshop.as_mut().unwrap();
+            s.submitted = true;
+            s.brief = TextField::new("/effort high");
+            this.start_song_workshop(cx);
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.preferences, before);
+            assert!(s.command_feedback.as_ref().unwrap().is_err());
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_slash_does_not_submit_ime_preedit(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| app.update(cx, |this, cx| this.open_song_workshop(window, cx)));
+        make_ready(&app, cx);
+        app.update(cx, |this, cx| {
+            this.song_workshop
+                .as_mut()
+                .unwrap()
+                .brief
+                .replace_and_mark(0..0, "/help", None);
+            this.start_song_workshop(cx);
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.brief.content(), "/help");
+            assert!(s.brief.marked().is_some());
+            assert!(s.command_feedback.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_input_prediction_accepts_tab_without_submitting(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.brief = TextField::new("A calm song");
+            s.brief.caret_to_end();
+            s.input_assist
+                .offer(s.brief.content(), &s.preferences, " with piano");
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("workshop-input-suggestion").is_some());
+        cx.simulate_keystrokes("tab");
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.brief.content(), "A calm song with piano");
+            assert!(!s.submitted);
+            assert!(!s.submitted);
+        });
+    }
+
+    #[gpui::test]
+    fn workshop_input_prediction_click_preserves_focus_and_rejects_stale_results(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.brief = TextField::new("A calm song");
+            s.brief.caret_to_end();
+            s.input_assist
+                .offer(s.brief.content(), &s.preferences, " with piano");
+            s.active_field = None;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("workshop-accept-suggestion", cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().brief.content(),
+                "A calm song with piano"
+            )
+        });
+        cx.simulate_input(" please");
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().brief.content(),
+                "A calm song with piano please"
+            )
+        });
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.input_assist
+                .offer(s.brief.content(), &s.preferences, " and strings");
+            s.preferences.model = "changed-model".into();
+            this.accept_workshop_suggestion();
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().brief.content(),
+                "A calm song with piano please"
+            );
         });
     }
 

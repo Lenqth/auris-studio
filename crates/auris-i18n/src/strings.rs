@@ -107,6 +107,13 @@ strings! {
     WorkshopLength { en: "Approximate length", ja: "おおよその長さ" }
     WorkshopBrief { en: "Direction", ja: "曲の方向性" }
     WorkshopBriefHint { en: "For example: walking through a city at night, with a memorable piano melody.", ja: "例：夜の街を歩くような、印象的なピアノのメロディーがある曲" }
+    WorkshopBriefHintGame { en: "For example: a cheerful game town theme with flute and acoustic guitar.", ja: "例：フルートとアコギで、ゲームの街に流れる明るい曲" }
+    WorkshopBriefHintVocal { en: "For example: a Japanese pop song about a new beginning, with a soaring chorus.", ja: "例：新しい一歩を踏み出す気持ちを、日本語の歌詞と伸びやかなサビで" }
+    WorkshopBriefHintAmbient { en: "For example: a quiet, spacious soundtrack for reading on a rainy afternoon.", ja: "例：雨の午後の読書に合う、静かでゆったりした音楽" }
+    WorkshopBriefHintDance { en: "For example: a driving dance track with a deep bass and sparkling synths.", ja: "例：深いベースときらめくシンセで、思わず踊りたくなる曲" }
+    WorkshopBriefHintLoop { en: "For example: a seamless forest exploration loop with soft strings and bells.", ja: "例：やわらかな弦とベルで、森の探索シーンに合うループBGM" }
+    WorkshopInputSuggestion { en: "Tab to complete", ja: "Tabで補完" }
+    WorkshopDismissSuggestion { en: "Dismiss suggestion", ja: "入力候補を閉じる" }
     WorkshopBright { en: "Bright", ja: "明るい" }
     WorkshopMelancholy { en: "Melancholy", ja: "切ない" }
     WorkshopCalm { en: "Calm", ja: "落ち着いた" }
@@ -143,8 +150,21 @@ strings! {
     SetupSinging { en: "Singing Voices", ja: "歌唱バックエンド" }
     SetupAppearance { en: "Appearance & Keys", ja: "表示・キー設定" }
     SetupAudioHelp { en: "Check the output device for your speakers or headphones. If you use a microphone or audio interface, choose its input device too. Start with the default sample rate and buffer size; adjust them if you hear dropouts or need lower latency.", ja: "スピーカーやヘッドホンの出力先を確認します。マイクやオーディオインターフェースを使う場合は入力先も選びましょう。サンプルレートやバッファサイズはまず既定値を使い、音切れや遅延が気になる場合に調整できます。" }
-    SetupAgentHelp { en: "Connect an AI agent to create song candidates, discuss arrangements and edit a project through conversation. Choose a backend and model in Settings, then use its connection check. A configured model name alone does not confirm that the connection works.", ja: "AIエージェントを接続すると、曲の候補生成や編曲の相談、会話によるプロジェクト編集ができます。設定画面でバックエンドとモデルを選び、接続を確認してください。モデル名の設定だけでは接続成功を意味しません。" }
+    SetupAgentHelp { en: "Choose a backend below and follow its installation and sign-in instructions. Then open Agent settings, check the connection and select a model to start creating music through conversation.", ja: "使いたいバックエンドの導入・ログイン手順を確認してください。準備ができたら設定画面で接続を確認し、モデルを選ぶと、会話で作曲や編集ができます。" }
     SetupSelectedModel { en: "Selected model", ja: "選択中のモデル" }
+    SetupInstallCodex { en: "Install Codex CLI using the official instructions, then run codex login with your ChatGPT account. For updates, follow the instructions for your installation method on the same page.", ja: "公式手順でCodex CLIをインストールし、codex loginでChatGPTアカウントにログインします。更新も同じページで、インストール方法に合った手順を確認してください。" }
+    SetupInstallClaude { en: "Install the native Claude Code CLI and run claude to sign in. Native installations can update with claude update; package-manager installations should use that manager's update command.", ja: "ネイティブ版Claude Code CLIをインストールし、claudeを起動してログインします。ネイティブ版はclaude updateで更新でき、パッケージマネージャーで導入した場合はその更新コマンドを使います。" }
+    SetupInstallOpenCode { en: "Install OpenCode and run opencode auth login to connect your provider. Update with opencode upgrade or the package manager you used to install it.", ja: "OpenCodeをインストールし、opencode auth loginでプロバイダーに接続します。更新にはopencode upgrade、または導入に使ったパッケージマネージャーを使います。" }
+    SetupInstallAntigravity { en: "Install the Antigravity CLI (agy), then launch agy and complete sign-in. Use the official CLI instructions for installation and updates.", ja: "Antigravity CLI（agy）をインストールし、agyを起動してログインします。導入・更新方法は公式のCLI手順を確認してください。" }
+    SetupInstallOllama { en: "Install and start Ollama, then download a model that supports tools. In Agent settings choose Ollama and its server URL (normally http://localhost:11434). Get updates from Ollama or your package manager.", ja: "Ollamaをインストール・起動し、ツール呼び出しに対応するモデルをダウンロードします。エージェント設定でOllamaとサーバーURL（通常はhttp://localhost:11434）を指定します。更新はOllamaまたは導入に使ったパッケージマネージャーから行います。" }
+    SetupInstallApi { en: "OpenAI-compatible API: enter the provider's URL, model and API key environment-variable name in Agent settings. A hosted API needs no local backend installation.", ja: "OpenAI互換API：エージェント設定でプロバイダーのURL、モデル、APIキーを保存した環境変数名を指定します。ホスト型APIではローカルへのバックエンド導入は不要です。" }
+    SetupAgentAfterInstall { en: "After installation or an update, open Agent settings and check connections, then refresh the model list. A configured model name alone does not confirm that the connection works. If a CLI is not found, select its native executable or restart Auris to pick up PATH changes. Connection checks also look for newer public releases of Codex, Claude Code and OpenCode; other backends use the update instructions above.", ja: "導入・更新後はエージェント設定で接続を確認し、モデル一覧を再取得してください。モデル名の設定だけでは接続成功を意味しません。CLIが見つからない場合は実行ファイルを指定するか、Aurisを再起動してPATHの変更を反映します。接続確認ではCodex・Claude Code・OpenCodeの新しい公開リリースも確認します。他のバックエンドは上記の更新手順を利用してください。" }
+    SetupInstallVoicevox { en: "Download the Engine archive for your OS from a release, extract it and start the Engine. Open Set Up VOICEVOX, check the connection and register a singing voice. For updates, stop the Engine and install a newer release for your OS.", ja: "リリースページからOSに合うEngineをダウンロード・展開して起動します。「VOICEVOXを設定」で接続を確認し、歌唱用の声を登録してください。更新時はEngineを終了してから、OSに合う新しいリリースを導入します。" }
+    SetupInstallDiffSinger { en: "Obtain an OpenUtau-compatible ONNX voicebank with dsconfig.yaml and its matching vocoder. Extract it and choose its folder in Set Up DiffSinger. Voicebank updates come from its publisher; keep the acoustic model, dictionary and vocoder together.", ja: "dsconfig.yamlと対応するボコーダーを含む、OpenUtau互換のONNX音声モデルを入手・展開します。「DiffSingerを設定」でそのフォルダーを選んでください。更新版は音声モデルの配布元から入手し、音響モデル・辞書・ボコーダーを揃えて使います。" }
+    SetupInstallLeapSinger { en: "Download a LeapSinger checkpoint and export the acoustic model to ONNX, then package it with NHVSing using the Auris instructions below. Open the generated .leapsinger.json in Set Up LeapSinger, test synthesis and register it. For updates, export and test a new compatible model set. Check each voice's usage terms.", ja: "LeapSingerのチェックポイントを入手し、音響モデルをONNXに書き出します。下記のAuris向け手順でNHVSingと一緒にまとめ、生成した.leapsinger.jsonを「LeapSingerを設定」で開き、合成テスト後に登録してください。更新時も対応するモデル一式を書き出してテストします。各音声モデルの利用条件を確認してください。" }
+    SetupSingingInstructions { en: "Auris voicebank preparation instructions", ja: "Auris向け音声モデルの準備手順" }
+    AgentUpdateAvailable { en: "Newer public release: {version} — see installation and update instructions below", ja: "新しい公開リリース：{version} — 下の導入・更新手順を確認してください" }
+    AgentUpdateUnknown { en: "Update information unavailable", ja: "更新情報を取得できませんでした" }
     SetupInputNotes { en: "Piano roll: create a MIDI clip on an instrument track, then draw and edit notes in the piano roll.", ja: "ピアノロール：音源トラックにMIDIクリップを作り、ピアノロールでノートを入力・編集できます。" }
     SetupInputTyping { en: "Computer keyboard: select an instrument track and enable Musical Typing from the Transport menu to play notes with your keyboard.", ja: "PCキーボード：音源トラックを選び、トランスポートメニューの「ミュージックタイピング」を有効にすると、キーボードで音を鳴らせます。" }
     SetupInputFiles { en: "MIDI files: choose File → Import MIDI File to bring an existing performance into your project. Keyboard shortcuts can be inspected and changed in Settings.", ja: "MIDIファイル：ファイルメニューの「MIDI ファイルを読み込む…」から既存の演奏を取り込めます。ショートカットは設定画面で確認・変更できます。" }
@@ -2118,7 +2138,7 @@ new のオプション
     AgentProviderCheckNeeded { en: "Check again after changes", ja: "変更後の再確認が必要" }
     AgentProviderVersionUnknown { en: "Version unavailable", ja: "バージョン不明" }
     AgentProviderModelCount { en: "Models: {count}", ja: "{count}モデル" }
-    AgentProviderStatusHelp { en: "Checks model discovery without generating a response. Expand a provider for details. After editing settings, check again using the unsaved values.", ja: "応答を生成せずにモデル一覧の取得を確認します。詳細は各プロバイダーを開いて確認できます。設定の変更後は、保存前の入力値で再確認できます。" }
+    AgentProviderStatusHelp { en: "Checks model discovery without generating a response, and public GitHub releases for Codex, Claude Code and OpenCode. Expand a provider for installation and update instructions. After editing settings, check again using the unsaved values.", ja: "応答を生成せずにモデル一覧の取得を確認し、Codex・Claude Code・OpenCodeのGitHub公開リリースも確認します。各プロバイダーを開くと導入・更新手順が表示されます。設定の変更後は、保存前の入力値で再確認できます。" }
     AgentBackendLabel { en: "Backend", ja: "バックエンド" }
     AgentAntigravityPathLabel { en: "Antigravity CLI executable path (optional)", ja: "Antigravity CLI実行ファイルのパス（任意）" }
     AgentAntigravityHelp { en: "Sign in by running agy. Leave the path empty to find the installed CLI. Choose an Antigravity CLI model in the Agent panel. Song tools use Auris permissions; native shell tools and image attachments are unavailable.", ja: "agyを起動してログインしてください。パスが空欄ならインストール済みCLIを探します。エージェントパネルでAntigravity CLIのモデルを選択してください。作曲ツールにはAurisの権限が適用されます。CLIのシェル操作と画像添付は未対応です。" }
@@ -2205,6 +2225,10 @@ new のオプション
     AgentSlashDeny { en: "Always deny an operation", ja: "操作を常に禁止" }
     AgentSlashDefault { en: "Reset an operation rule", ja: "許可ルールを標準に戻す" }
     AgentSlashCompact { en: "Summarize earlier context", ja: "過去の会話を要約" }
+    AgentSlashHelp { en: "Show available commands", ja: "使えるコマンドを表示" }
+    AgentSlashUnknown { en: "Unknown command. Use /help to see available commands.", ja: "不明なコマンドです。/help で使えるコマンドを確認できます。" }
+    AgentSlashWorkshopOnlyPanel { en: "This command is available in the agent panel. Use /help for song conversation commands.", ja: "このコマンドはエージェントパネルで使えます。曲作成で使えるコマンドは /help で確認できます。" }
+    AgentSlashBusy { en: "Stop the current task before changing model settings.", ja: "モデル設定を変えるには、実行中の処理を停止してください。" }
     AgentKeyEnvLabel { en: "API key variable", ja: "APIキーの環境変数" }
     AgentWorking { en: "Working…", ja: "作業中…" }
     AgentCompleted { en: "Completed", ja: "完了" }
@@ -2223,6 +2247,7 @@ new のオプション
         en: "Remove attachment: {name}",
         ja: "添付ファイルを削除：{name}"
     }
+    AgentReattachReference { en: "Reattach {name}", ja: "{name} を再添付" }
     AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
     AttachFiles { en: "Attach files", ja: "ファイルを添付" }
     AttachmentClosePreview { en: "Close preview", ja: "プレビューを閉じる" }
@@ -2299,7 +2324,7 @@ new のオプション
     AgentInterrupting { en: "Stopping the current turn…", ja: "現在の処理を中断中…" }
     AgentQueueReattach { en: "Attach the reference files again before sending this saved message.", ja: "保存されたメッセージを送るには、参照ファイルをもう一度添付してください。" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }
-    AgentDropFiles { en: "Drop images, text or audio here", ja: "画像・テキスト・音声をここにドロップ" }
+    AgentDropFiles { en: "Drop MIDI, images, text or audio here", ja: "MIDI・画像・テキスト・音声をここにドロップ" }
     AgentComposerPlaceholder { en: "Ask about this song, or drop reference files…", ja: "この曲について相談、または参考ファイルをドロップ…" }
     AgentEffortDefaultShort { en: "Auto", ja: "既定" }
     AgentFastMode { en: "Fast", ja: "高速" }
@@ -2308,6 +2333,30 @@ new のオプション
     AgentEffortMediumShort { en: "Med", ja: "中" }
     AgentEffortXhighShort { en: "XHigh", ja: "極高" }
     AgentEffortMaxShort { en: "Max", ja: "最大" }
+    AgentChords { en: "Attach chords…", ja: "コード進行を添付…" }
+    AgentChordsHint { en: "Absolute chords or numerals: | C | G | Am | F |. Use | between bars; chords in one bar share its beats equally.", ja: "コード名・度数で入力：| C | G | Am | F |。小節は | で区切り、同じ小節のコードには拍を均等に割り当てます。" }
+    AgentSound { en: "Choose sound…", ja: "音源を選ぶ…" }
+    AgentSoundAttach { en: "Attach to conversation", ja: "会話に添付" }
+    AgentMusicUnavailable { en: "Wait for the conversation to finish switching or sending, then attach again.", ja: "会話の切り替え・送信準備が終わってから、もう一度添付してください。" }
+    AgentMidiNew { en: "Write melody…", ja: "メロディを書く…" }
+    AgentMidiClip { en: "Attach selected clip…", ja: "選択クリップを添付…" }
+    AgentMidiFile { en: "Attach MIDI…", ja: "MIDIを添付…" }
+    AgentMidiMelody { en: "Melody", ja: "メロディ" }
+    AgentMidiLoading { en: "Reading MIDI…", ja: "MIDIを読み込み中…" }
+    AgentMidiHint { en: "Edit a copy for this conversation. Click the grid to add a note; select a note to edit its pitch, timing and lyrics.", ja: "会話用のコピーを編集します。グリッドをクリックして音符を追加し、音符を選んで音高・長さ・歌詞を変更できます。" }
+    AgentMidiBeats { en: "Beat", ja: "拍" }
+    AgentMidiLength { en: "Length", ja: "長さ" }
+    AgentMidiAdd { en: "Add note", ja: "音符を追加" }
+    AgentMidiDelete { en: "Delete note", ja: "音符を削除" }
+    AgentMidiPitchDown { en: "Pitch −", ja: "音高 −" }
+    AgentMidiPitchUp { en: "Pitch +", ja: "音高 +" }
+    AgentMidiEarlier { en: "Earlier", ja: "前へ" }
+    AgentMidiLater { en: "Later", ja: "後ろへ" }
+    AgentMidiShorter { en: "Shorter", ja: "短く" }
+    AgentMidiLonger { en: "Longer", ja: "長く" }
+    AgentMidiLyric { en: "Selected note lyrics", ja: "選択した音符の歌詞" }
+    AgentMidiLyricPlaceholder { en: "Word or syllable sung on this note", ja: "この音符で歌う言葉" }
+    AgentMidiApply { en: "Attach score", ja: "譜面を添付" }
     AgentAttachmentUnsupported { en: "Unsupported attachment: {name}", ja: "対応していないファイル形式です: {name}" }
     AgentAttachmentLimit { en: "Attach up to 8 files per message", ja: "添付できるファイルは1回につき8個までです" }
     AgentAttachmentImageUnsupported { en: "Antigravity CLI does not accept image attachments. Choose another model or remove the image.", ja: "Antigravity CLIは画像の添付に対応していません。別のモデルを選ぶか、画像の添付を外してください。" }

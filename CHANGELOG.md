@@ -7,6 +7,40 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.14.0 — 2026-10-29
+
+### Conversations and songwriting
+
+* **Attach MIDI, chord progressions and sound references to agent conversations.** Preview and
+  edit MIDI attachments, add lyrics, import MIDI files, and reuse archived music references in
+  the AI song workshop.
+* Choose how many song candidates to create, request additional candidates, and copy song
+  titles and concepts. Numbered alternatives make follow-up choices easier to identify.
+* Select and copy conversation text, view archived attachments, and read workshop replies as
+  Markdown. Share slash commands between chat interfaces and switch models with fuzzy completion.
+* Streamline composition guidance and audition unfinished songs. Place chord changes explicitly
+  within bars, preserve mixed harmonic rhythm, and retain imported MIDI clip duration.
+* Respect Ollama models' context limits and improve Claude Code prompt delivery and recovery
+  after refused tools.
+
+### Interface and instruments
+
+* **Refresh the desktop with Atelier Glass styling**, a liquid-metal welcome background, shared
+  conversation controls, and redesigned settings and singing-voice setup windows.
+* Explore sounds in a 3D timbre map with cluster colors shared by the library and optional
+  AI-generated cluster names. Redesign the physical-instrument visualizations.
+* Show stereo meters when the channels differ, spread physical instruments across the stereo
+  field, and activate hosted plugins at the sample rate used for rendering.
+* Add installation guidance and update notices for agent CLIs and singing backends.
+
+### Reliability and integration
+
+* Harden tool permissions and trace correlation, imported transcription acceptance, synthesis
+  provenance, and performance-control contracts for external model integrations.
+* Improve development build profiles and CI caching, and avoid launching duplicate update helpers.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.13.0.
+
 ## 0.13.0 — 2026-10-27
 
 ### Conversational songwriting

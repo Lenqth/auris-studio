@@ -28,6 +28,12 @@ fn load(path: &std::path::Path, rate: f64) -> Result<Content, String> {
     }
     let kind = auris_agent::attachment_kind(path).ok_or("Unsupported file type")?;
     match kind {
+        auris_agent::AttachmentKind::Midi => {
+            let score = auris_session::midi_reference::MidiReference::read(path)?;
+            Ok(Content::Text(
+                serde_json::to_string_pretty(&score).map_err(|e| e.to_string())?,
+            ))
+        }
         auris_agent::AttachmentKind::Text => {
             let bytes = read_bounded(path, 256 * 1024)?;
             Ok(Content::Text(

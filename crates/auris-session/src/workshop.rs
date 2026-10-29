@@ -14,6 +14,18 @@ pub struct Message {
     pub user: bool,
     /// Original text, including authored lyric line breaks.
     pub text: String,
+    /// Exact symbolic references captured on submission, independent of later file edits.
+    #[serde(default)]
+    pub references: Vec<Reference>,
+}
+
+/// One readable attachment and its bounded model-facing snapshot.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Reference {
+    /// Explicitly attached local file, retained for display and editor handoff.
+    pub path: PathBuf,
+    /// Decoded note, chord or instrument data; never an audio-listening claim.
+    pub text: String,
 }
 
 /// One independent candidate assignment.
@@ -72,6 +84,8 @@ pub struct Document {
     pub selected: Option<u64>,
     /// Unsent composer contents.
     pub draft: String,
+    /// Unsent local references, restored beside the draft message.
+    pub draft_attachments: Vec<PathBuf>,
 }
 
 /// A choice is evidence of a relative preference, never a dislike of every other song.
@@ -205,6 +219,10 @@ impl Store {
             for path in &mut message.attachments {
                 *path = crate::conversation_attachments::resolve(&self.root, path);
             }
+            for reference in &mut message.references {
+                reference.path =
+                    crate::conversation_attachments::resolve(&self.root, &reference.path);
+            }
         }
         Ok(document)
     }
@@ -214,6 +232,10 @@ impl Store {
         for message in &mut document.messages {
             for path in &mut message.attachments {
                 *path = crate::conversation_attachments::portable(&self.root, path);
+            }
+            for reference in &mut message.references {
+                reference.path =
+                    crate::conversation_attachments::portable(&self.root, &reference.path);
             }
         }
         write(&self.root.join("conversation.json"), &document)
@@ -313,6 +335,10 @@ mod tests {
         document.messages.push(Message {
             user: true,
             text: "Use these lyrics".into(),
+            references: vec![Reference {
+                path: attachments[0].clone(),
+                text: "夜の雨".into(),
+            }],
             attachments,
         });
         store.save(&document).unwrap();
@@ -321,6 +347,7 @@ mod tests {
         let restored = destination.load().unwrap();
         let files = destination.owned_attachments(&restored.messages[0].attachments);
         assert_eq!(files.len(), 1);
+        assert_eq!(restored.messages[0].references[0].path, files[0]);
         assert_eq!(std::fs::read_to_string(&files[0]).unwrap(), "夜の雨");
         assert!(destination.owned_attachments(&[source]).is_empty());
         let legacy: Message =
@@ -400,6 +427,7 @@ mod tests {
         let store = Store::new(dir.path().into());
         let mut document = Document::default();
         document.messages.push(Message {
+            references: vec![],
             attachments: Vec::new(),
             user: true,
             text: "歌詞\n二行目".into(),
