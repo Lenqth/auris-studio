@@ -300,7 +300,9 @@ pub enum Command {
         bars: u32,
         /// Optional key such as D major or A minor; replaces internal key changes and restores the prior key after the range.
         key: Option<String>,
-        /// Roman chart, e.g. | I | vi | IV | V |; each pipe-delimited group is one bar, with chords inside a bar sharing it equally. Interpreted in the supplied or current key. Placement follows meter changes, ignores the editing grid, and preserves harmony outside the range.
+        /// Prefer an array of bars, e.g. ["I","IV V","vi","ii V"]. Each entry spans one bar, with one or more chords sharing it equally; two chords in 4/4 start on beats 1 and 3. Choose harmonic rhythm per bar; there is no one-chord limit. Alternatively use an explicit pipe-delimited chart "| I | IV V | vi | ii V |", a single chord, or @catalogue. Unbarred multi-chord strings are rejected to prevent squeezing the whole progression into each bar. Placement follows meter changes, ignores the editing grid, and preserves outside harmony. Notes are unchanged.
+        #[serde(default, deserialize_with = "harmony::deserialize_chords")]
+        #[schemars(with = "Option<harmony::ChordChartInput>")]
         chords: Option<String>,
         /// Optional section name for this range, e.g. Intro or Chorus. Replaces internal section changes and restores the previous section after the range. Supply section alone to write structure without changing harmony.
         section: Option<String>,
@@ -384,7 +386,7 @@ pub enum Command {
         #[schemars(range(min = 1, max = 16))]
         limit: usize,
     },
-    /// Inspect actual rendered audio and score without saving: mel image, levels and piano roll. Start within the arrangement and request 1..8 bars fitting in 30 seconds. Visual interpretation is not listening. Use the same range before and after editing.
+    /// Inspect actual rendered audio and score without saving: mel image, levels, piano roll and up to 128 harmony_events including within-bar chord/key changes. Event tick is absolute (960 per quarter); bar/beat are 1-based, tick_in_beat uses the meter's beat, start_seconds is relative to the inspected range. Check harmony_events_truncated; inspect_project retains the full harmony maps. Start within the arrangement and request 1..8 bars fitting in 30 seconds. Visual interpretation is not listening. Use the same range before and after editing.
     InspectAudio {
         /// First bar, starting at 1.
         #[schemars(range(min = 1))]
