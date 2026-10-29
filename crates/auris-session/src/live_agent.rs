@@ -300,7 +300,9 @@ pub enum Command {
         bars: u32,
         /// Optional key such as D major or A minor; replaces internal key changes and restores the prior key after the range.
         key: Option<String>,
-        /// Roman chart, e.g. | I | vi | IV | V |; each pipe-delimited group is one bar, with chords inside a bar sharing it equally. Interpreted in the supplied or current key. Placement follows meter changes, ignores the editing grid, and preserves harmony outside the range.
+        /// Prefer an array of bars, e.g. ["I","vi","IV","V"], one entry per bar. Within-bar changes use one entry such as "I V". Alternatively use an explicit pipe-delimited chart "| I | vi | IV | V |", a single chord, or @catalogue. Unbarred multi-chord strings are rejected to prevent squeezing the whole progression into each bar. Placement follows meter changes, ignores the editing grid, and preserves outside harmony. Notes are unchanged.
+        #[serde(default, deserialize_with = "harmony::deserialize_chords")]
+        #[schemars(with = "Option<harmony::ChordChartInput>")]
         chords: Option<String>,
         /// Optional section name for this range, e.g. Intro or Chorus. Replaces internal section changes and restores the previous section after the range. Supply section alone to write structure without changing harmony.
         section: Option<String>,

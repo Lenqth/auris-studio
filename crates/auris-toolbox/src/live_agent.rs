@@ -613,6 +613,10 @@ mod tests {
             ),
             (
                 "edit_harmony",
+                serde_json::json!({"start_bar":1,"bars":8,"chords":["I","vi","IV","V"]}),
+            ),
+            (
+                "edit_harmony",
                 serde_json::json!({"start_bar":5,"bars":8,"section":"Chorus"}),
             ),
             ("list_voices", serde_json::json!({})),

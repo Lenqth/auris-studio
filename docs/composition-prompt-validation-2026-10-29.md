@@ -1,7 +1,7 @@
 # Shared composition prompt and draft auditions
 
 The editor agent and conversational song workshop use the same resolved composition
-prompt. The standard profile is 6,973 UTF-8 bytes (973 whitespace-separated words),
+prompt. At `cb86f9f8`, the tested standard profile was 6,973 UTF-8 bytes (973 whitespace-separated words),
 compared with 29,612 bytes (4,254 words) at `ffe1a6ac`: approximately 76% smaller.
 These are text sizes, not measured model token usage. Saved custom prompts remain
 replacements; a blank prompt follows the current standard.

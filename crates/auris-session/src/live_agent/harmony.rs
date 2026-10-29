@@ -1,5 +1,39 @@
 //! Bounded live harmony edits, validated before recording a single undo transaction.
 use super::*;
+use serde::{Deserialize, Deserializer, de::Error as _};
+
+/// Explicit bar groups or a chart with written bar separators.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub(super) enum ChordChartInput {
+    /// One entry per bar; multiple chord symbols in an entry divide that bar equally.
+    Bars(#[schemars(length(min = 1, max = 4096))] Vec<String>),
+    /// A pipe-delimited chart, a single chord, or a catalogue reference such as @axis.
+    Chart(String),
+}
+
+pub(super) fn deserialize_chords<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    match Option::<ChordChartInput>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(ChordChartInput::Chart(text)) => Ok(Some(text)),
+        Some(ChordChartInput::Bars(bars)) => {
+            if bars.is_empty() || bars.len() > 4096 {
+                return Err(D::Error::custom("Supply 1..4096 chord bars"));
+            }
+            if bars.iter().any(|bar| {
+                let bar = bar.trim();
+                bar.is_empty() || bar.contains('|') || bar.starts_with('@')
+            }) {
+                return Err(D::Error::custom(
+                    "Each chords array entry is one bar: use chord symbols such as I or I V, without pipes or catalogue names",
+                ));
+            }
+            Ok(Some(format!("| {} |", bars.join(" | "))))
+        }
+    }
+}
 
 impl Session {
     pub(super) fn agent_edit_harmony(
@@ -23,6 +57,14 @@ impl Session {
             label.trim().is_empty() || label.len() > 256 || label.chars().any(char::is_control)
         }) {
             return Err("section must be a nonempty label within 256 UTF-8 bytes, without control characters".into());
+        }
+        if chords.is_some_and(|text| {
+            let text = text.trim();
+            !text.starts_with('@') && !text.contains('|') && text.split_whitespace().count() > 1
+        }) {
+            return Err(
+                r#"Ambiguous chords: an unseparated list puts every chord in one bar and repeats it. For one chord per bar use chords:["I","V","vi","IV"] or "| I | V | vi | IV |". For intentional changes within one bar use ["I V"] or "| I V |"."#.into(),
+            );
         }
         let after = start_bar.checked_add(bars).ok_or("bar range overflow")?;
         let key = key
@@ -60,13 +102,141 @@ impl Session {
             self.set_section(end, previous_section);
         }
         self.end_transaction();
-        Ok(serde_json::json!({"start_bar":start_bar,"bars":bars,"key":self.project().harmony.key_at(start).to_text(),"section":self.project().sections.label_at(start),"unsaved":true,"notes_preserved":true,"usage":"inspect_project reads the current harmony and section maps."}).to_string())
+        let chord_changes = self
+            .project()
+            .harmony
+            .chords
+            .points()
+            .iter()
+            .filter(|point| point.tick >= start && point.tick < end && point.chord.is_some())
+            .count();
+        Ok(serde_json::json!({"start_bar":start_bar,"bars":bars,"chart_bars":chart.as_ref().map(|chart| chart.bars.len()),"chord_changes":chord_changes,"key":self.project().harmony.key_at(start).to_text(),"section":self.project().sections.label_at(start),"unsaved":true,"notes_preserved":true,"usage":"inspect_project reads the current harmony and section maps. Each chords array entry is one bar; spaces inside an entry divide that bar."}).to_string())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_bar_arrays_place_one_progression_across_bars_without_touching_notes() {
+        let mut session =
+            Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        let track = session.add_default_instrument_track("Existing").unwrap();
+        let clip = session
+            .add_midi_clip(track, "Existing", Ticks::ZERO, Ticks::QUARTER * 160)
+            .unwrap();
+        session
+            .add_note(clip, Note::new(60, Ticks::ZERO, Ticks::QUARTER))
+            .unwrap();
+        let before = session.project().clone();
+        let command: Command = serde_json::from_value(serde_json::json!({
+            "action":"edit_harmony", "start_bar":25, "bars":8,
+            "chords":["ii", "IV", "V", "V"]
+        }))
+        .expect("Each array entry explicitly addresses one bar");
+        let result: serde_json::Value =
+            serde_json::from_str(&session.agent_command(command).unwrap()).unwrap();
+        for offset in 0..8 {
+            let at = session.project().signatures.bar_start(25 + offset);
+            assert_eq!(session.harmony().chords.change_at(at), Some(at));
+            assert_eq!(
+                session.harmony().chords.change_at(at + Ticks::QUARTER),
+                Some(at)
+            );
+            assert_eq!(
+                session.harmony().chord_at(at).unwrap().to_string(),
+                ["Dm", "F", "G", "G"][offset as usize % 4]
+            );
+        }
+        assert_eq!(result["chart_bars"], 4);
+        assert_eq!(result["chord_changes"], 8);
+        assert_eq!(session.project().tracks, before.tracks);
+        let after = session.project().clone();
+        session.undo();
+        assert_eq!(session.project(), &before);
+        session.redo();
+        assert_eq!(session.project(), &after);
+    }
+
+    #[test]
+    fn ambiguous_unbarred_progressions_are_rejected_before_any_edit() {
+        let mut session =
+            Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        let before = session.project().clone();
+        let error = session
+            .agent_edit_harmony(
+                1,
+                8,
+                Some("D major"),
+                Some("I V vi IV"),
+                false,
+                Some("Verse"),
+            )
+            .unwrap_err();
+        assert!(error.contains("one bar"), "{error}");
+        assert_eq!(session.project(), &before);
+        assert!(!session.can_undo());
+    }
+
+    #[test]
+    fn explicit_within_bar_groups_keep_their_subdivisions() {
+        for chords in [
+            serde_json::json!(["I V", "vi IV"]),
+            serde_json::json!("| I V | vi IV |"),
+        ] {
+            let mut session =
+                Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+            let command = serde_json::from_value(serde_json::json!({
+                "action":"edit_harmony", "start_bar":1, "bars":2, "chords":chords,
+            }))
+            .unwrap();
+            session.agent_command(command).unwrap();
+            for (beat, expected) in [(0, "C"), (2, "G"), (4, "Am"), (6, "F")] {
+                assert_eq!(
+                    session
+                        .harmony()
+                        .chord_at(Ticks::QUARTER * beat)
+                        .unwrap()
+                        .to_string(),
+                    expected
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn empty_or_nested_bar_arrays_are_rejected_and_catalogues_still_work() {
+        for chords in [
+            serde_json::json!([]),
+            serde_json::json!([" "]),
+            serde_json::json!(["I | V"]),
+            serde_json::json!(["@axis"]),
+            serde_json::json!(vec!["I"; 4097]),
+        ] {
+            assert!(
+                serde_json::from_value::<Command>(serde_json::json!({
+                    "action":"edit_harmony", "start_bar":1, "bars":8, "chords":chords,
+                }))
+                .is_err()
+            );
+        }
+        let mut session =
+            Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
+        session
+            .agent_edit_harmony(1, 8, None, Some("@axis x2"), false, None)
+            .unwrap();
+        assert_eq!(
+            session
+                .harmony()
+                .chords
+                .points()
+                .iter()
+                .filter(|p| p.chord.is_some())
+                .count(),
+            8
+        );
+    }
 
     #[test]
     fn bounded_chords_restore_silence_after_the_range() {

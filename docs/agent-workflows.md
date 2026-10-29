@@ -304,9 +304,14 @@ and `name` names the piano track. Notes remain estimates; review timing and timb
 See the [external note API](transcription-api.md) for its validation and permission contract.
 
 For a new song, write its musical decisions into the document with `edit_harmony`, for example
-`{"start_bar":1,"bars":16,"key":"D major","chords":"| I | vi | IV | V |"}`.
+`{"start_bar":1,"bars":16,"key":"D major","chords":["I","vi","IV","V"]}`.
+Each array entry is one bar. For two chords sharing one bar, use one entry such as
+`"I V"`. Explicit pipe-delimited strings such as `"| I | vi | IV | V |"`, single
+chords and catalogue references are also accepted. A bare multi-chord string such as
+`"I V vi IV"` is ambiguous and is rejected before editing. The response includes
+`chart_bars` and the number of `chord_changes` in the range to check the placement.
 The chart repeats over the requested bars. The previous key resumes after the range;
-existing interior key points remain. The operation edits the key/chord map, preserves notes
+supplied keys replace interior key changes. The operation edits the key/chord map, preserves notes
 and mix, and is one Undo step. Audible chord notes alone do not populate this map.
 `clear_chords:true` clears the selected range; omit `chords` when clearing.
 
