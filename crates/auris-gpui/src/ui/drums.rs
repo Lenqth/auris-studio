@@ -531,63 +531,6 @@ mod tests {
     }
 
     #[gpui::test]
-    fn composing_cancels_old_measurements_and_late_results_cannot_replace_a_new_job(
-        cx: &mut TestAppContext,
-    ) {
-        let (app, cx) = open(cx);
-        let (track, old, report) = app.update(cx, |this, cx| {
-            let track = this
-                .session
-                .add_drum_track("Old Kit", "auris.synth.drumkit")
-                .unwrap();
-            let report = measure_one(this, track, 0);
-            accept_fixture(this, report.clone());
-            let old = start_fixture(this, track);
-            let spec = SongSpec::parse(
-                r#"
-                form = "chorus"
-                ending = "none"
-                [section.chorus]
-                bars = 1
-                [[part]]
-                name = "kick"
-                role = "kick"
-            "#,
-            )
-            .unwrap();
-            assert!(this.compose_spec(&spec, true, cx));
-            assert!(old.load(Ordering::Relaxed));
-            assert!(this.drum_analysis.report(track).is_none());
-            (track, old, report)
-        });
-        cx.run_until_parked();
-        app.update(cx, |this, _| {
-            assert!(this.compose_progress.is_none());
-            let composed = this.project().clone();
-            this.finish_drum_analysis(&old, Ok(report.clone()));
-            assert!(this.drum_analysis.report(track).is_none());
-            assert_eq!(this.project(), &composed);
-
-            let next_track = this
-                .project()
-                .tracks
-                .iter()
-                .find(|track| track.kind.is_drum())
-                .unwrap()
-                .id;
-            let next = start_fixture(this, next_track);
-            this.finish_drum_analysis(&old, Ok(report));
-            assert!(
-                this.drum_analysis
-                    .start_next(Instant::now() + state::DEBOUNCE)
-                    .is_none()
-            );
-            assert!(!next.load(Ordering::Relaxed));
-            assert!(this.drum_analysis.report(next_track).is_none());
-        });
-    }
-
-    #[gpui::test]
     fn automatic_observation_keeps_each_drum_result_across_selection_and_note_edits(
         cx: &mut TestAppContext,
     ) {

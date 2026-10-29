@@ -436,32 +436,14 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         ],
     });
 
-    // A menu of its own, and named for what it does rather than for how it is fed. Composing was
-    // one row in the middle of File, between Open Project and Save, carrying the label of the
-    // *specification file* route — so the sheet, which is the way in that needs no file at all,
-    // was announced as "Compose from Specification…" and the file route was in no menu whatever.
-    // Nobody who had not been told was going to find either.
     sections.push(MenuSection {
         name: t(Key::GroupCompose),
         rows: vec![
-            command(t(Key::CmdComposeSong), actions::ComposeSong, "file.compose"),
-            command(
-                t(Key::CmdComposeFromSpec),
-                actions::ComposeFromSpec,
-                "file.compose_spec",
-            ),
-            MenuRow::Separator,
-            // Under the same heading and below a rule, because it is the composer pointed the
-            // other way: the two above replace the document with a piece, and this one writes
-            // parts around a piece of it that is already there.
             command(
                 t(Key::CmdAccompanyMelody),
                 actions::AccompanyMelody,
                 "file.accompany",
             ),
-            // With the composer rather than with the mixer, because this is what composing already
-            // does at the end of every piece — the row is here for the piece that was written
-            // before it existed, and for the one whose instruments have been changed since.
             command(
                 t(Key::CmdBalanceLevels),
                 actions::BalanceLevels,
@@ -966,33 +948,26 @@ mod tests {
     }
 
     #[test]
-    fn both_ways_into_the_composer_are_in_a_menu_of_their_own() {
-        // `Session::compose` was written with the composer and the desktop application never
-        // called it, so the whole feature existed only for `auris compose`. Then it was one row
-        // in File — carrying the label of the specification-file route, while dispatching the
-        // song sheet, and with the file route itself in no menu at all. Both are named for what
-        // they are now, under a heading somebody looking for the composer would open.
+    fn composition_menu_exposes_accompaniment_and_mix_balance() {
         let compose = plain(Language::English)
             .into_iter()
             .find(|section| section.name == Key::GroupCompose.get(Language::English))
-            .expect("composing has a menu of its own");
-        let labels: Vec<String> = compose
+            .expect("Compose menu");
+        let labels: Vec<_> = compose
             .rows
             .iter()
             .filter_map(|row| match row {
-                MenuRow::Command { label, .. } => Some(label.to_string()),
+                MenuRow::Command { label, .. } => Some(label.as_ref()),
                 _ => None,
             })
             .collect();
-        for expected in [
-            Key::CmdComposeSong.get(Language::English),
-            Key::CmdComposeFromSpec.get(Language::English),
-        ] {
-            assert!(
-                labels.iter().any(|label| label == expected),
-                "`{expected}` is not in the Compose menu"
-            );
-        }
+        assert_eq!(
+            labels,
+            [
+                Key::CmdAccompanyMelody.get(Language::English),
+                Key::CmdBalanceLevels.get(Language::English),
+            ]
+        );
     }
 
     #[test]

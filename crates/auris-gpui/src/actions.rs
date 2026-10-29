@@ -15,10 +15,6 @@ actions!(
         NewProject,
         /// Open a project file.
         OpenProject,
-        /// Open the song sheet: a whole piece asked for with dials.
-        ComposeSong,
-        /// Write a piece from a song specification file, replacing the document.
-        ComposeFromSpec,
         /// Read the selected clip's melody and write a band behind it.
         AccompanyMelody,
         /// Render every track alone, measure it, and set the mix from what came out.
@@ -467,16 +463,7 @@ bindable! {
         "file.recent",          GroupFile,      CmdOpenRecent,         "" => OpenRecent;
         "file.quit",            GroupFile,      CmdQuit,               "secondary-q" => Quit;
 
-        // Their ids still begin `file.` because an id is written into settings files and never
-        // changes once released. The *group* is what a person reads, and these two are not file
-        // operations — one of them opens a form with no file in sight.
-        "file.compose",         GroupCompose,   CmdComposeSong,        "secondary-shift-c" => ComposeSong;
-        // The sheet is the primary way in and keeps the plain shift; the file picker is what an
-        // agent-written or hand-edited document goes through, one modifier further out.
-        "file.compose_spec",    GroupCompose,   CmdComposeFromSpec,    "secondary-alt-c" => ComposeFromSpec;
-        // No default. The two above take the chord that is free and the mnemonic that is obvious;
-        // this one has neither, and squatting on a third combination would take it from whoever
-        // wanted it more. The row is here so it can be given one.
+        // Keep the released command id so existing keymap overrides still apply.
         "file.accompany",       GroupCompose,   CmdAccompanyMelody,    ""            => AccompanyMelody;
         // No default either, and for a different reason: this one renders the piece once per part
         // before it answers, which is seconds rather than milliseconds. A command that costs that

@@ -136,9 +136,6 @@ pub(crate) fn create(cx: &mut App) -> Result<WindowHandle<AurisApp>, String> {
             window.on_window_should_close(cx, move |_, cx| {
                 asked
                     .update(cx, |view, cx| {
-                        if view.compose_progress.is_some() {
-                            return false;
-                        }
                         let close = view.confirm_discard(PendingAction::CloseWindow);
                         if close {
                             view.save_window_placement();
@@ -175,9 +172,7 @@ fn advance_quit(cx: &mut App) {
                     return true;
                 }
                 crate::termination::activate(window, cx);
-                if view.compose_progress.is_some() {
-                    return false;
-                }
+
                 if view.confirm_discard(PendingAction::Quit) {
                     view.save_window_placement();
                     cx.global_mut::<ProjectWindows>()
@@ -327,7 +322,6 @@ impl AurisApp {
                 if result.is_ok() {
                     view.stop_audition();
                     view.release_physical_preview();
-                    view.clear_chord_preview();
                     if !was_suspended {
                         view.set_status(view.t(auris_i18n::Key::ProjectAudioSuspended));
                     }

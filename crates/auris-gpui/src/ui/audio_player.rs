@@ -112,7 +112,6 @@ impl PlayerState {
 pub(crate) enum PlayerTarget {
     Workshop(usize),
     Attachment,
-    Chords,
 }
 
 #[derive(Clone, Copy)]
@@ -132,7 +131,6 @@ impl AurisApp {
     fn player(&self, target: PlayerTarget) -> Option<&PlayerState> {
         match target {
             PlayerTarget::Workshop(index) => self.song_workshop.as_ref().map(|s| &s.players[index]),
-            PlayerTarget::Chords => Some(&self.song_preview.player),
             PlayerTarget::Attachment => self.attachment_preview.as_ref().map(|s| &s.player),
         }
     }
@@ -142,7 +140,6 @@ impl AurisApp {
             PlayerTarget::Workshop(index) => {
                 self.song_workshop.as_mut().map(|s| &mut s.players[index])
             }
-            PlayerTarget::Chords => Some(&mut self.song_preview.player),
             PlayerTarget::Attachment => self.attachment_preview.as_mut().map(|s| &mut s.player),
         }
     }
@@ -190,13 +187,9 @@ impl AurisApp {
         let theme = &self.theme;
         let prefix = match target {
             PlayerTarget::Workshop(i) => format!("song-preview-{i}"),
-            PlayerTarget::Chords => "chord-player".into(),
             PlayerTarget::Attachment => "attachment-player".into(),
         };
-        let play_id: SharedString = match target {
-            PlayerTarget::Chords => "song-preview-play".into(),
-            _ => format!("{prefix}-play").into(),
-        };
+        let play_id: SharedString = format!("{prefix}-play").into();
         let playing = player.playing();
         let timeline = match target {
             PlayerTarget::Workshop(index) => self
@@ -259,7 +252,6 @@ impl AurisApp {
                                 PlayerTarget::Workshop(index) => {
                                     this.preview_song_candidate(index, cx)
                                 }
-                                PlayerTarget::Chords => this.preview_song_chords(false, cx),
                                 PlayerTarget::Attachment => this.play_attachment_preview(cx),
                             }
                         }
@@ -591,82 +583,5 @@ impl AurisApp {
             .when(!enabled, |s| s.opacity(0.5))
             .tooltip(keyed_tip(label, "← → · Home · End", theme));
         slider.into_any_element()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::harness::{click, drag, open, paint};
-    use auris_session::prelude::SongSpec;
-
-    #[gpui::test]
-    fn chord_player_seeks_by_pointer_and_keyboard_and_restores_muted_volume(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (app, cx) = open(cx);
-        let before = app.update(cx, |this, _| {
-            let spec = SongSpec::parse(
-                "key = 'D dorian'\ntempo = 240\nform = 'verse'\n[section.verse]\nbars = 4",
-            )
-            .unwrap();
-            this.song_sheet = Some(crate::ui::compose_sheet::song_dials(&spec));
-            this.project().clone()
-        });
-        paint(&app, cx);
-        click("song-preview-play", cx);
-        paint(&app, cx);
-        click("chord-player-seek", cx);
-        cx.simulate_keystrokes("home");
-        app.read_with(cx, |this, _| {
-            assert_eq!(this.song_preview.player.position(), 0.0)
-        });
-        cx.simulate_keystrokes("right");
-        app.read_with(cx, |this, _| {
-            assert!(this.song_preview.player.position() > 0.0);
-        });
-        let slider = cx.debug_bounds("chord-player-seek").unwrap();
-        drag(
-            cx,
-            slider.center(),
-            gpui::point(slider.right(), slider.center().y),
-        );
-        app.read_with(cx, |this, _| {
-            let player = &this.song_preview.player;
-            assert_eq!(
-                player.options(player.position()).position_seconds,
-                0.0,
-                "play at the end restarts"
-            );
-            assert!(this.audio_player_drag.is_none());
-        });
-        click("chord-player-volume", cx);
-        cx.simulate_keystrokes("home");
-        cx.simulate_keystrokes("pageup");
-        app.read_with(cx, |this, _| {
-            assert!(
-                (this.song_preview.player.volume - 0.1).abs() < 1e-6,
-                "volume after Home/PageUp: {}",
-                this.song_preview.player.volume
-            );
-        });
-        click("chord-player-mute", cx);
-        app.read_with(cx, |this, _| {
-            assert_eq!(this.song_preview.player.options(10.0).volume, 0.0);
-        });
-        click("song-preview-another", cx);
-        paint(&app, cx);
-        app.read_with(cx, |this, _| {
-            assert_eq!(
-                this.song_preview.player.options(10.0).volume,
-                0.0,
-                "changing the audio must preserve mute"
-            );
-        });
-        click("chord-player-mute", cx);
-        app.read_with(cx, |this, _| {
-            assert!((this.song_preview.player.options(10.0).volume - 0.1).abs() < 1e-6);
-            assert_eq!(this.project(), &before);
-            assert!(!this.session.can_undo());
-        });
     }
 }

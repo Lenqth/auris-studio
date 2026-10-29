@@ -208,9 +208,7 @@ impl Session {
         // composed song comes out belonging to the same song.
         project.harmony = composition.harmony.clone();
         project.sections = composition.sections.clone();
-        // What it was asked for, kept with what it produced. A song sheet reopened after a save
-        // and a reload refills itself from this, and Another Take goes on working on a piece
-        // nobody has the original `.asong` for.
+        // Retain the specification alongside the generated score for subsequent commands.
         project.song_spec = Some(self.composed_spec_with_sources(&spec));
 
         let mut report = ComposeReport {
