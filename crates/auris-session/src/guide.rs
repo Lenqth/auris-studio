@@ -92,9 +92,15 @@
 //! reopening as paused drafts. Explicit priority sends cancel the current worker, wait for its
 //! native shutdown, then resume from checkpointed model memory. Each backend checkpoints the
 //! pending request before model work, so cancellation retains its intent and uncertain outcome.
-//! Each user message retains its attachment references as display metadata, so the transcript
-//! can identify sent files after reopening. These references never repopulate the next draft
-//! or authorize file access; only files explicitly attached in the current window can do that.
+//! Both conversation surfaces accept audio, image and UTF-8 text attachments through a picker
+//! or file drop. Explicitly submitted files are copied on a storage worker into a content-addressed
+//! archive before model submission. Readable logs retain portable paths to these copies; Save As
+//! carries them with the conversation even after the original files have moved. Selecting a file
+//! opens a local image, selectable-text or audio preview without sending another model request.
+//! Historical editor references never repopulate the next draft or grant model file access.
+//! Workshop follow-ups and isolated composers reuse the latest archived references associated with
+//! their comparison round; arbitrary paths in restored workshop metadata are never sent.
+//! User messages, candidate titles and concepts support mouse selection and platform copy shortcuts.
 //!
 //! Storage runs on background threads. Stable locks serialize metadata edits, transcript revisions
 //! reject stale windows, and runtime memory generation tombstones prevent deleted conversations

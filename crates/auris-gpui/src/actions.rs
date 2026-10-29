@@ -865,6 +865,12 @@ pub fn install_bindings(cx: &mut App, bindings: impl IntoIterator<Item = KeyBind
     cx.bind_keys(crate::ui::rhythm_grid::key_bindings());
     cx.bind_keys(crate::ui::widgets::key_bindings());
     cx.bind_keys(crate::ui::agent_chat::model_key_bindings());
+    // The global reset also removes gpui-component's text-selection shortcut.
+    cx.bind_keys([KeyBinding::new(
+        "secondary-c",
+        gpui_component::input::Copy,
+        Some("TextView"),
+    )]);
 }
 
 #[cfg(test)]

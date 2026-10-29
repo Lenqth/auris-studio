@@ -2221,9 +2221,12 @@ new のオプション
         ja: "添付ファイルを削除：{name}"
     }
     AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
+    AttachFiles { en: "Attach files", ja: "ファイルを添付" }
+    AttachmentClosePreview { en: "Close preview", ja: "プレビューを閉じる" }
+    AttachmentLoading { en: "Loading preview…", ja: "プレビューを読み込み中…" }
     AgentOpenAttachment {
-        en: "Open attachment: {path}",
-        ja: "添付ファイルを開く：{path}"
+        en: "Preview attachment: {path}",
+        ja: "添付ファイルをプレビュー：{path}"
     }
     AgentAttachmentUnavailable {
         en: "Cannot open attachment: {path}. Check whether the file was moved or deleted.",

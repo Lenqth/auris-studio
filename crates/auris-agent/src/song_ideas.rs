@@ -15,6 +15,15 @@ pub struct SongPlanner {
 
 impl SongPlanner {
     pub(crate) fn conversation(prefs: AgentPreferences, prompt: String) -> Result<Self, String> {
+        Self::conversation_with_attachments(prefs, prompt, &[])
+    }
+
+    pub(crate) fn conversation_with_attachments(
+        prefs: AgentPreferences,
+        prompt: String,
+        attachments: &[std::path::PathBuf],
+    ) -> Result<Self, String> {
+        crate::validate_attachments(&prefs, attachments)?;
         let mut prefs = prefs;
         prefs.policy = Policy {
             mode: Mode::Plan,
@@ -29,7 +38,7 @@ impl SongPlanner {
         let worker = Worker::spawn(prefs.clone(), None, true, None)?;
         // Tool requests are denied by poll_text. Do not advertise a document planning mode:
         // that context otherwise leaks into the assignments for authorized composer workers.
-        worker.send(&serde_json::json!({"say":prompt}).to_string())?;
+        worker.send(&serde_json::json!({"say":prompt,"attachments":attachments}).to_string())?;
         Ok(Self {
             worker,
             deadline: Instant::now() + Duration::from_secs(180),

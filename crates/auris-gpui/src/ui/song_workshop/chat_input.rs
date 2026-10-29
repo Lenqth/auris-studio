@@ -60,9 +60,85 @@ impl AurisApp {
         )
         .debug_selector(|| "song-workshop-composer".to_owned())
         .m_0()
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap(theme.atelier.spacing.xs)
+                .children(s.attachments.iter().enumerate().map(|(index, path)| {
+                    let path = path.clone();
+                    let name = path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    div()
+                        .flex()
+                        .items_center()
+                        .min_w_0()
+                        .max_w_full()
+                        .child(
+                            div()
+                                .debug_selector(move || format!("song-draft-attachment-{index}"))
+                                .min_w_0()
+                                .flex_1()
+                                .overflow_hidden()
+                                .child(
+                                    atelier::Button::new(("song-draft-attachment", index), name)
+                                        .ghost()
+                                        .icon(atelier::IconName::File)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.open_attachment_preview(path.clone(), true, cx)
+                                        })),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .debug_selector(move || format!("song-remove-attachment-{index}"))
+                                .flex_shrink_0()
+                                .child(
+                                    atelier::Button::icon_only(
+                                        ("song-remove-attachment", index),
+                                        atelier::IconName::Close,
+                                    )
+                                    .ghost()
+                                    .disabled(busy)
+                                    .tooltip(
+                                        self.t(Key::AgentRemoveAttachment).replace(
+                                            "{name}",
+                                            &s.attachments[index]
+                                                .file_name()
+                                                .unwrap_or_default()
+                                                .to_string_lossy(),
+                                        ),
+                                    )
+                                    .on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            if let Some(s) = &mut this.song_workshop
+                                                && !s.busy()
+                                                && index < s.attachments.len()
+                                            {
+                                                s.attachments.remove(index);
+                                            }
+                                            cx.notify();
+                                        },
+                                    )),
+                                ),
+                        )
+                })),
+        )
         .child(self.workshop_field(0, Key::WorkshopBriefHint, true, cx))
         .child(
             agent_components::composer_controls("workshop-composer-controls", &theme)
+                .child(
+                    atelier::Button::icon_only("song-attach-files", atelier::IconName::Paperclip)
+                        .ghost()
+                        .tooltip(self.t(Key::AttachFiles))
+                        .disabled(busy)
+                        .on_click(
+                            cx.listener(|this, _, _, cx| this.pick_conversation_files(true, cx)),
+                        ),
+                )
                 .child(
                     div()
                         .debug_selector(|| "workshop-model".into())
