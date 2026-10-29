@@ -14,9 +14,6 @@ pub(crate) mod audio_player;
 pub mod automation;
 pub(crate) mod chat_commands;
 pub mod commands;
-mod compose_job;
-pub(crate) mod compose_progress;
-pub mod compose_sheet;
 pub mod context_menu;
 mod convert;
 #[cfg(test)]
@@ -56,7 +53,6 @@ pub mod scrollbars;
 pub mod selection;
 pub mod singer;
 pub(crate) mod singer_portrait;
-pub(crate) mod song_search;
 pub(crate) mod song_workshop;
 pub(crate) mod spectrogram;
 pub mod status_bar;

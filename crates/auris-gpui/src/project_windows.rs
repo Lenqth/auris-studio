@@ -213,9 +213,6 @@ fn advance_quit(cx: &mut App) {
                 if approved.contains(&(id, view.session.revision())) {
                     return true;
                 }
-                if view.compose_progress.is_some() {
-                    return false;
-                }
                 if view.confirm_discard(PendingAction::Quit) {
                     view.save_window_placement();
                     cx.global_mut::<ProjectWindows>()
@@ -372,7 +369,6 @@ impl AurisApp {
                 if result.is_ok() {
                     view.stop_audition();
                     view.release_physical_preview();
-                    view.clear_chord_preview();
                     if !was_suspended {
                         view.set_status(view.t(auris_i18n::Key::ProjectAudioSuspended));
                     }

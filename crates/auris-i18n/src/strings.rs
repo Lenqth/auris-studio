@@ -279,35 +279,6 @@ strings! {
     VisualizerNegativePeak { en: "Negative peak", ja: "負側ピーク" }
     VisualizerCorrelationReset { en: "Reset correlation", ja: "相関をリセット" }
     VisualizerHint { en: "Vertical: mono · horizontal: opposite polarity. Auto gain changes the display only; recent traces fade behind the current one.", ja: "縦：モノラル · 横：逆位相。自動ゲインは表示だけを変更し、直近の軌跡は現在値の後ろに薄く残ります。" }
-    SongSearchToggle { en: "Density Search", ja: "音符密度の探索" }
-    SongSearchHint { en: "Find settings close to a target note density. Counts all written notes and drum hits across tracks; this does not rate musical quality or rendered vocals.", ja: "目標の音符密度に近い設定を探します。全トラックの音符とドラム打音を数えます。音楽的な良さや、音声合成された歌唱は評価しません。" }
-    SongSearchMethod { en: "Method", ja: "探索方法" }
-    SongSearchRandom { en: "Random", ja: "ランダム探索" }
-    SongSearchHill { en: "Hill climbing", ja: "山登り法" }
-    SongSearchAttempts { en: "Attempt limit", ja: "試行回数の上限" }
-    SongSearchTarget { en: "Target notes / bar", ja: "目標音符数 / 小節" }
-    SongSearchSeed { en: "Search seed", ja: "探索シード" }
-    SongSearchCompositionSeed { en: "Composition seed", ja: "作曲シード" }
-    SongSearchPart { en: "Vary part density", ja: "密度を探索するパート" }
-    SongSearchSection { en: "Vary section intensity", ja: "強度を探索するセクション" }
-    SongSearchFixed { en: "Keep fixed", ja: "固定する" }
-    SongSearchBounds { en: "Range: 0–100% · hill step: 10%. Automatic density starts at its current value. All other song settings stay fixed.", ja: "探索範囲：0～100% · 山登り法の変化幅：10%。自動密度は現在の値から開始します。他の作曲設定は固定されます。" }
-    SongSearchChooseParameter { en: "Choose a part or section to vary.", ja: "探索するパートかセクションを選んでください。" }
-    SongSearchStart { en: "Start Search", ja: "探索を開始" }
-    SongSearchRunning { en: "Searching", ja: "探索中" }
-    SongSearchCancel { en: "Cancel Search", ja: "探索を中止" }
-    SongSearchCancelling { en: "Finishing current attempt…", ja: "現在の試行が終わるのを待っています…" }
-    SongSearchCancelled { en: "Search cancelled", ja: "探索を中止しました" }
-    SongSearchComplete { en: "Search complete", ja: "探索が完了しました" }
-    SongSearchFailed { en: "Search failed", ja: "探索に失敗しました" }
-    SongSearchChanged { en: "The song, document, or search settings changed. Run Search again to apply a result.", ja: "曲・プロジェクト・探索設定が変更されました。適用するには探索をやり直してください。" }
-    SongSearchBest { en: "Best notes / bar", ja: "最良候補の音符数 / 小節" }
-    SongSearchDistance { en: "Distance from target", ja: "目標との差" }
-    SongSearchCandidate { en: "Candidate", ja: "候補" }
-    SongSearchProgress { en: "Attempts", ja: "試行数" }
-    SongSearchNoCandidate { en: "No successful candidate. Adjust the song or search settings and try again.", ja: "有効な候補がありません。曲や探索設定を調整して、再度お試しください。" }
-    SongSearchApply { en: "Apply Best & Play", ja: "最良候補を適用して再生" }
-    SongSearchApplyHint { en: "Replaces the project with the best score and starts playback. Undo restores the previous project.", ja: "最良候補でプロジェクトを置き換えて再生します。元に戻す操作で、適用前のプロジェクトに戻せます。" }
     TimbreMap { en: "Timbre Map", ja: "音色マップ" }
     TimbreMapHint { en: "Drag to rotate · click a point or choose a sound to audition", ja: "ドラッグで回転 · 点または一覧の音色を選んで試聴" }
     TimbreMapGeometry { en: "Color: acoustic group · axes: PC1–PC3 · similarity uses full features", ja: "色：音響クラスタ · 軸：PC1–PC3 · 類似音は元の特徴量で検索" }
@@ -370,12 +341,6 @@ strings! {
     PromptLyric { en: "Lyric", ja: "歌詞" }
     PromptPhonemes { en: "Phonemes (space-separated IPA)", ja: "音素(スペース区切りの IPA)" }
     PromptLyrics { en: "Write Lyrics Across Selection", ja: "選択ノートに歌詞を流し込む" }
-    PromptSectionLyrics { en: "Lyrics", ja: "歌詞" }
-    HintSectionLyrics {
-        en: "One line per phrase · Tab walks the sections · empty makes a section instrumental",
-        ja: "1行が1フレーズ(、や！？も切れ目)。Tabで次のセクションへ。空にすると歌なしに戻ります"
-    }
-    LyricsNoWords { en: "(no words — instrumental)", ja: "(歌詞なし — インスト)" }
     LyricsNotesUnit { en: "notes", ja: "音" }
     MenuEditLyric { en: "Edit Lyric…", ja: "歌詞を編集…" }
     MenuEditPhonemes { en: "Edit Phonemes…", ja: "音素を編集…" }
@@ -870,9 +835,7 @@ strings! {
     CmdCloseTab { en: "Close tab", ja: "タブを閉じる" }
     CmdNextTab { en: "Next tab", ja: "次のタブ" }
     CmdPreviousTab { en: "Previous tab", ja: "前のタブ" }
-    CmdComposeSong { en: "Compose a Song…", ja: "曲を作る…" }
     CmdAccompanyMelody { en: "Accompany the Melody", ja: "旋律に伴奏をつける" }
-    CmdComposeFromSpec { en: "Compose from Specification…", ja: "仕様ファイルから作曲…" }
     CmdBalanceLevels { en: "Balance the Mix", ja: "ミックスの自動調整" }
     CmdOpenPluginWindow { en: "Open Plugin Window", ja: "プラグインの画面を開く" }
     PluginOpenEditor { en: "Open editor…", ja: "画面を開く…" }
@@ -967,7 +930,6 @@ strings! {
     MenuServices { en: "Services", ja: "サービス" }
     MenuQuitApp { en: "Quit Auris Studio", ja: "Auris Studio を終了" }
     MenuOpenProjectItem { en: "Open Project…", ja: "プロジェクトを開く…" }
-    MenuComposeItem { en: "Compose from Specification…", ja: "仕様ファイルから作曲…" }
     MenuSaveAsItem { en: "Save As…", ja: "名前を付けて保存…" }
     MenuImportAudioItem { en: "Import Audio…", ja: "オーディオを読み込む…" }
     MenuImportSoundFontItem { en: "Import SoundFont…", ja: "サウンドフォントを読み込む…" }
@@ -1206,200 +1168,25 @@ strings! {
     SubdivisionEighthTriplet { en: "1/8 triplet", ja: "1/8 三連" }
     SubdivisionSixteenthTriplet { en: "1/16 triplet", ja: "1/16 三連" }
 
-    // ------------------------------------------------------------------ the song sheet
-    // The dialog that writes a whole piece. Its dials are the specification's own fields, so
-    // where one is already named above — density, gate, swing — the same string is reused and
-    // only what the sheet adds appears here.
-    SongSheetTitle { en: "Compose a Song", ja: "曲を作る" }
-    ComposeProgressTitle { en: "Creating your song", ja: "自動作曲中" }
-    ComposeProgressWriting { en: "Writing the music…", ja: "メロディーと編曲を作成しています…" }
-    ComposeProgressPreparing { en: "Preparing instruments…", ja: "音源を準備しています…" }
-    ComposeProgressBalancing { en: "Adjusting the mix…", ja: "音量バランスを調整しています…" }
-    ComposeProgressMix { en: "Measuring the full mix", ja: "曲全体の音量を測定" }
-    ComposeProgressVerification { en: "Checking the final levels", ja: "最終的な音量を確認" }
-    ComposeProgressHint {
-        en: "Longer songs and larger instruments can take more time.",
-        ja: "曲の長さや音源によって、時間がかかることがあります。"
-    }
-    ComposeProgressChanged {
-        en: "The project changed while the song was being created. The result was not applied.",
-        ja: "作曲中にプロジェクトが変更されたため、作成結果を適用しませんでした。"
-    }
-    ComposeProgressBalanceFailed {
-        en: "The song was created, but its levels could not be adjusted automatically.",
-        ja: "曲を作成しましたが、音量バランスの自動調整に失敗しました。"
-    }
+    // ------------------------------------------------------------------ harmony and performance
     BalanceChanged {
         en: "The project changed while its levels were being measured. The adjustment was not applied.",
         ja: "音量の測定中にプロジェクトが変更されたため、調整結果を適用しませんでした。"
     }
-    SongHeading { en: "Song", ja: "曲" }
-    SongTitleField { en: "Title", ja: "タイトル" }
-    SongKey { en: "Key", ja: "調" }
-    SongScale { en: "Scale", ja: "スケール" }
-    SongMeter { en: "Time signature", ja: "拍子" }
-    // The named feeling, and the four numbers behind it. A mood the dials have been nudged away
-    // from matches no word, and the picker says so rather than naming the one it started at.
-    SongMood { en: "Mood", ja: "曲調" }
-    SongTonality { en: "Major or minor", ja: "長調・短調" }
-    SongAutomatic { en: "Follow the mood", ja: "雰囲気に合わせる" }
-    SongMajor { en: "Major", ja: "長調" }
-    SongMinor { en: "Minor", ja: "短調" }
-    SongSound { en: "Sound", ja: "響き" }
-    SongPreviewSection { en: "Preview section", ja: "試聴するセクション" }
-    SongPreviewPlay { en: "Preview chords", ja: "コードを試聴" }
-    SongPreviewStop { en: "Stop preview", ja: "試聴を停止" }
-    SongPreviewAnother { en: "Another progression", ja: "別の進行" }
-    SongPreviewAdopt { en: "Use these chords", ja: "この進行を採用" }
-    SongPreviewAdopted { en: "The previewed chords will be used for this section.", ja: "試聴したコード進行を、このセクションに採用しました。" }
-    SongPreviewRendering { en: "Rendering chords…", ja: "コードをレンダリング中…" }
-    SongPreviewFailed { en: "Could not preview chords", ja: "コードを試聴できませんでした" }
-    SongPreviewHint { en: "Hear up to 8 bars on a fixed keyboard sound, then adopt the progression for this section.", ja: "一定の鍵盤音で最大8小節を試聴し、気に入った進行をこのセクションに採用できます。" }
-    SongSoundAuto { en: "Automatic", ja: "おまかせ" }
-    SongSoundMajor { en: "Bright (Major)", ja: "素直で明るい（メジャー）" }
-    SongSoundMinor { en: "Subdued (Minor)", ja: "しっとり暗い（マイナー）" }
-    SongSoundDorian { en: "Dark with warmth (Dorian)", ja: "暗さの中に明るさ（ドリアン）" }
-    SongSoundLydian { en: "Floating (Lydian)", ja: "浮遊感（リディアン）" }
-    SongSoundMixolydian { en: "Bright and mellow (Mixolydian)", ja: "明るく少し渋い（ミクソリディアン）" }
-    SongSoundPhrygian { en: "Tense and dark (Phrygian)", ja: "張りつめた暗さ（フリジアン）" }
-    SongPace { en: "Speed", ja: "速さ" }
-    SongSlow { en: "Slow", ja: "ゆったり" }
-    SongModerate { en: "Moderate", ja: "ほどほど" }
-    SongFast { en: "Fast", ja: "速い" }
-    SongMoodCustom { en: "custom", ja: "カスタム" }
-    SongBrightness { en: "Brightness", ja: "明るさ" }
-    SongEnergy { en: "Energy", ja: "勢い" }
-    SongTension { en: "Tension", ja: "緊張感" }
-    SongVariation { en: "Variation", ja: "繰り返しの変化" }
-    // How long one section runs, with the whole song's length in the footer — the dial sets one
-    // thing and the number that matters is the other.
-    SongBars { en: "Bars", ja: "小節数" }
-    SongLength { en: "Length", ja: "長さ" }
-    SongBarsUnit { en: "bars", ja: "小節" }
-    SongChords { en: "Progression", ja: "コード進行" }
-    SongChordsOwn { en: "the composer's own", ja: "おまかせ" }
-    // The form: which sections play, in what order, and what each of them is.
-    SongStyle { en: "Style", ja: "スタイル" }
-    SongStyleChoose { en: "Choose…", ja: "選ぶ…" }
-    SongStyleChiptune { en: "Chiptune", ja: "チップチューン" }
-    SongStyleGameLoop { en: "Looping game music", ja: "ループするゲーム音楽" }
-    SongStylePopBand { en: "Pop band", ja: "ポップバンド" }
-    SongStyleCityPop { en: "City pop", ja: "シティポップ" }
-    SongStyleRock { en: "Rock band", ja: "ロックバンド" }
-    SongStyleJazz { en: "Jazz trio", ja: "ジャズトリオ" }
-    SongStyleOrchestral { en: "Orchestra", ja: "オーケストラ" }
-    SongStyleSynthwave { en: "Synthwave", ja: "シンセウェーブ" }
-    SongStyleAmbient { en: "Ambient", ja: "アンビエント" }
-    SongEnding { en: "Ending", ja: "終わり方" }
-    SongEndingHeld { en: "Held chord", ja: "終止音" }
-    SongEndingFade { en: "Fade out", ja: "フェードアウト" }
-    SongEndingLoop { en: "Loop (BGM)", ja: "ループ（BGM）" }
-    SongEndingNone { en: "Stop", ja: "そのまま停止" }
-    SongFormHeading { en: "Form", ja: "構成" }
-    SongHarmonyHeading { en: "Harmony and rhythm", ja: "調・拍子・リズム" }
-    SongPerformanceHeading { en: "Performance", ja: "演奏の表情" }
-    SongAddSection { en: "Add Section", ja: "セクションを追加" }
-    SongSectionName { en: "Section", ja: "セクション" }
-    SongTranspose { en: "Transpose", ja: "移調" }
-    SongSectionParts { en: "Who Plays", ja: "演奏するパート" }
-    SongMatrixHeading { en: "Instruments across the song", ja: "セクションごとの演奏" }
-    SongMatrixHint { en: "Click a cell to switch a part on or off. Columns follow the song from left to right.", ja: "マスを押して演奏・休みを切り替えます。左から右へ曲が進みます。" }
-    SongMatrixRepeated { en: "Repeated sections share their participation settings.", ja: "同じセクションを繰り返す列は、演奏設定が連動します。" }
-    SongMatrixPlaying { en: "Play", ja: "演奏" }
-    SongMatrixRest { en: "Rest", ja: "休み" }
-    SongMatrixLastPart { en: "Keep at least one part playing in each section.", ja: "各セクションで少なくとも1つのパートを演奏します。" }
-    SongSectionTempo { en: "Section Tempo", ja: "セクションのテンポ" }
-    SongTempoHint { en: "20–400 BPM; clear to follow the song", ja: "20〜400 BPM・空欄で曲に合わせる" }
-    SongAdvanced { en: "Detailed settings", ja: "詳細設定" }
-    SongBasic { en: "Back to basics", ja: "基本設定に戻る" }
-    SongStartHint { en: "Choose a mood, major or minor, and a speed. Chords are composed for you. A style supplies the instruments; lyrics are optional.", ja: "雰囲気・長調か短調・速さを選ぶと、コード進行は自動で作ります。スタイルで楽器編成を選べます。歌詞は空欄でも作れます。" }
-    SongAdvancedHint { en: "Adjust the form, chords, rhythm and instruments. Returning to basics keeps every setting.", ja: "曲の構成・コード進行・リズム・楽器を調整できます。基本設定に戻っても、設定は保持されます。" }
-    SongVerseLabel { en: "Verse {n}", ja: "{n}番 Aメロ" }
-    SongPreChorusLabel { en: "Pre-Chorus {n}", ja: "{n}番 Bメロ" }
-    SongChorusLabel { en: "Chorus {n}", ja: "{n}番 サビ" }
-    SongIntroLabel { en: "Intro", ja: "イントロ" }
-    SongOutroLabel { en: "Outro", ja: "エンディング" }
-    SongBridgeLabel { en: "Bridge {n}", ja: "{n}番 Cメロ" }
-    SongSharedLyricsHint { en: "Uses the melody from {section}. You can enter different lyrics.", ja: "{section}と同じメロディです。別の歌詞を入力できます。" }
-    SongMelodyFrom { en: "Shared melody", ja: "メロディ共有" }
     SongLyricsMatch { en: "Match the notes in each phrase to the original lyrics", ja: "元の歌詞と、フレーズごとの音数を合わせてください" }
-    SongLyricsEstimate { en: "{notes} notes · Section: {bars} bars", ja: "{notes}音 ・ {bars}小節に配置" }
-    SongLyricsFits { en: "The melody adapts to fit these bars.", ja: "この小節数に収まるようメロディを生成します。" }
-    SongLyricsOverflow { en: "Too many syllables; shorten the lyrics or reduce phrase breaks.", ja: "音数が多すぎます。歌詞を短くするか、フレーズの区切りを減らしてください。" }
-    SongLyricsUnreadable { en: "Cannot estimate all lyrics. Use kana or check the Japanese dictionary.", ja: "一部の歌詞を読めないため推定できません。かなで入力するか、日本語辞書の設定を確認してください。" }
-    SongLyricsMatched { en: "Matches {section}: {actual} notes, including every phrase.", ja: "{section}と一致：{actual}音。フレーズごとの音数も合っています。" }
-    SongLyricsNoteMismatch { en: "Does not match {section}: {actual} notes / expected {expected}.", ja: "{section}と不一致：今の歌詞 {actual}音 / 元の歌詞 {expected}音。" }
-    SongLyricsPhraseMismatch { en: "Total matches {section} ({actual} notes), but phrase lengths differ.", ja: "{section}と合計は同じ{actual}音ですが、フレーズごとの音数が違います。" }
-    SongLyricsOriginalEmpty { en: "Enter lyrics for {section} first to compare note counts.", ja: "比較するには、先に{section}の歌詞を入力してください。" }
-    SongLyricsMatchUnreadable { en: "Cannot compare with {section} until both lyrics can be read.", ja: "歌詞の読みを確認できないため、{section}との一致を判定できません。" }
-    SongLyricsCounts { en: "These lyrics: {actual} · Original: {expected}", ja: "今の歌詞: {actual} ・ 元の歌詞: {expected}" }
-    SongSectionTempoFollows { en: "Follow the Song", ja: "曲に合わせる" }
-    // Writing a progression out, and keeping the one written. The second reaches past the song
-    // into the book this installation carries.
-    SongWriteProgression { en: "Write one…", ja: "手で書く…" }
-    SongKeepProgression { en: "Keep in the catalogue…", ja: "カタログに登録…" }
     HintProgression { en: "Bars of roman numerals: | IVmaj7 | III7 | vi7 | I7 |",
                       ja: "ローマ数字を小節ごとに: | IVmaj7 | III7 | vi7 | I7 |" }
-    // The tune's contour, given by hand or taken from a clip; empty leaves it to the composer.
-    SongMotif { en: "Motif", ja: "モチーフ" }
-    HintMotif { en: "Scale steps around the anchor: 0 2 4 2 — empty leaves it to the composer",
-                ja: "アンカーからのスケール度数: 0 2 4 2 — 空欄ならおまかせ" }
-    MenuComposeFromMotif { en: "Take as the Motif…", ja: "モチーフとして取り込む…" }
-    ErrorMotifTooShort { en: "that clip has no line to take as a motif",
-                         ja: "モチーフにできる旋律がクリップにありません" }
-    // The roster. `Part` alone is the heading on a single generated clip, so this one is plural.
-    SongPartsHeading { en: "Parts", ja: "パート" }
-    SongPartName { en: "Name", ja: "名前" }
-    SongPartRole { en: "Role", ja: "役割" }
-    SongPartInstrument { en: "Instrument", ja: "音源" }
-    SongLibraryTitle { en: "Choose an instrument", ja: "音源を選択" }
-    SongLibraryHint { en: "Use the selected instrument for “{part}”.", ja: "選択した音源を「{part}」に使います。" }
-    SongLibraryNoInstruments { en: "This file contains no instrument plugins.", ja: "このファイルに楽器プラグインはありません。" }
     SongSourceUnavailable { en: "The selected song instrument could not be loaded", ja: "選択した曲の音源を読み込めませんでした" }
-    // Which MIDI note a drum part strikes. It stands where a pitched part shows its octave,
-    // because a kit has no octave and does need this.
-    // The strip under the piano roll, named by what is in it rather than by the word "lane".
     BendLane { en: "Bend", ja: "ベンド" }
     ModulationLane { en: "Mod", ja: "モジュ" }
     CurveLanes { en: "Lanes", ja: "レーン" }
     StraightenCurve { en: "Straighten", ja: "カーブを消す" }
     CmdShowBendLane { en: "Pitch Bend", ja: "ピッチベンド" }
     CmdShowModulationLane { en: "Modulation", ja: "モジュレーション" }
-    SongPartNote { en: "Note", ja: "ノート" }
-    SongPartGain { en: "Level", ja: "音量" }
-    SongPartPan { en: "Pan", ja: "定位" }
-    SongDensityAuto { en: "Follow mood", ja: "曲調に合わせる" }
-    SongAddPart { en: "Add Part", ja: "パートを追加" }
-    SongRemovePart { en: "Remove", ja: "削除" }
-    SongPartNameTitle { en: "Name for this part", ja: "このパートの名前" }
-    // The three things the sheet can do. "Another take" is the next seed rather than a random
-    // one, which is what makes a take somebody liked reachable again.
-    SongWrite { en: "Create Song", ja: "曲を作る" }
-    SongAnotherTake { en: "Another Take", ja: "別テイク" }
-    SongSaveSpec { en: "Save as Specification…", ja: "仕様ファイルに保存…" }
-    // What the roles are called where a part names one. `Role::name` is the word the document
-    // writes and stays English; this is the word the picker shows.
-    RoleMelody { en: "Melody", ja: "メロディ" }
-    RoleChords { en: "Chords", ja: "コード" }
-    RolePad { en: "Pad", ja: "パッド" }
-    RoleArp { en: "Arpeggio", ja: "アルペジオ" }
-    RoleStab { en: "Stab", ja: "スタブ" }
-    RoleBass { en: "Bass", ja: "ベース" }
     RoleKick { en: "Kick", ja: "キック" }
     RoleSnare { en: "Snare", ja: "スネア" }
     RoleHat { en: "Hi-hat", ja: "ハイハット" }
     RoleCrash { en: "Crash", ja: "クラッシュ" }
-    RoleRiser { en: "Riser", ja: "ライザー" }
-    // The mood vocabulary. Nine words that each mean four numbers.
-    MoodNeutral { en: "Neutral", ja: "ニュートラル" }
-    MoodBright { en: "Bright", ja: "明るい" }
-    MoodDark { en: "Dark", ja: "暗い" }
-    MoodCalm { en: "Calm", ja: "穏やか" }
-    MoodDriving { en: "Driving", ja: "疾走感" }
-    MoodEpic { en: "Epic", ja: "壮大" }
-    MoodDreamy { en: "Dreamy", ja: "夢見心地" }
-    MoodTense { en: "Tense", ja: "張り詰めた" }
-    MoodFunky { en: "Funky", ja: "ファンキー" }
 
     // ------------------------------------------------------------------ appearance
     AppearanceHeading { en: "Colour theme", ja: "カラーテーマ" }
@@ -1466,7 +1253,6 @@ strings! {
     BackgroundCommandChanged { en: "The project changed; the background result was not applied", ja: "プロジェクトが変更されたため、バックグラウンド処理の結果は適用しませんでした" }
     Rename { en: "Rename", ja: "変更" }
     NameCannotBeEmpty { en: "Name cannot be empty", ja: "名前を空にはできません" }
-    NameAlreadyUsed { en: "Name is already in use", ja: "その名前はすでに使われています" }
     // What each sheet is asking for, shown under the field before anything goes wrong. The chord
     // one carries the rule nothing else on screen states: case is what says major or minor, and
     // a user who has not been told that has no way to guess it from an empty box.
@@ -1555,7 +1341,6 @@ strings! {
     UpdateInstallFailed { en: "Could not install the update. Use Help → Check for Updates to try again.", ja: "更新をインストールできませんでした。ヘルプの「更新を確認」から再度お試しください。" }
     MenuNoRecentProjects { en: "Nothing opened yet", ja: "まだ何も開いていません" }
     MenuForgetRecent { en: "Forget This List", ja: "履歴を消去" }
-    DialogComposeSpec { en: "Compose from specification", ja: "仕様書から作曲" }
     DialogImportAudio { en: "Import audio", ja: "オーディオを読み込む" }
     DialogImportSoundFont { en: "Import SoundFont", ja: "サウンドフォントを読み込む" }
     DialogImportMidi { en: "Import a MIDI file", ja: "MIDI ファイルを読み込む" }
@@ -1563,7 +1348,6 @@ strings! {
     DialogExportFrames { en: "Export singer frames", ja: "シンガーフレームを書き出す" }
     DialogExportWav { en: "Export Audio", ja: "オーディオを書き出す" }
     FilterProject { en: "Auris project", ja: "Auris プロジェクト" }
-    FilterSpec { en: "Song specification", ja: "楽曲仕様書" }
     FilterAudio { en: "Audio", ja: "オーディオ" }
     FilterSoundFont { en: "SoundFont", ja: "サウンドフォント" }
     FilterMidi { en: "MIDI file", ja: "MIDI ファイル" }
@@ -1607,7 +1391,6 @@ strings! {
     SingCancelled { en: "Singing stopped; the previous take stands", ja: "歌唱を中止しました。前のテイクのままです" }
     TakeBehind { en: "behind the notes", ja: "テイクが楽譜より古い" }
     TakeRendering { en: "singing the notes…", ja: "歌声をレンダリング中…" }
-    SpecRejectedTitle { en: "The specification was not accepted", ja: "仕様書を読み取れませんでした" }
 
     // ------------------------------------------------------------------ statuses
     NothingToUndo { en: "Nothing to undo", ja: "取り消せる操作がありません" }
@@ -1885,9 +1668,6 @@ strings! {
         en: "the shipped sound library is not installed, so General MIDI sounds are unavailable",
         ja: "同梱の音色ライブラリが未インストールのため、General MIDI音源は使えません"
     }
-    SongSpeakerDefault { en: "Default speaker", ja: "標準の話者" }
-    SongInstrumentsHeading { en: "Instruments", ja: "楽器" }
-    SongAddDrums { en: "Add drums", ja: "ドラムを追加" }
     ErrorGenerationPositionOccupied {
         en: "there is already a clip at this position; choose an empty area on the track",
         ja: "この位置にはクリップがあります。同じトラックの空いている場所を選んでください"
