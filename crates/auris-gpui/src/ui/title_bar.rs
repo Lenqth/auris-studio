@@ -144,11 +144,14 @@ mod tests {
             }
             if super::panels_in_titlebar(px(width)) {
                 // The agent is the last switch in the default right dock.
+                // Atelier's `TitleBar` keeps `spacing.sm` before caption buttons and `spacing.md`
+                // from a bare window edge (macOS, where the traffic lights lead instead).
                 let rightmost = cx.debug_bounds("panel-switch-5").unwrap().right();
-                let controls_left = cx
+                let spacing = app.read_with(cx, |this, _| this.theme.atelier.spacing);
+                let edge = cx
                     .debug_bounds("window-minimize")
-                    .map_or(px(width), |bounds| bounds.left());
-                assert_eq!(rightmost, controls_left - px(8.0));
+                    .map_or(px(width) - spacing.md, |bounds| bounds.left() - spacing.sm);
+                assert_eq!(rightmost, edge);
             }
             let looping = app.read_with(cx, |this, _| this.project().loop_enabled);
             click("loop", cx);
