@@ -727,15 +727,7 @@ async fn list_models(options: &Options) -> Result<String, String> {
                         .await
                         .ok()
                         .and_then(Result::ok);
-                        let window = shown
-                            .as_ref()
-                            .and_then(|shown| shown.get("model_info"))
-                            .and_then(|info| info.as_object())
-                            .and_then(|info| {
-                                info.iter()
-                                    .find(|(key, _)| key.ends_with(".context_length"))
-                                    .and_then(|(_, value)| value.as_u64())
-                            });
+                        let window = shown.as_ref().and_then(runtime::model_context_limit);
                         (name, window)
                     });
                 }
@@ -1923,20 +1915,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ollama_receives_the_requested_context_and_thinking_setting() {
+    async fn ollama_caps_the_context_before_building_requests_and_budgeting_history() {
         let (url, seen) = mock_server(vec![
-            serde_json::json!({"capabilities":["tools"],"model_info":{"mock.context_length":262144}}).to_string(),
+            serde_json::json!({"capabilities":["tools"],"model_info":{"lfm3.context_length":128000}}).to_string(),
             serde_json::json!({"model":"mock","created_at":"2026-09-06T00:00:00Z","message":{"role":"assistant","content":"ready"},"done":true,"prompt_eval_count":100,"eval_count":1}).to_string(),
         ]);
         let Command::Run(mut options) = parse(
-            &format!("--model mock --url {url} --context-tokens 32768 --thinking off"),
+            &format!("--model mock --url {url} --context-tokens 131072 --thinking off"),
             &no_env,
         )
         .unwrap() else {
             panic!()
         };
-        options.output_tokens = 8192;
-        runtime::preflight(&options).await.unwrap();
+        options.output_tokens = 32768;
+        runtime::preflight(&mut options).await.unwrap();
+        assert_eq!(options.context_limit(), Some(128000));
         let agent = build_agent(&options).unwrap();
         let (answer, ..) = converse(
             &agent,
@@ -1952,15 +1945,66 @@ mod tests {
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 2);
         let body: serde_json::Value = serde_json::from_str(&requests[1]).unwrap();
-        assert_eq!(body["options"]["num_ctx"], 32768);
+        assert_eq!(body["options"]["num_ctx"], 128000);
         assert_eq!(body["options"]["temperature"], 0.0);
-        assert_eq!(body["options"]["num_predict"], 8192);
+        assert_eq!(body["options"]["num_predict"], 32768);
         assert_eq!(body["think"], false);
         assert!(
             body["options"].get("options").is_none(),
             "Ollama options must not be nested twice"
         );
         assert!(parse("--model mock --context-tokens 4096", &no_env).is_err());
+    }
+
+    #[tokio::test]
+    async fn ollama_rejects_output_reserve_larger_than_effective_context() {
+        let (url, _) = mock_server(vec![
+            serde_json::json!({"capabilities":["tools"],"model_info":{"mock.context_length":32768}}).to_string(),
+        ]);
+        let Command::Run(mut options) = parse(
+            &format!("--model mock --url {url} --context-tokens 131072"),
+            &no_env,
+        )
+        .unwrap() else {
+            panic!()
+        };
+        options.output_tokens = 32768;
+        assert!(
+            runtime::preflight(&mut options)
+                .await
+                .unwrap_err()
+                .contains("output token limit")
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires AURIS_AGENT_OLLAMA_MODEL and local Ollama"]
+    async fn local_ollama_accepts_model_capped_context() {
+        let model = std::env::var("AURIS_AGENT_OLLAMA_MODEL").expect("set a local model name");
+        let Command::Run(mut options) =
+            parse(&format!("--model {model} --context-tokens 131072"), &no_env).unwrap()
+        else {
+            panic!()
+        };
+        options.output_tokens = 128;
+        runtime::preflight(&mut options).await.unwrap();
+        let agent = build_with(&options, |builder| {
+            builder.preamble("Reply briefly.").build()
+        })
+        .unwrap();
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(90),
+            agent.prompt("Say ready."),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!response.output().trim().is_empty());
+        println!(
+            "Effective context: {}; response: {}",
+            options.context_tokens,
+            response.output()
+        );
     }
 
     #[tokio::test]

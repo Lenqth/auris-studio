@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-/// Confirms that the selected Ollama model supports tools and the requested context.
-pub(super) async fn preflight(options: &Options) -> Result<bool, String> {
+/// Resolves the usable Ollama context before constructing the request and its budget guard.
+pub(super) async fn preflight(options: &mut Options) -> Result<bool, String> {
     if options.provider != Provider::Ollama {
         return Ok(true);
     }
@@ -39,13 +39,36 @@ pub(super) async fn preflight(options: &Options) -> Result<bool, String> {
         .json()
         .await
         .map_err(|e| e.to_string())?;
-    validate_model(&shown, options.context_tokens)?;
+    let context = validate_model(&shown, options.context_tokens)?;
+    if options.output_tokens >= context {
+        return Err(format!(
+            "Output token limit {} must be smaller than this model's effective context {context}; lower the Agent Panel output token limit",
+            options.output_tokens
+        ));
+    }
+    options.context_tokens = context;
     Ok(shown["capabilities"]
         .as_array()
         .is_some_and(|caps| caps.iter().any(|cap| cap == "vision")))
 }
 
-fn validate_model(shown: &serde_json::Value, context: u32) -> Result<(), String> {
+/// Prefer the language architecture's ceiling over auxiliary audio/vision metadata.
+pub(super) fn model_context_limit(shown: &serde_json::Value) -> Option<u64> {
+    let info = shown.get("model_info")?.as_object()?;
+    if let Some(architecture) = info.get("general.architecture").and_then(|v| v.as_str())
+        && let Some(maximum) = info
+            .get(&format!("{architecture}.context_length"))
+            .and_then(|v| v.as_u64())
+    {
+        return Some(maximum);
+    }
+    info.iter()
+        .filter(|(key, _)| key.ends_with(".context_length"))
+        .filter_map(|(_, value)| value.as_u64())
+        .min()
+}
+
+fn validate_model(shown: &serde_json::Value, context: u32) -> Result<u32, String> {
     if shown
         .get("capabilities")
         .and_then(|v| v.as_array())
@@ -56,18 +79,14 @@ fn validate_model(shown: &serde_json::Value, context: u32) -> Result<(), String>
                 .into(),
         );
     }
-    let maximum = shown
-        .get("model_info")
-        .and_then(|v| v.as_object())
-        .and_then(|v| v.iter().find(|(key, _)| key.ends_with(".context_length")))
-        .and_then(|(_, v)| v.as_u64());
-    if maximum.is_some_and(|max| u64::from(context) > max) {
+    let context = model_context_limit(shown)
+        .map_or(context, |maximum| u64::from(context).min(maximum) as u32);
+    if context < 16384 {
         return Err(format!(
-            "requested context {context} exceeds this model's maximum {}; lower --context-tokens or choose a larger-context model",
-            maximum.unwrap()
+            "this model's effective context is {context} tokens; Auris tools need at least 16384. Choose a larger-context model"
         ));
     }
-    Ok(())
+    Ok(context)
 }
 
 #[derive(Default)]
@@ -705,11 +724,19 @@ mod tests {
     #[test]
     fn context_and_tools_are_validated_before_chat() {
         let model = serde_json::json!({"capabilities":["tools"],"model_info":{"arch.context_length":65536}});
-        assert!(validate_model(&model, 32768).is_ok());
+        assert_eq!(validate_model(&model, 32768).unwrap(), 32768);
+        assert_eq!(validate_model(&model, 131072).unwrap(), 65536);
         assert!(
-            validate_model(&model, 131072)
-                .unwrap_err()
-                .contains("maximum")
+            validate_model(
+                &serde_json::json!({"model_info":{"arch.context_length":8192}}),
+                32768
+            )
+            .unwrap_err()
+            .contains("16384")
+        );
+        assert_eq!(
+            validate_model(&serde_json::json!({}), 32768).unwrap(),
+            32768
         );
         assert!(
             validate_model(&serde_json::json!({"capabilities":["completion"]}), 32768).is_err()
@@ -718,6 +745,15 @@ mod tests {
             signature("edit", r#"{"b":2,"a":1}"#),
             signature("edit", r#"{ "a": 1, "b": 2 }"#)
         );
+    }
+
+    #[test]
+    fn multimodal_context_uses_the_language_architecture() {
+        let model = serde_json::json!({"model_info":{
+            "general.architecture":"lfm3", "audio.context_length":2048,
+            "lfm3.context_length":128000
+        }});
+        assert_eq!(validate_model(&model, 131072).unwrap(), 128000);
     }
 
     #[test]

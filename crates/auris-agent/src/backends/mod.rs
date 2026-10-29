@@ -106,12 +106,12 @@ impl Backend {
             Self::Codex(prefs) => {
                 codex::run(&prefs, bridge, history_path, fresh, history, cancelled).await
             }
-            Self::Rig(options) => tokio::select! {
+            Self::Rig(mut options) => tokio::select! {
                 biased;
                 _ = cancelled => Ok(()),
                 result = async {
+                    let vision = runtime::preflight(&mut options).await?;
                     let agent = build_for_worker(&options, Some(bridge.clone()))?;
-                    let vision = runtime::preflight(&options).await?;
                     bridge.set_vision(vision);
                     json_conversation(&agent, &options, bridge, history_path, fresh, history).await
                 } => result,
