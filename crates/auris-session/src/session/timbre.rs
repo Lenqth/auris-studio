@@ -92,9 +92,82 @@ pub struct TimbreMap {
     summaries: Vec<TimbreCluster>,
     previews: Vec<Arc<AudioBuffer>>,
     sample_rate: f64,
+    registry: Arc<PluginRegistry>,
+}
+
+/// A single mapped note rendered from the scan's immutable library snapshot on a worker.
+pub struct TimbrePreviewJob {
+    registry: Arc<PluginRegistry>,
+    sound: TimbreSound,
+    pitch: u8,
+    sample_rate: f64,
+    cached: Option<Arc<AudioBuffer>>,
+}
+
+impl TimbrePreviewJob {
+    /// Renders the instrument's actual note, with the map's hold, release and level matching.
+    pub fn run(self, control: &TimbreMapControl) -> Result<Arc<AudioBuffer>, SessionError> {
+        control.check()?;
+        if let Some(cached) = self.cached {
+            return Ok(cached);
+        }
+        let mut instrument = self.registry.create_instrument(&self.sound.instrument_id)?;
+        let mut state = PluginState::default();
+        if let Some(preset) = self.sound.preset {
+            auris_sampler::store_preset(&mut state, preset);
+        }
+        instrument.load_state(&state);
+        instrument.prepare(&PrepareContext::new(self.sample_rate, BLOCK, 2));
+        let mut audio = render_reference(
+            instrument.as_mut(),
+            self.sample_rate,
+            self.pitch,
+            0.85,
+            control,
+        )?;
+        audio.sanitize();
+        if audio.peak() <= 1e-8 {
+            return Err(failure("the selected sound is silent at this pitch"));
+        }
+        level_match(&mut audio);
+        Ok(Arc::new(audio))
+    }
 }
 
 impl Session {
+    /// Prepares a mapped note for independent output audition, without requiring a track.
+    ///
+    /// Run the job on a worker, then pass its buffer to [`Self::play_output_preview`].
+    /// Middle C reuses the measured reference; other pitches trigger fresh instruments rather
+    /// than pitch-shifting the reference. The scan's SoundFonts remain alive for the job.
+    pub fn timbre_preview_job(
+        &self,
+        map: &TimbreMap,
+        index: usize,
+        pitch: u8,
+    ) -> Result<TimbrePreviewJob, SessionError> {
+        if self.is_recording() {
+            return Err(SessionError::RecordingInProgress);
+        }
+        if pitch > 127 {
+            return Err(failure("preview pitch must be a MIDI note from 0 to 127"));
+        }
+        if map.sample_rate != self.sample_rate() {
+            return Err(failure("the audio rate changed; rescan the library"));
+        }
+        let sound = map
+            .sounds
+            .get(index)
+            .ok_or_else(|| failure("unknown mapped sound"))?;
+        Ok(TimbrePreviewJob {
+            registry: Arc::clone(&map.registry),
+            sound: sound.clone(),
+            pitch,
+            sample_rate: map.sample_rate,
+            cached: map.previews.get(index).filter(|_| pitch == 60).cloned(),
+        })
+    }
+
     /// Persistent identity for a library correction. Font IDs are document-local, so fonts use
     /// their resolved path and exact bank/patch instead. This performs no filesystem access.
     pub fn library_sound_key(
@@ -291,6 +364,7 @@ impl TimbreMapJob {
             summaries,
             previews,
             sample_rate: self.sample_rate,
+            registry: self.registry,
         })
     }
 }
@@ -611,6 +685,7 @@ mod tests {
             summaries,
             previews: vec![],
             sample_rate: 48_000.,
+            registry: crate::default_registry(auris_sampler::SoundFontBank::shared()),
         };
         assert_eq!(map.cluster_for("builtin", None), Some(2));
         assert_eq!(
@@ -675,6 +750,74 @@ mod tests {
         assert_eq!(session.undo(), Some(Edit::ChangeInstrument));
         assert_eq!(session.project(), &before);
         assert!(!session.can_undo(), "adoption is one edit");
+    }
+
+    #[test]
+    fn mapped_notes_preview_without_tracks_and_preserve_the_document() {
+        let mut session = Session::new(SessionOptions::headless()).unwrap();
+        let tracks: Vec<_> = session
+            .project()
+            .tracks
+            .iter()
+            .map(|track| track.id)
+            .collect();
+        for track in tracks {
+            session.remove_track(track).unwrap();
+        }
+        session.forget_history();
+        assert!(session.audition_track(None).is_none());
+        let before = session.project().clone();
+        let revision = session.revision();
+        let map = session
+            .timbre_map_job()
+            .unwrap()
+            .run(&TimbreMapControl::default())
+            .unwrap();
+        let index = map
+            .sounds
+            .iter()
+            // A periodic oscillator makes zero crossings useful; the physical piano has
+            // inharmonic partials whose crossings do not measure its fundamental pitch.
+            .position(|s| s.instrument_id == "auris.synth.chiptune")
+            .unwrap();
+        let middle = session
+            .timbre_preview_job(&map, index, 60)
+            .unwrap()
+            .run(&TimbreMapControl::default())
+            .unwrap();
+        assert!(Arc::ptr_eq(&middle, &map.previews[index]));
+        let upper = session
+            .timbre_preview_job(&map, index, 72)
+            .unwrap()
+            .run(&TimbreMapControl::default())
+            .unwrap();
+        let crossings = |audio: &AudioBuffer| {
+            let start = (audio.sample_rate() * 0.1) as usize;
+            let end = (audio.sample_rate() * 0.5) as usize;
+            audio.channel(0)[start..end]
+                .windows(2)
+                .filter(|s| s[0] <= 0. && s[1] > 0.)
+                .count() as f64
+        };
+        let ratio = crossings(&upper) / crossings(&middle);
+        assert!((ratio - 2.).abs() < 0.04, "octave frequency ratio: {ratio}");
+        assert!(upper.peak() > 0.01 && upper.peak() <= 0.801);
+        assert_eq!(upper.frame_count(), middle.frame_count());
+        session.play_output_preview(upper).unwrap();
+        assert_eq!(session.project(), &before);
+        assert_eq!(session.revision(), revision);
+        assert!(!session.can_undo());
+        let cancelled = TimbreMapControl::default();
+        cancelled.cancel();
+        assert!(
+            session
+                .timbre_preview_job(&map, index, 61)
+                .unwrap()
+                .run(&cancelled)
+                .is_err()
+        );
+        assert!(session.timbre_preview_job(&map, usize::MAX, 60).is_err());
+        assert!(session.timbre_preview_job(&map, index, 128).is_err());
     }
 
     #[test]
@@ -758,6 +901,20 @@ mod tests {
             map.sounds
                 .iter()
                 .any(|s| s.preset.is_some_and(|p| p.font == font))
+        );
+        let index = map
+            .sounds
+            .iter()
+            .position(|s| s.preset.is_some_and(|p| p.font == font))
+            .unwrap();
+        let preview = session
+            .timbre_preview_job(&map, index, 67)
+            .unwrap()
+            .run(&TimbreMapControl::default())
+            .unwrap();
+        assert!(
+            preview.peak() > 0.01,
+            "the keyboard uses the retained SoundFont preset"
         );
     }
 }
