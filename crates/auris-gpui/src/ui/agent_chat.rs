@@ -5670,6 +5670,8 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
+            // Other tests can save model preferences into this process's shared fixture.
+            this.settings.agent.model = "initial-model".into();
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.models_loaded = true;

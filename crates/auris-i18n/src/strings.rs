@@ -49,7 +49,6 @@ strings! {
     WorkshopContinue { en: "Continue with this song", ja: "この曲で続ける" }
     WorkshopSelected { en: "Current song", ja: "制作中の曲" }
     WorkshopOpenEditor { en: "Open editor", ja: "エディタで開く" }
-    WorkshopOpenEditorHint { en: "Continue with a song to open it", ja: "曲を選ぶと開けます" }
     WorkshopGenerating { en: "Generating", ja: "生成中" }
     WorkshopMemory { en: "Use my preferences", ja: "好みを記録・活用" }
     WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
