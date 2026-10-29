@@ -11,6 +11,7 @@ impl AurisApp {
         let Some(audio) = state.audition(index) else {
             return;
         };
+        let timeline = state.latest_timeline(index);
         for player in &mut state.players {
             player.stop();
         }
@@ -42,6 +43,7 @@ impl AurisApp {
                 }) {
                     Ok(status) => {
                         state.played_audio[index] = Some(source);
+                        state.played_timeline[index] = timeline;
                         state.players[index].start(status);
                     }
                     Err(error) => state.error = Some(error.to_string()),

@@ -1827,6 +1827,13 @@ pub mod composition {
     //! cancellation and device loss remain terminal; replay queues a fresh request. Both desktop
     //! preview surfaces compose the same player with keyboard-operable seek and volume sliders.
     //!
+    //! Workshop auditions retain an [`AuditionTimeline`](crate::AuditionTimeline) with each
+    //! immutable buffer. Workers measure bounded absolute peaks across all channels; section
+    //! times come from the captured score's tempo map. The frontend draws Atelier's `PeakBars`
+    //! under proportional section buttons and keeps the timeline of the audio actually chosen
+    //! while newer drafts arrive. Seeking a section or the waveform changes only the audition
+    //! clock. Unnamed score gaps and rendered effect tails stay unnamed.
+    //!
     //! # Two stages
     //!
     //! **The frame is planned first and then frozen.** Harmony, form, shared phrase boundaries

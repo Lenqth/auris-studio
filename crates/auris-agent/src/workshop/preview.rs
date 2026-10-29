@@ -15,7 +15,7 @@ use std::{
 };
 
 pub(super) struct Renderer {
-    sender: Option<mpsc::SyncSender<(u64, RenderJob)>>,
+    sender: Option<mpsc::SyncSender<(u64, RenderJob, Vec<auris_session::AuditionSection>)>>,
     stopped: Arc<AtomicBool>,
     busy: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
@@ -24,7 +24,8 @@ pub(super) struct Renderer {
 
 impl Renderer {
     pub(super) fn start(id: u64, events: mpsc::Sender<JobEvent>) -> Result<Self, String> {
-        let (sender, receiver) = mpsc::sync_channel::<(u64, RenderJob)>(1);
+        let (sender, receiver) =
+            mpsc::sync_channel::<(u64, RenderJob, Vec<auris_session::AuditionSection>)>(1);
         let stopped = Arc::new(AtomicBool::new(false));
         let cancel = Arc::clone(&stopped);
         let busy = Arc::new(AtomicBool::new(false));
@@ -32,7 +33,7 @@ impl Renderer {
         let handle = std::thread::Builder::new()
             .name(format!("auris-draft-audio-{id}"))
             .spawn(move || {
-                while let Ok((revision, mut job)) = receiver.recv() {
+                while let Ok((revision, mut job, sections)) = receiver.recv() {
                     let Ok(_gate) = audio_gate(&cancel) else {
                         break;
                     };
@@ -60,6 +61,11 @@ impl Renderer {
                                 id,
                                 Ok(Preview {
                                     revision,
+                                    timeline: Arc::new(
+                                        auris_session::AuditionTimeline::from_audio(
+                                            &audio, sections,
+                                        ),
+                                    ),
                                     audio: Arc::new(audio),
                                 }),
                             ));
@@ -99,7 +105,11 @@ impl Renderer {
         self.busy.store(true, Ordering::Release);
         if self.sender.as_ref().is_some_and(|sender| {
             sender
-                .try_send((revision, session.render_job_at(Some(22_050.0))))
+                .try_send((
+                    revision,
+                    session.render_job_at(Some(22_050.0)),
+                    session.audition_sections(),
+                ))
                 .is_ok()
         }) {
             self.captured = Some((revision, Instant::now()));
@@ -139,6 +149,7 @@ mod tests {
     #[test]
     fn audition_captures_the_unfinished_score_without_editing_or_waiting_for_completion() {
         let mut session = score();
+        session.set_section(Ticks::ZERO, Some("Intro".into()));
         let project = session.project().clone();
         let revision = session.revision();
         let (sender, events) = mpsc::channel();
@@ -146,6 +157,7 @@ mod tests {
         renderer.capture(&mut session);
         // Subsequent edits must not mutate the captured audio or its revision.
         session.set_tempo_at(Ticks::ZERO, 80.0);
+        session.set_section(Ticks::ZERO, Some("Chorus".into()));
         let JobEvent::Preview(id, result) = events.recv_timeout(Duration::from_secs(20)).unwrap()
         else {
             panic!("preview expected")
@@ -153,6 +165,12 @@ mod tests {
         let preview = result.unwrap();
         assert_eq!(id, 7);
         assert_eq!(preview.revision, revision);
+        assert_eq!(preview.timeline.sections[0].label, "Intro");
+        assert_eq!(preview.timeline.peaks.len(), 256);
+        assert_eq!(
+            preview.timeline.duration_seconds,
+            preview.audio.duration_seconds()
+        );
         assert!(preview.audio.peak() > 0.001);
         assert!((preview.audio.duration_seconds() - project.duration_seconds()).abs() < 0.01);
         assert_eq!(session.project().tracks, project.tracks);
