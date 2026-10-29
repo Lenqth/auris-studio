@@ -418,6 +418,48 @@ impl AurisApp {
                 .unwrap_or_default()
         };
         let mut sound_rows = self.singer_rows(track_id, cx);
+        if is_singer || instrument_id.is_some() {
+            let preset = self.session.track_preset(track_id);
+            let patch = preset.map(|preset| preset.patch);
+            let artwork = sound_artwork(
+                instrument_id.as_deref().unwrap_or(""),
+                patch,
+                is_drum
+                    || self
+                        .session
+                        .track_preset(track_id)
+                        .is_some_and(|preset| preset.bank == 128),
+                is_singer,
+            );
+            sound_rows.insert(
+                0,
+                div()
+                    .debug_selector(|| "inspector-sound-artwork".into())
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_2()
+                    .py_3()
+                    .w_full()
+                    .bg(theme.surface_raised)
+                    .rounded(crate::theme::Metrics::RADIUS_SM)
+                    .child(
+                        gpui::svg()
+                            .path(artwork)
+                            .w(gpui::px(150.0))
+                            .h(gpui::px(140.0))
+                            .text_color(theme.accent),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.text)
+                            .text_center()
+                            .child(sound_summary.clone()),
+                    )
+                    .into_any_element(),
+            );
+        }
 
         if let Some(instrument_id) = instrument_id {
             let name = self.instrument_label(track_id, &instrument_id);
@@ -1148,6 +1190,40 @@ impl AurisApp {
     }
 }
 
+/// Presentation artwork follows the selected sound, including General MIDI families.
+fn sound_artwork(id: &str, patch: Option<i32>, drum: bool, singer: bool) -> &'static str {
+    if singer {
+        return "sounds/voice.svg";
+    }
+    if drum {
+        return "sounds/drums.svg";
+    }
+    if let Some(patch) = patch {
+        return match patch {
+            0..=7 | 16..=23 => "sounds/keys.svg",
+            8..=15 => "sounds/mallet.svg",
+            24..=55 => "sounds/strings.svg",
+            56..=79 => "sounds/wind.svg",
+            112..=119 => "sounds/drums.svg",
+            _ => "sounds/synth.svg",
+        };
+    }
+    match id {
+        "auris.physical.piano" => "sounds/keys.svg",
+        "auris.physical.guitar"
+        | "auris.physical.electric_guitar"
+        | "auris.physical.bass"
+        | "auris.physical.violin" => "sounds/strings.svg",
+        "auris.physical.clarinet" | "auris.physical.tin_whistle" => "sounds/wind.svg",
+        "auris.physical.mallet" | "auris.physical.hammered_dulcimer" => "sounds/mallet.svg",
+        "auris.physical.bell" => "sounds/bell.svg",
+        "auris.synth.drumkit" | "auris.synth.noisedrum" => "sounds/drums.svg",
+        "auris.synth.vocal" | "auris.physical.choir" => "sounds/voice.svg",
+        "auris.synth.chiptune" | "auris.synth.fm2" => "sounds/synth.svg",
+        _ => "sounds/wave.svg",
+    }
+}
+
 /// A plugin's display name, translated where the term is known.
 pub(crate) fn audio_name(app: &AurisApp, english: &str) -> String {
     auris_i18n::audio::plugin_name(english, app.language()).to_string()
@@ -1361,6 +1437,35 @@ mod tests {
         assert!(cx.debug_bounds("inspector-selected-track").is_some());
         assert!(
             cx.debug_bounds("inspector-selection").unwrap().size.height < selection.size.height
+        );
+    }
+
+    #[test]
+    fn sound_artwork_tracks_midi_families_and_track_roles() {
+        assert_eq!(
+            sound_artwork("auris.sampler", Some(0), false, false),
+            "sounds/keys.svg"
+        );
+        assert_eq!(
+            sound_artwork("auris.sampler", Some(40), false, false),
+            "sounds/strings.svg"
+        );
+        assert_eq!(
+            sound_artwork("auris.sampler", Some(65), false, false),
+            "sounds/wind.svg"
+        );
+        assert_eq!(
+            sound_artwork("auris.sampler", Some(0), true, false),
+            "sounds/drums.svg"
+        );
+        assert_eq!(sound_artwork("", None, false, true), "sounds/voice.svg");
+        assert_eq!(
+            sound_artwork("auris.synth.fm2", None, false, false),
+            "sounds/synth.svg"
+        );
+        assert_eq!(
+            sound_artwork("third.party", None, false, false),
+            "sounds/wave.svg"
         );
     }
 
