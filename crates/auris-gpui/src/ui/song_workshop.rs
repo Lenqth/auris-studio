@@ -1570,7 +1570,13 @@ mod tests {
         make_ready(&app, cx);
         resize(&app, cx, gpui::size(gpui::px(1200.), gpui::px(1000.)));
         let before = app.read_with(cx, |this, _| this.project().clone());
-        click("agent-midi-new", cx);
+        click("music-reference-menu", cx);
+        paint(&app, cx);
+        crate::harness::choose(
+            &app,
+            cx,
+            &crate::ui::context_menu::MenuCommand::ComposerMelody(false),
+        );
         paint(&app, cx);
         click("agent-midi-add", cx);
         paint(&app, cx);
@@ -1588,7 +1594,13 @@ mod tests {
             );
         });
         paint(&app, cx);
-        click("agent-chords", cx);
+        click("music-reference-menu", cx);
+        paint(&app, cx);
+        crate::harness::choose(
+            &app,
+            cx,
+            &crate::ui::context_menu::MenuCommand::ComposerChords,
+        );
         paint(&app, cx);
         cx.simulate_input("| C | G | Am | F |");
         cx.simulate_keystrokes("enter");
@@ -1633,7 +1645,13 @@ mod tests {
         });
         make_ready(&app, cx);
         paint(&app, cx);
-        click("agent-sound", cx);
+        click("music-reference-menu", cx);
+        paint(&app, cx);
+        crate::harness::choose(
+            &app,
+            cx,
+            &crate::ui::context_menu::MenuCommand::ComposerSound,
+        );
         paint(&app, cx);
         let handle = app.read_with(cx, |this, _| {
             this.auxiliary_windows[&crate::auxiliary_window::Surface::TimbreMap]

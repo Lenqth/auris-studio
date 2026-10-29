@@ -2357,6 +2357,7 @@ new のオプション
     AgentSoundAttach { en: "Attach to conversation", ja: "会話に添付" }
     AgentMusicUnavailable { en: "Wait for the conversation to finish switching or sending, then attach again.", ja: "会話の切り替え・送信準備が終わってから、もう一度添付してください。" }
     AgentMidiNew { en: "Write melody…", ja: "メロディを書く…" }
+    AgentMusicReferences { en: "Music references", ja: "音楽の参照" }
     AgentMidiClip { en: "Attach selected clip…", ja: "選択クリップを添付…" }
     AgentMidiFile { en: "Attach MIDI…", ja: "MIDIを添付…" }
     AgentMidiMelody { en: "Melody", ja: "メロディ" }

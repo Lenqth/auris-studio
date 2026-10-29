@@ -20,6 +20,14 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// Opens a reference score draft, optionally from the selected MIDI clip.
+    ComposerMelody(bool),
+    /// Attaches a MIDI file to the current conversation.
+    ComposerMidi,
+    /// Opens the chord reference prompt for the current conversation.
+    ComposerChords,
+    /// Opens the sound map to attach an instrument choice.
+    ComposerSound,
     /// Selects a model for the new-song draft.
     WorkshopModel(usize),
     /// Refreshes the new-song model catalogue.
@@ -1173,6 +1181,14 @@ impl AurisApp {
             }
             MenuCommand::WorkshopModel(index) => self.choose_workshop_model(index),
             MenuCommand::WorkshopRefreshModels => self.refresh_workshop_models(),
+            MenuCommand::ComposerMelody(selection) => self.start_midi_draft(selection),
+            MenuCommand::ComposerMidi => self.choose_midi_attachment(cx),
+            MenuCommand::ComposerChords => self.open_agent_chords(),
+            MenuCommand::ComposerSound => {
+                if self.can_attach_agent_music() {
+                    self.timbre_map.open = true;
+                }
+            }
             MenuCommand::SongSinger(path) => {
                 if let Some(dials) = self.song_sheet.as_mut() {
                     if dials.singer != path {
