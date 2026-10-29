@@ -70,7 +70,7 @@ impl SongWorkshop {
                 .as_ref()
                 .is_none_or(|s| s.planning || !s.progress.is_empty())
     }
-    fn send(&self, command: Command) -> bool {
+    pub(crate) fn send(&self, command: Command) -> bool {
         self.runtime
             .as_ref()
             .is_some_and(|runtime| runtime.send(command))

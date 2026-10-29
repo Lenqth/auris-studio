@@ -54,6 +54,10 @@
 //! The frontend owns presentation, provider selection, audition and explicit editor handoff.
 //! Local cross-project preference evidence records contextual choices. It is optional, inspectable
 //! and clearable, and does not infer dislike from nonselection or override explicit instructions.
+//! The desktop's personalization settings show the complete preference history, allow corrections to a
+//! request or chosen alternative, and support individual removal or a confirmed history reset.
+//! Corrections compare the original observation under the storage lock, so concurrent selection,
+//! deletion or reset cannot be silently overwritten. Preference I/O runs on a background executor.
 //! Direction planning, lyric generation and composer workers share the agent's musical-design
 //! principles. The conversational composer extends the resolved live-agent prompt with its
 //! isolated-session contract: expressive note authoring, purposeful arrangement, a mixer pass
