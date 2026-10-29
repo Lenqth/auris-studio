@@ -4073,6 +4073,22 @@ impl AurisApp {
             }
             _ => div().child(text).into_any_element(),
         };
+        let body = if let ChatEntry::Tool { name, .. } = entry {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .min_w_0()
+                .child(icon(
+                    super::icons::tool_icon(name),
+                    theme.atelier.typography.size_sm,
+                    colour,
+                ))
+                .child(div().flex_1().min_w_0().child(body))
+                .into_any_element()
+        } else {
+            body
+        };
         div()
             .id(("agent-line", index))
             .debug_selector(move || format!("agent-line-{index}"))
@@ -5670,8 +5686,7 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
-            // Other tests can save model preferences into this process's shared fixture.
-            this.settings.agent.model = "initial-model".into();
+            this.settings.agent = Default::default();
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.models_loaded = true;

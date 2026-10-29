@@ -121,7 +121,7 @@ pub use auris_engine::{OutputPreviewOptions, OutputPreviewStatus};
 pub use auris_io::IoError;
 pub use error::SessionError;
 mod audition;
-pub use audition::{AuditionSection, AuditionTimeline};
+pub use audition::{AuditionNote, AuditionSection, AuditionTimeline, AuditionTrack};
 pub use history::{Edit, History};
 pub use library::{
     DICTIONARY_DIR_VAR, DICTIONARY_FOLDER, GENERAL_MIDI, JAPANESE_DICTIONARY, LIBRARY_DIR_VAR,

@@ -3,12 +3,14 @@ use super::*;
 use crate::ui::chat_commands::{self, CompletionKey, Scope};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
-    pub(crate) fn workshop_chord_prompt(&self) -> bool {
+    pub(crate) fn workshop_prompt_open(&self) -> bool {
         self.song_workshop.is_some()
             && self.prompt.as_ref().is_some_and(|p| {
                 matches!(
                     p.target(),
                     Some(crate::ui::prompt::PromptTarget::AgentChordReference { .. })
+                        | Some(crate::ui::prompt::PromptTarget::WorkshopFeedback { .. })
+                        | Some(crate::ui::prompt::PromptTarget::WorkshopThreadName { .. })
                 )
             })
     }
@@ -300,7 +302,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.workshop_chord_prompt() {
+        if self.workshop_prompt_open() {
             if self.prompt_key(event, window, cx) {
                 cx.stop_propagation();
                 cx.notify();
@@ -352,7 +354,7 @@ impl AurisApp {
         if let Some(s) = &mut self.song_workshop
             && s.foci[0].is_focused(window)
         {
-            if s.submitted || s.brief.marked().is_some() {
+            if s.submitted || s.switching || s.brief.marked().is_some() {
                 return;
             }
             let matches = s
