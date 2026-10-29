@@ -108,6 +108,8 @@ pub use auris_core::CoreError;
 pub use auris_core::motion::{MotionFrame, MotionGeometry, MotionVoice};
 /// PCM-derived drum measurements, exposed without a frontend DSP dependency.
 pub use auris_dsp::drum_analysis::{AcousticCharacter, DrumAcoustics, DrumSpectrum};
+/// Upper bound on populated groups in a refined library timbre map.
+pub use auris_dsp::timbre::MAX_TIMBRE_CLUSTERS;
 /// Workspace-owned engine error variants exposed for frontend localisation.
 pub use auris_engine::EngineError;
 /// Completion status and cancellation of a queued or playing output audition.
@@ -166,7 +168,7 @@ pub use session::{
     SongCandidate, SongIdea, SongRequest, SongSinger, SongSinging, SongSourceChoice,
 };
 pub use session::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
-pub use session::{TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
+pub use session::{TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
 pub use session::{TrackConversion, TrackConversionJob};
 pub use settings::{
     AgentEndpoint, AgentPreferences, AudioPreferences, CONFIG_DIR_VAR, ExportPreferences,

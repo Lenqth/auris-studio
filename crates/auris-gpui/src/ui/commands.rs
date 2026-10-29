@@ -1002,7 +1002,7 @@ impl AurisApp {
         self.spectrogram_tracks.clear();
         self.music_analysis.clear();
         self.close_timbre_map();
-        self.timbre_map.map = None;
+        self.timbre_map.clear();
         self.spectrograms.clear();
         self.cancel_auto_sing();
         self.invalidate_sung_previews();

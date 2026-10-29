@@ -980,7 +980,11 @@ impl Theme {
             markdown.colors.primary_foreground = self.text_on_accent;
             markdown.colors.ring = self.selection;
         }
-        self.atelier.clone().install(cx);
+        if cx.has_global::<atelier::Theme>() {
+            self.atelier.clone().install(cx);
+        } else {
+            atelier::init(cx, self.atelier.clone());
+        }
     }
 
     fn apply_glass_surfaces(&mut self) {
