@@ -127,7 +127,8 @@ fn open_surface(app: WeakEntity<AurisApp>, surface: Surface, cx: &mut App) {
         }
     };
     let bounds = Bounds::centered(None, dimensions, cx);
-    let opened = cx.open_window(
+    let opened = crate::native_window::open(
+        cx,
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             window_min_size: Some(match surface {

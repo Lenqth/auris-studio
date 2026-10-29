@@ -145,7 +145,8 @@ impl AurisApp {
         let app = cx.entity();
         let weak = app.downgrade();
         let bounds = Bounds::centered(None, size(px(760.0), px(460.0)), cx);
-        let opened = cx.open_window(
+        let opened = crate::native_window::open(
+            cx,
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(480.0), px(260.0))),

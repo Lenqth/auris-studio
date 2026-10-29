@@ -3507,7 +3507,8 @@ impl AurisApp {
 
         // Wide enough for the navigation column and a page beside it at its reading width.
         let bounds = Bounds::centered(None, size(px(820.), px(640.)), cx);
-        let opened = cx.open_window(
+        let opened = crate::native_window::open(
+            cx,
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(480.0), px(360.0))),

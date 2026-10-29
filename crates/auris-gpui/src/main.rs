@@ -25,6 +25,7 @@ mod i18n;
 mod keymap;
 mod logbook;
 mod menu;
+mod native_window;
 mod project_windows;
 mod settings_window;
 mod setup_guide;

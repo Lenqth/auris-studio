@@ -1618,7 +1618,8 @@ impl AurisApp {
         let theme = self.theme.clone();
         let language = self.language();
         let bounds = Bounds::centered(None, size(px(820.0), px(660.0)), cx);
-        let opened: Result<WindowHandle<VoiceSetupWindow>, _> = cx.open_window(
+        let opened: Result<WindowHandle<VoiceSetupWindow>, _> = crate::native_window::open(
+            cx,
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(480.0), px(360.0))),
