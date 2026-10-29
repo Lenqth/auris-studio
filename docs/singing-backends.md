@@ -8,6 +8,18 @@ depend on a concrete model layout. This keeps model
 discovery, caching, speaker selection, previewing, take rendering, and WAV output identical across
 backends.
 
+## Setup guide
+
+The project chooser's **Setup Guide → Singing Voices** provides download and
+preparation links for VOICEVOX Engine, DiffSinger voicebanks and LeapSinger models,
+alongside the corresponding setup windows. Download and extract the files first,
+then register the connection or voice in Auris. VOICEVOX updates come from the Engine
+releases; stop the old Engine before starting a replacement. DiffSinger and LeapSinger
+updates come from each model's publisher. Keep matching acoustic models, dictionaries
+and vocoders together, follow the voice's usage terms, and test the replacement before
+using it in a project. The LeapSinger preparation commands below produce the manifest
+that its setup window opens.
+
 ## DiffSinger voicebanks
 
 Choose the voicebank's `dsconfig.yaml`. The backend reads the OpenUtau deployment fields

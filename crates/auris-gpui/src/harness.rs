@@ -226,6 +226,25 @@ pub(crate) fn drag(cx: &mut VisualTestContext, from: Point<Pixels>, to: Point<Pi
     release(cx, to);
 }
 
+/// Select a whole text block by dragging, repainting as its selection state changes.
+pub(crate) fn select_text(
+    app: &Entity<AurisApp>,
+    cx: &mut VisualTestContext,
+    selector: &'static str,
+) {
+    let bounds = cx
+        .debug_bounds(selector)
+        .expect("selectable text is visible");
+    let from = bounds.origin + point(px(0.5), px(0.5));
+    let to = bounds.bottom_right() - point(px(0.5), px(0.5));
+    press(cx, from);
+    paint(app, cx);
+    drag_to(cx, to);
+    paint(app, cx);
+    release(cx, to);
+    paint(app, cx);
+}
+
 /// Puts the left button down at `at`, and leaves it down.
 pub(crate) fn press(cx: &mut VisualTestContext, at: Point<Pixels>) {
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());

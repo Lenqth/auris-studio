@@ -122,26 +122,30 @@ impl AurisApp {
                                 cx.notify();
                             }),
                         )
+                        .debug_selector(move || format!("song-draft-attachment-{index}"))
                         .flex_1()
                         .flex_shrink(),
                     )
-                    .child(crate::ui::widgets::button_enabled(
-                        ("workshop-reference-remove", index),
-                        self.t(Key::MenuRemove),
-                        crate::ui::widgets::ButtonStyle::Ghost,
-                        crate::ui::widgets::ButtonState::available(false, !busy),
-                        theme.accent,
-                        &theme,
-                        cx.listener(move |this, _, _, cx| {
-                            if let Some(s) = &mut this.song_workshop
-                                && index < s.references.attachments.len()
-                            {
-                                let removed = s.references.attachments.remove(index);
-                                this.cancel_midi_for_attachment(&removed);
-                            }
-                            cx.notify();
-                        }),
-                    ))
+                    .child(
+                        crate::ui::widgets::button_enabled(
+                            ("workshop-reference-remove", index),
+                            self.t(Key::MenuRemove),
+                            crate::ui::widgets::ButtonStyle::Ghost,
+                            crate::ui::widgets::ButtonState::available(false, !busy),
+                            theme.accent,
+                            &theme,
+                            cx.listener(move |this, _, _, cx| {
+                                if let Some(s) = &mut this.song_workshop
+                                    && index < s.references.attachments.len()
+                                {
+                                    let removed = s.references.attachments.remove(index);
+                                    this.cancel_midi_for_attachment(&removed);
+                                }
+                                cx.notify();
+                            }),
+                        )
+                        .debug_selector(move || format!("song-remove-attachment-{index}")),
+                    )
             }),
         ))
         .when(self.music_references().midi_draft.is_some(), |body| {
@@ -153,6 +157,15 @@ impl AurisApp {
         .child(self.workshop_field(0, Key::WorkshopBriefHint, true, cx))
         .child(
             agent_components::composer_controls("workshop-composer-controls", &theme)
+                .child(
+                    atelier::Button::icon_only("song-attach-files", atelier::IconName::Paperclip)
+                        .ghost()
+                        .tooltip(self.t(Key::AttachFiles))
+                        .disabled(busy)
+                        .on_click(
+                            cx.listener(|this, _, _, cx| this.pick_conversation_files(true, cx)),
+                        ),
+                )
                 .child(
                     div()
                         .debug_selector(|| "workshop-model".into())

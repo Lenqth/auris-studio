@@ -1150,6 +1150,7 @@ pub(crate) struct AgentChat {
     history_error_project: Option<PathBuf>,
     /// The exact composer submission to send once saved history has arrived.
     pending_send: Option<PendingAgentSend>,
+    attachment_save: Option<Receiver<Result<Vec<PathBuf>, String>>>,
     queued: VecDeque<queued::QueuedEntry>,
     queue_paused: bool,
     interrupting: bool,
@@ -1246,6 +1247,7 @@ impl Default for AgentChat {
             loaded_history: None,
             history_error_project: None,
             pending_send: None,
+            attachment_save: None,
             queued: VecDeque::new(),
             queue_paused: false,
             interrupting: false,
@@ -2061,6 +2063,7 @@ impl AurisApp {
             .matches(self.session.path(), self.session.revision())
         {
             if self.agent_chat.pending_send.take().is_some() {
+                self.agent_chat.attachment_save = None;
                 self.agent_chat.push_entry(ChatEntry::Error(
                     "The document changed while conversation history was loading. Review the draft and send it again."
                         .into(),
@@ -2094,6 +2097,7 @@ impl AurisApp {
                 self.agent_chat.history_error_project = project;
                 self.agent_chat.loaded_history = None;
                 self.agent_chat.pending_send = None;
+                self.agent_chat.attachment_save = None;
                 self.agent_chat.queue_paused = true;
                 self.agent_chat.push_entry(ChatEntry::Error(error));
             }
@@ -2145,6 +2149,7 @@ impl AurisApp {
 
     /// Starts fresh model history and rebinds the next child to the current document.
     pub(crate) fn agent_reset_conversation(&mut self) {
+        self.attachment_preview = None;
         let _ = self.flush_conversation_storage();
         self.agent_chat.conversations = Default::default();
         let had_transcript = !self.agent_chat.entries.is_empty();
@@ -2162,6 +2167,7 @@ impl AurisApp {
         self.agent_chat.loaded_history = None;
         self.agent_chat.history_error_project = None;
         self.agent_chat.pending_send = None;
+        self.agent_chat.attachment_save = None;
         self.agent_chat.queued.clear();
         self.agent_chat.queue_paused = false;
         self.agent_chat.interrupting = false;
@@ -2194,6 +2200,7 @@ impl AurisApp {
             self.agent_stop(cx);
             self.agent_chat.history_load = None;
             self.agent_chat.pending_send = None;
+            self.agent_chat.attachment_save = None;
         }
         self.initialize_conversations();
         self.conversation_operation(conversations::Operation::Create);
@@ -2213,6 +2220,7 @@ impl AurisApp {
     fn agent_cancel(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         self.agent_chat.queue_paused = true;
         if self.agent_chat.pending_send.take().is_some() {
+            self.agent_chat.attachment_save = None;
             // Dropping the receiver detaches this panel from the read. The storage thread may
             // finish independently, but its stale answer can no longer start the queued turn.
             self.agent_chat.history_load = None;
@@ -2371,6 +2379,64 @@ impl AurisApp {
 
     /// Sends one already-validated composer snapshot without consulting the live editor again.
     fn send_agent_message(&mut self, message: PendingAgentSend) -> bool {
+        if message.attachments.is_empty() {
+            return self.send_prepared_agent_message(message);
+        }
+        let Some((store, id)) = self.agent_chat.conversations.attachment_destination() else {
+            self.agent_chat.push_entry(ChatEntry::Error(
+                "Conversation storage is not ready. Try sending again.".into(),
+            ));
+            return false;
+        };
+        let paths = message.attachments.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        match std::thread::Builder::new()
+            .name("auris-save-attachments".into())
+            .spawn(move || {
+                let _ = sender.send(store.capture_attachments(&id, &paths));
+            }) {
+            Ok(_) => {
+                self.agent_chat.pending_send = Some(message);
+                self.agent_chat.attachment_save = Some(receiver);
+                true
+            }
+            Err(error) => {
+                self.agent_chat
+                    .push_entry(ChatEntry::Error(error.to_string()));
+                false
+            }
+        }
+    }
+
+    fn poll_agent_attachment_save(&mut self, cx: &mut gpui::Context<Self>) {
+        let result = self
+            .agent_chat
+            .attachment_save
+            .as_ref()
+            .and_then(|rx| match rx.try_recv() {
+                Ok(result) => Some(result),
+                Err(std::sync::mpsc::TryRecvError::Empty) => None,
+                Err(_) => Some(Err("Attachment storage worker stopped".into())),
+            });
+        let Some(result) = result else {
+            return;
+        };
+        self.agent_chat.attachment_save = None;
+        if let Some(mut message) = self.agent_chat.pending_send.take() {
+            match result {
+                Ok(paths) => {
+                    message.attachments = paths;
+                    self.send_prepared_agent_message(message);
+                }
+                Err(error) => {
+                    self.agent_chat.push_entry(ChatEntry::Error(error));
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn send_prepared_agent_message(&mut self, message: PendingAgentSend) -> bool {
         if !message
             .token
             .matches(self.session.path(), self.session.revision())
@@ -2815,6 +2881,7 @@ impl AurisApp {
     pub(crate) fn drain_agent(&mut self, cx: &mut gpui::Context<Self>) {
         self.poll_conversations(cx);
         self.poll_agent_history_load(cx);
+        self.poll_agent_attachment_save(cx);
         let history_answer = self
             .agent_chat
             .history_clear
@@ -3677,6 +3744,7 @@ impl AurisApp {
                 (window.viewport_size().height * 0.45).min(window.rem_size() * 24.0),
                 cx,
             ))
+            .child(self.render_attachment_preview(false, window, cx))
             // Drawn over everything, hidden until a drag carrying something attachable is over
             // the panel. A recolour of the panel itself was covered by the header and composer.
             .child(
@@ -3894,37 +3962,14 @@ impl AurisApp {
             .into_any_element()
     }
 
-    /// Opens a historical reference only after an explicit user activation.
+    /// Open an explicitly selected reference in its local editor or preview.
     pub(crate) fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
         if auris_agent::attachment_kind(&path) == Some(auris_agent::AttachmentKind::Midi) {
             self.edit_midi_attachment(path, cx);
-            return;
+        } else {
+            self.open_attachment_preview(path, self.song_workshop.is_some(), cx);
         }
-        cx.spawn(async move |this, cx| {
-            let checked_path = path.clone();
-            let url = cx
-                .background_executor()
-                .spawn(async move {
-                    url::Url::from_file_path(&checked_path)
-                        .ok()
-                        .filter(|_| checked_path.is_file())
-                })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                if let Some(url) = url {
-                    cx.open_url(url.as_str());
-                } else {
-                    this.agent_chat.push_entry(ChatEntry::Error(
-                        this.t(Key::AgentAttachmentUnavailable)
-                            .replace("{path}", &path.to_string_lossy()),
-                    ));
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
     }
-
     /// One transcript row. A tool row with an answer opens to the whole of it when activated —
     /// by pointer or keyboard — so the loop's log stays where the loop is shown.
     fn chat_row(
@@ -4015,9 +4060,13 @@ impl AurisApp {
                 theme,
                 cx,
             ),
-            ChatEntry::You { .. } => {
-                agent_components::user_message(("agent-message", index), text.clone())
-            }
+            ChatEntry::You { .. } => agent_components::user_message(
+                ("agent-message", index),
+                text.clone(),
+                theme,
+                window,
+                cx,
+            ),
             ChatEntry::Reasoning(_) => disclosure(
                 SharedString::from(format!("agent-reasoning-{index}")),
                 text,
@@ -4060,6 +4109,12 @@ impl AurisApp {
         div()
             .id(("agent-line", index))
             .debug_selector(move || format!("agent-line-{index}"))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, _, _| {
+                    this.agent_chat.focused = None;
+                }),
+            )
             .w_full()
             .min_w_0()
             .flex_shrink_0()
@@ -4148,8 +4203,7 @@ impl AurisApp {
                 },
             )
             .when(!details.is_empty(), |this| {
-                // Line by line rather than one string: a div's text collapses the newlines a
-                // tool's tables are drawn with.
+                // Keep authored line breaks and allow selections across the entire log section.
                 this.child(
                     div()
                         .mt_0p5()
@@ -4168,12 +4222,14 @@ impl AurisApp {
                                     .when_some(label, |this, label| {
                                         this.child(div().text_color(theme.text_faint).child(label))
                                     })
-                                    .children(
-                                        detail
-                                            .lines()
-                                            .map(|line| div().child(line.to_string()))
-                                            .collect::<Vec<_>>(),
-                                    )
+                                    .child(agent_components::selectable_text(
+                                        SharedString::from(format!(
+                                            "agent-detail-{index}-{section}"
+                                        )),
+                                        detail,
+                                        window,
+                                        cx,
+                                    ))
                             },
                         )),
                 )
@@ -5175,6 +5231,18 @@ impl AurisApp {
             .child(
                 agent_components::composer_controls("agent-panel-controls", &theme)
                     .child(
+                        atelier::Button::icon_only(
+                            "agent-attach-files",
+                            atelier::IconName::Paperclip,
+                        )
+                        .ghost()
+                        .tooltip(self.t(Key::AttachFiles))
+                        .disabled(locked)
+                        .on_click(
+                            cx.listener(|this, _, _, cx| this.pick_conversation_files(false, cx)),
+                        ),
+                    )
+                    .child(
                         div()
                             .w(relative(0.26))
                             .min_w_0()
@@ -5908,6 +5976,55 @@ mod tests {
                 vec![0, 1]
             );
         });
+    }
+
+    #[gpui::test]
+    fn transcript_text_can_be_dragged_copied_and_pasted_into_the_composer(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let user = "**literal** <tag> & melody\n  日本語の歌詞";
+        let answer = "A gentle piano melody";
+        let detail = "{\n  \"tempo\": 120\n}";
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent.model = "test-model".into();
+            this.agent_chat.configuring = false;
+            this.agent_chat.models_error = Some("offline fixture".into());
+            this.agent_chat.entries = vec![
+                ChatEntry::You {
+                    text: user.into(),
+                    attachments: vec![],
+                },
+                ChatEntry::Agent(answer.into()),
+                ChatEntry::Reasoning(detail.into()),
+            ];
+            this.agent_chat.expanded.insert(2);
+        });
+        crate::harness::resize(&app, cx, gpui::size(gpui::px(1200.0), gpui::px(1000.0)));
+        for (selector, expected) in [
+            ("agent-markdown-1-0-block", answer),
+            ("agent-message-0-text", user),
+            ("agent-detail-2-0", detail),
+        ] {
+            crate::harness::select_text(&app, cx, selector);
+            cx.simulate_keystrokes("secondary-c");
+            cx.update(|_, cx| {
+                assert_eq!(
+                    cx.read_from_clipboard()
+                        .and_then(|item| item.text())
+                        .as_deref(),
+                    Some(expected),
+                    "{selector}"
+                );
+            });
+            crate::harness::click("agent-input", cx);
+            cx.simulate_keystrokes("secondary-a secondary-v");
+            app.read_with(cx, |this, _| {
+                assert_eq!(this.agent_chat.input.content(), expected)
+            });
+            crate::harness::paint(&app, cx);
+        }
     }
 
     #[gpui::test]
@@ -8170,12 +8287,12 @@ mod tests {
     }
 
     #[gpui::test]
-    fn transcript_attachments_open_the_selected_file_by_pointer_and_keyboard(
+    fn transcript_attachments_preview_the_selected_file_by_pointer_and_keyboard(
         cx: &mut gpui::TestAppContext,
     ) {
         let folder = tempfile::tempdir().unwrap();
         let paths = vec![
-            folder.path().join("参考 #1 %.wav"),
+            folder.path().join("参考 #1 %.txt"),
             folder.path().join("score & notes.txt"),
         ];
         for path in &paths {
@@ -8195,10 +8312,9 @@ mod tests {
         assert_eq!(cx.opened_url(), None);
         crate::harness::click("agent-message-attachment-0-0", cx);
         cx.run_until_parked();
-        assert_eq!(
-            cx.opened_url(),
-            Some(url::Url::from_file_path(&paths[0]).unwrap().into())
-        );
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.attachment_preview.as_ref().unwrap().path, paths[0])
+        });
 
         // Pointer focus stays on the first file; Tab reaches the next file's button.
         cx.simulate_keystrokes("tab");
@@ -8206,10 +8322,9 @@ mod tests {
             keystroke: gpui::Keystroke::parse("enter").unwrap(),
         });
         cx.run_until_parked();
-        assert_eq!(
-            cx.opened_url(),
-            Some(url::Url::from_file_path(&paths[1]).unwrap().into())
-        );
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.attachment_preview.as_ref().unwrap().path, paths[1])
+        });
         app.read_with(cx, |this, _| {
             assert!(this.agent_chat.references.attachments.is_empty());
             assert!(this.agent_chat.references.attached_here.is_empty());
@@ -8246,10 +8361,8 @@ mod tests {
         }
         assert_eq!(cx.opened_url(), None);
         app.read_with(cx, |this, _| {
-            assert_eq!(this.agent_chat.entries.len(), 3);
-            assert!(this.agent_chat.entries[1..].iter().all(|entry| matches!(entry,
-                ChatEntry::Error(message) if message.starts_with("添付ファイルを開けません：")
-            )));
+            assert_eq!(this.agent_chat.entries.len(), 1);
+            assert!(this.attachment_preview.as_ref().unwrap().error.is_some());
         });
     }
 

@@ -4,7 +4,7 @@
 //! the same two voices. Keeping those voices in one adapter makes the Atelier design language
 //! visible in both places and prevents a new entry point from inventing a third chat treatment.
 
-use atelier::agent::{ChatNotice, ThinkingIndicator, UserMessage};
+use atelier::agent::{ChatNotice, ThinkingIndicator};
 use gpui::prelude::*;
 use gpui::{AnyElement, ElementId, IntoElement, ParentElement, SharedString, div};
 
@@ -38,10 +38,245 @@ pub(crate) fn conversation_intro(
         .into_any_element()
 }
 
-/// Draws a person's message using the shared trailing bubble treatment.
-pub(crate) fn user_message(id: impl Into<ElementId>, text: impl Into<SharedString>) -> AnyElement {
+struct TextSelection {
+    text: SharedString,
+    anchor: usize,
+    head: usize,
+    dragging: bool,
+    focus: gpui::FocusHandle,
+}
+
+impl TextSelection {
+    fn range(&self) -> std::ops::Range<usize> {
+        self.anchor.min(self.head)..self.anchor.max(self.head)
+    }
+}
+
+/// Read-only text using shaped glyph positions and the original UTF-8 source for selection.
+/// Unlike a Markdown/HTML parser, this preserves blank lines, indentation and literal markup.
+pub(crate) fn selectable_text(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> gpui::Div {
     let id = id.into();
-    UserMessage::new(text).id(id).into_any_element()
+    let text = text.into();
+    let state = window.use_keyed_state((id.clone(), "selection"), cx, |_, cx| TextSelection {
+        text: text.clone(),
+        anchor: 0,
+        head: 0,
+        dragging: false,
+        focus: cx.focus_handle(),
+    });
+    let (range, focus) = state.update(cx, |state, _| {
+        if state.text != text {
+            state.text = text.clone();
+            state.anchor = 0;
+            state.head = 0;
+            state.dragging = false;
+        }
+        (state.range(), state.focus.clone())
+    });
+    use gpui_component::ActiveTheme;
+    let selection_color = cx.theme().selection;
+    let element = gpui::StyledText::new(text).with_highlights([(
+        range,
+        gpui::HighlightStyle {
+            background_color: Some(selection_color),
+            ..Default::default()
+        },
+    )]);
+    let layout = element.layout().clone();
+    let copy_state = state.clone();
+    let selector = id.to_string();
+    div()
+        .debug_selector(move || selector.clone())
+        .w_full()
+        .min_w_0()
+        .cursor_text()
+        .child(
+            div()
+                .id(id)
+                .w_full()
+                .min_w_0()
+                .relative()
+                .track_focus(&focus)
+                .key_context("TextView")
+                .on_action(move |_: &gpui_component::input::Copy, _, cx| {
+                    let state = copy_state.read(cx);
+                    if !state.range().is_empty() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                            state.text[state.range()].to_owned(),
+                        ));
+                    }
+                })
+                .child(element)
+                .child(
+                    gpui::canvas(
+                        |bounds, window, _| {
+                            window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
+                        },
+                        move |bounds, hitbox: gpui::Hitbox, window, _| {
+                            let parent = window.current_view();
+                            let down_state = state.clone();
+                            let down_layout = layout.clone();
+                            window.on_mouse_event(
+                                move |event: &gpui::MouseDownEvent, phase, window, cx| {
+                                    if !phase.bubble() || event.button != gpui::MouseButton::Left {
+                                        return;
+                                    }
+                                    down_state.update(cx, |state, _| {
+                                        if hitbox.is_hovered(window)
+                                            && bounds.contains(&event.position)
+                                        {
+                                            let index = down_layout
+                                                .index_for_position(event.position)
+                                                .unwrap_or_else(|index| index)
+                                                .min(state.text.len());
+                                            if !event.modifiers.shift {
+                                                state.anchor = index;
+                                            }
+                                            state.head = index;
+                                            state.dragging = true;
+                                        } else {
+                                            state.anchor = 0;
+                                            state.head = 0;
+                                            state.dragging = false;
+                                        }
+                                    });
+                                    cx.notify(parent);
+                                },
+                            );
+                            let move_state = state.clone();
+                            let move_layout = layout.clone();
+                            window.on_mouse_event(
+                                move |event: &gpui::MouseMoveEvent, phase, _, cx| {
+                                    if !phase.bubble() || !move_state.read(cx).dragging {
+                                        return;
+                                    }
+                                    move_state.update(cx, |state, _| {
+                                        state.head = move_layout
+                                            .index_for_position(event.position)
+                                            .unwrap_or_else(|index| index)
+                                            .min(state.text.len());
+                                        state.dragging =
+                                            event.pressed_button == Some(gpui::MouseButton::Left);
+                                    });
+                                    cx.notify(parent);
+                                },
+                            );
+                            let up_state = state.clone();
+                            window.on_mouse_event(move |_: &gpui::MouseUpEvent, phase, _, cx| {
+                                if phase.bubble() {
+                                    up_state.update(cx, |state, _| state.dragging = false);
+                                }
+                            });
+                        },
+                    )
+                    .absolute()
+                    .inset_0(),
+                ),
+        )
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+    struct Fixture;
+    impl gpui::Render for Fixture {
+        fn render(
+            &mut self,
+            window: &mut gpui::Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            div()
+                .p(gpui::px(80.0))
+                .w(gpui::px(560.0))
+                .child(selectable_text(
+                    "fixture-text",
+                    "Plain <text> & **stars**\n\n  日本語",
+                    window,
+                    cx,
+                ))
+        }
+    }
+    #[gpui::test]
+    fn plain_selection_preserves_whitespace_and_literal_markup(cx: &mut gpui::TestAppContext) {
+        cx.update(gpui_component::init);
+        let (view, cx) = cx.add_window_view(|_, _| Fixture);
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        let bounds = cx.debug_bounds("fixture-text").unwrap();
+        crate::harness::press(
+            cx,
+            bounds.origin + gpui::point(gpui::px(0.5), gpui::px(0.5)),
+        );
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        let end = bounds.bottom_right() - gpui::point(gpui::px(0.5), gpui::px(0.5));
+        crate::harness::drag_to(cx, end);
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        crate::harness::release(cx, end);
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        cx.simulate_keystrokes("secondary-c");
+        cx.update(|_, cx| {
+            assert_eq!(
+                cx.read_from_clipboard().and_then(|c| c.text()).as_deref(),
+                Some("Plain <text> & **stars**\n\n  日本語")
+            )
+        });
+        crate::harness::press(
+            cx,
+            bounds.origin + gpui::point(gpui::px(20.0), gpui::px(5.0)),
+        );
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        let end = bounds.origin + gpui::point(gpui::px(70.0), gpui::px(5.0));
+        crate::harness::drag_to(cx, end);
+        crate::harness::release(cx, end);
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        cx.simulate_keystrokes("secondary-c");
+        cx.update(|_, cx| {
+            let copied = cx.read_from_clipboard().unwrap().text().unwrap();
+            assert!(!copied.is_empty());
+            assert!(copied.len() < "Plain <text> & **stars**".len());
+            assert!("Plain <text> & **stars**".contains(&copied));
+        });
+    }
+}
+
+/// Draws a person's selectable message with Atelier's trailing bubble geometry and tokens.
+pub(crate) fn user_message(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    theme: &Theme,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> AnyElement {
+    let id = id.into();
+    let atelier = &theme.atelier;
+    let body = selectable_text((id.clone(), "text"), text, window, cx);
+    let message = div()
+        .flex()
+        .flex_col()
+        .items_end()
+        .pl(atelier.spacing.xxl)
+        .child(
+            div()
+                .max_w_full()
+                .px(atelier.spacing.md)
+                .py(atelier.spacing.sm)
+                .rounded(atelier.shape.radius_lg)
+                .bg(atelier.colors.user_bubble)
+                .text_color(atelier.colors.on_user_bubble)
+                .text_size(atelier.typography.size_md)
+                .child(body),
+        );
+    atelier::motion::appear(message, id, cx, |row, delta| row.opacity(delta))
 }
 
 /// Draws an agent answer: the prose alone, with no avatar or name above it.
@@ -84,10 +319,7 @@ pub(crate) fn assistant_message(
         .text_color(atelier.colors.text)
         .child(body)
         .children(caret);
-    atelier::motion::appear(message, id, cx, |row, delta| {
-        row.opacity(delta)
-            .mt(gpui::px(atelier::motion::lerp(8.0, 0.0, delta)))
-    })
+    atelier::motion::appear(message, id, cx, |row, delta| row.opacity(delta))
 }
 
 /// Draws a workshop message through the same shared agent transcript primitives.
@@ -105,7 +337,7 @@ pub(crate) fn workshop_message(
     let id = id.into();
     let text = text.into();
     if user {
-        user_message(id, text)
+        user_message(id, text, theme, window, cx)
     } else {
         let body = super::agent_markdown::render(
             SharedString::from(format!("workshop-markdown-{id}")),

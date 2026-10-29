@@ -10,7 +10,7 @@ mod lyric_repair;
 mod provider_status;
 mod tool_failures;
 pub use discovery::{ModelConnection, discover_models_background};
-pub use provider_status::{ProviderStatus, check_providers_background};
+pub use provider_status::{ProviderStatus, ProviderUpdate, check_providers_background};
 mod attachments;
 pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
 pub mod approval_review;

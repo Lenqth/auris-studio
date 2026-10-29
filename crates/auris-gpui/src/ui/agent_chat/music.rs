@@ -32,10 +32,7 @@ impl AurisApp {
             return;
         }
         for path in paths {
-            if !matches!(
-                auris_agent::attachment_kind(path),
-                Some(auris_agent::AttachmentKind::Midi | auris_agent::AttachmentKind::Text)
-            ) {
+            if auris_agent::attachment_kind(path).is_none() {
                 self.music_references_mut().attachment_error = Some(
                     self.t(Key::AgentAttachmentUnsupported)
                         .replace("{name}", &path.to_string_lossy()),

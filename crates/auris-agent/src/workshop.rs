@@ -33,7 +33,7 @@ pub const AUTO_RECOVERY_LIMIT: u32 = 3;
 /// Commands accepted by the background workshop owner.
 pub enum Command {
     /// Submit one natural-language message with model settings captured at submission.
-    Send(String, Vec<PathBuf>, Box<AgentPreferences>),
+    Send(String, Box<AgentPreferences>, Vec<PathBuf>),
     /// Choose an exact completed candidate without closing the conversation.
     Select(u64, Box<AgentPreferences>, String),
     /// Retry only this candidate in a new artifact directory.
@@ -176,7 +176,10 @@ pub fn handoff(
                 }
                 ConversationContent::User {
                     text: message.text.clone(),
-                    attachments: message.references.iter().map(|r| r.path.clone()).collect(),
+                    attachments: store.capture_attachments(
+                        &conversation.info.id,
+                        &Store::new(store.root().into()).owned_attachments(&message.attachments),
+                    )?,
                 }
             } else {
                 memory.push(&pending, &message.text);
@@ -217,14 +220,15 @@ fn capture_references(
     if paths.len() > crate::ATTACHMENT_COUNT_LIMIT {
         return Err("Too many music references".into());
     }
-    for path in paths {
-        if !matches!(
-            crate::attachment_kind(path),
-            Some(crate::AttachmentKind::Midi | crate::AttachmentKind::Text)
-        ) {
-            return Err("The song workshop accepts MIDI and text music references".into());
-        }
-    }
+    let paths: Vec<_> = paths
+        .iter()
+        .filter(|path| {
+            matches!(
+                crate::attachment_kind(path),
+                Some(crate::AttachmentKind::Midi | crate::AttachmentKind::Text)
+            )
+        })
+        .collect();
     let names: Vec<_> = paths
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
@@ -239,7 +243,7 @@ fn capture_references(
         .zip(decoded)
         .map(|(path, reference)| match reference {
             crate::attachments::Reference::Text(text) => Ok(auris_session::workshop::Reference {
-                path: path.clone(),
+                path: (*path).clone(),
                 text,
             }),
             _ => Err("Expected a symbolic music reference".into()),
@@ -274,7 +278,7 @@ fn decision(text: &str) -> Result<Decision, String> {
         serde_json::from_str(text).map_err(|e| format!("Invalid director response: {e}"))?;
     if value.reply.trim().is_empty()
         || value.reply.chars().count() > 4000
-        || !matches!(value.directions.len(), 0 | 3)
+        || value.directions.len() > 3
         || value.directions.iter().any(|d| {
             d.title.trim().is_empty()
                 || d.title.chars().count() > 80
@@ -407,6 +411,7 @@ impl Owner {
                     Ok(answer) => {
                         self.snapshot.document.messages.push(Message {
                             references: vec![],
+                            attachments: Vec::new(),
                             user: false,
                             text: answer.reply,
                         });
@@ -529,7 +534,7 @@ impl Owner {
     }
     fn command(&mut self, command: Command) {
         match command {
-            Command::Send(text, attachments, prefs)
+            Command::Send(text, prefs, attachments)
                 if self.planner.is_none() && self.jobs.is_empty() =>
             {
                 if text.trim().is_empty() || text.chars().count() > 16000 {
@@ -538,6 +543,16 @@ impl Owner {
                 }
                 self.snapshot.document.draft = text.clone();
                 self.snapshot.document.draft_attachments = attachments.clone();
+                self.prefs = *prefs;
+                let attachments = match crate::validate_attachments(&self.prefs, &attachments)
+                    .and_then(|()| self.store.capture_attachments(&attachments))
+                {
+                    Ok(paths) => paths,
+                    Err(error) => {
+                        self.snapshot.error = Some(error);
+                        return;
+                    }
+                };
                 let references = match capture_references(&attachments) {
                     Ok(references) => references,
                     Err(error) => {
@@ -545,7 +560,6 @@ impl Owner {
                         return;
                     }
                 };
-                self.prefs = *prefs;
                 self.selection_followup = false;
                 self.planned_parent = self.snapshot.document.selected;
                 self.snapshot.error = None;
@@ -562,6 +576,7 @@ impl Owner {
                     user: true,
                     text,
                     references,
+                    attachments,
                 });
                 let selected = self
                     .snapshot
@@ -571,9 +586,30 @@ impl Owner {
                     .flat_map(|r| &r.candidates)
                     .find(|c| Some(c.id) == self.snapshot.document.selected);
                 let voices = auris_session::library::voices_with_settings(&self.settings);
+                let candidate_history: Vec<_> = self.snapshot.document.rounds.iter().map(|round| {
+                    json!({"after_message": round.after_message, "candidates": round.candidates.iter().map(|candidate| {
+                        json!({"id": candidate.id, "parent": candidate.parent,
+                            "title": candidate.direction.title, "description": candidate.direction.description})
+                    }).collect::<Vec<_>>()})
+                }).collect();
                 let prompt = json!({"conversation": self.snapshot.document.messages, "selected": selected, "selected_score":self.snapshot.document.selected.and_then(|id| self.snapshot.candidates.get(&id)).map(|c| c.workshop_outline()),
+                    "candidate_history": candidate_history,
                     "preference_evidence": self.snapshot.preferences.context(), "installed_voices": voices}).to_string();
-                match crate::song_ideas::SongPlanner::conversation(self.prefs.clone(), prompt) {
+                let references = self
+                    .snapshot
+                    .document
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|message| !message.attachments.is_empty())
+                    .map(|message| message.attachments.as_slice())
+                    .unwrap_or_default();
+                let references = self.store.owned_attachments(references);
+                match crate::song_ideas::SongPlanner::conversation_with_attachments(
+                    self.prefs.clone(),
+                    prompt,
+                    &references,
+                ) {
                     Ok(planner) => self.planner = Some(planner),
                     Err(e) => self.snapshot.error = Some(e),
                 }
@@ -634,6 +670,7 @@ impl Owner {
                 self.planned_parent = Some(id);
                 self.snapshot.document.messages.push(Message {
                     references: vec![],
+                    attachments: Vec::new(),
                     user: true,
                     text: message,
                 });
@@ -791,6 +828,25 @@ impl Owner {
             .parent
             .map(|id| self.store.candidate_path(id).join("song/song.auris"));
         let id = candidate.id;
+        let after_message = self
+            .snapshot
+            .document
+            .rounds
+            .iter()
+            .find(|round| round.candidates.iter().any(|c| c.id == id))
+            .map_or(self.snapshot.document.messages.len(), |round| {
+                round.after_message
+            });
+        let references = self
+            .snapshot
+            .document
+            .messages
+            .iter()
+            .take(after_message)
+            .rev()
+            .find(|message| !message.attachments.is_empty())
+            .map(|message| self.store.owned_attachments(&message.attachments))
+            .unwrap_or_default();
         candidate.direction.instructions =
             composition_assignment(&candidate, &self.snapshot.document);
         match std::thread::Builder::new()
@@ -811,6 +867,7 @@ impl Owner {
                                 parent.clone(),
                                 &cancel,
                                 &sender,
+                                &references,
                             )
                         }))
                         .unwrap_or_else(|_| Err(AttemptError::permanent("Candidate worker failed")))
@@ -941,6 +998,10 @@ fn idea(direction: &Direction) -> SongIdea {
 // Render and voice inference share a conservative process-wide gate; model turns remain parallel.
 static AUDIO_WORK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "isolated candidate inputs and worker channels"
+)]
 fn compose(
     candidate: &Candidate,
     mut prefs: AgentPreferences,
@@ -949,6 +1010,7 @@ fn compose(
     parent: Option<PathBuf>,
     cancel: &AtomicBool,
     sender: &mpsc::Sender<JobEvent>,
+    references: &[PathBuf],
 ) -> Result<SongCandidate, AttemptError> {
     if cancel.load(Ordering::Acquire) {
         return Err("Cancelled".into());
@@ -1037,7 +1099,7 @@ fn compose(
             "recovery":candidate.error.as_ref().map(|error| json!({
                 "last_error":error,
                 "instruction":"Inspect the restored score and current resources. Continue only unfinished work; do not duplicate successful edits. Correct the cause of the last failure before completing."
-            }))}).to_string(),"policy":prefs.policy}).to_string(),
+            }))}).to_string(),"policy":prefs.policy,"attachments":references}).to_string(),
     )?;
     let deadline = Instant::now() + Duration::from_secs(900);
     let mut edits = 0;
@@ -1283,6 +1345,7 @@ mod tests {
             None,
             &AtomicBool::new(false),
             &sender,
+            &[],
         );
         drop(sender);
         let events = collector.join().unwrap();
@@ -1352,17 +1415,78 @@ mod tests {
     }
 
     #[test]
+    fn additional_request_includes_previous_candidates_without_requiring_selection() {
+        let answer = json!({"role":"assistant","content":json!({
+            "reply":"Which part would you like to change?", "directions":[]
+        }).to_string()})
+        .to_string();
+        let (url, seen) =
+            crate::tests::mock_server(vec![crate::tests::completion(&answer, "stop")]);
+        let dir = tempfile::tempdir().unwrap();
+        let reference = dir.path().join("lyrics.txt");
+        std::fs::write(&reference, "LYRIC_REFERENCE_夜の雨").unwrap();
+        let (events, _) = mpsc::channel();
+        let mut owner = Owner::new(Store::new(dir.path().into()), Settings::default(), events);
+        let mut old = assignment();
+        old.direction.title = "Earlier piano idea".into();
+        old.direction.description = "Sparse piano over a steady pulse".into();
+        owner.snapshot.document.rounds.push(Round {
+            after_message: 0,
+            candidates: vec![old],
+        });
+        owner.command(Command::Send(
+            "None of these fit; offer another approach".into(),
+            Box::new(AgentPreferences {
+                provider: "openai".into(),
+                model: "mock".into(),
+                url,
+                ..Default::default()
+            }),
+            vec![reference.clone()],
+        ));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        std::fs::remove_file(&reference).unwrap();
+        let planner = owner
+            .planner
+            .as_mut()
+            .expect("director started without a selection");
+        loop {
+            if let Some(result) = planner.poll_text() {
+                assert!(result.is_ok(), "{result:?}");
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(owner.snapshot.document.selected, None);
+        assert_eq!(owner.snapshot.document.rounds.len(), 1);
+        let requests = seen.lock().unwrap();
+        assert!(requests[0].contains("candidate_history"));
+        assert!(requests[0].contains("Earlier piano idea"));
+        assert!(requests[0].contains("Sparse piano over a steady pulse"));
+        assert!(requests[0].contains("LYRIC_REFERENCE_夜の雨"));
+        let paths = &owner.snapshot.document.messages[0].attachments;
+        assert_eq!(paths.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(&paths[0]).unwrap(),
+            "LYRIC_REFERENCE_夜の雨"
+        );
+    }
+
+    #[test]
     fn editor_handoff_keeps_readable_turns_and_provider_memory() {
         let dir = tempfile::tempdir().unwrap();
         let document = Document {
             messages: vec![
                 Message {
                     references: vec![],
+                    attachments: Vec::new(),
                     user: true,
                     text: "Keep the melody".into(),
                 },
                 Message {
                     references: vec![],
+                    attachments: Vec::new(),
                     user: false,
                     text: "I will change only the accompaniment".into(),
                 },
@@ -1413,12 +1537,15 @@ mod tests {
             ..Default::default()
         };
         let (events, _) = mpsc::channel();
-        let store = Store::new(dir.path().join("history"));
+        let editor_folder = dir.path().join("editor");
+        let conversation_store =
+            auris_session::conversations::ConversationStore::for_project(&editor_folder);
+        let store = Store::new(conversation_store.root().into());
         let mut owner = Owner::new(store.clone(), Settings::default(), events);
         owner.command(Command::Send(
             "Use these references".into(),
-            paths.clone(),
             Box::new(prefs),
+            paths.clone(),
         ));
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
@@ -1446,11 +1573,17 @@ mod tests {
                 .text
                 .contains("\"pitch\":61")
         );
-        let (editor, id) = handoff(dir.path().join("editor"), false, restored).unwrap();
+        let (editor, id) = handoff(editor_folder, false, restored).unwrap();
         let conversation = editor.load(&id).unwrap();
-        assert!(
-            matches!(&conversation.transcript.messages[0].content, auris_session::conversations::ConversationContent::User { attachments, .. } if attachments == &paths)
-        );
+        let auris_session::conversations::ConversationContent::User { attachments, .. } =
+            &conversation.transcript.messages[0].content
+        else {
+            panic!("Expected a user turn")
+        };
+        assert_eq!(attachments.len(), paths.len());
+        let archived_score = MidiReference::read(&attachments[0]).unwrap();
+        assert_eq!(archived_score.tracks[0].notes[0].pitch, 61);
+        assert_eq!(archived_score.tracks[0].notes[0].lyric, "きみ");
     }
 
     #[test]
@@ -1462,8 +1595,8 @@ mod tests {
         let mut owner = Owner::new(Store::new(dir.path().into()), Settings::default(), events);
         owner.command(Command::Send(
             "Use this melody".into(),
-            vec![path.clone()],
             Box::default(),
+            vec![path.clone()],
         ));
         assert!(owner.snapshot.document.messages.is_empty());
         assert!(owner.snapshot.error.is_some());
@@ -1759,6 +1892,7 @@ mod tests {
                     None,
                     &cancel,
                     &sender,
+                    &[],
                 )
                 .inspect_err(|error| eprintln!("Recovery attempt failed: {error:?}"))
             },
@@ -1818,6 +1952,7 @@ mod tests {
             None,
             &cancel,
             &sender,
+            &[],
         )
         .unwrap();
         assert!(result.audio.peak() > 1e-8);
@@ -1872,6 +2007,7 @@ mod tests {
             None,
             &AtomicBool::new(false),
             &sender,
+            &[],
         )
         .unwrap();
         assert!(result.audio.peak() > 1e-8);
@@ -1896,6 +2032,7 @@ mod tests {
             None,
             &AtomicBool::new(true),
             &sender,
+            &[],
         );
         assert!(result.is_err());
         assert!(!dir.path().join("1").exists());
@@ -1922,7 +2059,26 @@ mod tests {
         );
     }
     #[test]
-    fn incomplete_comparison_is_rejected() {
-        assert!(decision(r#"{"reply":"作ります","directions":[{"title":"A","description":"Piano","instructions":"Compose"}]}"#).is_err());
+    fn single_direction_is_accepted() {
+        let answer = decision(r#"{"reply":"作ります","directions":[{"title":"A","description":"Piano","instructions":"Compose"}]}"#).unwrap();
+        assert_eq!(answer.directions.len(), 1);
+    }
+
+    #[test]
+    fn two_directions_are_accepted() {
+        let directions = vec![assignment().direction; 2];
+        let answer =
+            decision(&json!({"reply":"Compare these", "directions":directions}).to_string())
+                .unwrap();
+        assert_eq!(answer.directions.len(), 2);
+    }
+
+    #[test]
+    fn oversized_batch_is_rejected() {
+        let directions = vec![assignment().direction; 4];
+        assert!(
+            decision(&json!({"reply":"Compare these", "directions":directions}).to_string())
+                .is_err()
+        );
     }
 }

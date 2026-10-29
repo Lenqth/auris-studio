@@ -84,6 +84,9 @@ impl Default for Conversations {
 }
 
 impl Conversations {
+    pub(super) fn attachment_destination(&self) -> Option<(ConversationStore, String)> {
+        Some((self.store.clone()?, self.active_id()?.to_owned()))
+    }
     pub(super) fn managed(&self) -> bool {
         self.store.is_some()
     }
@@ -1146,7 +1149,8 @@ impl AurisApp {
                 }),
             ));
         }
-        body.into_any_element()
+        body.child(self.render_attachment_preview(false, window, cx))
+            .into_any_element()
     }
 
     /// Keeps conversation commands in the header; the list already presents the title.
@@ -1619,10 +1623,9 @@ mod tests {
         assert_eq!(cx.opened_url(), None);
         click("agent-message-attachment-0-0", cx);
         cx.run_until_parked();
-        assert_eq!(
-            cx.opened_url(),
-            Some(url::Url::from_file_path(&reference).unwrap().into())
-        );
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.attachment_preview.as_ref().unwrap().path, reference)
+        });
         app.read_with(cx, |this, _| {
             assert!(this.agent_chat.references.attachments.is_empty());
             assert!(this.agent_chat.references.attached_here.is_empty());
