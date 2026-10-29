@@ -188,9 +188,9 @@ impl AurisApp {
 
     /// The panel-coloured shape that travels between the start panel and the whole body.
     ///
-    /// Atelier's `Morph` draws the shape; only its opacity is Auris's, because the shape that
-    /// leaves the opaque panel arrives as the workshop's veil over the metal, so it becomes the
-    /// veil rather than covering it and then vanishing.
+    /// Atelier's `Morph` owns the transition fill and border, including the translucent veil
+    /// that remains behind the workshop. Keeping those values on the morph avoids a second
+    /// wrapper animation whose opacity could drift from the shape's geometry.
     pub(crate) fn welcome_morph(
         &self,
         transition: WelcomeTransition,
@@ -213,18 +213,18 @@ impl AurisApp {
         } else {
             Morph::new(id, body).to(panel).radius(px(0.0), radius)
         };
+        let veil = gpui::Hsla {
+            a: settle,
+            ..theme.surface
+        };
         div()
             .absolute()
             .inset_0()
-            .child(shape.fill(theme.surface))
-            .with_animation(
-                ("welcome-veil", transition.serial as usize),
-                Animation::new(theme.atelier.motion.normal).with_easing(atelier::motion::ease_out),
-                move |shape, delta| {
-                    // 0 is the start panel, 1 the whole body.
-                    let open = if to_workshop { delta } else { 1.0 - delta };
-                    shape.opacity(atelier::motion::lerp(1.0, settle, open))
-                },
+            .child(
+                shape
+                    .fill(theme.surface)
+                    .fill_to(veil)
+                    .border(theme.border_subtle, None),
             )
             .into_any_element()
     }
@@ -568,11 +568,14 @@ impl AurisApp {
         });
         let footer = div()
             .flex()
+            .flex_wrap()
             .flex_none()
             .items_center()
             .gap(spacing.sm)
-            .h(theme.atelier.density.toolbar)
+            .min_h(theme.atelier.density.toolbar)
+            .h_auto()
             .px(spacing.lg)
+            .py(spacing.sm)
             .border_t_1()
             .border_color(theme.border_subtle)
             .children(self.chooser_footer(cx));
@@ -636,11 +639,10 @@ impl AurisApp {
             .on_action(cx.listener(|this, _: &crate::actions::Quit, window, cx| {
                 this.quit_asking(window, cx)
             }))
-            .child(crate::titlebar::composed(
+            .child(crate::titlebar::bar(
                 window,
                 &theme,
-                crate::titlebar::Parts::new("chooser-title", self.t(Key::ChooseProject))
-                    .subtitle("Auris Studio"),
+                crate::titlebar::Parts::new("chooser-title", self.t(Key::ChooseProject)),
                 crate::titlebar::controls(
                     window,
                     &theme,
@@ -667,6 +669,7 @@ impl AurisApp {
 
 #[cfg(test)]
 mod tests {
+    use auris_i18n::Language;
     use gpui::{px, size};
 
     #[test]
@@ -679,6 +682,40 @@ mod tests {
         assert!(medium.width < px(1300.0) * 0.6 && medium.height < px(820.0) * 0.6);
         let small = super::panel_size(size(px(600.0), px(380.0)), margin);
         assert_eq!(small, size(px(552.0), px(332.0)), "never past the margin");
+    }
+
+    #[gpui::test]
+    fn japanese_chooser_footer_stays_inside_a_short_narrow_panel(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.language = Language::Japanese;
+                this.show_project_chooser(window, cx);
+            });
+        });
+        crate::harness::resize(&app, cx, size(px(600.0), px(380.0)));
+        crate::harness::paint(&app, cx);
+
+        let chooser = cx
+            .debug_bounds("project-chooser")
+            .expect("chooser is visible");
+        for action in ["chooser-browse", "chooser-close", "chooser-confirm"] {
+            let bounds = cx
+                .debug_bounds(action)
+                .unwrap_or_else(|| panic!("{action} remains rendered"));
+            assert!(
+                bounds.left() >= chooser.left(),
+                "{action} escaped left edge"
+            );
+            assert!(
+                bounds.right() <= chooser.right(),
+                "{action} escaped right edge"
+            );
+            assert!(
+                bounds.bottom() <= chooser.bottom(),
+                "{action} escaped bottom edge"
+            );
+        }
     }
 
     #[gpui::test]
@@ -695,7 +732,13 @@ mod tests {
         });
         crate::harness::click("chooser-empty", cx);
         crate::harness::paint(&app, cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |app, _| window.focus(&app.focus));
+        });
         cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         app.read_with(cx, |app, _| {
             assert!(app.project_chooser.is_none());
             assert!(app.song_workshop.is_none());

@@ -1651,7 +1651,6 @@ pub struct AurisApp {
     /// is pressed, which is what lets a whole song be set up and then thrown away.
     pub(crate) song_sheet: Option<crate::ui::compose_sheet::SongDials>,
     pub(crate) song_preview: crate::ui::compose_sheet::preview::SongPreviewState,
-    pub(crate) audio_player_drag: Option<crate::ui::audio_player::PlayerDrag>,
     /// Modal progress while a song is written, prepared and balanced.
     pub(crate) compose_progress: Option<crate::ui::compose_progress::ComposeProgressState>,
     /// Independent composition-search settings, worker control, and exact retained result.
@@ -1687,6 +1686,13 @@ pub struct AurisApp {
     pub(crate) note_selection_preview: Option<auris_session::NoteSelectionPreview>,
     /// Keyboard focus target, so the action bindings reach this view.
     pub(crate) focus: FocusHandle,
+    /// Focus target owned by the contextual-menu overlay while it is open.
+    ///
+    /// Keeping this separate from the document root lets a menu command move focus to another
+    /// pane without the overlay teardown mistaking that intentional move for a lost menu focus.
+    pub(crate) menu_focus: FocusHandle,
+    /// A menu's activation release, which must not press the control that regains focus.
+    pub(crate) menu_activation: Option<(gpui::WindowId, String)>,
     /// Window whose transport consumed Space, so its release cannot also click a button.
     pub(crate) transport_space_window: Option<gpui::WindowId>,
     /// Stable, focus-trapped keyboard targets for the controls in modal overlays.
@@ -1729,6 +1735,8 @@ pub struct AurisApp {
     pub(crate) menu_bar_scroll: gpui::ScrollHandle,
     /// The open right-click menu, if any.
     pub(crate) menu: Option<ContextMenu>,
+    /// Trigger focus restored after a contextual menu releases the keyboard.
+    pub(crate) menu_focus_return: Option<gpui::FocusHandle>,
     /// Which menu-bar menu is open, on the platforms that draw their own bar.
     pub(crate) menu_bar: Option<OpenMenu>,
     /// The open rename sheet, if any.
@@ -2192,7 +2200,6 @@ impl AurisApp {
             sung_geometry_revision: 0,
             song_sheet: None,
             song_preview: Default::default(),
-            audio_player_drag: None,
             compose_progress: None,
             composition_search: Default::default(),
             song_library: None,
@@ -2207,6 +2214,8 @@ impl AurisApp {
             auditioning: None,
             note_selection_preview: None,
             focus: cx.focus_handle(),
+            menu_focus: cx.focus_handle(),
+            menu_activation: None,
             transport_space_window: None,
             modal_focus: ModalFocus::new(cx),
             panes: PaneFocus::new(cx),
@@ -2224,6 +2233,7 @@ impl AurisApp {
             log_scroll: gpui::ScrollHandle::new(),
             menu_bar_scroll: gpui::ScrollHandle::new(),
             menu: None,
+            menu_focus_return: None,
             menu_bar: None,
             prompt: None,
             update_phase: crate::ui::updates::UpdatePhase::Idle,
@@ -3195,14 +3205,21 @@ impl AurisApp {
         self.status_failed = true;
     }
 
-    /// Window title, marking unsaved changes the way every editor does.
-    pub(crate) fn window_title(&self) -> String {
-        let name = self
-            .session
+    /// The document name shown in the application title bar.
+    ///
+    /// Window chrome owns the product name and save marker separately; keeping this value
+    /// document-only lets Atelier centre the title without duplicating application branding.
+    pub(crate) fn document_title(&self) -> String {
+        self.session
             .path()
             .and_then(|path| path.file_stem())
             .map(|stem| stem.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.project().name.clone());
+            .unwrap_or_else(|| self.project().name.clone())
+    }
+
+    /// Window title, marking unsaved changes the way every editor does.
+    pub(crate) fn window_title(&self) -> String {
+        let name = self.document_title();
         if self.session.is_dirty() {
             format!("{name} • Auris Studio")
         } else {
@@ -3239,6 +3256,7 @@ impl AurisApp {
     pub(crate) fn apply_language(&mut self, preference: Option<Language>, cx: &mut App) {
         self.settings.language = preference;
         self.language = self.settings.language();
+        crate::install_component_language(self.language, cx);
         if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }

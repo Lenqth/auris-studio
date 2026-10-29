@@ -62,7 +62,7 @@ pub(crate) struct NavigateAgentModel {
 /// The selector context wins before window actions such as Down-to-select-the-next-track while
 /// the model control owns focus. Tab deliberately remains unbound so normal focus traversal can
 /// continue after dismissing the menu.
-pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
+pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 9] {
     [
         gpui::KeyBinding::new(
             "secondary-r",
@@ -72,16 +72,6 @@ pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
         gpui::KeyBinding::new(
             "escape",
             NavigateAgentModel { key: "escape" },
-            Some("AurisAgentDropdown"),
-        ),
-        gpui::KeyBinding::new(
-            "enter",
-            crate::ui::widgets::ClaimDisclosureActivation,
-            Some("AurisAgentDropdown"),
-        ),
-        gpui::KeyBinding::new(
-            "space",
-            crate::ui::widgets::ClaimDisclosureActivation,
             Some("AurisAgentDropdown"),
         ),
         gpui::KeyBinding::new(
@@ -4809,8 +4799,7 @@ impl AurisApp {
         .bg(theme.surface_raised)
         .border_color(gpui::transparent_black())
         .track_focus(&focus)
-        .key_context("AurisAgentDropdown")
-        .on_action(|_: &crate::ui::widgets::ClaimDisclosureActivation, _, _| {})
+        .key_context("AurisAgentDropdown AtelierControl")
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _: &MouseDownEvent, window, cx| {

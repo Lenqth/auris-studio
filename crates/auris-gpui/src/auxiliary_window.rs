@@ -345,7 +345,7 @@ impl Render for AuxiliaryWindow {
             let theme = app.theme.clone();
             let title = surface.title(app);
             window.set_window_title(&title);
-            let chrome = titlebar::composed(
+            let chrome = titlebar::bar(
                 window,
                 &theme,
                 titlebar::Parts::new("utility-title", title),

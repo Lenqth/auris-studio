@@ -3129,6 +3129,9 @@ mod window_tests {
             });
         });
         cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
         paint(&app, cx);
 
         cx.update(|window, cx| {
@@ -3459,6 +3462,9 @@ mod window_tests {
             );
         });
         cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         app.read_with(cx, |this, _| {
             assert!(
                 this.prompt.is_none(),
@@ -3560,6 +3566,9 @@ mod window_tests {
             );
         });
         cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         paint(&app, cx);
         cx.simulate_input("のはな");
         app.read_with(cx, |this, _| {

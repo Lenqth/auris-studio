@@ -879,6 +879,7 @@ strings! {
     PluginActions { en: "Plugin actions", ja: "プラグインの操作" }
     PluginBypassed { en: "Bypassed", ja: "バイパス中" }
     CmdSave { en: "Save", ja: "保存" }
+    DocumentUnsaved { en: "Unsaved changes", ja: "未保存の変更" }
     CmdSaveAs { en: "Save As", ja: "名前を付けて保存" }
     CmdImportAudio { en: "Import Audio", ja: "オーディオを読み込む" }
     CmdImportSoundFont { en: "Import SoundFont", ja: "サウンドフォントを読み込む" }
@@ -2152,6 +2153,7 @@ new のオプション
     AgentNotConfigured { en: "Name a model to talk to.", ja: "話しかけるモデルを設定してください。" }
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }
+    AgentRevert { en: "Revert", ja: "元に戻す" }
     TimelineScrollHelp { en: "Drag the bar or use Shift+wheel to scroll horizontally", ja: "バーをドラッグ、またはShift＋ホイールで横スクロール" }
     AgentToolFailureLimit { en: "Repeated tool failure limit", ja: "同じツール呼び出しの失敗上限" }
     AgentToolFailureLimitHelp { en: "Failure allowance for the same tool and arguments. Bounds API/Antigravity loops and Claude Code recovery after tool errors. Success resets that call's count. Applies from the next conversation; other CLI runtimes manage their own limits.", ja: "同じツール・引数での失敗上限です。API／Antigravityの実行ループと、Claude Codeがツールエラー後に終了した際の自動継続に使います。成功すると該当する回数をリセットします。次の会話から適用され、他のCLIは独自の制限を使用します。" }

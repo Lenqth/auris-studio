@@ -1,18 +1,10 @@
 //! Shared controls for finite audio previews. The callback owns the playback clock.
 
-use super::icons::{Icon, icon};
 use super::tooltip::keyed_tip;
-use super::widgets::{
-    AdjustSlider, ButtonState, ButtonStyle, button_with_content, slider_fraction_after_key,
-};
+use super::widgets::{ButtonState, ButtonStyle, button_with_content};
 use crate::app::AurisApp;
-use auris_i18n::Key;
 use auris_session::OutputPreviewStatus;
-use gpui::{
-    AnyElement, Bounds, Context, IntoElement, MouseButton, MouseMoveEvent, Pixels, SharedString,
-    canvas, div, prelude::*, relative, rems,
-};
-use std::{cell::Cell, rc::Rc};
+use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, relative};
 
 pub(crate) struct PlayerState {
     status: Option<OutputPreviewStatus>,
@@ -115,14 +107,6 @@ pub(crate) enum PlayerTarget {
     Chords,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct PlayerDrag {
-    target: PlayerTarget,
-    volume: bool,
-    bounds: Bounds<Pixels>,
-    duration: f64,
-}
-
 fn time_label(seconds: f64) -> String {
     let seconds = seconds.max(0.0).floor() as u64;
     format!("{}:{:02}", seconds / 60, seconds % 60)
@@ -157,25 +141,6 @@ impl AurisApp {
         }
     }
 
-    pub(crate) fn move_audio_player(
-        &mut self,
-        event: &MouseMoveEvent,
-        cx: &mut Context<Self>,
-    ) -> bool {
-        let Some(drag) = self.audio_player_drag else {
-            return false;
-        };
-        if event.pressed_button != Some(MouseButton::Left) {
-            self.audio_player_drag = None;
-            return false;
-        }
-        let fraction =
-            ((event.position.x - drag.bounds.left()) / drag.bounds.size.width).clamp(0.0, 1.0);
-        self.adjust_player(drag.target, drag.volume, fraction, drag.duration);
-        cx.notify();
-        true
-    }
-
     pub(crate) fn render_audio_player(
         &self,
         target: PlayerTarget,
@@ -192,10 +157,6 @@ impl AurisApp {
             PlayerTarget::Workshop(i) => format!("song-preview-{i}"),
             PlayerTarget::Chords => "chord-player".into(),
             PlayerTarget::Attachment => "attachment-player".into(),
-        };
-        let play_id: SharedString = match target {
-            PlayerTarget::Chords => "song-preview-play".into(),
-            _ => format!("{prefix}-play").into(),
         };
         let playing = player.playing();
         let timeline = match target {
@@ -222,119 +183,54 @@ impl AurisApp {
         } else {
             0.0
         };
-        let play_label = self.t(if loading {
-            Key::WorkshopPreparing
-        } else if playing {
-            Key::PreviewPause
-        } else {
-            Key::PreviewPlay
-        });
         let muted = player.muted || player.volume == 0.0;
-        let mute_label = self.t(if muted {
-            Key::PreviewUnmute
-        } else {
-            Key::PreviewMute
-        });
-        let controls = div()
-            .w_full()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(
-                button_with_content(
-                    play_id,
-                    icon(
-                        if playing { Icon::Pause } else { Icon::Play },
-                        crate::theme::Metrics::CONTROL_HEIGHT * 0.6,
-                        theme.text,
-                    ),
-                    ButtonStyle::Ghost,
-                    ButtonState::available(false, enabled && !loading),
-                    theme.accent,
-                    theme,
-                    cx.listener(move |this, _, _, cx| {
-                        if !this.player(target).is_some_and(PlayerState::toggle_pause) {
-                            match target {
-                                PlayerTarget::Workshop(index) => {
-                                    this.preview_song_candidate(index, cx)
-                                }
-                                PlayerTarget::Chords => this.preview_song_chords(false, cx),
-                                PlayerTarget::Attachment => this.play_attachment_preview(cx),
-                            }
-                        }
-                        cx.notify();
-                    }),
-                )
-                .size_8()
-                .tooltip(keyed_tip(play_label, "", theme)),
-            )
-            .when(timeline.is_none(), |row| {
-                row.child(self.player_slider(
-                    format!("{prefix}-seek"),
-                    target,
-                    false,
-                    fraction,
-                    duration,
-                    enabled && duration > 0.0,
-                    cx,
-                ))
-            })
-            .when(timeline.is_some(), |row| row.child(div().flex_1()))
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .text_xs()
-                    .child(time_label(position))
-                    .child(
-                        div()
-                            .text_color(theme.text_muted)
-                            .child(format!(" / {}", time_label(duration))),
-                    )
-                    .flex()
-                    .items_center(),
-            )
-            .child(
-                button_with_content(
-                    SharedString::from(format!("{prefix}-mute")),
-                    icon(
-                        if muted {
-                            Icon::VolumeMuted
-                        } else {
-                            Icon::Volume
-                        },
-                        crate::theme::Metrics::CONTROL_HEIGHT * 0.6,
-                        theme.text,
-                    ),
-                    ButtonStyle::Ghost,
-                    ButtonState::available(false, enabled),
-                    theme.accent,
-                    theme,
-                    cx.listener(move |this, _, _, cx| {
-                        if let Some(player) = this.player_mut(target) {
-                            if player.volume == 0.0 {
-                                player.volume = 1.0;
-                                player.muted = false;
-                            } else {
-                                player.muted = !player.muted;
-                            }
-                            player.apply_volume();
-                        }
-                        cx.notify();
-                    }),
-                )
-                .size_8()
-                .tooltip(keyed_tip(mute_label, "", theme)),
-            )
-            .child(self.player_slider(
-                format!("{prefix}-volume"),
-                target,
-                true,
-                if muted { 0.0 } else { player.volume },
-                duration,
-                enabled,
-                cx,
-            ));
+        let native_id = match target {
+            PlayerTarget::Chords => "song-preview".to_owned(),
+            _ => prefix.clone(),
+        };
+        let mut native_player = atelier::AudioPlayer::new(
+            SharedString::from(native_id),
+            fraction,
+            time_label(position),
+            time_label(duration),
+        )
+        .playing(playing)
+        .volume(player.volume)
+        .muted(muted)
+        .loading(loading)
+        .disabled(!enabled);
+        if duration > 0.0 {
+            native_player = native_player.seek_step((5.0 / duration) as f32);
+        }
+        if let Some(timeline) = timeline.as_ref() {
+            native_player = native_player.peaks(timeline.peaks.clone());
+        }
+        let native_player = native_player
+            .on_play(cx.listener(move |this, _, _, cx| {
+                if !this.player(target).is_some_and(PlayerState::toggle_pause) {
+                    match target {
+                        PlayerTarget::Workshop(index) => this.preview_song_candidate(index, cx),
+                        PlayerTarget::Chords => this.preview_song_chords(false, cx),
+                        PlayerTarget::Attachment => this.play_attachment_preview(cx),
+                    }
+                }
+                cx.notify();
+            }))
+            .on_seek(cx.listener(move |this, value, _, cx| {
+                this.adjust_player(target, false, *value, duration);
+                cx.notify();
+            }))
+            .on_volume(cx.listener(move |this, value, _, cx| {
+                this.adjust_player(target, true, *value, duration);
+                cx.notify();
+            }))
+            .on_mute(cx.listener(move |this, _, _, cx| {
+                if let Some(player) = this.player_mut(target) {
+                    player.muted = !player.muted;
+                    player.apply_volume();
+                }
+                cx.notify();
+            }));
         div()
             .id(SharedString::from(prefix.clone()))
             .w_full()
@@ -349,7 +245,7 @@ impl AurisApp {
                 player
                     .child(self.player_timeline(&prefix, target, &timeline, position, enabled, cx))
             })
-            .child(controls)
+            .child(native_player)
             .into_any_element()
     }
 
@@ -422,175 +318,7 @@ impl AurisApp {
             .flex()
             .flex_col()
             .when(!timeline.sections.is_empty(), |view| view.child(sections))
-            .child(self.player_slider(
-                format!("{prefix}-seek"),
-                target,
-                false,
-                if duration > 0.0 {
-                    (position / duration) as f32
-                } else {
-                    0.0
-                },
-                duration,
-                enabled && duration > 0.0,
-                cx,
-            ))
             .into_any_element()
-    }
-
-    // The two sliders share interaction policy while their geometry and availability differ.
-    #[expect(clippy::too_many_arguments)]
-    fn player_slider(
-        &self,
-        id: String,
-        target: PlayerTarget,
-        volume: bool,
-        fraction: f32,
-        duration: f64,
-        enabled: bool,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let theme = &self.theme;
-        let bounds = Rc::new(Cell::new(Bounds::<Pixels>::default()));
-        let painted = bounds.clone();
-        let selector = id.clone();
-        let label = self.t(if volume {
-            Key::PreviewVolume
-        } else {
-            Key::PreviewSeek
-        });
-        let timeline = match target {
-            PlayerTarget::Workshop(index) if !volume => self
-                .song_workshop
-                .as_ref()
-                .and_then(|s| s.audition_timeline(index)),
-            _ => None,
-        };
-        let has_waveform = timeline.is_some();
-        let track = if let Some(timeline) = timeline {
-            let mut waveform = div()
-                .relative()
-                .h_16()
-                .w_full()
-                .rounded_sm()
-                .overflow_hidden()
-                .bg(theme.surface_sunken)
-                .child(atelier::viz::PeakBars::new(timeline.peaks.clone()).progress(fraction))
-                .child(
-                    canvas(move |bounds, _, _| painted.set(bounds), |_, _, _, _| {})
-                        .absolute()
-                        .size_full(),
-                );
-            for section in &timeline.sections {
-                waveform = waveform.child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .bottom_0()
-                        .left(relative((section.start_seconds / duration) as f32))
-                        .border_l_1()
-                        .border_color(theme.border),
-                );
-            }
-            waveform
-                .child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .bottom_0()
-                        .left(relative(fraction))
-                        .border_l_1()
-                        .border_color(theme.text),
-                )
-                .into_any_element()
-        } else {
-            div()
-                .relative()
-                .h_1()
-                .w_full()
-                .rounded_full()
-                .bg(theme.surface_sunken)
-                .child(
-                    canvas(move |bounds, _, _| painted.set(bounds), |_, _, _, _| {})
-                        .absolute()
-                        .size_full(),
-                )
-                .child(
-                    div()
-                        .absolute()
-                        .h_full()
-                        .w(relative(fraction))
-                        .rounded_full()
-                        .bg(theme.text_muted),
-                )
-                .child(
-                    div()
-                        .absolute()
-                        .left(relative(fraction))
-                        .top(rems(-0.25))
-                        .ml(rems(-0.375))
-                        .size_3()
-                        .rounded_full()
-                        .bg(if enabled {
-                            theme.text
-                        } else {
-                            theme.text_faint
-                        }),
-                )
-                .into_any_element()
-        };
-        let slider = div()
-            .id(SharedString::from(id))
-            .debug_selector(move || selector.clone())
-            .relative()
-            .when(has_waveform, |s| s.h_16().w_full().flex_shrink_0())
-            .when(!has_waveform, |s| s.h_8())
-            .min_w_0()
-            .rounded_sm()
-            .border_1()
-            .border_color(gpui::transparent_black())
-            .when(volume, |s| s.w_12().flex_shrink_0())
-            .when(!volume && !has_waveform, |s| s.flex_1())
-            .flex()
-            .items_center()
-            .when(!has_waveform, |s| s.px_1())
-            .child(track)
-            .when(enabled, |s| {
-                s.tab_index(0)
-                    .key_context("AurisSlider")
-                    .focus(|s| s.border_color(theme.selection))
-                    .hover(|s| s.bg(theme.surface_hover))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-                            let bounds = bounds.get();
-                            if bounds.size.width <= gpui::px(0.0) {
-                                return;
-                            }
-                            let fraction = ((event.position.x - bounds.left()) / bounds.size.width)
-                                .clamp(0.0, 1.0);
-                            this.audio_player_drag = Some(PlayerDrag {
-                                target,
-                                volume,
-                                bounds,
-                                duration,
-                            });
-                            this.adjust_player(target, volume, fraction, duration);
-                            // Let GPUI's built-in mouse-down listener focus this Tab stop.
-                            cx.notify();
-                        }),
-                    )
-                    .on_action(cx.listener(move |this, event: &AdjustSlider, _, cx| {
-                        if let Some(next) = slider_fraction_after_key(fraction, event.key) {
-                            this.adjust_player(target, volume, next, duration);
-                            cx.notify();
-                        }
-                        cx.stop_propagation();
-                    }))
-            })
-            .when(!enabled, |s| s.opacity(0.5))
-            .tooltip(keyed_tip(label, "← → · Home · End", theme));
-        slider.into_any_element()
     }
 }
 
@@ -615,7 +343,7 @@ mod tests {
         paint(&app, cx);
         click("song-preview-play", cx);
         paint(&app, cx);
-        click("chord-player-seek", cx);
+        click("song-preview-seek", cx);
         cx.simulate_keystrokes("home");
         app.read_with(cx, |this, _| {
             assert_eq!(this.song_preview.player.position(), 0.0)
@@ -624,7 +352,7 @@ mod tests {
         app.read_with(cx, |this, _| {
             assert!(this.song_preview.player.position() > 0.0);
         });
-        let slider = cx.debug_bounds("chord-player-seek").unwrap();
+        let slider = cx.debug_bounds("song-preview-seek").unwrap();
         drag(
             cx,
             slider.center(),
@@ -637,19 +365,18 @@ mod tests {
                 0.0,
                 "play at the end restarts"
             );
-            assert!(this.audio_player_drag.is_none());
         });
-        click("chord-player-volume", cx);
+        click("song-preview-volume", cx);
         cx.simulate_keystrokes("home");
-        cx.simulate_keystrokes("pageup");
+        cx.simulate_keystrokes("right right");
         app.read_with(cx, |this, _| {
             assert!(
                 (this.song_preview.player.volume - 0.1).abs() < 1e-6,
-                "volume after Home/PageUp: {}",
+                "volume after Home/two right steps: {}",
                 this.song_preview.player.volume
             );
         });
-        click("chord-player-mute", cx);
+        click("song-preview-mute", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(this.song_preview.player.options(10.0).volume, 0.0);
         });
@@ -662,7 +389,7 @@ mod tests {
                 "changing the audio must preserve mute"
             );
         });
-        click("chord-player-mute", cx);
+        click("song-preview-mute", cx);
         app.read_with(cx, |this, _| {
             assert!((this.song_preview.player.options(10.0).volume - 0.1).abs() < 1e-6);
             assert_eq!(this.project(), &before);

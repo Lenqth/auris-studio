@@ -6,7 +6,7 @@
 
 use atelier::{
     Button, ControlSize, Edge, FormField, FormGroup, IconName, ListItem, SectionHeader, Sidebar,
-    Switch,
+    StatusBar, Switch,
 };
 use auris_i18n::{Key, Language, messages};
 use auris_session::prelude::*;
@@ -300,7 +300,7 @@ impl SettingsWindow {
             cx,
         );
         FormField::new(self.t(label))
-            .child(div().flex_1().min_w_0().child(control))
+            .child(control)
             .into_any_element()
     }
 
@@ -676,7 +676,7 @@ impl SettingsWindow {
                             group.child(
                                 FormField::new(self.t(Key::LanguageHeading))
                                     .description(self.t(Key::LanguageNote))
-                                    .child(div().flex_1().min_w_0().child(language_control)),
+                                    .child(language_control),
                             )
                         })
                         .when(self.matches_section(Section::Autosave), |group| {
@@ -707,12 +707,12 @@ impl SettingsWindow {
                         .child(
                             FormField::new(self.t(Key::SingerComputeHeading))
                                 .description(self.t(Key::SingerComputeNote))
-                                .child(div().flex_1().min_w_0().child(acceleration_control)),
+                                .child(acceleration_control),
                         )
                         .child(
                             FormField::new(self.t(Key::BrowserVoices))
                                 .description(self.t(Key::VoiceFoldersNote))
-                                .child(div().flex_1().min_w_0().child(voice_paths)),
+                                .child(voice_paths),
                         )
                         .child(voice_setup),
                 )
@@ -1998,7 +1998,7 @@ impl Render for SettingsWindow {
         }
 
         let theme = self.theme.clone();
-        let titlebar = titlebar::composed(
+        let titlebar = titlebar::bar(
             window,
             &theme,
             titlebar::Parts::new("settings-title", self.t(Key::Settings)),
@@ -2073,7 +2073,7 @@ impl Render for SettingsWindow {
                                             .flex()
                                             .flex_col()
                                             .w_full()
-                                            .max_w(px(760.0))
+                                            .max_w(theme.atelier.density.form_width)
                                             .children(page_header)
                                             .child(body),
                                     ),
@@ -2081,18 +2081,16 @@ impl Render for SettingsWindow {
                             .child(
                                 div()
                                     .id("settings-status")
-                                    .flex()
-                                    .items_center()
-                                    .min_h(Metrics::STATUS_HEIGHT)
-                                    .max_h(px(84.0))
+                                    .debug_selector(|| "settings-status".into())
                                     .flex_shrink_0()
-                                    .overflow_y_scroll()
-                                    .px(theme.atelier.spacing.xl)
                                     .border_t_1()
                                     .border_color(theme.border_subtle)
-                                    .text_size(theme.atelier.typography.size_sm)
-                                    .text_color(theme.text_muted)
-                                    .child(status),
+                                    .child(
+                                        div()
+                                            .h(theme.atelier.density.status_bar)
+                                            .px(theme.atelier.spacing.xl)
+                                            .child(StatusBar::new().message(status)),
+                                    ),
                             ),
                     ),
             )
@@ -2250,6 +2248,40 @@ mod tests {
                 this.status
             );
         });
+    }
+
+    #[gpui::test]
+    fn japanese_settings_keep_the_form_and_status_bar_inside_the_window(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        cx.run_until_parked();
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut gpui::VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(560.0), px(420.0)));
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, _, cx| {
+                this.sync_appearance(
+                    Appearance {
+                        scheme: "daylight".into(),
+                        ..Appearance::default()
+                    },
+                    Some(Language::Japanese),
+                );
+                cx.notify();
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let status = cx
+            .debug_bounds("settings-status")
+            .expect("settings status bar");
+        assert!(status.bottom() <= px(420.0));
+        assert!(status.left() >= px(0.0) && status.right() <= px(560.0));
+        let page = cx.debug_bounds("settings-page").expect("settings page");
+        assert!(page.left() >= px(0.0) && page.right() <= px(560.0));
     }
 
     #[test]

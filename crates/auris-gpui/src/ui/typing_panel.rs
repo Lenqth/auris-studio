@@ -558,6 +558,7 @@ pub fn slides_onto_key(
 
 /// A label and the value it names, for the four things the keys move blind.
 fn readout(label: &str, value: &str, theme: &Theme) -> impl IntoElement + use<> {
+    // atelier: allow — caption/value pair for the musical typing keyboard's current register.
     div()
         .flex()
         .items_baseline()

@@ -282,11 +282,18 @@ pub mod context {
 /// `h` gets the same treatment as the commands that shipped on one — and so a command moved *off*
 /// a played key gets its keystroke back without anything here having to know.
 pub fn reachable_from(context: &str, keystroke: &str) -> String {
+    let mut predicate = context.to_string();
     if auris_session::shadows_musical_typing(keystroke) {
-        format!("{context} && !{}", context::TYPING)
-    } else {
-        context.to_string()
+        predicate.push_str(&format!(" && !{}", context::TYPING));
     }
+    // Bare shortcuts yield to focused controls. Traversal and dismissal still belong to the
+    // containing surface, including when a control holds focus.
+    if gpui::Keystroke::parse(&normalise_keystroke(keystroke)).is_ok_and(|stroke| {
+        !stroke.modifiers.modified() && !matches!(stroke.key.as_str(), "tab" | "escape")
+    }) {
+        predicate.push_str(" && !AtelierControl");
+    }
+    predicate
 }
 
 /// One command the user can rebind.
@@ -865,6 +872,19 @@ pub fn install_bindings(cx: &mut App, bindings: impl IntoIterator<Item = KeyBind
     cx.bind_keys(crate::ui::rhythm_grid::key_bindings());
     cx.bind_keys(crate::ui::widgets::key_bindings());
     cx.bind_keys(crate::ui::agent_chat::model_key_bindings());
+    // Keymap replacement must retain the native read-only text editing commands.
+    cx.bind_keys([
+        KeyBinding::new(
+            &normalise_keystroke("secondary-c"),
+            atelier::CopySelection,
+            Some(atelier::SELECTABLE_CONTEXT),
+        ),
+        KeyBinding::new(
+            &normalise_keystroke("secondary-a"),
+            atelier::SelectAll,
+            Some(atelier::SELECTABLE_CONTEXT),
+        ),
+    ]);
     // The global reset also removes gpui-component's text-selection shortcut.
     cx.bind_keys([KeyBinding::new(
         "secondary-c",
@@ -877,6 +897,16 @@ pub fn install_bindings(cx: &mut App, bindings: impl IntoIterator<Item = KeyBind
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn focused_controls_keep_surface_traversal_and_dismissal_reachable() {
+        for key in ["tab", "shift-tab", "escape"] {
+            assert!(!reachable_from(context::WINDOW, key).contains("!AtelierControl"));
+        }
+        for key in ["enter", "space", "delete", "m"] {
+            assert!(reachable_from(context::WINDOW, key).contains("!AtelierControl"));
+        }
+    }
 
     /// Every command that ships with a keystroke, as its id and that keystroke.
     ///
@@ -1071,9 +1101,9 @@ mod tests {
         for (id, default) in played {
             let entry = bindable(id).expect("a real command");
             let predicate = reachable_from(entry.context, default);
-            assert_eq!(
-                predicate,
-                format!("{} && !{}", entry.context, context::TYPING),
+            assert!(
+                predicate.starts_with(entry.context)
+                    && predicate.contains(&format!("!{}", context::TYPING)),
                 "`{id}` is on `{default}`, which the keyboard plays"
             );
             // And it still parses, which is the half a formatted string can get wrong.
@@ -1095,9 +1125,9 @@ mod tests {
         ] {
             let entry = bindable(id).expect("a real command");
             let default = entry.default.expect("one of these without a key is a bug");
-            assert_eq!(
-                reachable_from(entry.context, default),
-                entry.context,
+            let predicate = reachable_from(entry.context, default);
+            assert!(
+                !predicate.contains(context::TYPING),
                 "`{id}` is on `{default}` and would go out of reach while playing"
             );
         }

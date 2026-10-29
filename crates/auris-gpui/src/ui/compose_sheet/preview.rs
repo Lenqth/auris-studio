@@ -394,9 +394,9 @@ mod tests {
                 for selector in [
                     "song-preview-section",
                     "song-preview-play",
-                    "chord-player-seek",
-                    "chord-player-mute",
-                    "chord-player-volume",
+                    "song-preview-seek",
+                    "song-preview-mute",
+                    "song-preview-volume",
                     "song-preview-another",
                     "song-sheet-write",
                 ] {
