@@ -69,6 +69,7 @@ pub(crate) struct SongWorkshop {
     chord_prompt_open: bool,
     show_memory: bool,
     copied: Option<(&'static str, usize)>,
+    expanded_tools: std::collections::BTreeSet<u64>,
     scroll: gpui::ScrollHandle,
 }
 
@@ -272,6 +273,7 @@ impl AurisApp {
             chord_prompt_open: false,
             show_memory: false,
             copied: None,
+            expanded_tools: Default::default(),
             scroll: gpui::ScrollHandle::new(),
         });
         focus.focus(window);
@@ -1210,6 +1212,7 @@ impl AurisApp {
             );
         }
         if !candidate.tools.is_empty() {
+            let opened = s.expanded_tools.contains(&id);
             let mut total = auris_session::workshop::ToolUsage::default();
             for usage in candidate.tools.values() {
                 total.total += usage.total;
@@ -1217,44 +1220,80 @@ impl AurisApp {
                 total.failed += usage.failed;
                 total.interrupted += usage.interrupted;
             }
+            let mut label = self
+                .t(Key::AgentToolGroup)
+                .replace("{count}", &total.total.to_string());
+            for (count, key) in [
+                (total.running(), Key::AgentToolGroupRunning),
+                (total.failed, Key::AgentToolGroupFailed),
+            ] {
+                if count > 0 {
+                    label.push_str(" · ");
+                    label.push_str(&self.t(key).replace("{count}", &count.to_string()));
+                }
+            }
             let mut tools = div()
                 .flex()
                 .flex_col()
                 .gap(spacing.xs)
                 .debug_selector(move || format!("song-candidate-tools-{index}"))
                 .child(
-                    Label::new(tool_counts(self.t(Key::WorkshopToolCounts), &total))
-                        .size(TextSize::Small),
+                    super::widgets::disclosure(
+                        gpui::SharedString::from(format!("song-tools-toggle-{id}")),
+                        label,
+                        opened,
+                        theme,
+                        cx.listener(move |this, _, _, cx| {
+                            if let Some(workshop) = &mut this.song_workshop
+                                && !workshop.expanded_tools.remove(&id)
+                            {
+                                workshop.expanded_tools.insert(id);
+                            }
+                            cx.notify();
+                        }),
+                    )
+                    .when(total.failed > 0, |row| row.text_color(theme.danger)),
                 );
-            for (name, usage) in &candidate.tools {
-                tools = tools.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(spacing.sm)
-                        .min_w_0()
-                        .child(super::icons::icon(
-                            super::icons::tool_icon(name),
-                            theme.atelier.typography.size_sm,
-                            if usage.running() > 0 {
-                                colors.agent
-                            } else {
-                                theme.text_muted
-                            },
-                        ))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_size(theme.atelier.typography.size_sm)
-                                .child(div().child(name.clone()))
-                                .child(
-                                    div()
-                                        .text_color(theme.text_muted)
-                                        .child(tool_counts(self.t(Key::WorkshopToolCounts), usage)),
-                                ),
-                        ),
-                );
+            if opened {
+                let mut details = div()
+                    .flex()
+                    .flex_col()
+                    .gap(spacing.xs)
+                    .debug_selector(move || format!("song-tools-body-{index}"))
+                    .child(
+                        Label::new(tool_counts(self.t(Key::WorkshopToolCounts), &total))
+                            .size(TextSize::Small),
+                    );
+                for (name, usage) in &candidate.tools {
+                    details = details.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(spacing.sm)
+                            .min_w_0()
+                            .child(super::icons::icon(
+                                super::icons::tool_icon(name),
+                                theme.atelier.typography.size_sm,
+                                if usage.running() > 0 {
+                                    colors.agent
+                                } else {
+                                    theme.text_muted
+                                },
+                            ))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(theme.atelier.typography.size_sm)
+                                    .child(div().child(name.clone()))
+                                    .child(div().text_color(theme.text_muted).child(tool_counts(
+                                        self.t(Key::WorkshopToolCounts),
+                                        usage,
+                                    ))),
+                            ),
+                    );
+                }
+                tools = tools.child(details);
             }
             card = card.child(tools);
         }
@@ -1974,9 +2013,14 @@ mod tests {
             assert!(a.size.width >= gpui::px(300.0));
             assert!(cx.debug_bounds("song-candidate-activity-0").is_some());
             assert!(cx.debug_bounds("song-candidate-tools-0").is_some());
+            assert!(cx.debug_bounds("song-tools-body-0").is_none());
             assert!(cx.debug_bounds("song-candidate-activity-1").is_none());
             assert!(cx.debug_bounds("song-planning-activity").is_some());
         }
+        crate::harness::click("song-tools-toggle-0", cx);
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("song-tools-body-0").is_some());
+        assert!(cx.debug_bounds("song-tools-body-1").is_none());
         app.update(cx, |this, _| {
             let snapshot = this
                 .song_workshop
@@ -1994,6 +2038,33 @@ mod tests {
         });
         crate::harness::paint(&app, cx);
         assert!(cx.debug_bounds("song-candidate-tools-0").is_some());
+        assert!(cx.debug_bounds("song-tools-body-0").is_some());
+        let expanded_height = cx
+            .debug_bounds("song-candidate-tools-0")
+            .unwrap()
+            .size
+            .height;
+        crate::harness::click("song-tools-toggle-0", cx);
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(
+                !this
+                    .song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .expanded_tools
+                    .contains(&0),
+                "tool details should collapse after clicking the disclosure"
+            )
+        });
+        // GPUI retains debug bounds for removed elements; measure the live container instead.
+        assert!(
+            cx.debug_bounds("song-candidate-tools-0")
+                .unwrap()
+                .size
+                .height
+                < expanded_height
+        );
     }
 
     #[gpui::test]
