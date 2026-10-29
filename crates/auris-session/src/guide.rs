@@ -41,7 +41,9 @@
 //! # Agent conversations
 //!
 //! The new-song workshop is a persistent natural-language conversation. A tool-free director
-//! asks focused questions or dispatches three independent composer workers. Each composer owns
+//! asks focused questions or dispatches one to three independent composer workers, choosing the
+//! count to fit the request. Further requests can add rounds without selecting a candidate;
+//! the director receives earlier titles and concepts alongside the conversation. Each composer owns
 //! a headless session and edits it through the normal session commands. Provider calls run in
 //! parallel; voice inference and final audition rendering use a bounded audio-work gate.
 //! Progress describes observed command stages, never simulated elapsed-time percentages.

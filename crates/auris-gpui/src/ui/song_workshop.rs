@@ -51,6 +51,7 @@ pub(crate) struct SongWorkshop {
     error: Option<String>,
     submitted: bool,
     show_memory: bool,
+    copied: Option<(&'static str, usize)>,
     scroll: gpui::ScrollHandle,
 }
 
@@ -76,6 +77,7 @@ impl SongWorkshop {
         self.preparing = None;
     }
     fn view(&mut self, index: usize) {
+        self.copied = None;
         for player in &mut self.players {
             player.reset_audio();
         }
@@ -185,6 +187,7 @@ impl AurisApp {
             error,
             submitted: false,
             show_memory: false,
+            copied: None,
             scroll: gpui::ScrollHandle::new(),
         });
         focus.focus(window);
@@ -214,6 +217,64 @@ impl AurisApp {
         s.submitted = true;
         s.error = None;
         cx.notify();
+    }
+
+    fn request_more_song_candidates(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let request = self.t(Key::WorkshopMoreCandidatesRequest).to_owned();
+        let Some(s) = &mut self.song_workshop else {
+            return;
+        };
+        if s.busy() {
+            return;
+        }
+        // Keep any feedback already drafted, and let the user refine the request before sending.
+        if !s.brief.content().contains(&request) {
+            let prefix = if s.brief.content().is_empty() {
+                request
+            } else {
+                format!("{request}\n\n")
+            };
+            s.brief.replace(0..0, &prefix);
+        }
+        s.active_field = Some(0);
+        s.foci[0].focus(window);
+        cx.notify();
+    }
+
+    fn workshop_copy_button(
+        &self,
+        id: (&'static str, usize),
+        label: Key,
+        text: String,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let copied = self
+            .song_workshop
+            .as_ref()
+            .is_some_and(|s| s.copied == Some(id));
+        div()
+            .debug_selector(move || format!("{}-{}", id.0, id.1))
+            .child(
+                Button::new(
+                    id,
+                    self.t(if copied {
+                        Key::CopiedToClipboard
+                    } else {
+                        label
+                    }),
+                )
+                .ghost()
+                .size(atelier::ControlSize::Small)
+                .when(copied, |button| button.tooltip(self.t(label)))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone()));
+                    if let Some(s) = &mut this.song_workshop {
+                        s.copied = Some(id);
+                    }
+                    cx.notify();
+                })),
+            )
+            .into_any_element()
     }
 
     pub(crate) fn poll_song_workshop(&mut self, cx: &mut Context<Self>) {
@@ -501,6 +562,28 @@ impl AurisApp {
                     window,
                     cx,
                 );
+                let entry = div()
+                    .flex()
+                    .flex_col()
+                    .gap(spacing.xs)
+                    .child(entry)
+                    .child(
+                        div()
+                            .flex()
+                            .when(message.user, |row| row.justify_end())
+                            .child(
+                                div()
+                                    .rounded(theme.atelier.shape.radius_md)
+                                    .when(message.user, |copy| copy.bg(theme.surface))
+                                    .child(self.workshop_copy_button(
+                                        ("song-copy-message", i),
+                                        Key::WorkshopCopyMessage,
+                                        message.text.clone(),
+                                        cx,
+                                    )),
+                            ),
+                    )
+                    .into_any_element();
                 // The person's own words are already in an opaque bubble.
                 transcript = transcript.child(if message.user {
                     entry
@@ -553,6 +636,25 @@ impl AurisApp {
                     }
                     transcript = transcript.child(cards);
                 }
+            }
+            if !snapshot.document.rounds.is_empty() {
+                transcript = transcript.child(text_panel(
+                    div()
+                        .debug_selector(|| "song-more-candidates".into())
+                        .child(
+                            Button::new(
+                                "song-more-candidates",
+                                self.t(Key::WorkshopMoreCandidates),
+                            )
+                            .disabled(s.busy())
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    this.request_more_song_candidates(window, cx);
+                                },
+                            )),
+                        ),
+                    &theme,
+                ));
             }
             if snapshot.planning {
                 transcript = transcript.child(text_panel(
@@ -888,6 +990,24 @@ impl AurisApp {
                     .color(TextColor::Muted),
             );
         }
+        card = card.child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap(spacing.xs)
+                .child(self.workshop_copy_button(
+                    ("song-copy-title", index),
+                    Key::WorkshopCopyTitle,
+                    candidate.direction.title.clone(),
+                    cx,
+                ))
+                .child(self.workshop_copy_button(
+                    ("song-copy-concept", index),
+                    Key::WorkshopCopyConcept,
+                    candidate.direction.description.clone(),
+                    cx,
+                )),
+        );
         for error in [
             candidate.error.as_ref(),
             s.errors[index].as_ref(),
@@ -1214,6 +1334,82 @@ mod tests {
                 preferences: Default::default(),
                 error: None,
             });
+        });
+    }
+
+    #[gpui::test]
+    fn single_candidate_supports_copying_and_requesting_more(cx: &mut gpui::TestAppContext) {
+        use auris_session::workshop::{Candidate, Direction, Message, Round};
+
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.view_round = Some(0);
+            s.brief = TextField::new("もっと静かにしてください");
+            let snapshot = s.snapshot.as_mut().unwrap();
+            snapshot.document.messages.push(Message {
+                user: false,
+                text: "この方向で作ります。\nピアノを中心に。".into(),
+            });
+            snapshot.document.rounds.push(Round {
+                after_message: 1,
+                candidates: vec![Candidate {
+                    id: 1,
+                    parent: None,
+                    ready: false,
+                    error: None,
+                    recoveries: 0,
+                    direction: Direction {
+                        title: "夜の散歩".into(),
+                        description: "静かなピアノ\n柔らかな弦楽器".into(),
+                        instructions: "Private composer instructions".into(),
+                        protected_tracks: vec![],
+                    },
+                }],
+            });
+        });
+        crate::harness::resize(&app, cx, gpui::size(gpui::px(1200.0), gpui::px(1000.0)));
+        assert!(cx.debug_bounds("song-candidate-0").is_some());
+        assert!(cx.debug_bounds("song-candidate-1").is_none());
+        for (selector, expected) in [
+            ("song-copy-title-0", "夜の散歩"),
+            ("song-copy-concept-0", "静かなピアノ\n柔らかな弦楽器"),
+            (
+                "song-copy-message-0",
+                "この方向で作ります。\nピアノを中心に。",
+            ),
+        ] {
+            crate::harness::click(selector, cx);
+            cx.update(|_, cx| {
+                assert_eq!(
+                    cx.read_from_clipboard()
+                        .and_then(|item| item.text())
+                        .as_deref(),
+                    Some(expected)
+                );
+            });
+            crate::harness::paint(&app, cx);
+        }
+        crate::harness::click("song-more-candidates", cx);
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-more-candidates", cx);
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            let request = this.t(Key::WorkshopMoreCandidatesRequest);
+            assert_eq!(
+                s.brief.content(),
+                format!("{request}\n\nもっと静かにしてください")
+            );
+            assert_eq!(s.active_field, Some(0));
+            assert_eq!(s.snapshot.as_ref().unwrap().document.rounds.len(), 1);
+            assert_eq!(s.snapshot.as_ref().unwrap().document.selected, None);
         });
     }
 

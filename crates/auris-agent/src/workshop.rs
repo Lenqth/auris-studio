@@ -227,7 +227,7 @@ fn decision(text: &str) -> Result<Decision, String> {
         serde_json::from_str(text).map_err(|e| format!("Invalid director response: {e}"))?;
     if value.reply.trim().is_empty()
         || value.reply.chars().count() > 4000
-        || !matches!(value.directions.len(), 0 | 3)
+        || value.directions.len() > 3
         || value.directions.iter().any(|d| {
             d.title.trim().is_empty()
                 || d.title.chars().count() > 80
@@ -509,7 +509,14 @@ impl Owner {
                     .flat_map(|r| &r.candidates)
                     .find(|c| Some(c.id) == self.snapshot.document.selected);
                 let voices = auris_session::library::voices_with_settings(&self.settings);
+                let candidate_history: Vec<_> = self.snapshot.document.rounds.iter().map(|round| {
+                    json!({"after_message": round.after_message, "candidates": round.candidates.iter().map(|candidate| {
+                        json!({"id": candidate.id, "parent": candidate.parent,
+                            "title": candidate.direction.title, "description": candidate.direction.description})
+                    }).collect::<Vec<_>>()})
+                }).collect();
                 let prompt = json!({"conversation": self.snapshot.document.messages, "selected": selected, "selected_score":self.snapshot.document.selected.and_then(|id| self.snapshot.candidates.get(&id)).map(|c| c.workshop_outline()),
+                    "candidate_history": candidate_history,
                     "preference_evidence": self.snapshot.preferences.context(), "installed_voices": voices}).to_string();
                 match crate::song_ideas::SongPlanner::conversation(self.prefs.clone(), prompt) {
                     Ok(planner) => self.planner = Some(planner),
@@ -1285,6 +1292,54 @@ mod tests {
     }
 
     #[test]
+    fn additional_request_includes_previous_candidates_without_requiring_selection() {
+        let answer = json!({"role":"assistant","content":json!({
+            "reply":"Which part would you like to change?", "directions":[]
+        }).to_string()})
+        .to_string();
+        let (url, seen) =
+            crate::tests::mock_server(vec![crate::tests::completion(&answer, "stop")]);
+        let dir = tempfile::tempdir().unwrap();
+        let (events, _) = mpsc::channel();
+        let mut owner = Owner::new(Store::new(dir.path().into()), Settings::default(), events);
+        let mut old = assignment();
+        old.direction.title = "Earlier piano idea".into();
+        old.direction.description = "Sparse piano over a steady pulse".into();
+        owner.snapshot.document.rounds.push(Round {
+            after_message: 0,
+            candidates: vec![old],
+        });
+        owner.command(Command::Send(
+            "None of these fit; offer another approach".into(),
+            Box::new(AgentPreferences {
+                provider: "openai".into(),
+                model: "mock".into(),
+                url,
+                ..Default::default()
+            }),
+        ));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let planner = owner
+            .planner
+            .as_mut()
+            .expect("director started without a selection");
+        loop {
+            if let Some(result) = planner.poll_text() {
+                assert!(result.is_ok(), "{result:?}");
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(owner.snapshot.document.selected, None);
+        assert_eq!(owner.snapshot.document.rounds.len(), 1);
+        let requests = seen.lock().unwrap();
+        assert!(requests[0].contains("candidate_history"));
+        assert!(requests[0].contains("Earlier piano idea"));
+        assert!(requests[0].contains("Sparse piano over a steady pulse"));
+    }
+
+    #[test]
     fn editor_handoff_keeps_readable_turns_and_provider_memory() {
         let dir = tempfile::tempdir().unwrap();
         let document = Document {
@@ -1762,7 +1817,26 @@ mod tests {
         );
     }
     #[test]
-    fn incomplete_comparison_is_rejected() {
-        assert!(decision(r#"{"reply":"作ります","directions":[{"title":"A","description":"Piano","instructions":"Compose"}]}"#).is_err());
+    fn single_direction_is_accepted() {
+        let answer = decision(r#"{"reply":"作ります","directions":[{"title":"A","description":"Piano","instructions":"Compose"}]}"#).unwrap();
+        assert_eq!(answer.directions.len(), 1);
+    }
+
+    #[test]
+    fn two_directions_are_accepted() {
+        let directions = vec![assignment().direction; 2];
+        let answer =
+            decision(&json!({"reply":"Compare these", "directions":directions}).to_string())
+                .unwrap();
+        assert_eq!(answer.directions.len(), 2);
+    }
+
+    #[test]
+    fn oversized_batch_is_rejected() {
+        let directions = vec![assignment().direction; 4];
+        assert!(
+            decision(&json!({"reply":"Compare these", "directions":directions}).to_string())
+                .is_err()
+        );
     }
 }
