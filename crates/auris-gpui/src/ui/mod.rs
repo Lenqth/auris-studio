@@ -2,7 +2,8 @@
 //!
 //! The panel modules add `impl` blocks to [`crate::app::AurisApp`] rather than defining their own
 //! gpui entities: one owner is simpler than synchronising the shared project and engine state.
-//! [`tooltip`] is the intentional standalone view needed by gpui's tooltip API.
+//! [`tooltip`] owns GPUI tooltip lifetimes. [`reference_piano_roll`] hosts the same note editor
+//! on an independent session, keeping conversational references outside the song.
 
 pub mod agent_chat;
 pub(crate) mod agent_components;
@@ -49,6 +50,7 @@ mod portrait_image;
 pub(crate) mod project_chooser;
 pub mod prompt;
 pub(crate) mod provider_logo;
+pub(crate) mod reference_piano_roll;
 pub(crate) mod rhythm_grid;
 pub mod root;
 pub(crate) mod score_layer;
