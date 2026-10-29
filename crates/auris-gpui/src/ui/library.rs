@@ -2905,11 +2905,15 @@ impl AurisApp {
                     .hover(|this| this.bg(theme.surface_hover))
             })
             .tooltip(tooltip)
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .child(icon(role.icon(), px(14.0), accent)),
-            )
+            .child(div().flex_shrink_0().child(icon(
+                if role == LibraryRole::Instrument && source.is_none() {
+                    Icon::Sound(self.library_sound_icon(&plugin.id, None, &plugin.name))
+                } else {
+                    role.icon()
+                },
+                px(14.0),
+                accent,
+            )))
             .child(
                 div()
                     .flex()
@@ -3064,11 +3068,15 @@ impl AurisApp {
                     .hover(|this| this.bg(theme.surface_hover))
             })
             .tooltip(tooltip)
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .child(icon(Icon::Wave, px(14.0), accent)),
-            )
+            .child(div().flex_shrink_0().child(icon(
+                Icon::Sound(if choice.bank == PERCUSSION_BANK {
+                    auris_session::SoundIcon::Drum
+                } else {
+                    self.library_sound_icon(SAMPLER_ID, Some(choice), &preset.name)
+                }),
+                px(14.0),
+                accent,
+            )))
             .child(
                 div()
                     .flex()

@@ -9,6 +9,8 @@ use gpui::{Hsla, IntoElement, Pixels, div, prelude::*, svg};
 /// An icon the UI can draw.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Icon {
+    /// A semantic library sound family.
+    Sound(auris_session::SoundIcon),
     /// Return the playhead to the start.
     ToStart,
     /// Start playback.
@@ -91,6 +93,7 @@ pub fn icon(icon: Icon, size: Pixels, color: Hsla) -> impl IntoElement + use<> {
 impl Icon {
     fn extension_path(self) -> Option<&'static str> {
         match self {
+            Self::Sound(family) => Some(sound_icon_path(family)),
             Self::Volume => Some("icons/auris-volume.svg"),
             Self::VolumeMuted => Some("icons/auris-volume-muted.svg"),
             Self::Punch => Some("icons/auris-punch.svg"),
@@ -111,6 +114,7 @@ impl Icon {
     /// glyph with a different visual grammar.
     fn atelier_name(self) -> AtelierIconName {
         match self {
+            Self::Sound(_) => AtelierIconName::Music,
             Self::ToStart => AtelierIconName::SkipBack,
             Self::Play => AtelierIconName::Play,
             Self::Pause => AtelierIconName::Pause,
@@ -140,5 +144,26 @@ impl Icon {
             Self::Redo => AtelierIconName::Undo,
             Self::Bolt => AtelierIconName::Sparkles,
         }
+    }
+}
+
+/// Embedded monochrome SVG shared by library rows, map rows and the manual picker.
+pub(crate) fn sound_icon_path(family: auris_session::SoundIcon) -> &'static str {
+    use auris_session::SoundIcon;
+    match family {
+        SoundIcon::Sound => "icons/sound-sound.svg",
+        SoundIcon::Piano => "icons/sound-piano.svg",
+        SoundIcon::Organ => "icons/sound-organ.svg",
+        SoundIcon::Guitar => "icons/sound-guitar.svg",
+        SoundIcon::Bass => "icons/sound-bass.svg",
+        SoundIcon::Strings => "icons/sound-strings.svg",
+        SoundIcon::Brass => "icons/sound-brass.svg",
+        SoundIcon::Wind => "icons/sound-wind.svg",
+        SoundIcon::Drum => "icons/sound-drum.svg",
+        SoundIcon::Bell => "icons/sound-bell.svg",
+        SoundIcon::Voice => "icons/sound-voice.svg",
+        SoundIcon::Synth => "icons/sound-synth.svg",
+        SoundIcon::Pad => "icons/sound-pad.svg",
+        SoundIcon::Pluck => "icons/sound-pluck.svg",
     }
 }
