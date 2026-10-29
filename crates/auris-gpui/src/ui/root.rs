@@ -205,6 +205,7 @@ impl Render for AurisApp {
         self.main_was_active = window.is_window_active();
         let theme = self.theme.clone();
         let title_bar = self.render_title_bar(window, cx);
+        let project_tabs = self.render_project_tabs(window, cx);
         let menu_bar = self.render_menu_bar(window, cx);
         let transport = self.render_transport(window, cx);
         let arrangement = self.render_track_workspace(window, cx);
@@ -254,6 +255,7 @@ impl Render for AurisApp {
             .font(theme.font.clone())
             .text_size(theme.atelier.typography.size_md)
             .child(title_bar)
+            .children(project_tabs)
             .children(menu_bar)
             .child(transport)
             .child(
@@ -295,7 +297,7 @@ impl Render for AurisApp {
 }
 
 impl AurisApp {
-    fn modal_blocks_document_actions(&self) -> bool {
+    pub(crate) fn modal_blocks_document_actions(&self) -> bool {
         self.compose_progress.is_some()
             || self.export_dialog.is_some()
             || self.export.is_some()
@@ -342,7 +344,7 @@ impl AurisApp {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .top(crate::titlebar::HEIGHT + menu_bar::HEIGHT)
+                    .top(crate::titlebar::HEIGHT + self.project_tabs_height() + menu_bar::HEIGHT)
                     .occlude()
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -398,6 +400,18 @@ impl AurisApp {
                         cx.notify();
                     }
                 },
+            ))
+            .on_action(Self::window_listener(
+                cx,
+                |this, _: &actions::NextProjectTab, _, cx| this.cycle_project_tab(true, cx),
+            ))
+            .on_action(Self::window_listener(
+                cx,
+                |this, _: &actions::PreviousProjectTab, _, cx| this.cycle_project_tab(false, cx),
+            ))
+            .on_action(Self::window_listener(
+                cx,
+                |this, _: &actions::CloseProjectTab, _, cx| this.close_project_tab(cx),
             ))
             .when(modal_blocks_document_actions, |this| {
                 // Consume Quit here so it cannot fall through to the application fallback.
@@ -802,7 +816,7 @@ impl AurisApp {
                 viewport.height,
                 // The same chrome `resize_dock` clamps against — menu bar included, where one
                 // is drawn — or the drawn dock and the dragged limit disagree by a row.
-                Self::chrome_height(),
+                Self::chrome_height() + self.project_tabs_height(),
             ),
         }
     }
@@ -2708,7 +2722,7 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         if crate::project_windows::installed(cx) {
-            crate::project_windows::open(None, cx);
+            crate::project_windows::open_in(None, self.project_window, cx);
         } else {
             self.new_project_asking();
         }

@@ -26,6 +26,7 @@ mod keymap;
 mod logbook;
 mod menu;
 mod native_window;
+mod project_tabs;
 mod project_windows;
 mod settings_window;
 mod setup_guide;
@@ -90,23 +91,34 @@ fn main() {
         project_windows::install(cx);
         let window = project_windows::create(cx).expect("could not open the main window");
         window
-            .update(cx, |view, _, cx| {
-                view.download_missing_soundfonts(cx);
-                view.start_auto_updates(cx);
+            .update(cx, |tabs, _, cx| {
+                tabs.active().update(cx, |view, cx| {
+                    view.download_missing_soundfonts(cx);
+                    view.start_auto_updates(cx);
+                });
             })
             .ok();
         cx.on_action(|_: &actions::Quit, cx| project_windows::request_quit(cx));
         if let Some(path) = project_argument(std::env::args_os()) {
             window
-                .update(cx, |view, _, cx| view.open_project_at(path, cx))
+                .update(cx, |tabs, _, cx| {
+                    tabs.active()
+                        .update(cx, |view, cx| view.open_project_at(path, cx))
+                })
                 .ok();
         } else {
             window
-                .update(cx, |view, window, cx| view.show_project_chooser(window, cx))
+                .update(cx, |tabs, window, cx| {
+                    tabs.active()
+                        .update(cx, |view, cx| view.show_project_chooser(window, cx))
+                })
                 .ok();
         }
         window
-            .update(cx, |view, _, cx| view.offer_initial_setup(cx))
+            .update(cx, |tabs, _, cx| {
+                tabs.active()
+                    .update(cx, |view, cx| view.offer_initial_setup(cx))
+            })
             .ok();
         cx.spawn(async move |cx| {
             loop {
@@ -151,8 +163,7 @@ fn handed_over_project(url: &str) -> Option<PathBuf> {
 
 /// The project to open at launch, out of the arguments the shell handed over.
 ///
-/// The first argument that is not an option, and nothing after it: one window holds one
-/// document, so a second path could only replace the first as it finished loading.
+/// The first argument that is not an option names the initial project tab.
 ///
 /// Anything starting with `-` is skipped rather than rejected. That is not politeness about
 /// flags this binary does not have — it is what makes launching from the macOS Finder work at

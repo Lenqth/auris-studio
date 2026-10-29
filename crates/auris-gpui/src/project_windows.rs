@@ -2,9 +2,13 @@
 
 use std::path::PathBuf;
 
-use gpui::{App, AppContext, Context, Global, WindowHandle, WindowId, WindowOptions, px, size};
+use gpui::{
+    App, AppContext, Context, Entity, EntityId, Global, WindowHandle, WindowId, WindowOptions, px,
+    size,
+};
 
-use crate::app::{AurisApp, Pane};
+use crate::app::AurisApp;
+use crate::project_tabs::ProjectTabs;
 use crate::ui::prompt::PendingAction;
 
 pub(crate) enum AuditionRequest {
@@ -19,8 +23,9 @@ pub(crate) enum AuditionRequest {
 
 #[derive(Default)]
 pub(crate) struct ProjectWindows {
-    approved: Vec<(WindowId, u64)>,
+    approved: Vec<(EntityId, u64)>,
     restart: Option<WindowId>,
+    restart_committed: bool,
 }
 
 impl Global for ProjectWindows {}
@@ -29,17 +34,50 @@ pub(crate) fn installed(cx: &App) -> bool {
     cx.has_global::<ProjectWindows>()
 }
 
-fn windows(cx: &App) -> Vec<WindowHandle<AurisApp>> {
+fn windows(cx: &App) -> Vec<WindowHandle<ProjectTabs>> {
     cx.windows()
         .into_iter()
-        .filter_map(|window| window.downcast::<AurisApp>())
+        .filter_map(|window| window.downcast::<ProjectTabs>())
         .collect()
+}
+
+fn projects(cx: &App) -> Vec<Entity<AurisApp>> {
+    cx.windows()
+        .into_iter()
+        .flat_map(|window| {
+            if let Some(tabs) = window.downcast::<ProjectTabs>() {
+                tabs.read(cx)
+                    .map(|tabs| tabs.projects.clone())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            }
+        })
+        .collect()
+}
+
+fn activate(project: &Entity<AurisApp>, cx: &mut App) {
+    let owner = project.read(cx).project_tabs.clone();
+    let id = project.entity_id();
+    if let Some(owner) = owner {
+        crate::project_tabs::update_window(owner, cx, move |tabs, window, cx| {
+            tabs.select(id, window, cx);
+            crate::termination::activate(window, cx);
+        });
+    } else if let Some(id) = project.read(cx).project_window
+        && let Some(handle) = cx
+            .windows()
+            .into_iter()
+            .find(|handle| handle.window_id() == id)
+    {
+        let _ = handle.update(cx, |_, window, cx| crate::termination::activate(window, cx));
+    }
 }
 
 pub(crate) fn install(cx: &mut App) {
     cx.set_global(ProjectWindows::default());
     cx.on_window_closed(|cx| {
-        if windows(cx).is_empty() {
+        if projects(cx).is_empty() {
             crate::termination::quit(cx);
         }
     })
@@ -47,50 +85,71 @@ pub(crate) fn install(cx: &mut App) {
 }
 
 pub(crate) fn open(path: Option<PathBuf>, cx: &mut App) {
+    open_in(path, None, cx);
+}
+
+pub(crate) fn open_in(path: Option<PathBuf>, preferred: Option<WindowId>, cx: &mut App) {
     // Opening draws synchronously. Defer until the invoking document is no longer leased.
     cx.defer(move |cx| {
         if let Some(path) = path.as_ref() {
             let identity = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
-            for handle in windows(cx) {
-                let found = handle.update(cx, |view, window, _| {
-                    let found = view.session.path().is_some_and(|existing| {
+            for project in projects(cx) {
+                let found = project.update(cx, |view, _| {
+                    view.session.path().is_some_and(|existing| {
                         std::fs::canonicalize(existing).unwrap_or_else(|_| existing.to_path_buf())
                             == identity
-                    }) || view.opening_project.as_ref() == Some(&identity);
-                    if found {
-                        window.activate_window();
-                    }
-                    found
+                    }) || view.opening_project.as_ref() == Some(&identity)
                 });
-                if matches!(found, Ok(true)) {
-                    return;
-                }
-            }
-            for handle in windows(cx) {
-                let reused = handle.update(cx, |view, window, cx| {
-                    if view.project_chooser.is_some()
-                        && view.song_workshop.is_none()
-                        && view.opening_project.is_none()
-                    {
-                        window.activate_window();
-                        view.open_project_at(path.clone(), cx);
-                        true
-                    } else {
-                        false
-                    }
-                });
-                if matches!(reused, Ok(true)) {
+                if found {
+                    activate(&project, cx);
                     return;
                 }
             }
         }
+        let target = windows(cx)
+            .into_iter()
+            .find(|handle| Some(handle.window_id()) == preferred)
+            .or_else(|| {
+                cx.active_window()
+                    .and_then(|window| window.downcast::<ProjectTabs>())
+            })
+            .or_else(|| windows(cx).first().copied());
+        if let Some(target) = target {
+            let _ = target.update(cx, |tabs, window, cx| {
+                if let Some(path) = path.as_ref() {
+                    let reused = tabs.active().update(cx, |view, cx| {
+                        if view.project_chooser.is_some()
+                            && view.song_workshop.is_none()
+                            && view.opening_project.is_none()
+                        {
+                            view.open_project_at(path.clone(), cx);
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                    if reused {
+                        window.activate_window();
+                        return;
+                    }
+                }
+                tabs.add(path, window, cx);
+                window.activate_window();
+            });
+            return;
+        }
         match create(cx) {
             Ok(handle) => {
                 if let Some(path) = path {
-                    let _ = handle.update(cx, |view, _, cx| view.open_project_at(path, cx));
+                    let _ = handle.update(cx, |tabs, _, cx| {
+                        tabs.active()
+                            .update(cx, |view, cx| view.open_project_at(path, cx))
+                    });
                 } else {
-                    let _ =
-                        handle.update(cx, |view, window, cx| view.show_project_chooser(window, cx));
+                    let _ = handle.update(cx, |tabs, window, cx| {
+                        tabs.active()
+                            .update(cx, |view, cx| view.show_project_chooser(window, cx))
+                    });
                 }
             }
             Err(error) => log::error!("could not open project window: {error}"),
@@ -102,21 +161,23 @@ pub(crate) fn open(path: Option<PathBuf>, cx: &mut App) {
 pub(crate) fn open_setup_guide(cx: &mut App) {
     match create(cx) {
         Ok(handle) => {
-            let _ = handle.update(cx, |view, window, cx| {
-                view.show_project_chooser(window, cx);
-                if let Some(chooser) = &mut view.project_chooser {
-                    chooser.page = crate::ui::project_chooser::ChooserPage::Setup;
-                }
+            let _ = handle.update(cx, |tabs, window, cx| {
+                tabs.active().update(cx, |view, cx| {
+                    view.show_project_chooser(window, cx);
+                    if let Some(chooser) = &mut view.project_chooser {
+                        chooser.page = crate::ui::project_chooser::ChooserPage::Setup;
+                    }
+                })
             });
         }
         Err(error) => log::error!("could not open project window: {error}"),
     }
 }
 
-pub(crate) fn create(cx: &mut App) -> Result<WindowHandle<AurisApp>, String> {
+pub(crate) fn create(cx: &mut App) -> Result<WindowHandle<ProjectTabs>, String> {
     let remembered = auris_session::Settings::load().window;
     let bounds = crate::opening_window_bounds(remembered, cx);
-    let handle = crate::native_window::open(
+    crate::native_window::open(
         cx,
         WindowOptions {
             window_bounds: Some(bounds),
@@ -124,57 +185,34 @@ pub(crate) fn create(cx: &mut App) -> Result<WindowHandle<AurisApp>, String> {
             focus: true,
             ..crate::titlebar::options("Auris Studio")
         },
-        |_, cx| cx.new(AurisApp::new),
+        |window, cx| cx.new(|cx| ProjectTabs::new(window, cx)),
     )
-    .map_err(|error| error.to_string())?;
-    handle
-        .update(cx, |view, window, cx| {
-            view.project_window = Some(window.window_handle().window_id());
-            let _ = view.session.set_audio_suspended(true);
-            view.focus_pane(Pane::Arrangement, window);
-            let asked = cx.entity().downgrade();
-            window.on_window_should_close(cx, move |_, cx| {
-                asked
-                    .update(cx, |view, cx| {
-                        if view.compose_progress.is_some() {
-                            return false;
-                        }
-                        let close = view.confirm_discard(PendingAction::CloseWindow);
-                        if close {
-                            view.save_window_placement();
-                        }
-                        cx.notify();
-                        close
-                    })
-                    .unwrap_or(true)
-            });
-        })
-        .map_err(|error| error.to_string())?;
-    Ok(handle)
+    .map_err(|error| error.to_string())
 }
 
 pub(crate) fn request_quit(cx: &mut App) {
     cx.global_mut::<ProjectWindows>().approved.clear();
     cx.global_mut::<ProjectWindows>().restart = None;
+    cx.global_mut::<ProjectWindows>().restart_committed = false;
     advance_quit(cx);
 }
 
 pub(crate) fn request_restart(owner: Option<WindowId>, cx: &mut App) {
     cx.global_mut::<ProjectWindows>().approved.clear();
     cx.global_mut::<ProjectWindows>().restart = owner;
+    cx.global_mut::<ProjectWindows>().restart_committed = false;
     advance_quit(cx);
 }
 
 fn advance_quit(cx: &mut App) {
     cx.defer(|cx| {
-        for handle in windows(cx) {
-            let id = handle.window_id();
+        for project in projects(cx) {
+            let id = project.entity_id();
             let approved = cx.global::<ProjectWindows>().approved.clone();
-            let ready = handle.update(cx, |view, window, cx| {
+            let ready = project.update(cx, |view, cx| {
                 if approved.contains(&(id, view.session.revision())) {
                     return true;
                 }
-                crate::termination::activate(window, cx);
                 if view.compose_progress.is_some() {
                     return false;
                 }
@@ -189,14 +227,19 @@ fn advance_quit(cx: &mut App) {
                     false
                 }
             });
-            if !matches!(ready, Ok(true)) {
+            if !ready {
+                activate(&project, cx);
                 return;
             }
         }
         if let Some(owner) = cx.global::<ProjectWindows>().restart {
+            cx.global_mut::<ProjectWindows>().restart_committed = true;
             for handle in windows(cx) {
                 if handle.window_id() == owner {
-                    let _ = handle.update(cx, |view, _, _| view.restart_after_update = true);
+                    let _ = handle.update(cx, |tabs, _, cx| {
+                        tabs.active()
+                            .update(cx, |view, _| view.restart_after_update = true)
+                    });
                 }
             }
         }
@@ -210,10 +253,11 @@ fn advance_quit(cx: &mut App) {
 /// read. Without the window registry there is only the one window, and nothing else to ask.
 pub(crate) fn restart_requested_elsewhere(own: Option<WindowId>, cx: &App) -> bool {
     installed(cx)
-        && windows(cx)
-            .into_iter()
-            .filter(|handle| Some(handle.window_id()) != own)
-            .any(|handle| handle.read(cx).is_ok_and(|view| view.restart_after_update))
+        && (cx.global::<ProjectWindows>().restart_committed
+            || projects(cx).into_iter().any(|project| {
+                let view = project.read(cx);
+                view.project_window != own && view.restart_after_update
+            }))
 }
 
 impl AurisApp {
@@ -293,7 +337,7 @@ impl AurisApp {
 
     pub(crate) fn open_project_window(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         if installed(cx) {
-            open(Some(path), cx);
+            open_in(Some(path), self.project_window, cx);
         } else if self.confirm_discard(PendingAction::OpenDropped(path.clone())) {
             self.open_project_at(path, cx);
         }
@@ -304,7 +348,8 @@ impl AurisApp {
             crate::termination::quit(cx);
             return;
         }
-        if let Some(id) = self.project_window {
+        if self.project_window.is_some() {
+            let id = cx.entity_id();
             cx.global_mut::<ProjectWindows>()
                 .approved
                 .push((id, self.session.revision()));
@@ -317,11 +362,11 @@ impl AurisApp {
         if !installed(cx) || !self.session.audio_suspended() {
             return true;
         }
-        for handle in windows(cx) {
-            if Some(handle.window_id()) == self.project_window {
+        for project in projects(cx) {
+            if project.entity_id() == cx.entity_id() {
                 continue;
             }
-            let result = handle.update(cx, |view, _, cx| {
+            let result = project.update(cx, |view, cx| {
                 let was_suspended = view.session.audio_suspended();
                 let result = view.session.set_audio_suspended(true);
                 if result.is_ok() {
@@ -336,8 +381,8 @@ impl AurisApp {
                 result
             });
             match result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
+                Ok(()) => {}
+                Err(error) => {
                     let message =
                         if matches!(error, auris_session::SessionError::RecordingInProgress) {
                             self.t(auris_i18n::Key::OtherProjectRecording).to_string()
@@ -345,10 +390,6 @@ impl AurisApp {
                             crate::i18n::error_text(&error, self.language())
                         };
                     self.set_failed_status(message);
-                    return false;
-                }
-                Err(error) => {
-                    log::warn!("could not transfer realtime audio: {error}");
                     return false;
                 }
             }
@@ -389,144 +430,161 @@ mod tests {
     use super::*;
 
     #[gpui::test]
-    fn projects_keep_independent_documents_and_transfer_audio(cx: &mut gpui::TestAppContext) {
-        let (first, cx) = crate::harness::open(cx);
-        let second = cx.update(|window, cx| {
-            install(cx);
-            first.update(cx, |view, _| {
-                view.project_window = Some(window.window_handle().window_id());
-                view.session.set_audio_suspended(true).unwrap();
-                view.session.add_audio_track("First");
-            });
-            create(cx).unwrap()
+    fn tabs_keep_independent_documents_undo_and_audio(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        first.update(cx, |view, _| view.session.add_audio_track("First"));
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.add(None, window, cx)));
+        let second = tabs.read_with(cx, |tabs, _| tabs.active());
+        second.update(cx, |view, cx| {
+            view.project_chooser = None;
+            view.session.add_audio_track("Second");
+            assert!(view.acquire_audio(cx));
         });
-        cx.cx.update(|cx| {
-            second
-                .update(cx, |view, _, cx| {
-                    view.session.add_audio_track("Second");
-                    assert!(view.acquire_audio(cx));
-                })
-                .unwrap();
-            first.update(cx, |view, cx| {
-                assert!(view.session.audio_suspended());
-                assert!(view.acquire_audio(cx));
-                assert_eq!(view.project().tracks.len(), 2);
-                assert_eq!(view.project().tracks[1].name, "First");
-            });
-            second
-                .update(cx, |view, _, _| {
-                    assert!(view.session.audio_suspended());
-                    assert_eq!(view.project().tracks.len(), 2);
-                    assert_eq!(view.project().tracks[1].name, "Second");
-                    view.session.undo();
-                    assert_eq!(view.project().tracks.len(), 1);
-                })
-                .unwrap();
-            assert_eq!(first.read(cx).project().tracks.len(), 2);
+        first.update(cx, |view, cx| {
+            assert!(view.session.audio_suspended());
+            assert!(view.acquire_audio(cx));
+            assert_eq!(view.project().tracks[1].name, "First");
         });
+        second.update(cx, |view, _| {
+            assert!(view.session.audio_suspended());
+            view.session.undo();
+            assert_eq!(view.project().tracks.len(), 1);
+        });
+        assert_eq!(
+            first.read_with(cx, |view, _| view.project().tracks.len()),
+            2
+        );
+        assert_eq!(tabs.read_with(cx, |tabs, _| tabs.projects.len()), 2);
     }
 
     #[gpui::test]
-    fn a_restart_chosen_in_another_window_is_seen_by_this_ones_quit(cx: &mut gpui::TestAppContext) {
-        let (first, cx) = crate::harness::open(cx);
-        let own = cx.update(|window, cx| {
-            install(cx);
-            let own = window.window_handle().window_id();
-            first.update(cx, |view, _| view.project_window = Some(own));
-            own
-        });
-        let second = cx.cx.update(|cx| create(cx).unwrap());
-        cx.cx.update(|cx| {
-            assert!(!restart_requested_elsewhere(Some(own), cx));
-            second
-                .update(cx, |view, _, _| view.restart_after_update = true)
-                .unwrap();
-            assert!(restart_requested_elsewhere(Some(own), cx));
-            // The asking window's own flag is its caller's to read, not this function's.
-            let other = second.window_id();
-            assert!(!restart_requested_elsewhere(Some(other), cx));
-        });
-    }
-
-    #[gpui::test]
-    fn closing_one_project_keeps_the_other_window(cx: &mut gpui::TestAppContext) {
-        let (first, cx) = crate::harness::open(cx);
-        let second = cx.cx.update(|cx| {
-            install(cx);
-            create(cx).unwrap()
-        });
-        cx.cx.update(|cx| {
-            second
-                .update(cx, |_, window, _| window.remove_window())
-                .unwrap();
-        });
-        cx.run_until_parked();
-        cx.cx.update(|cx| {
-            assert_eq!(windows(cx).len(), 1);
-            assert_eq!(first.read(cx).project().tracks.len(), 1);
-        });
-    }
-
-    #[gpui::test]
-    fn opening_the_same_project_activates_its_existing_window(cx: &mut gpui::TestAppContext) {
-        let (first, cx) = crate::harness::open(cx);
+    fn opening_a_project_twice_selects_its_existing_tab(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
         let directory = tempfile::tempdir().unwrap();
-        let path = cx.update(|window, cx| {
-            install(cx);
-            first.update(cx, |view, _| {
-                view.project_window = Some(window.window_handle().window_id());
-                view.session
-                    .save_as(&directory.path().join("Same.auris"))
-                    .unwrap();
-                view.session.add_audio_track("Unsaved edits");
-                view.session.path().unwrap().to_path_buf()
-            })
+        let path = first.update(cx, |view, _| {
+            view.session
+                .save_as(&directory.path().join("Same.auris"))
+                .unwrap();
+            view.session.add_audio_track("Unsaved edits");
+            view.session.path().unwrap().to_path_buf()
         });
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.add(None, window, cx)));
         cx.cx.update(|cx| {
             open(Some(path.clone()), cx);
             open(Some(path), cx);
         });
         cx.run_until_parked();
+        assert_eq!(tabs.read_with(cx, |tabs, _| tabs.projects.len()), 2);
+        assert_eq!(
+            tabs.read_with(cx, |tabs, _| tabs.active()).entity_id(),
+            first.entity_id()
+        );
+        assert!(first.read_with(cx, |view, _| view.session.is_dirty()));
+        assert_eq!(
+            first.read_with(cx, |view, _| view.project().tracks.len()),
+            2
+        );
+    }
+
+    #[gpui::test]
+    fn opening_another_saved_project_keeps_the_current_dirty_document(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        first.update(cx, |view, _| {
+            view.session.add_audio_track("Keep unsaved first")
+        });
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.add(None, window, cx)));
+        let second = tabs.read_with(cx, |tabs, _| tabs.active());
+        let directory = tempfile::tempdir().unwrap();
+        let path = second.update(cx, |view, _| {
+            view.project_chooser = None;
+            view.session.add_audio_track("Saved second");
+            view.session
+                .save_as(&directory.path().join("Second.auris"))
+                .unwrap();
+            view.session.path().unwrap().to_path_buf()
+        });
+        cx.update(|window, cx| {
+            tabs.update(cx, |tabs, cx| {
+                tabs.close_tab(second.entity_id(), window, cx)
+            })
+        });
+        cx.cx.update(|cx| open(Some(path), cx));
+        cx.run_until_parked();
+        assert_eq!(tabs.read_with(cx, |tabs, _| tabs.projects.len()), 2);
+        let loaded = tabs.read_with(cx, |tabs, _| tabs.active());
+        assert_ne!(loaded.entity_id(), first.entity_id());
+        assert_eq!(
+            loaded.read_with(cx, |view, _| view.project().tracks[1].name.clone()),
+            "Saved second"
+        );
+        assert!(first.read_with(cx, |view, _| view.session.is_dirty()));
+        assert_eq!(
+            first.read_with(cx, |view, _| view.project().tracks[1].name.clone()),
+            "Keep unsaved first"
+        );
+    }
+
+    #[gpui::test]
+    fn quit_checks_hidden_dirty_tabs_before_closing_any_window(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        first.update(cx, |view, _| view.session.add_audio_track("Unsaved"));
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.add(None, window, cx)));
+        cx.cx.update(request_quit);
+        cx.run_until_parked();
+        assert_eq!(
+            tabs.read_with(cx, |tabs, _| tabs.active()).entity_id(),
+            first.entity_id()
+        );
+        first.update(cx, |view, _| {
+            assert!(matches!(
+                view.prompt.as_ref().map(|prompt| &prompt.body),
+                Some(crate::ui::prompt::PromptBody::Ask(
+                    crate::ui::prompt::Question::Unsaved(PendingAction::Quit)
+                ))
+            ));
+            assert!(view.cancel_prompt());
+            assert!(view.session.is_dirty());
+        });
+        assert_eq!(tabs.read_with(cx, |tabs, _| tabs.projects.len()), 2);
+    }
+
+    #[gpui::test]
+    fn a_restart_chosen_in_another_window_is_seen_by_this_ones_quit(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let own = tabs
+            .read_with(cx, |tabs, _| tabs.active())
+            .read_with(cx, |view, _| view.project_window);
+        let second = cx.cx.update(|cx| create(cx).unwrap());
         cx.cx.update(|cx| {
-            assert_eq!(windows(cx).len(), 1);
-            assert!(first.read(cx).session.is_dirty());
-            assert_eq!(first.read(cx).project().tracks.len(), 2);
+            assert!(!restart_requested_elsewhere(own, cx));
+            second
+                .update(cx, |tabs, _, cx| {
+                    tabs.active()
+                        .update(cx, |view, _| view.restart_after_update = true)
+                })
+                .unwrap();
+            assert!(restart_requested_elsewhere(own, cx));
+            assert!(!restart_requested_elsewhere(Some(second.window_id()), cx));
         });
     }
 
     #[gpui::test]
-    fn quit_checks_other_dirty_projects_before_closing_any_window(cx: &mut gpui::TestAppContext) {
-        let (first, cx) = crate::harness::open(cx);
-        let second = cx.update(|window, cx| {
-            install(cx);
-            first.update(cx, |view, _| {
-                view.project_window = Some(window.window_handle().window_id())
-            });
-            let second = create(cx).unwrap();
-            second
-                .update(cx, |view, _, _| {
-                    view.session.add_audio_track("Unsaved");
-                })
-                .unwrap();
-            request_quit(cx);
-            second
-        });
+    fn a_cancelled_restart_does_not_restart_on_a_later_window_close(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        first.update(cx, |view, _| view.session.add_audio_track("Unsaved"));
+        let own = first.read_with(cx, |view, _| view.project_window);
+        cx.cx.update(|cx| request_restart(own, cx));
         cx.run_until_parked();
-        cx.cx.update(|cx| {
-            assert_eq!(windows(cx).len(), 2);
-            second
-                .update(cx, |view, _, _| {
-                    assert!(matches!(
-                        view.prompt.as_ref().map(|prompt| &prompt.body),
-                        Some(crate::ui::prompt::PromptBody::Ask(
-                            crate::ui::prompt::Question::Unsaved(PendingAction::Quit)
-                        ))
-                    ));
-                    assert!(view.session.is_dirty());
-                    assert!(view.cancel_prompt());
-                    assert!(view.session.is_dirty());
-                })
-                .unwrap();
-        });
+        assert!(first.read_with(cx, |view, _| view.prompt.is_some()));
+        first.update(cx, |view, _| view.cancel_prompt());
+        cx.cx
+            .update(|cx| assert!(!restart_requested_elsewhere(None, cx)));
     }
 }

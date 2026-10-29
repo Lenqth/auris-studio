@@ -13,8 +13,12 @@ Auris Studio は Rust で開発されたデジタル・オーディオ・ワー�
 Rust 1.95 以降を使ってソースからビルドする場合は、次を実行します。
 
 ```sh
+git clone https://github.com/uthree/auris-studio.git
+cd auris-studio
 cargo run --release
 ```
+
+`cargo install` で実行ファイルをインストールする手順は、[ソースからのビルドとインストール](docs/installation.ja.md#building-and-installing-from-source)を参照してください。
 
 Windows でのビルドには Visual Studio C++ Build Tools と LLVM も必要です。Visual Studio の開発者用 PowerShell で `.\tools\setup-windows.ps1 -InstallLlvm` を実行してからビルドしてください。各 OS の準備については[開発ガイド](docs/development.ja.md#building-on-each-platform)、内蔵音源については[物理モデル音源](docs/physical-instruments.ja.md)を参照してください。
 

@@ -15,6 +15,12 @@ actions!(
         NewProject,
         /// Open a project file.
         OpenProject,
+        /// Close the selected project tab after checking for unsaved changes.
+        CloseProjectTab,
+        /// Select the next project tab.
+        NextProjectTab,
+        /// Select the previous project tab.
+        PreviousProjectTab,
         /// Open the song sheet: a whole piece asked for with dials.
         ComposeSong,
         /// Write a piece from a song specification file, replacing the document.
@@ -242,6 +248,8 @@ actions!(
 /// therefore always on that path; a pane's name is only on it while that pane holds focus. That
 /// is what lets `t` mean one thing in the piano roll without meaning it everywhere.
 pub mod context {
+    /// Project navigation stays reachable while a document text field owns input.
+    pub const PROJECT_TABS: &str = "AurisProjectTabs";
     /// The window. A binding here fires wherever focus is.
     pub const WINDOW: &str = "Auris";
     /// A sheet or the palette is up. Nothing is bound here, which is how a text field gets its
@@ -377,6 +385,8 @@ impl Bindable {
         self.context == other.context
             || self.context == context::WINDOW
             || other.context == context::WINDOW
+            || self.context == context::PROJECT_TABS
+            || other.context == context::PROJECT_TABS
     }
 }
 
@@ -417,6 +427,11 @@ macro_rules! bindable {
 // which is what each platform's users already have in their fingers. Writing `cmd` would bind
 // the Windows key off a Mac, and the shell takes most of those combinations first.
 bindable! {
+    context::PROJECT_TABS => {
+        "file.close_tab",       GroupFile,      CmdCloseTab,           "secondary-w" => CloseProjectTab;
+        "view.next_tab",        GroupView,      CmdNextTab,            "ctrl-tab" => NextProjectTab;
+        "view.previous_tab",    GroupView,      CmdPreviousTab,        "ctrl-shift-tab" => PreviousProjectTab;
+    }
     context::WINDOW => {
         "transport.play",       GroupTransport, CmdPlayStop,           "space"       => TogglePlay;
         "transport.return",     GroupTransport, CmdReturnToZero,       "enter"       => ReturnToZero;
@@ -1049,6 +1064,7 @@ mod tests {
         // A typo would parse as an identifier gpui never sees on the dispatch path, and the
         // binding would simply never fire — with nothing anywhere to say why.
         const CONTEXTS: &[&str] = &[
+            context::PROJECT_TABS,
             context::WINDOW,
             context::LIBRARY,
             context::ARRANGEMENT,

@@ -627,6 +627,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let project_tabs = self.render_project_tabs(window, cx);
         self.sync_auxiliary_windows(cx);
         let chord_prompt = self.workshop_chord_prompt();
         if chord_prompt {
@@ -981,6 +982,29 @@ impl AurisApp {
             .on_action(cx.listener(|this, _: &crate::actions::Quit, window, cx| {
                 this.quit_asking(window, cx)
             }))
+            .on_action(
+                cx.listener(|this, _: &crate::actions::NextProjectTab, _, cx| {
+                    this.cycle_project_tab(true, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::actions::PreviousProjectTab, _, cx| {
+                    this.cycle_project_tab(false, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::actions::CloseProjectTab, _, cx| {
+                    this.close_project_tab(cx)
+                }),
+            )
+            .on_action(cx.listener(|this, _: &crate::actions::NewProject, _, cx| {
+                crate::project_windows::open_in(None, this.project_window, cx)
+            }))
+            .on_action(
+                cx.listener(|this, _: &crate::actions::OpenProject, window, cx| {
+                    this.open_project(window, cx)
+                }),
+            )
             .child(crate::titlebar::bar(
                 window,
                 &theme,
@@ -988,9 +1012,10 @@ impl AurisApp {
                 crate::titlebar::controls(
                     window,
                     &theme,
-                    cx.listener(|_, _, window, _| window.remove_window()),
+                    cx.listener(|this, _, window, cx| this.close_project_window(window, cx)),
                 ),
             ))
+            .children(project_tabs)
             .child(
                 div()
                     .relative()

@@ -7,7 +7,6 @@ use crate::app::AurisApp;
 use crate::dock::Dock;
 use crate::titlebar;
 use crate::ui::icons::Icon;
-use crate::ui::prompt::PendingAction;
 use crate::ui::widgets::icon_button_enabled;
 
 /// Whether there is room beside playback and the native controls for the panel switches.
@@ -31,10 +30,7 @@ impl AurisApp {
             window,
             theme,
             cx.listener(|this, _, window, cx| {
-                if this.confirm_discard(PendingAction::CloseWindow) {
-                    this.save_window_placement();
-                    window.remove_window();
-                }
+                this.close_project_window(window, cx);
                 cx.notify();
             }),
         );
