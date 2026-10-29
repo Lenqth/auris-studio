@@ -15,6 +15,7 @@ mod attachments;
 pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
 pub mod approval_review;
 mod completion;
+pub mod input_suggestion;
 pub mod song_authoring;
 pub mod song_ideas;
 pub mod timbre_names;

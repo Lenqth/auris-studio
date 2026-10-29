@@ -107,6 +107,13 @@ strings! {
     WorkshopLength { en: "Approximate length", ja: "おおよその長さ" }
     WorkshopBrief { en: "Direction", ja: "曲の方向性" }
     WorkshopBriefHint { en: "For example: walking through a city at night, with a memorable piano melody.", ja: "例：夜の街を歩くような、印象的なピアノのメロディーがある曲" }
+    WorkshopBriefHintGame { en: "For example: a cheerful game town theme with flute and acoustic guitar.", ja: "例：フルートとアコギで、ゲームの街に流れる明るい曲" }
+    WorkshopBriefHintVocal { en: "For example: a Japanese pop song about a new beginning, with a soaring chorus.", ja: "例：新しい一歩を踏み出す気持ちを、日本語の歌詞と伸びやかなサビで" }
+    WorkshopBriefHintAmbient { en: "For example: a quiet, spacious soundtrack for reading on a rainy afternoon.", ja: "例：雨の午後の読書に合う、静かでゆったりした音楽" }
+    WorkshopBriefHintDance { en: "For example: a driving dance track with a deep bass and sparkling synths.", ja: "例：深いベースときらめくシンセで、思わず踊りたくなる曲" }
+    WorkshopBriefHintLoop { en: "For example: a seamless forest exploration loop with soft strings and bells.", ja: "例：やわらかな弦とベルで、森の探索シーンに合うループBGM" }
+    WorkshopInputSuggestion { en: "Tab to complete", ja: "Tabで補完" }
+    WorkshopDismissSuggestion { en: "Dismiss suggestion", ja: "入力候補を閉じる" }
     WorkshopBright { en: "Bright", ja: "明るい" }
     WorkshopMelancholy { en: "Melancholy", ja: "切ない" }
     WorkshopCalm { en: "Calm", ja: "落ち着いた" }
@@ -2205,6 +2212,10 @@ new のオプション
     AgentSlashDeny { en: "Always deny an operation", ja: "操作を常に禁止" }
     AgentSlashDefault { en: "Reset an operation rule", ja: "許可ルールを標準に戻す" }
     AgentSlashCompact { en: "Summarize earlier context", ja: "過去の会話を要約" }
+    AgentSlashHelp { en: "Show available commands", ja: "使えるコマンドを表示" }
+    AgentSlashUnknown { en: "Unknown command. Use /help to see available commands.", ja: "不明なコマンドです。/help で使えるコマンドを確認できます。" }
+    AgentSlashWorkshopOnlyPanel { en: "This command is available in the agent panel. Use /help for song conversation commands.", ja: "このコマンドはエージェントパネルで使えます。曲作成で使えるコマンドは /help で確認できます。" }
+    AgentSlashBusy { en: "Stop the current task before changing model settings.", ja: "モデル設定を変えるには、実行中の処理を停止してください。" }
     AgentKeyEnvLabel { en: "API key variable", ja: "APIキーの環境変数" }
     AgentWorking { en: "Working…", ja: "作業中…" }
     AgentCompleted { en: "Completed", ja: "完了" }

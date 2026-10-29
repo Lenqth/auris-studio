@@ -12,6 +12,7 @@ pub mod arrangement;
 pub(crate) mod attachment_preview;
 pub(crate) mod audio_player;
 pub mod automation;
+pub(crate) mod chat_commands;
 pub mod commands;
 mod compose_job;
 pub(crate) mod compose_progress;

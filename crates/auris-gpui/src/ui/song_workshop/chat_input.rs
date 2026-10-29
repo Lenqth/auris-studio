@@ -1,5 +1,6 @@
 //! One natural-language composer and provider controls.
 use super::*;
+use crate::ui::chat_commands::{self, CompletionKey, Scope};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
     pub(super) fn render_workshop_input(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -24,8 +25,9 @@ impl AurisApp {
         ));
         let focused = s.active_field == Some(0);
         let busy = s.busy();
-        let can_send =
-            !busy && !s.brief.content().trim().is_empty() && s.preferences.is_configured();
+        let can_send = !busy
+            && !s.brief.content().trim().is_empty()
+            && (s.preferences.is_configured() || s.brief.content().trim().starts_with('/'));
         let action = if busy {
             agent_components::composer_action(
                 "song-cancel",
@@ -127,7 +129,78 @@ impl AurisApp {
                         )
                 })),
         )
-        .child(self.workshop_field(0, Key::WorkshopBriefHint, true, cx))
+        .children(s.completions.render(
+            if s.brief.marked().is_none() && s.active_field == Some(0) {
+                s.completions
+                    .matches(s.brief.content(), &s.models, Scope::Workshop)
+            } else {
+                Vec::new()
+            },
+            Scope::Workshop,
+            &theme,
+            self.language(),
+            cx,
+        ))
+        .child(self.workshop_field(0, s.input_assist.placeholder(), true, cx))
+        .children(
+            (!busy)
+                .then(|| s.input_assist.suffix(&s.brief, &s.preferences))
+                .flatten()
+                .map(|suffix| {
+                    div()
+                        .id("workshop-input-suggestion")
+                        .debug_selector(|| "workshop-input-suggestion".into())
+                        .flex()
+                        .items_center()
+                        .gap(theme.atelier.spacing.xs)
+                        .child(
+                            div()
+                                .debug_selector(|| "workshop-accept-suggestion".into())
+                                .min_w_0()
+                                .overflow_hidden()
+                                .child(
+                                    atelier::Button::new(
+                                        "workshop-accept-suggestion",
+                                        suffix.to_owned(),
+                                    )
+                                    .ghost()
+                                    .size(atelier::ControlSize::Small)
+                                    .tooltip(suffix.to_owned())
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.focus_workshop_input(window);
+                                            this.accept_workshop_suggestion();
+                                            cx.notify();
+                                        },
+                                    )),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.text_faint)
+                                .child(self.t(Key::WorkshopInputSuggestion)),
+                        )
+                        .child(
+                            atelier::Button::icon_only(
+                                "workshop-dismiss-suggestion",
+                                atelier::IconName::Close,
+                            )
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .tooltip(self.t(Key::WorkshopDismissSuggestion))
+                            .on_click(cx.listener(
+                                |this, _, window, cx| {
+                                    if let Some(s) = &mut this.song_workshop {
+                                        s.input_assist.dismiss();
+                                        s.foci[0].focus(window);
+                                    }
+                                    cx.notify();
+                                },
+                            )),
+                        )
+                }),
+        )
         .child(
             agent_components::composer_controls("workshop-composer-controls", &theme)
                 .child(
@@ -208,6 +281,12 @@ impl AurisApp {
                 .child(div().flex_1())
                 .child(action),
         );
+        if let Some(feedback) = &s.command_feedback {
+            body = body.child(match feedback {
+                Ok(text) => agent_components::status_notice(text.clone()),
+                Err(text) => agent_components::error_notice(text.clone()),
+            });
+        }
         if let Some(error) = &s.model_error {
             body = body.child(crate::ui::agent_components::error_notice(error.clone()));
         }
@@ -231,6 +310,58 @@ impl AurisApp {
             if s.brief.marked().is_some() {
                 return;
             }
+            let matches = s
+                .completions
+                .matches(s.brief.content(), &s.models, Scope::Workshop);
+            match s.completions.key(s.brief.content(), &matches, event) {
+                CompletionKey::Handled => {
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
+                CompletionKey::Complete { fill, submit } => {
+                    self.accept_workshop_completion(&fill);
+                    if submit {
+                        self.start_song_workshop(cx);
+                    }
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
+                CompletionKey::Ignored => {}
+            }
+            if s.input_assist.suffix(&s.brief, &s.preferences).is_some() {
+                match event.keystroke.key.as_str() {
+                    "tab" if !event.keystroke.modifiers.shift => {
+                        self.accept_workshop_suggestion();
+                        cx.stop_propagation();
+                        cx.notify();
+                        return;
+                    }
+                    "escape" => {
+                        s.input_assist.dismiss();
+                        cx.stop_propagation();
+                        cx.notify();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some(s) = &mut self.song_workshop
+            && s.foci[0].is_focused(window)
+        {
+            if event.keystroke.key == "tab" {
+                s.active_field = None;
+                if event.keystroke.modifiers.shift {
+                    window.focus_prev();
+                } else {
+                    window.focus_next();
+                }
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
             if event.keystroke.key == "enter" {
                 if event.keystroke.modifiers.shift {
                     s.brief.insert("\n");
@@ -241,14 +372,18 @@ impl AurisApp {
                 cx.notify();
                 return;
             }
-            if s.brief.apply_key_with_clipboard(
+            let effect = s.brief.apply_key_with_clipboard(
                 &event.keystroke.key,
                 event.keystroke.modifiers.shift,
                 event.keystroke.modifiers.secondary(),
                 true,
                 cx,
-            ) != KeyEffect::Ignored
-            {
+            );
+            if effect == KeyEffect::Changed {
+                s.completions.reset();
+                s.input_assist.edited();
+            }
+            if effect != KeyEffect::Ignored {
                 cx.stop_propagation();
                 cx.notify();
                 return;
@@ -263,6 +398,95 @@ impl AurisApp {
             cx.notify();
         }
     }
+
+    pub(crate) fn reset_workshop_completions(&mut self) {
+        if let Some(s) = &mut self.song_workshop {
+            s.completions.reset();
+            s.input_assist.edited();
+        }
+    }
+
+    pub(in crate::ui) fn accept_workshop_completion(&mut self, fill: &str) {
+        if let Some(s) = &mut self.song_workshop {
+            s.brief.replace(0..s.brief.content().len(), fill);
+            s.completions.reset();
+            s.active_field = Some(0);
+        }
+    }
+
+    pub(in crate::ui) fn focus_workshop_input(&mut self, window: &mut Window) {
+        if let Some(s) = &mut self.song_workshop {
+            s.active_field = Some(0);
+            s.foci[0].focus(window);
+        }
+    }
+
+    /// Commands never become composition requests or consume draft attachments.
+    pub(super) fn workshop_control_command(&mut self) -> bool {
+        let language = self.language();
+        let Some(s) = &mut self.song_workshop else {
+            return false;
+        };
+        let text = s.brief.content().trim().to_owned();
+        if !text.starts_with('/') {
+            return false;
+        }
+        let (command, value) = text.split_once(' ').unwrap_or((&text, ""));
+        let value = value.trim();
+        let result = match command {
+            "/help" => Ok(Some(chat_commands::help(Scope::Workshop, language))),
+            "/model" | "/effort" if s.busy() => Err(Key::AgentSlashBusy.get(language).to_owned()),
+            "/model" => {
+                if s.model_receiver.is_some() {
+                    Err(Key::AgentModelSearchLoading.get(language).to_owned())
+                } else if value.is_empty() {
+                    self.accept_workshop_completion("/model ");
+                    return true;
+                } else if let Some(&index) =
+                    crate::ui::agent_chat::model_search::matches(value, &s.models).first()
+                {
+                    self.choose_workshop_model(index);
+                    Ok(None)
+                } else {
+                    Err(Key::AgentModelSearchEmpty.get(language).to_owned())
+                }
+            }
+            "/effort" => match auris_session::ReasoningEffort::named(value) {
+                Some(effort)
+                    if s.preferences.backend == "opencode" && effort != Default::default() =>
+                {
+                    Err(Key::AgentOpenCodeVariantHelp.get(language).to_owned())
+                }
+                Some(effort) => {
+                    s.preferences.effort = effort;
+                    s.preferences.thinking = None;
+                    Ok(None)
+                }
+                None => Err(
+                    "/effort default | none | minimal | low | medium | high | xhigh | max".into(),
+                ),
+            },
+            _ => Err(if chat_commands::is_control_command(&text) {
+                Key::AgentSlashWorkshopOnlyPanel
+            } else {
+                Key::AgentSlashUnknown
+            }
+            .get(language)
+            .to_owned()),
+        };
+        if let Some(s) = &mut self.song_workshop {
+            match result {
+                Ok(feedback) => {
+                    s.command_feedback = feedback.map(Ok);
+                    s.brief = TextField::default();
+                }
+                Err(error) => s.command_feedback = Some(Err(error)),
+            }
+            s.completions.reset();
+        }
+        true
+    }
+
     pub(crate) fn choose_workshop_model(&mut self, index: usize) {
         let Some(s) = &mut self.song_workshop else {
             return;
