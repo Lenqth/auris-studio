@@ -2487,6 +2487,17 @@ impl AurisApp {
             }
             return;
         }
+        if self
+            .prompt
+            .as_ref()
+            .and_then(crate::ui::prompt::Prompt::feedback_focus_handles)
+            .is_some_and(|foci| {
+                foci.iter().any(|focus| focus.is_focused(window))
+                    || self.modal_focus.prompt_contains_focused(window)
+            })
+        {
+            return;
+        }
         if self.song_sheet.is_some()
             && self.lyrics_edit.is_none()
             && self.prompt.is_none()

@@ -17,6 +17,7 @@ use std::sync::{
 
 /// The width the transcript, the cards and the composer share, as in Atelier's compose screen.
 const COLUMN_WIDTH: gpui::Pixels = gpui::px(1040.0);
+static NEXT_WORKSHOP: AtomicU64 = AtomicU64::new(1);
 
 /// A command's label used as a title: without the ellipsis that says the command asks for more.
 fn title_of(label: &str) -> String {
@@ -37,6 +38,7 @@ mod input;
 mod input_assist;
 #[path = "song_workshop/preview.rs"]
 mod preview;
+mod threads;
 
 pub(crate) struct SongWorkshop {
     pub(crate) identity: u64,
@@ -71,17 +73,67 @@ pub(crate) struct SongWorkshop {
     copied: Option<(&'static str, usize)>,
     expanded_tools: std::collections::BTreeSet<u64>,
     scroll: gpui::ScrollHandle,
+    switching: bool,
+    show_archived_threads: bool,
+    pending_thread_name: Option<String>,
 }
 
 impl SongWorkshop {
+    /// Release outdated audition snapshots once playback and preparation are idle.
+    pub(super) fn sync_idle_auditions(&mut self) -> bool {
+        let mut changed = false;
+        for index in 0..self.players.len() {
+            if preview::should_refresh_audition(
+                self.played_audio[index].as_ref(),
+                self.audition(index).as_ref(),
+                self.players[index].playing(),
+                self.preparing == Some(index),
+            ) {
+                self.players[index].stop();
+                self.played_audio[index] = None;
+                self.played_timeline[index] = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+    /// Send feedback only to the exact conversation and candidate that opened the sheet.
+    pub(super) fn send_feedback(
+        &self,
+        identity: u64,
+        id: u64,
+        feedback: auris_session::workshop::Feedback,
+    ) -> bool {
+        self.identity == identity
+            && self.snapshot.as_ref().is_some_and(|snapshot| {
+                snapshot
+                    .document
+                    .rounds
+                    .iter()
+                    .flat_map(|r| &r.candidates)
+                    .any(|c| c.id == id && c.ready)
+            })
+            && !self.switching
+            && self.send(Command::Feedback(
+                self.snapshot
+                    .as_ref()
+                    .map_or("default", |s| s.document.thread_id.as_str())
+                    .to_owned(),
+                id,
+                feedback,
+            ))
+    }
+    /// Whether production or a conversation switch is in progress.
     pub(crate) fn busy(&self) -> bool {
-        self.submitted
+        self.switching
+            || self.submitted
             || self
                 .snapshot
                 .as_ref()
                 .is_none_or(|s| s.planning || !s.progress.is_empty())
     }
-    fn send(&self, command: Command) -> bool {
+    /// Queue a command for the background conversation owner.
+    pub(super) fn send(&self, command: Command) -> bool {
         self.runtime
             .as_ref()
             .is_some_and(|runtime| runtime.send(command))
@@ -166,7 +218,7 @@ impl SongWorkshop {
         &mut self.brief
     }
     pub(crate) fn field(&self) -> Option<&TextField> {
-        if self.submitted {
+        if self.submitted || self.switching {
             return None;
         }
         match self.active_field {
@@ -176,7 +228,7 @@ impl SongWorkshop {
         }
     }
     pub(crate) fn field_mut(&mut self) -> Option<&mut TextField> {
-        if self.submitted {
+        if self.submitted || self.switching {
             return None;
         }
         match self.active_field {
@@ -189,7 +241,11 @@ impl SongWorkshop {
 
 impl Drop for SongWorkshop {
     fn drop(&mut self) {
-        self.send(Command::Draft(
+        self.send(Command::ThreadDraft(
+            self.snapshot
+                .as_ref()
+                .map_or("default", |s| s.document.thread_id.as_str())
+                .to_owned(),
             self.brief.content().to_owned(),
             self.references.attachments.clone(),
         ));
@@ -197,6 +253,34 @@ impl Drop for SongWorkshop {
 }
 
 impl AurisApp {
+    fn open_workshop_feedback(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(state) = &self.song_workshop else {
+            return;
+        };
+        let Some(candidate) = state.snapshot.as_ref().and_then(|snapshot| {
+            snapshot
+                .document
+                .rounds
+                .iter()
+                .flat_map(|r| &r.candidates)
+                .find(|c| c.id == id && c.ready)
+        }) else {
+            return;
+        };
+        let feedback = candidate.feedback.as_ref();
+        let prompt = super::prompt::Prompt::new(
+            self.t(Key::WorkshopFeedbackTitle)
+                .replace("{song}", &candidate.direction.title),
+            super::prompt::PromptTarget::WorkshopFeedback {
+                workshop: state.identity,
+                candidate: id,
+                rating: feedback.map_or(0, |f| f.rating),
+            },
+            feedback.map_or_else(String::new, |f| f.comment.clone()),
+        )
+        .with_feedback_focus(cx);
+        self.open_prompt(prompt);
+    }
     pub(crate) fn workshop_attach_files(
         &mut self,
         paths: &[std::path::PathBuf],
@@ -208,7 +292,7 @@ impl AurisApp {
     }
     pub(crate) fn open_song_workshop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.attachment_preview = None;
-        static NEXT: AtomicU64 = AtomicU64::new(1);
+
         let focus = cx.focus_handle().tab_stop(true);
         let subscription = cx.on_focus(&focus, window, |this, _, cx| {
             if let Some(s) = &mut this.song_workshop {
@@ -239,7 +323,7 @@ impl AurisApp {
             Ok(runtime) => (Some(runtime), None),
             Err(e) => (None, Some(e)),
         };
-        let identity = NEXT.fetch_add(1, Ordering::Relaxed);
+        let identity = NEXT_WORKSHOP.fetch_add(1, Ordering::Relaxed);
         self.song_workshop = Some(SongWorkshop {
             identity,
             brief: TextField::default(),
@@ -275,6 +359,9 @@ impl AurisApp {
             copied: None,
             expanded_tools: Default::default(),
             scroll: gpui::ScrollHandle::new(),
+            switching: false,
+            show_archived_threads: false,
+            pending_thread_name: None,
         });
         focus.focus(window);
         cx.notify();
@@ -411,9 +498,36 @@ impl AurisApp {
             cx.notify();
         }
         if let Some(snapshot) = s.runtime.as_ref().and_then(Workshop::poll) {
+            let changed_thread = s
+                .snapshot
+                .as_ref()
+                .is_some_and(|old| old.document.thread_id != snapshot.document.thread_id);
+            if changed_thread {
+                for player in &mut s.players {
+                    player.reset_audio();
+                }
+                s.played_audio = std::array::from_fn(|_| None);
+                s.played_timeline = std::array::from_fn(|_| None);
+                s.saved = std::array::from_fn(|_| None);
+                s.errors = std::array::from_fn(|_| None);
+                s.identity = NEXT_WORKSHOP.fetch_add(1, Ordering::Relaxed);
+                s.preview_serial = s.preview_serial.wrapping_add(1);
+                s.preparing = None;
+                s.expanded_tools.clear();
+                s.completions.reset();
+                s.input_assist.edited();
+                s.view_round = None;
+                s.submitted = false;
+                s.brief = TextField::new(snapshot.document.draft.clone());
+                s.references = Default::default();
+                s.references.attachments = snapshot.document.draft_attachments.clone();
+            }
+            if changed_thread || snapshot.error.is_some() {
+                s.switching = false;
+            }
             let follow_tail =
                 f32::from(s.scroll.max_offset().height) + f32::from(s.scroll.offset().y) < 64.0;
-            let initial = s.snapshot.is_none();
+            let initial = s.snapshot.is_none() || changed_thread;
             let added = s
                 .snapshot
                 .as_ref()
@@ -457,6 +571,9 @@ impl AurisApp {
             } else {
                 s.refresh_candidates();
             }
+            cx.notify();
+        }
+        if s.sync_idle_auditions() {
             cx.notify();
         }
     }
@@ -659,7 +776,7 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.sync_auxiliary_windows(cx);
-        let chord_prompt = self.workshop_chord_prompt();
+        let chord_prompt = self.workshop_prompt_open();
         if chord_prompt {
             self.reconcile_focus(window, cx);
         }
@@ -963,12 +1080,19 @@ impl AurisApp {
             .child(input)
             .child(attachment_preview)
             .child(options);
-        let screen = div()
-            .size_full()
+        let content = div()
+            .h_full()
+            .flex_1()
+            .min_w_0()
             .flex()
             .flex_col()
             .child(body)
             .child(footer);
+        let screen = div()
+            .size_full()
+            .flex()
+            .child(self.workshop_sidebar(cx))
+            .child(content);
         let back = Button::new("song-back", self.t(Key::WorkshopBack))
             .ghost()
             .icon(IconName::ChevronLeft)
@@ -1372,40 +1496,55 @@ impl AurisApp {
                 audition
                     .as_ref()
                     .map_or(0.0, |audio| audio.duration_seconds()),
-                audition.is_some() && s.preparing.is_none(),
+                audition.is_some() && s.preparing.is_none() && !s.switching,
                 s.preparing == Some(index),
                 cx,
             ),
         );
-        if audition.as_ref().is_some_and(|latest| {
-            s.played_audio[index]
-                .as_ref()
-                .is_some_and(|played| !Arc::ptr_eq(latest, played))
-        }) {
-            card = card.child(
-                Button::new(
-                    ("song-preview-latest", index),
-                    self.t(Key::WorkshopLatestPreview),
-                )
-                .ghost()
-                .icon(IconName::Refresh)
-                .disabled(s.preparing.is_some())
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if let Some(state) = &mut this.song_workshop {
-                        state.players[index].reset_audio();
-                    }
-                    this.preview_song_candidate(index, cx);
-                })),
-            );
-        }
-        let usable = ready && !running;
-        let retry_enabled = running || (!snapshot.planning && snapshot.progress.len() < 3);
+        let usable = ready && !running && !s.switching;
+        let retry_enabled =
+            !s.switching && (running || (!snapshot.planning && snapshot.progress.len() < 3));
         let unfinished = !candidate.ready;
+        if let Some(feedback) = &candidate.feedback {
+            card = card.child(
+                Label::new(format!(
+                    "{}{}  {}/5",
+                    "★".repeat(usize::from(feedback.rating.min(5))),
+                    "☆".repeat(usize::from(5 - feedback.rating.min(5))),
+                    feedback.rating
+                ))
+                .size(TextSize::Small),
+            );
+            if !feedback.comment.is_empty() {
+                card = card.child(
+                    div()
+                        .text_size(theme.atelier.typography.size_sm)
+                        .child(feedback.comment.clone()),
+                );
+            }
+        }
         card.child(
             div()
                 .flex()
                 .flex_wrap()
                 .gap(spacing.sm)
+                .child(
+                    Button::new(
+                        ("song-feedback", index),
+                        self.t(if candidate.feedback.is_some() {
+                            Key::WorkshopEditFeedback
+                        } else {
+                            Key::WorkshopRateSong
+                        }),
+                    )
+                    .ghost()
+                    .disabled(!candidate.ready || running || s.switching)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_workshop_feedback(id, cx);
+                        this.focus.focus(window);
+                        cx.notify();
+                    })),
+                )
                 .child(
                     Button::new(("song-adopt", index), self.t(Key::WorkshopContinue))
                         .icon(IconName::Check)
@@ -1589,6 +1728,83 @@ fn workshop_veil_layer(has_messages: bool, veil: f32, theme: &crate::theme::Them
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[gpui::test]
+    fn feedback_form_accepts_stars_multiline_impressions_and_preserves_failed_submissions(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::harness::{click, paint};
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        app.update(cx, |this, _| {
+            let state = this.song_workshop.as_mut().unwrap();
+            state.brief = TextField::new("Unsent brief");
+            state.view_round = Some(0);
+            state.snapshot.as_mut().unwrap().document = serde_json::from_value(serde_json::json!({
+                "messages":[{"user":false,"text":"Here is your song"}],
+                "rounds":[{"after_message":1,"candidates":[{"id":1,"parent":null,"ready":true,"error":null,
+                    "direction":{"title":"My song","description":"Piano","instructions":"Compose"}}]}]
+            })).unwrap();
+        });
+        paint(&app, cx);
+        click("song-feedback-0", cx);
+        paint(&app, cx);
+        cx.simulate_keystrokes("secondary-enter");
+        paint(&app, cx);
+        assert!(cx.debug_bounds("prompt-error").is_some());
+        cx.simulate_keystrokes("shift-tab space");
+        app.read_with(cx, |this, _| {
+            assert!(matches!(
+                this.prompt.as_ref().unwrap().target(),
+                Some(super::super::prompt::PromptTarget::WorkshopFeedback { rating: 5, .. })
+            ))
+        });
+        click("feedback-star-4", cx);
+        click("feedback-comment", cx);
+        cx.simulate_input("メロディが好き");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("ドラムを控えめに");
+        cx.simulate_keystrokes("secondary-enter");
+        app.read_with(cx, |this, _| {
+            let prompt = this.prompt.as_ref().unwrap();
+            assert!(matches!(
+                prompt.target(),
+                Some(super::super::prompt::PromptTarget::WorkshopFeedback {
+                    rating: 4,
+                    candidate: 1,
+                    ..
+                })
+            ));
+            assert_eq!(
+                prompt.field().unwrap().content(),
+                "メロディが好き\nドラムを控えめに"
+            );
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().brief.content(),
+                "Unsent brief"
+            );
+            assert!(
+                this.song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .snapshot
+                    .as_ref()
+                    .unwrap()
+                    .document
+                    .rounds[0]
+                    .candidates[0]
+                    .feedback
+                    .is_none()
+            );
+        });
+        cx.simulate_keystrokes("escape");
+        app.read_with(cx, |this, _| assert!(this.prompt.is_none()));
+    }
 
     #[gpui::test]
     fn workshop_edits_melody_lyrics_and_chords_without_touching_editor_drafts(
@@ -1795,6 +2011,7 @@ mod tests {
             s.runtime = None;
             s.model_receiver = None;
             s.snapshot = Some(Snapshot {
+                threads: Vec::new(),
                 document: Default::default(),
                 candidates: Default::default(),
                 previews: Default::default(),
@@ -1887,6 +2104,7 @@ mod tests {
                     error: None,
                     recoveries: 0,
                     tools: Default::default(),
+                    feedback: None,
                     direction: Direction {
                         title: "夜の散歩".into(),
                         description: "静かなピアノ\n柔らかな弦楽器".into(),
@@ -1981,6 +2199,7 @@ mod tests {
                         error: None,
                         recoveries: 0,
                         tools: Default::default(),
+                        feedback: None,
                         direction: Direction {
                             title: format!("Candidate {id}"),
                             description: "Piano and strings".into(),
@@ -2223,6 +2442,7 @@ mod tests {
                     error: None,
                     recoveries: 0,
                     tools: Default::default(),
+                    feedback: None,
                     direction: Direction {
                         title: "Draft".into(),
                         description: "A melody being written".into(),
@@ -2256,10 +2476,25 @@ mod tests {
                     audio: Arc::clone(&first),
                 },
             );
+            let timeline = &mut snapshot.previews.get_mut(&1).unwrap().timeline;
+            Arc::make_mut(timeline).tracks = (0..2)
+                .map(|index| auris_session::AuditionTrack {
+                    id: index,
+                    name: format!("Track {index}"),
+                    color: auris_session::prelude::Color::PALETTE[index as usize].0,
+                    notes: vec![auris_session::AuditionNote {
+                        pitch: 48 + index as u8 * 24,
+                        start_seconds: 0.1,
+                        end_seconds: 0.4,
+                    }],
+                })
+                .collect();
             this.session.project().clone()
         });
         crate::harness::paint(&app, cx);
         crate::harness::click("song-preview-0-section-1", cx);
+        assert!(cx.debug_bounds("song-preview-0-seek-notes").is_some());
+        assert!(cx.debug_bounds("song-preview-0-tracks").is_some());
         app.read_with(cx, |this, _| {
             let s = this.song_workshop.as_ref().unwrap();
             assert_eq!(s.players[0].options(1.0).position_seconds, 0.5);
@@ -2322,7 +2557,18 @@ mod tests {
                     .is_none()
             )
         });
-        crate::harness::click("song-preview-latest-0", cx);
+        // The headless harness has no audio callback; stop the finite player state explicitly.
+        app.update(cx, |this, cx| {
+            this.song_workshop.as_mut().unwrap().players[0].stop();
+            this.poll_song_workshop(cx);
+        });
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let state = this.song_workshop.as_ref().unwrap();
+            assert!(state.played_audio[0].is_none());
+            assert_eq!(state.audition_timeline(0).unwrap().duration_seconds, 2.0);
+        });
+        crate::harness::click("song-preview-0-play", cx);
         cx.run_until_parked();
         app.read_with(cx, |this, _| {
             let s = this.song_workshop.as_ref().unwrap();

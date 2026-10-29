@@ -50,7 +50,12 @@
 //! Selecting an exact candidate sets the baseline for further edits without closing the chat.
 //! Descendants open that candidate's saved score; selection never regenerates the music.
 //! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
-//! documents and audition assets. Save As copies the store together with conversations.
+//! documents and audition assets. Each project can keep multiple named workshop conversations,
+//! including their drafts, attachments and candidate feedback. Archiving is reversible; opening
+//! another conversation waits until production has stopped. The legacy workshop remains the
+//! default conversation. Save As copies every workshop conversation and its assets.
+//! Explicit one-to-five-star ratings and comments belong to the exact candidate and inform
+//! subsequent requests in that conversation; they never change the score or start production.
 //! The frontend owns presentation, provider selection, audition and explicit editor handoff.
 //! Local cross-project preference evidence records contextual choices. It is optional, inspectable
 //! and clearable, and does not infer dislike from nonselection or override explicit instructions.

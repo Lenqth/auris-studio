@@ -82,7 +82,8 @@ impl PlayerState {
             .map_or(self.position, OutputPreviewStatus::position_seconds)
     }
 
-    fn playing(&self) -> bool {
+    /// Whether the current audition reports active playback.
+    pub(super) fn playing(&self) -> bool {
         self.status
             .as_ref()
             .is_some_and(OutputPreviewStatus::is_playing)
@@ -126,6 +127,51 @@ pub(crate) struct PlayerDrag {
 fn time_label(seconds: f64) -> String {
     let seconds = seconds.max(0.0).floor() as u64;
     format!("{}:{:02}", seconds / 60, seconds % 60)
+}
+
+fn note_rect(
+    note: &auris_session::AuditionNote,
+    low: u8,
+    high: u8,
+    duration: f64,
+) -> (f32, f32, f32, f32) {
+    let rows = f32::from(high - low + 1);
+    (
+        (note.start_seconds / duration) as f32,
+        f32::from(high.saturating_sub(note.pitch)) / rows,
+        ((note.end_seconds - note.start_seconds) / duration) as f32,
+        1.0 / rows,
+    )
+}
+
+// Keep authored colors when they identify a track, then use themed categorical fallbacks.
+fn audition_track_colors(
+    timeline: &auris_session::AuditionTimeline,
+    theme: &crate::theme::Theme,
+) -> Vec<gpui::Hsla> {
+    let mut colors = Vec::with_capacity(timeline.tracks.len());
+    let palette = auris_session::prelude::Color::PALETTE;
+    for (index, track) in timeline.tracks.iter().enumerate() {
+        let authored = theme.track_color(track.color);
+        let color = if colors.contains(&authored) {
+            palette
+                .iter()
+                .cycle()
+                .skip(index % palette.len())
+                .take(palette.len())
+                .map(|color| theme.track_color(color.0))
+                .chain(
+                    (1..=index + 1)
+                        .map(|slot| theme.group_color((slot as f32 * 0.618_034).fract())),
+                )
+                .find(|color| !colors.contains(color))
+                .unwrap_or(authored)
+        } else {
+            authored
+        };
+        colors.push(color);
+    }
+    colors
 }
 
 impl AurisApp {
@@ -262,6 +308,11 @@ impl AurisApp {
                                 PlayerTarget::Chords => this.preview_song_chords(false, cx),
                                 PlayerTarget::Attachment => this.play_attachment_preview(cx),
                             }
+                        }
+                        if let PlayerTarget::Workshop(_) = target
+                            && let Some(workshop) = &mut this.song_workshop
+                        {
+                            workshop.sync_idle_auditions();
                         }
                         cx.notify();
                     }),
@@ -435,6 +486,35 @@ impl AurisApp {
                 enabled && duration > 0.0,
                 cx,
             ))
+            .child(
+                div()
+                    .id(SharedString::from(format!("{prefix}-tracks")))
+                    .debug_selector({
+                        let label = format!("{prefix}-tracks");
+                        move || label.clone()
+                    })
+                    .flex()
+                    .min_w_0()
+                    .w_full()
+                    .gap_2()
+                    .overflow_x_scroll()
+                    .children(
+                        timeline
+                            .tracks
+                            .iter()
+                            .zip(audition_track_colors(timeline, theme))
+                            .map(|(track, color)| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .flex_shrink_0()
+                                    .text_xs()
+                                    .child(div().size_2().rounded_sm().bg(color))
+                                    .child(track.name.clone())
+                            }),
+                    ),
+            )
             .into_any_element()
     }
 
@@ -475,12 +555,80 @@ impl AurisApp {
                 .rounded_sm()
                 .overflow_hidden()
                 .bg(theme.surface_sunken)
-                .child(atelier::viz::PeakBars::new(timeline.peaks.clone()).progress(fraction))
+                .child(
+                    div()
+                        .size_full()
+                        .opacity(if timeline.tracks.is_empty() {
+                            1.0
+                        } else {
+                            0.45
+                        })
+                        .child(
+                            atelier::viz::PeakBars::new(timeline.peaks.clone()).progress(fraction),
+                        ),
+                )
                 .child(
                     canvas(move |bounds, _, _| painted.set(bounds), |_, _, _, _| {})
                         .absolute()
                         .size_full(),
                 );
+            if !timeline.tracks.is_empty() && duration > 0.0 {
+                let score = std::sync::Arc::clone(&timeline);
+                let colors = audition_track_colors(&timeline, theme);
+                let overlay_id = format!("{selector}-notes");
+                waveform = waveform.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .debug_selector(move || overlay_id.clone())
+                        .child(
+                            canvas(
+                                |_, _, _| (),
+                                move |bounds, _, window, _| {
+                                    let low = score
+                                        .tracks
+                                        .iter()
+                                        .flat_map(|t| &t.notes)
+                                        .map(|n| n.pitch)
+                                        .min()
+                                        .unwrap_or(60)
+                                        .saturating_sub(2);
+                                    let high = score
+                                        .tracks
+                                        .iter()
+                                        .flat_map(|t| &t.notes)
+                                        .map(|n| n.pitch)
+                                        .max()
+                                        .unwrap_or(72)
+                                        .saturating_add(2)
+                                        .min(127);
+                                    for (track, color) in score.tracks.iter().zip(&colors) {
+                                        let color = color.opacity(0.72);
+                                        for note in &track.notes {
+                                            let (x, y, width, height) =
+                                                note_rect(note, low, high, duration);
+                                            // Keep short notes visible at the overlay's raster resolution.
+                                            let rect = gpui::Bounds::new(
+                                                bounds.origin
+                                                    + gpui::point(
+                                                        bounds.size.width * x,
+                                                        bounds.size.height * y,
+                                                    ),
+                                                gpui::size(
+                                                    (bounds.size.width * width).max(gpui::px(1.0)),
+                                                    (bounds.size.height * height)
+                                                        .max(gpui::px(1.0)),
+                                                ),
+                                            );
+                                            window.paint_quad(gpui::fill(rect, color));
+                                        }
+                                    }
+                                },
+                            )
+                            .size_full(),
+                        ),
+                );
+            }
             for section in &timeline.sections {
                 waveform = waveform.child(
                     div()
@@ -596,6 +744,44 @@ impl AurisApp {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shared_instrument_colors_remain_distinguishable_in_the_overlay_and_legend() {
+        let theme = crate::theme::Theme::default();
+        let color = auris_session::prelude::Color::INSTRUMENT.0;
+        let timeline = auris_session::AuditionTimeline {
+            tracks: (0..10)
+                .map(|id| auris_session::AuditionTrack {
+                    id,
+                    name: format!("Track {id}"),
+                    color,
+                    notes: vec![],
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let colors = super::audition_track_colors(&timeline, &theme);
+        assert_eq!(colors[0], theme.track_color(color));
+        assert_eq!(colors.len(), 10);
+        for (index, color) in colors.iter().enumerate() {
+            assert!(!colors[..index].contains(color));
+        }
+        assert!(timeline.tracks.iter().all(|track| track.color == color));
+    }
+    #[test]
+    fn overlaid_notes_share_one_time_and_pitch_scale() {
+        let note = auris_session::AuditionNote {
+            pitch: 72,
+            start_seconds: 2.0,
+            end_seconds: 3.0,
+        };
+        assert_eq!(
+            super::note_rect(&note, 36, 83, 8.0),
+            (0.25, 11.0 / 48.0, 0.125, 1.0 / 48.0)
+        );
+        let bass = auris_session::AuditionNote { pitch: 36, ..note };
+        let (_, y, _, _) = super::note_rect(&bass, 36, 83, 8.0);
+        assert_eq!(y, 47.0 / 48.0);
+    }
     use crate::harness::{click, drag, open, paint};
     use auris_session::prelude::SongSpec;
 
