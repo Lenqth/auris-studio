@@ -90,6 +90,15 @@
 //! reopening as paused drafts. Explicit priority sends cancel the current worker, wait for its
 //! native shutdown, then resume from checkpointed model memory. Each backend checkpoints the
 //! pending request before model work, so cancellation retains its intent and uncertain outcome.
+//! Conversations can also refer to symbolic MIDI scores. [`crate::midi_reference::MidiReference`] owns bounded
+//! SMF decoding, exact note/lyric snapshots and immutable storage. The desktop edits a copy in
+//! its inline piano roll; this never modifies the source clip or imported file. Snapshots live
+//! under the settings directory's `conversation-midi` folder so queued and historical turns
+//! retain their own score. All agent backends receive the score as bounded reference text,
+//! with explicit tick units and source origin, rather than an audio-listening claim.
+//! [`crate::music_reference`] also captures bar-delimited chords in a fixed key and meter,
+//! and instrument/preset identities selected in the timbre map. These immutable JSON references
+//! use the existing text-attachment transport and never apply harmony or instrument edits.
 //! Each user message retains its attachment references as display metadata, so the transcript
 //! can identify sent files after reopening. These references never repopulate the next draft
 //! or authorize file access; only files explicitly attached in the current window can do that.

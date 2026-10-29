@@ -190,6 +190,9 @@ impl AurisApp {
         self.conversation_operation(Operation::Open(id));
     }
     pub(crate) fn flush_conversation_storage(&mut self) -> Option<Receiver<()>> {
+        if !self.commit_midi_draft() {
+            return None;
+        }
         self.agent_chat.link = None;
         let snapshot = self.conversation_snapshot();
         self.agent_chat.flush_conversation_snapshot(snapshot)
@@ -232,6 +235,17 @@ impl AurisApp {
     }
 
     pub(super) fn conversation_operation(&mut self, operation: Operation) {
+        if matches!(
+            operation,
+            Operation::Create
+                | Operation::Open(_)
+                | Operation::Reload(_)
+                | Operation::Copy(_)
+                | Operation::Delete(_)
+        ) && !self.commit_midi_draft()
+        {
+            return;
+        }
         if matches!(operation, Operation::Copy(_)) {
             self.agent_chat.conversations.relocating = true;
         }

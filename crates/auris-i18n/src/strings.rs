@@ -2291,7 +2291,7 @@ new のオプション
     AgentInterrupting { en: "Stopping the current turn…", ja: "現在の処理を中断中…" }
     AgentQueueReattach { en: "Attach the reference files again before sending this saved message.", ja: "保存されたメッセージを送るには、参照ファイルをもう一度添付してください。" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }
-    AgentDropFiles { en: "Drop images, text or audio here", ja: "画像・テキスト・音声をここにドロップ" }
+    AgentDropFiles { en: "Drop MIDI, images, text or audio here", ja: "MIDI・画像・テキスト・音声をここにドロップ" }
     AgentComposerPlaceholder { en: "Ask about this song, or drop reference files…", ja: "この曲について相談、または参考ファイルをドロップ…" }
     AgentEffortDefaultShort { en: "Auto", ja: "既定" }
     AgentFastMode { en: "Fast", ja: "高速" }
@@ -2300,6 +2300,30 @@ new のオプション
     AgentEffortMediumShort { en: "Med", ja: "中" }
     AgentEffortXhighShort { en: "XHigh", ja: "極高" }
     AgentEffortMaxShort { en: "Max", ja: "最大" }
+    AgentChords { en: "Attach chords…", ja: "コード進行を添付…" }
+    AgentChordsHint { en: "Absolute chords or numerals: | C | G | Am | F |. Use | between bars; chords in one bar share its beats equally.", ja: "コード名・度数で入力：| C | G | Am | F |。小節は | で区切り、同じ小節のコードには拍を均等に割り当てます。" }
+    AgentSound { en: "Choose sound…", ja: "音源を選ぶ…" }
+    AgentSoundAttach { en: "Attach to conversation", ja: "会話に添付" }
+    AgentMusicUnavailable { en: "Wait for the conversation to finish switching or sending, then attach again.", ja: "会話の切り替え・送信準備が終わってから、もう一度添付してください。" }
+    AgentMidiNew { en: "Write melody…", ja: "メロディを書く…" }
+    AgentMidiClip { en: "Attach selected clip…", ja: "選択クリップを添付…" }
+    AgentMidiFile { en: "Attach MIDI…", ja: "MIDIを添付…" }
+    AgentMidiMelody { en: "Melody", ja: "メロディ" }
+    AgentMidiLoading { en: "Reading MIDI…", ja: "MIDIを読み込み中…" }
+    AgentMidiHint { en: "Edit a copy for this conversation. Click the grid to add a note; select a note to edit its pitch, timing and lyrics.", ja: "会話用のコピーを編集します。グリッドをクリックして音符を追加し、音符を選んで音高・長さ・歌詞を変更できます。" }
+    AgentMidiBeats { en: "Beat", ja: "拍" }
+    AgentMidiLength { en: "Length", ja: "長さ" }
+    AgentMidiAdd { en: "Add note", ja: "音符を追加" }
+    AgentMidiDelete { en: "Delete note", ja: "音符を削除" }
+    AgentMidiPitchDown { en: "Pitch −", ja: "音高 −" }
+    AgentMidiPitchUp { en: "Pitch +", ja: "音高 +" }
+    AgentMidiEarlier { en: "Earlier", ja: "前へ" }
+    AgentMidiLater { en: "Later", ja: "後ろへ" }
+    AgentMidiShorter { en: "Shorter", ja: "短く" }
+    AgentMidiLonger { en: "Longer", ja: "長く" }
+    AgentMidiLyric { en: "Selected note lyrics", ja: "選択した音符の歌詞" }
+    AgentMidiLyricPlaceholder { en: "Word or syllable sung on this note", ja: "この音符で歌う言葉" }
+    AgentMidiApply { en: "Attach score", ja: "譜面を添付" }
     AgentAttachmentUnsupported { en: "Unsupported attachment: {name}", ja: "対応していないファイル形式です: {name}" }
     AgentAttachmentLimit { en: "Attach up to 8 files per message", ja: "添付できるファイルは1回につき8個までです" }
     AgentAttachmentImageUnsupported { en: "Antigravity CLI does not accept image attachments. Choose another model or remove the image.", ja: "Antigravity CLIは画像の添付に対応していません。別のモデルを選ぶか、画像の添付を外してください。" }

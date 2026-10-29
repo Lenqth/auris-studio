@@ -59,6 +59,7 @@ impl AurisApp {
     pub(super) fn agent_composer_can_submit(&self) -> bool {
         if self.agent_chat.input.content().trim().is_empty()
             || self.agent_chat.input.marked().is_some()
+            || self.agent_chat.midi_loading
         {
             return false;
         }
@@ -71,6 +72,9 @@ impl AurisApp {
     }
 
     pub(super) fn enqueue_agent_message(&mut self) -> bool {
+        if !self.commit_midi_draft() {
+            return false;
+        }
         if !self.agent_composer_can_submit()
             || controls::is_control_command(self.agent_chat.input.content().trim())
         {

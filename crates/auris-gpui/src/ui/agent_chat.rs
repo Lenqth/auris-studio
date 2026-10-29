@@ -36,7 +36,9 @@ mod articulation_eval;
 mod composition_eval;
 pub(crate) mod controls;
 mod conversations;
+mod midi;
 mod model_search;
+mod music;
 #[cfg(test)]
 mod performance_eval;
 mod queued;
@@ -686,6 +688,8 @@ pub(crate) enum AgentField {
     Chat,
     /// Title search in the conversation browser.
     ConversationSearch,
+    /// Lyrics of the selected note in the inline score editor.
+    MidiLyric,
 }
 
 /// One model a provider reported serving.
@@ -1179,6 +1183,9 @@ pub(crate) struct AgentChat {
     /// readable path on the next message for the user to send without noticing.
     attached_here: std::collections::HashSet<PathBuf>,
     attachment_error: Option<String>,
+    midi_draft: Option<midi::MidiDraft>,
+    midi_loading: bool,
+    midi_lyric_focus: Option<gpui::FocusHandle>,
     /// Actual painted bounds used by the window's shared file-drop router.
     pub(crate) drop_bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
     /// A different project produced by the last turn, ready to open explicitly.
@@ -1264,6 +1271,9 @@ impl Default for AgentChat {
             attachments: Vec::new(),
             attached_here: Default::default(),
             attachment_error: None,
+            midi_draft: None,
+            midi_loading: false,
+            midi_lyric_focus: None,
             drop_bounds: Default::default(),
             produced_project: None,
             fresh_history: false,
@@ -1368,7 +1378,9 @@ impl AgentChat {
 
     /// The message editor's actual focus target, once the panel has been painted.
     pub(crate) fn input_focus(&self) -> Option<&gpui::FocusHandle> {
-        if self.focused == Some(AgentField::ConversationSearch) {
+        if self.focused == Some(AgentField::MidiLyric) {
+            self.midi_lyric_focus.as_ref()
+        } else if self.focused == Some(AgentField::ConversationSearch) {
             self.conversations.focus.as_ref()
         } else {
             self.input_focus.as_ref()
@@ -1384,6 +1396,7 @@ impl AgentChat {
         }
         Some(match self.focused? {
             AgentField::Chat => &mut self.input,
+            AgentField::MidiLyric => &mut self.midi_draft.as_mut()?.lyric,
             AgentField::ConversationSearch => &mut self.conversations.search,
         })
     }
@@ -1395,6 +1408,7 @@ impl AgentChat {
         }
         Some(match self.focused? {
             AgentField::Chat => &self.input,
+            AgentField::MidiLyric => &self.midi_draft.as_ref()?.lyric,
             AgentField::ConversationSearch => &self.conversations.search,
         })
     }
@@ -1860,7 +1874,9 @@ impl AurisApp {
 
     /// Attach dropped reference files without importing them into the song.
     pub(crate) fn agent_attach_files(&mut self, paths: &[PathBuf], cx: &mut gpui::Context<Self>) {
-        if self.agent_chat.pending_send.is_some() {
+        if self.agent_chat.pending_send.is_some()
+            || self.agent_chat.conversations.changing_conversation()
+        {
             return;
         }
         self.agent_chat.attachment_error = None;
@@ -2164,6 +2180,7 @@ impl AurisApp {
         self.agent_chat.turn_project = None;
         self.agent_chat.pending_reload = None;
         self.agent_chat.attachments.clear();
+        self.agent_chat.midi_draft = None;
         self.agent_chat.entries.clear();
         self.agent_chat.expanded.clear();
         self.agent_chat.expanded_tool_groups.clear();
@@ -2259,6 +2276,9 @@ impl AurisApp {
     /// The window saves first, so the model reads the document as it stands — the other half
     /// of the bargain is in [`AgentChat::absorb`], where the model's writes come back.
     pub(crate) fn agent_send(&mut self) {
+        if self.agent_chat.midi_loading || !self.commit_midi_draft() {
+            return;
+        }
         let text = self.agent_chat.input.content().trim().to_string();
         if text.is_empty() {
             return;
@@ -3143,6 +3163,16 @@ impl AurisApp {
             // dispatch the window's focus-navigation binding and strand the candidate session.
             return true;
         }
+        if !composing && focused == AgentField::MidiLyric && key == "escape" {
+            self.close_midi_editor(window);
+            return true;
+        }
+        if !composing && focused == AgentField::MidiLyric && key == "enter" {
+            if self.commit_midi_draft() {
+                self.close_midi_editor(window);
+            }
+            return true;
+        }
         if !composing && focused == AgentField::Chat && self.agent_chat.controls.pending.is_some() {
             if key == "escape" {
                 self.agent_approval(controls::Approval::Deny);
@@ -3328,7 +3358,16 @@ impl AurisApp {
             })
             .clone()
             .tab_stop(cancelable);
-        if !composer_locked && input_focus.is_focused(window) {
+        if !composer_locked
+            && self
+                .agent_chat
+                .midi_lyric_focus
+                .as_ref()
+                .is_some_and(|f| f.is_focused(window))
+            && self.agent_chat.midi_draft.is_some()
+        {
+            self.focus_agent_field(AgentField::MidiLyric);
+        } else if !composer_locked && input_focus.is_focused(window) {
             self.focus_agent_field(AgentField::Chat);
         } else if !composer_locked
             && self.agent_chat.focused == Some(AgentField::Chat)
@@ -3639,7 +3678,12 @@ impl AurisApp {
                 |this| this.child(self.agent_status_row(&theme)),
             )
             .child(self.agent_slash_completions(cx))
-            .child(self.agent_input_row(input_focus, stop_focus, cx))
+            .child(self.agent_input_row(
+                input_focus,
+                stop_focus,
+                (window.viewport_size().height * 0.45).min(window.rem_size() * 24.0),
+                cx,
+            ))
             // Drawn over everything, hidden until a drag carrying something attachable is over
             // the panel. A recolour of the panel itself was covered by the header and composer.
             .child(
@@ -3859,6 +3903,10 @@ impl AurisApp {
 
     /// Opens a historical reference only after an explicit user activation.
     fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
+        if auris_agent::attachment_kind(&path) == Some(auris_agent::AttachmentKind::Midi) {
+            self.edit_midi_attachment(path, cx);
+            return;
+        }
         cx.spawn(async move |this, cx| {
             let checked_path = path.clone();
             let url = cx
@@ -4902,6 +4950,7 @@ impl AurisApp {
         &mut self,
         input_focus: gpui::FocusHandle,
         stop_focus: gpui::FocusHandle,
+        editor_height: gpui::Pixels,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
@@ -5047,7 +5096,13 @@ impl AurisApp {
                                         theme.accent,
                                         &theme,
                                         cx.listener(move |this, _, _, cx| {
-                                            this.open_agent_attachment(path.clone(), cx);
+                                            if auris_agent::attachment_kind(&path)
+                                                == Some(auris_agent::AttachmentKind::Midi)
+                                            {
+                                                this.edit_midi_attachment(path.clone(), cx);
+                                            } else {
+                                                this.open_agent_attachment(path.clone(), cx);
+                                            }
                                         }),
                                     )
                                     .flex_1()
@@ -5072,7 +5127,9 @@ impl AurisApp {
                                         &theme,
                                         cx.listener(move |this, _, _, cx| {
                                             if index < this.agent_chat.attachments.len() {
-                                                this.agent_chat.attachments.remove(index);
+                                                let removed =
+                                                    this.agent_chat.attachments.remove(index);
+                                                this.cancel_midi_for_attachment(&removed);
                                                 this.agent_chat.attachment_error = None;
                                             }
                                             cx.notify();
@@ -5088,6 +5145,10 @@ impl AurisApp {
                                 )
                         })),
                 )
+            })
+            .child(self.midi_composer_controls(locked, cx))
+            .when(self.agent_chat.midi_draft.is_some(), |this| {
+                this.child(self.midi_editor(editor_height, cx))
             })
             .when(locked, |this| {
                 this.child(
@@ -5210,6 +5271,12 @@ impl AurisApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let value = match field {
+            AgentField::MidiLyric => {
+                let Some(draft) = &self.agent_chat.midi_draft else {
+                    return div().into_any_element();
+                };
+                &draft.lyric
+            }
             AgentField::Chat => &self.agent_chat.input,
             AgentField::ConversationSearch => &self.agent_chat.conversations.search,
         };
@@ -5219,7 +5286,7 @@ impl AurisApp {
         let marked = value.marked();
         let view = cx.entity();
         let pointer_focus = focus.clone();
-        let (minimum, maximum) = if field == AgentField::ConversationSearch {
+        let (minimum, maximum) = if field != AgentField::Chat {
             let height = crate::ui::text_area::area_height("", 1, 1);
             (height, height)
         } else {
@@ -5291,15 +5358,18 @@ impl AurisApp {
                     MouseButton::Left,
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                         if focused && !composing {
-                            let text = this.agent_chat.input.content().to_string();
+                            let text = this
+                                .agent_chat
+                                .field()
+                                .map(|f| f.content().to_owned())
+                                .unwrap_or_default();
                             if let Some(offset) = crate::ui::text_area::wrapped_area_offset_at(
                                 window,
                                 &text,
                                 event.position,
-                            ) {
-                                this.agent_chat
-                                    .input
-                                    .place_caret(offset, event.modifiers.shift);
+                            ) && let Some(value) = this.agent_chat.field_mut()
+                            {
+                                value.place_caret(offset, event.modifiers.shift);
                             }
                         }
                         this.focus_agent_field(field);

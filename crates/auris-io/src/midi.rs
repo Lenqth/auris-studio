@@ -359,6 +359,7 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
         let mut at: u64 = 0;
         let mut track_events = 0usize;
         let mut track_name: Option<String> = None;
+        let mut lyrics = BTreeMap::new();
         // Sounding notes, keyed by channel and pitch. A stack per key rather than one slot: the
         // same pitch struck twice before either release is legal, and the engine already keeps
         // such notes independent.
@@ -430,6 +431,11 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
                 TrackEventKind::Meta(MetaMessage::TrackName(name)) => {
                     track_name = Some(String::from_utf8_lossy(name).trim().to_string())
                         .filter(|name| !name.is_empty());
+                }
+                TrackEventKind::Meta(MetaMessage::Lyric(text)) => {
+                    // Lyrics are track-local text, not channel events. Resolve them after
+                    // note-offs so their position in an equal-tick event group does not matter.
+                    lyrics.insert(tick, String::from_utf8_lossy(text).into_owned());
                 }
                 TrackEventKind::Midi { channel, message } => {
                     let channel = channel.as_int();
@@ -514,6 +520,16 @@ fn read_smf_with_limits(smf: &Smf, limits: ImportLimits) -> Result<MidiImport> {
             for started in stack {
                 if let Some(part) = parts.get_mut(&(index, channel)) {
                     part.notes.push(note(started, at, pitch, per_quarter));
+                }
+            }
+        }
+        for key in order.iter().copied().filter(|(track, _)| *track == index) {
+            if let Some(part) = parts.get_mut(&key) {
+                part.notes.sort_by_key(|note| (note.start, note.pitch));
+                for note in &mut part.notes {
+                    if let Some(lyric) = lyrics.remove(&note.start) {
+                        note.lyric = lyric;
+                    }
                 }
             }
         }
