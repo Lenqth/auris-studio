@@ -16,6 +16,7 @@ pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
 pub mod approval_review;
 pub mod song_authoring;
 pub mod song_ideas;
+pub mod timbre_names;
 pub mod workshop;
 
 use std::io::Read;

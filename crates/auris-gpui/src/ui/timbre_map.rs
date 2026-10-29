@@ -3,9 +3,10 @@
 use crate::{app::AurisApp, theme::Theme};
 use atelier::plot::Plot3d;
 use atelier::{
-    Button, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar, SectionHeader,
-    Segment, SegmentedControl, StatusBar, StatusDot, TextColor, TextSize,
+    Button, ButtonVariant, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar,
+    SectionHeader, Segment, SegmentedControl, StatusBar, StatusDot, TextColor, TextSize,
 };
+use auris_agent::timbre_names::{ClusterName, TimbreNamer};
 use auris_i18n::Key;
 use auris_session::{TimbreMap, TimbreMapControl, prelude::*};
 use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
@@ -27,14 +28,43 @@ pub(crate) struct TimbreMapState {
     selected: Option<usize>,
     preview_track: Option<TrackId>,
     error: Option<String>,
+    names: Vec<ClusterName>,
+    namer: Option<TimbreNamer>,
+    naming_generation: u64,
+    naming_error: Option<String>,
 }
 
 impl TimbreMapState {
+    pub(crate) fn clear(&mut self) {
+        self.cancel();
+        self.map = None;
+        self.names.clear();
+        self.naming_error = None;
+    }
+
     pub(crate) fn cancel(&mut self) {
         if let Some(control) = self.control.take() {
             control.cancel();
         }
         self.generation = self.generation.wrapping_add(1);
+        self.cancel_naming();
+    }
+
+    fn cancel_naming(&mut self) {
+        self.namer = None;
+        self.naming_generation = self.naming_generation.wrapping_add(1);
+    }
+
+    fn finish_naming(&mut self, generation: u64, result: Result<Vec<ClusterName>, String>) -> bool {
+        if self.naming_generation != generation || self.map.is_none() {
+            return false;
+        }
+        self.namer = None;
+        match result {
+            Ok(names) => self.names = names,
+            Err(error) => self.naming_error = Some(error),
+        }
+        true
     }
 }
 
@@ -43,6 +73,89 @@ fn cluster_color(cluster: usize, theme: &Theme) -> gpui::Hsla {
 }
 
 impl AurisApp {
+    fn timbre_cluster_name(&self, cluster: usize) -> String {
+        if let Some(name) = self.timbre_map.names.iter().find(|name| name.id == cluster) {
+            return name.name.clone();
+        }
+        self.timbre_map
+            .map
+            .as_ref()
+            .and_then(|map| {
+                map.cluster_summaries()
+                    .iter()
+                    .find(|summary| summary.id == cluster)
+            })
+            .map(|summary| super::inspector::audio_name(self, &summary.representative.name))
+            .unwrap_or_default()
+    }
+
+    /// Cluster annotation for an exact measured library choice, shared by tree and search rows.
+    pub(crate) fn library_timbre_cluster(
+        &self,
+        instrument_id: &str,
+        preset: Option<PresetRef>,
+    ) -> Option<(gpui::Hsla, String)> {
+        let cluster = self
+            .timbre_map
+            .map
+            .as_ref()?
+            .cluster_for(instrument_id, preset)?;
+        Some((
+            cluster_color(cluster, &self.theme),
+            self.timbre_cluster_name(cluster),
+        ))
+    }
+
+    fn name_timbre_clusters(&mut self, cx: &mut Context<Self>) {
+        let Some(map) = &self.timbre_map.map else {
+            return;
+        };
+        if self.timbre_map.namer.is_some() || self.timbre_map.control.is_some() {
+            return;
+        }
+        let result = TimbreNamer::start(
+            self.settings.agent.clone(),
+            map.cluster_summaries(),
+            self.language.code(),
+        );
+        self.timbre_map.naming_error = None;
+        match result {
+            Ok(namer) => self.timbre_map.namer = Some(namer),
+            Err(error) => {
+                self.timbre_map.naming_error = Some(error);
+                return;
+            }
+        }
+        let generation = self.timbre_map.naming_generation;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(100))
+                    .await;
+                let active = this
+                    .update(cx, |this, cx| {
+                        if this.timbre_map.naming_generation != generation {
+                            return false;
+                        }
+                        let Some(namer) = &mut this.timbre_map.namer else {
+                            return false;
+                        };
+                        let Some(result) = namer.poll() else {
+                            return true;
+                        };
+                        this.timbre_map.finish_naming(generation, result);
+                        cx.notify();
+                        false
+                    })
+                    .unwrap_or(false);
+                if !active {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
     pub(crate) fn close_timbre_map(&mut self) {
         self.timbre_map.cancel();
         self.timbre_map.open = false;
@@ -56,6 +169,8 @@ impl AurisApp {
         self.timbre_map.selected = None;
         self.timbre_map.hovered = None;
         self.timbre_map.error = None;
+        self.timbre_map.names.clear();
+        self.timbre_map.naming_error = None;
         if let Some(track) = self.timbre_map.preview_track.take() {
             self.session.stop_singer_preview(track);
         }
@@ -165,6 +280,7 @@ impl AurisApp {
         let theme = &self.theme.atelier;
         let spacing = theme.spacing;
         let busy = self.timbre_map.control.is_some();
+        let mut naming_toolbar = None;
         let mut content = div().flex().flex_col().flex_1().min_h_0().gap(spacing.md);
         if let Some(control) = &self.timbre_map.control {
             content = content.child(
@@ -220,7 +336,8 @@ impl AurisApp {
                         self.timbre_map.camera.azimuth,
                         self.timbre_map.camera.elevation,
                     );
-                for cluster in 0..=map.clusters().iter().copied().max().unwrap_or(0) {
+                for summary in map.cluster_summaries() {
+                    let cluster = summary.id;
                     let points = positions
                         .iter()
                         .enumerate()
@@ -250,7 +367,7 @@ impl AurisApp {
                     .debug_selector(|| "timbre-plot".into())
                     .relative()
                     .flex_1()
-                    .min_h(gpui::rems(16.))
+                    .min_h(gpui::rems(12.))
                     .w_full()
                     .rounded(theme.shape.radius_sm)
                     .bg(theme.colors.sunken)
@@ -317,9 +434,13 @@ impl AurisApp {
                         .left_0()
                         .size_full(),
                     );
-                if let Some(i) = self.timbre_map.hovered.and_then(|i| map.sounds.get(i)) {
+                if let Some(index) = self.timbre_map.hovered.filter(|i| *i < map.sounds.len()) {
                     well = well.tooltip(crate::ui::tooltip::keyed_tip(
-                        i.name.clone(),
+                        format!(
+                            "{} · {}",
+                            map.sounds[index].name,
+                            self.timbre_cluster_name(map.clusters()[index])
+                        ),
                         "",
                         &self.theme,
                     ));
@@ -383,31 +504,98 @@ impl AurisApp {
                             })),
                     );
                 }
-                let mut legend = div().flex().flex_wrap().gap(spacing.sm);
-                for cluster in 0..=map.clusters().iter().copied().max().unwrap_or(0) {
+                let mut legend = div()
+                    .id("timbre-legend")
+                    .flex()
+                    .flex_wrap()
+                    .gap(spacing.sm)
+                    .max_h(gpui::rems(7.))
+                    .overflow_y_scroll();
+                for summary in map.cluster_summaries() {
+                    let cluster = summary.id;
+                    let name = self.timbre_cluster_name(cluster);
                     legend = legend.child(
                         div()
+                            .id(SharedString::from(format!("timbre-cluster-{cluster}")))
                             .flex()
                             .items_center()
                             .gap(spacing.xs)
+                            .max_w(gpui::rems(15.))
+                            .tooltip(super::tooltip::keyed_tip(
+                                format!("{name}\n{}", summary.examples.join(" · ")),
+                                "",
+                                &self.theme,
+                            ))
                             .child(StatusDot::new(cluster_color(cluster, &self.theme)))
                             .child(
-                                Label::new(format!(
-                                    "{} {}",
-                                    self.t(Key::TimbreMapGroup),
-                                    cluster + 1
-                                ))
-                                .size(TextSize::XSmall)
-                                .color(TextColor::Muted),
+                                div().min_w_0().truncate().child(
+                                    Label::new(format!("{name} · {}", summary.sound_count))
+                                        .size(TextSize::XSmall)
+                                        .color(TextColor::Muted),
+                                ),
                             ),
                     );
                 }
+                let naming = self.timbre_map.namer.is_some();
+                let mut naming_controls = div()
+                    .flex()
+                    .flex_1()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(spacing.sm)
+                    .child(
+                        Button::new(
+                            "timbre-name-clusters",
+                            self.t(if naming {
+                                Key::TimbreMapNaming
+                            } else {
+                                Key::TimbreMapNameWithAi
+                            }),
+                        )
+                        .icon(IconName::Sparkles)
+                        .variant(ButtonVariant::Agent)
+                        .size(ControlSize::Small)
+                        .disabled(naming || !self.settings.agent.is_configured())
+                        .tooltip(self.t(if self.settings.agent.is_configured() {
+                            Key::TimbreMapNamingHint
+                        } else {
+                            Key::TimbreMapConfigureAi
+                        }))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.name_timbre_clusters(cx);
+                            cx.notify();
+                        })),
+                    );
+                if naming {
+                    naming_controls = naming_controls.child(
+                        Button::new("timbre-cancel-naming", self.t(Key::Cancel))
+                            .ghost()
+                            .size(ControlSize::Small)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.timbre_map.cancel_naming();
+                                cx.notify();
+                            })),
+                    );
+                } else if !self.timbre_map.names.is_empty() {
+                    naming_controls = naming_controls.child(
+                        Button::new("timbre-reset-names", self.t(Key::TimbreMapResetNames))
+                            .ghost()
+                            .size(ControlSize::Small)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.timbre_map.cancel_naming();
+                                this.timbre_map.names.clear();
+                                this.timbre_map.naming_error = None;
+                                cx.notify();
+                            })),
+                    );
+                }
+                naming_toolbar = Some(naming_controls.into_any_element());
                 let figure = Card::new()
                     .flex_1()
                     .min_w_0()
                     .min_h(gpui::rems(24.))
                     .p(spacing.lg)
-                    .gap(spacing.md)
+                    .gap(spacing.sm)
                     .child(
                         SectionHeader::new(self.t(Key::TimbreMap))
                             .description(self.t(Key::TimbreMapHint)),
@@ -431,7 +619,6 @@ impl AurisApp {
                             ),
                     )
                     .child(well)
-                    .child(legend)
                     .child(
                         Label::new(self.t(Key::TimbreMapGeometry))
                             .size(TextSize::XSmall)
@@ -520,47 +707,67 @@ impl AurisApp {
                             .p(spacing.xs)
                             .overflow_y_scroll()
                             .children(entries.into_iter().map(|(i, distance)| {
-                                ListItem::new(
+                                let mut row = ListItem::new(
                                     SharedString::from(format!("{list_id}-{i}")),
                                     map.sounds[i].name.clone(),
                                 )
                                 .selected(self.timbre_map.selected == Some(i))
                                 .icon(IconName::Music)
                                 .icon_color(cluster_color(map.clusters()[i], &self.theme))
-                                .trailing(
-                                    Label::new(distance.map_or_else(
-                                        || {
-                                            format!(
-                                                "{} {}",
-                                                self.t(Key::TimbreMapGroup),
-                                                map.clusters()[i] + 1
-                                            )
-                                        },
-                                        |d| format!("{d:.2}"),
-                                    ))
-                                    .mono()
-                                    .size(TextSize::XSmall)
-                                    .color(TextColor::Muted),
-                                )
-                                .on_click(cx.listener(
-                                    move |this, _, _, cx| {
-                                        this.select_timbre(i);
-                                        cx.notify();
-                                    },
-                                ))
+                                .description(self.timbre_cluster_name(map.clusters()[i]))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.select_timbre(i);
+                                    cx.notify();
+                                }));
+                                if let Some(distance) = distance {
+                                    row = row.trailing(
+                                        Label::new(format!("{distance:.2}"))
+                                            .mono()
+                                            .size(TextSize::XSmall)
+                                            .color(TextColor::Muted),
+                                    );
+                                }
+                                row
                             })),
                     );
-                content = content.child(
-                    div()
-                        .id("timbre-map-body")
-                        .flex()
-                        .flex_1()
-                        .min_h_0()
-                        .gap(spacing.lg)
-                        .when(narrow, |row| row.flex_col().overflow_y_scroll())
-                        .child(figure)
-                        .child(inspector),
-                );
+                content = content
+                    .child(
+                        div()
+                            .id("timbre-map-body")
+                            .flex()
+                            .flex_1()
+                            .min_h_0()
+                            .gap(spacing.lg)
+                            .overflow_y_scroll()
+                            .when(narrow, |row| row.flex_col().overflow_y_scroll())
+                            .child(figure)
+                            .child(inspector),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_shrink_0()
+                            .gap(spacing.sm)
+                            .child(legend)
+                            .child(
+                                Label::new(self.t(if self.timbre_map.names.is_empty() {
+                                    Key::TimbreMapRepresentativeNames
+                                } else {
+                                    Key::TimbreMapAiNames
+                                }))
+                                .size(TextSize::XSmall)
+                                .color(TextColor::Muted),
+                            )
+                            .children(self.timbre_map.naming_error.as_ref().map(|error| {
+                                Label::new(format!(
+                                    "{}: {error}",
+                                    self.t(Key::TimbreMapNamingFailed)
+                                ))
+                                .size(TextSize::Small)
+                                .color(TextColor::Danger)
+                            })),
+                    );
             }
         } else if !busy {
             content = content.child(EmptyState::new(
@@ -605,6 +812,7 @@ impl AurisApp {
                         .flex_shrink_0()
                         .border_b_1()
                         .border_color(theme.colors.separator)
+                        .children(naming_toolbar)
                         .child(
                             Button::new("timbre-rescan", self.t(Key::TimbreMapRescan))
                                 .size(ControlSize::Small)
@@ -692,6 +900,15 @@ mod tests {
                 .unwrap();
             this.timbre_map.map = Some(Arc::new(map));
             this.timbre_map.open = true;
+            let map = this.timbre_map.map.as_ref().unwrap();
+            let cluster = map.clusters()[index];
+            let sound = &map.sounds[index];
+            let annotation = this
+                .library_timbre_cluster(&sound.instrument_id, sound.preset)
+                .unwrap();
+            assert_eq!(annotation.0, cluster_color(cluster, &this.theme));
+            assert!(!annotation.1.is_empty());
+            assert!(this.library_timbre_cluster("unmeasured", None).is_none());
             (this.project().clone(), index)
         });
         paint(&app, cx);
@@ -771,12 +988,26 @@ mod tests {
                     gpui::size(gpui::px(900.), gpui::px(700.)),
                 );
                 assert!(utility.debug_bounds("timbre-plot").is_some());
+                assert!(
+                    utility
+                        .debug_bounds("timbre-name-clusters")
+                        .unwrap()
+                        .bottom()
+                        < gpui::px(700.)
+                );
                 crate::harness::resize(
                     &app,
                     &mut utility,
                     gpui::size(gpui::px(640.), gpui::px(540.)),
                 );
                 assert!(utility.debug_bounds("timbre-plot").is_some());
+                assert!(
+                    utility
+                        .debug_bounds("timbre-name-clusters")
+                        .unwrap()
+                        .bottom()
+                        < gpui::px(540.)
+                );
             }
         }
         crate::harness::resize(
@@ -784,7 +1015,35 @@ mod tests {
             &mut utility,
             gpui::size(gpui::px(900.), gpui::px(700.)),
         );
-        paint(&app, cx);
+        app.update(&mut utility, |this, _| {
+            let map = this.timbre_map.map.as_ref().unwrap();
+            let names = map
+                .cluster_summaries()
+                .iter()
+                .map(|cluster| ClusterName {
+                    id: cluster.id,
+                    name: format!("Named cluster {}", cluster.id),
+                })
+                .collect();
+            let sound = map.sounds[index].clone();
+            let cluster = map.clusters()[index];
+            let generation = this.timbre_map.naming_generation;
+            assert!(this.timbre_map.finish_naming(generation, Ok(names)));
+            assert_eq!(
+                this.library_timbre_cluster(&sound.instrument_id, sound.preset)
+                    .unwrap()
+                    .1,
+                format!("Named cluster {cluster}")
+            );
+            assert_eq!(this.project(), &before);
+        });
+        paint(&app, &mut utility);
+        click("timbre-reset-names", &mut utility);
+        app.read_with(&utility, |this, _| {
+            assert!(this.timbre_map.names.is_empty());
+            assert_eq!(this.project(), &before);
+        });
+        paint(&app, &mut utility);
         click("timbre-use", &mut utility);
         app.update(cx, |this, _| {
             assert_ne!(this.project(), &before);
@@ -792,7 +1051,30 @@ mod tests {
             assert_eq!(this.project(), &before);
         });
         click("timbre-close", &mut utility);
-        app.read_with(cx, |this, _| assert!(!this.timbre_map.open));
+        app.update(cx, |this, _| {
+            assert!(!this.timbre_map.open);
+            let obsolete = this.timbre_map.naming_generation;
+            this.timbre_map.cancel_naming();
+            assert!(!this.timbre_map.finish_naming(
+                obsolete,
+                Ok(vec![ClusterName {
+                    id: 0,
+                    name: "Obsolete".into()
+                }])
+            ));
+            assert!(this.timbre_map.names.is_empty());
+            let map = this.timbre_map.map.as_ref().unwrap();
+            let sound = &map.sounds[index];
+            assert!(
+                this.library_timbre_cluster(&sound.instrument_id, sound.preset)
+                    .is_some()
+            );
+            this.reset_view();
+            assert!(
+                this.library_timbre_cluster("auris.physical.piano", None)
+                    .is_none()
+            );
+        });
     }
 
     #[gpui::test]

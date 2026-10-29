@@ -20,6 +20,26 @@ Audition uses the selected playable track, or the first playable track. Its mute
 and routing apply, so choose an unmuted dry track for comparisons. Previews are matched to a
 common RMS target with a peak ceiling; closing the map stops the last preview.
 
+## Cluster names and library colors
+
+After a scan, measured default instruments and melodic SoundFont presets use the map's cluster
+color and name in the library tree and search results. Unmeasured choices retain their role
+colors. Identity uses the instrument id and exact font/bank/patch, so equal display names do not
+share annotations accidentally. Closing the map keeps these annotations available in the library.
+
+Each cluster initially takes the name of the measured source closest to its centroid in the full
+feature space. The legend shows the source count; its tooltip lists up to eight central examples.
+These names describe exploratory groups rather than fixed instrument categories.
+
+With an agent model configured in Settings, **Name Clusters with AI** requests short labels in
+the interface language. It sends only cluster sizes and bounded representative sound names to the
+configured backend, without audio, project contents or conversation history. Suggestions are
+display labels inferred from metadata, not a listening assessment. The request cannot use tools
+or edit the project. Every cluster must receive one distinct valid name before any names change.
+Cancel, closing the map, rescanning or replacing the document invalidates a pending request;
+failure preserves the current labels. **Restore Representative Names** reverts the suggestions.
+Colors and names remain in memory for this scan; rescanning or replacing the document clears them.
+
 ## Measurement and coordinates
 
 Every source uses fresh instances for six matched triggers: MIDI 48, 60 and 72 at velocities

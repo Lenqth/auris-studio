@@ -271,7 +271,14 @@ strings! {
     TimbreMapGeometry { en: "Color: acoustic group · axes: PC1–PC3 · similarity uses full features", ja: "色：音響クラスタ · 軸：PC1–PC3 · 類似音は元の特徴量で検索" }
     TimbreMapSelect { en: "Select a sound to audition and compare its neighbors", ja: "音色を選ぶと試聴し、似ている音色を確認できます" }
     TimbreMapReady { en: "Scan the library to explore its sounds", ja: "ライブラリを解析すると音色を探索できます" }
-    TimbreMapGroup { en: "Group", ja: "グループ" }
+    TimbreMapNameWithAi { en: "Name Clusters with AI", ja: "AIでクラスタに名前を付ける" }
+    TimbreMapNaming { en: "Naming clusters…", ja: "クラスタ名を考えています…" }
+    TimbreMapNamingHint { en: "Send representative sound names and cluster sizes to the configured agent. No audio is sent.", ja: "代表音色の名前とクラスタの音色数を設定済みエージェントに送ります。音声は送信しません。" }
+    TimbreMapConfigureAi { en: "Configure an AI model in Settings to suggest cluster names.", ja: "設定でAIモデルを指定すると、クラスタ名を提案できます。" }
+    TimbreMapRepresentativeNames { en: "Names from representative sounds", ja: "代表音色の名前を表示中" }
+    TimbreMapAiNames { en: "AI-suggested names", ja: "AIが提案した名前を表示中" }
+    TimbreMapResetNames { en: "Restore Representative Names", ja: "代表音色の名前に戻す" }
+    TimbreMapNamingFailed { en: "Could not name clusters", ja: "クラスタ名を取得できませんでした" }
     TimbreMapView3d { en: "3D", ja: "3D" }
     TimbreMapViewTop { en: "Top", ja: "上面" }
     TimbreMapViewFront { en: "Front", ja: "正面" }
