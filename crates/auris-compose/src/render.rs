@@ -192,11 +192,8 @@ pub struct Composition {
     pub seed: u64,
     /// The specification it was written from, as the document would hold it.
     ///
-    /// Carried rather than thrown away so that a project can remember what it was asked for: a
-    /// song sheet reopened after a save and a reload refills itself from this, and Another Take
-    /// goes on working on a piece nobody has the original file for. Text rather than a
-    /// [`SongSpec`] because the document may not name this crate, and because the format is
-    /// already the canonical way of writing one down — nothing is lost by storing it as one.
+    /// Retains the composition request in the project. Text rather than a [`SongSpec`]
+    /// because the document may not name this crate.
     pub spec: String,
     /// The key and the chords, on the song's own timeline.
     ///

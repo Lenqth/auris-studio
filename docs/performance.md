@@ -173,7 +173,7 @@ Take updates inherited ghost/expression seeds and preserves their settings and e
 | Synthwave | Tight rhythm, connected saw lead, delayed vibrato and subtle falls |
 | Ambient | Slow shared phrase dynamics and subtle cello motion; bells stay at their written pitch |
 
-Instrument changes in the song sheet are respected: bend, strum and mute choices depend on
+Requested instruments are respected: bend, strum and mute choices depend on
 the instrument and role, not the part's name. Ghosts preserve long rests and final tails;
 drum ghosts stay scoped to their named kit voice. Singing melodies use the voice pipeline's
 own ornaments.

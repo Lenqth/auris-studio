@@ -7,66 +7,8 @@ chords with **Write It Again**. The rest of the application is in [Features](fea
 
 ## The song specification
 
-**Compose → Compose a Song…** starts with style, voice, title, tempo and one XY pad for brightness
-and energy beside the lyrics. Moving right or up raises the labelled value. Lyrics are optional;
-**Create Song** also works with every box empty. The columns stack in smaller windows.
-
-Click the tempo's BPM value to enter an exact number between 20 and 400, including decimals.
-The −1 and +1 buttons adjust it one BPM at a time; hold Shift while dragging a song dial for
-fine adjustment.
-
-The participation matrix places parts and their instruments down the left and sections in song
-order across the top, with bar ranges under their names. Click a cell to switch between **Play**
-and **Rest**. Instrument names open the sound picker for that part. The labels stay in place while
-the timeline scrolls horizontally. Parts using the same sound, including individual drum writers,
-can enter separately; repeated occurrences of the same section share their participation settings.
-Every section keeps at least one playing part. The matrix is available in basic mode too.
-
-**Detailed settings** keeps the basic controls and lyrics in place and adds groups below them:
-harmony and rhythm, performance, section structure and the drum/instrument roster. Section cards
-name their transposition, tempo and shared melody. The toggle stays above
-the scrolling fields. **Back to basics** retains every setting and any lyrics being edited.
-Tab and Shift+Tab reveal the next or previous lyrics editor automatically. Long picker values
-are shortened to fit their columns; hovering shows the full value, and editing retains it all.
-The basic lyrics view shows note counts and estimated bars for every nonempty lyric. Estimates
-use the same mora reading and phrase rhythm as composition. Each section reports an exact fit,
-spare bars for accompaniment, or missing bars and notes that cannot fit. **Fit bars to lyrics**
-applies the estimate to that section without changing its words or other sections. Unreadable
-lyrics show an explanation instead of a partial estimate.
-
-Later verses show whether their total and per-phrase note counts match the original. Matching
-totals with different phrase boundaries are reported separately; an empty original asks for its
-lyrics first. These checks remain visible in basic mode.
-
-The **Voice** selector offers installed singers and a file picker. **Speaker** selects a named
-speaker within that voice. VOICEVOX offers saved styles immediately and fetches current singing
-styles from its Engine; saved choices remain available when the Engine is offline. The choices
-are saved in the specification's `singer` and `singer_speaker` fields and assigned to the generated
-vocal track. Changing the voice resets the speaker to that voice's default.
-
-When the selected speaker has artwork, its portrait appears below **Speaker**, fitted inside
-the song controls. It follows voice and speaker changes independently of the inspector. Artwork
-loads in the background; a failed request offers a retry, and voices without artwork leave no
-empty image frame.
-
-**Drums** has its own source selector and add/remove controls. **Instruments** lists melodic
-parts separately, with its own add button. Removing or restoring the drum kit preserves the
-instrument parts and their settings.
-Each melodic part's **Density** follows the mood while **Follow mood** is selected. Dragging
-the density starts from that current value and pins it; select **Follow mood** again to restore
-automatic changes with the song's energy. Changing a part's role retains its custom settings
-and updates values still equal to the previous role's defaults. Selecting the same role keeps
-every setting.
-**Create Song** writes the piece. Detailed settings also offers **Another Take** — the same dials
-and the next seed — and **Save as Specification…**.
-The whole piece arrives as a single undo step, so a composition that is not what was wanted is one
-press away from the document that was there before it.
-
-Song creation shows its current stage above the settings: writing the score, preparing the sounds,
-then balancing the mix. During balancing, the progress bar follows each track render and the two
-full-mix passes, naming the current measurement. The window keeps updating while the score and
-audio are calculated. Editing resumes when the job finishes; a rejected source leaves the draft
-open for correction. **Another Take** keeps the settings open after success as well.
+`auris compose song.asong` reads a TOML specification. Use `auris presets` to list styles,
+and `auris compose --preset city-pop` to compose a preset without a file.
 
 Every style also installs [non-destructive performance settings](performance.md#starting-from-automatic-composition)
 suited to its instruments: guitar strokes and muted tails, quiet pickups, shared phrasing,
@@ -74,7 +16,7 @@ and pitch gestures on appropriate solo parts. Adjust them in each clip's Perform
 The `.asong` root field `performance` stores the palette independently of the song title.
 
 The separate `writing_style` field selects the written musical vocabulary. Presets set both
-fields, and the song sheet preserves them independently. For example,
+fields independently. For example,
 `writing_style = "city-pop"` selects syncopated comping and bass figures, while
 `performance = "city-pop"` selects how the stored notes are played. Changing performance
 alone does not rewrite a note. Writing style is saved in each generated clip's recipe.
@@ -98,10 +40,6 @@ every mora remains present, and text that cannot fit is rejected. Shared section
 keep the same slots. Accompaniment reads the actual sung notes. These are all score edits:
 the piano roll, lyrics, save/load, Undo and clip regeneration work on normal editable notes.
 
-**Style** is the first row and the one to start at. Around thirty dials is a lot to be asked for
-before anything has made a sound, and the honest answer to what they should be is *depends what you
-are writing* — so the shelf answers all of them at once:
-
 | | |
 | --- | --- |
 | `chiptune` | The built-in voices, four to the floor |
@@ -114,19 +52,13 @@ are writing* — so the shelf answers all of them at once:
 | `synthwave` | Bowed lead, mallet arpeggios and a four-on-the-floor kit |
 | `ambient` | Pads and a slow bell, no kit at all |
 
-Choosing one replaces the whole sheet — tempo, key, groove, progression, form and roster — because
-half a style is the arrangement of one at the tempo of another. Then change what you do not like,
-which is a much better place to start than an empty form. From the command line the same list is
-`auris presets`, and `auris compose --preset city-pop` writes one without a file.
-
 Each is a `.asong` document embedded in the build rather than a structure assembled in code: a
 preset is meant to be *read*, the format was designed to be the readable one, and it means the
 presets are parser tests that fail loudly rather than silently.
 
 Melodic parts use the built-in physical piano, guitar, bass, bell, mallet and violin.
 The `chiptune` and `game-loop` styles use oscillator voices. Percussion keeps its kit
-and reverse-cymbal choices. Instrument IDs are stored directly in the specification,
-so opening it in the song sheet shows the selected physical instrument.
+and reverse-cymbal choices. Instrument IDs are stored directly in the specification.
 
 Presets also retain their instrument controls and ordered insert effects. Rock's lead and
 rhythm guitars use bridge pickups and driven closed-cabinet Guitar Amps; its clean guitar
@@ -153,49 +85,18 @@ Omitting `effects` retains the automatic role/GM insert rules; `effects = []` re
 empty chain. The specification preserves these choices through saving and regeneration,
 and the generated project's ordinary mixer and instrument controls remain editable.
 
-A part's instrument name opens the library inside the song sheet. Its search and category tree
-are shared with the main Library panel: choose a built-in instrument, an exact SoundFont preset,
-or an installed CLAP/VST3 instrument. **Import SoundFont…** adds another font to this browser;
-**Add plugin folder…** includes plugins stored outside the usual locations. Expand a plugin file
-to see the instruments it exports. Selecting a sound returns to the same matrix position.
-Closing the browser preserves the current draft and the main library's query and tree.
-Fonts imported here do not change the open project until **Create Song**.
-
-The song sheet has a **Drums** source selector. Choosing a kit applies it to the drum writers
-sharing that source; separately configured kits retain their choices. Adding or removing drums
-changes the kit as a whole. Each section becomes one
-clip containing the independent voices. The track fader, pan, inserts and sends belong to the
-whole kit. A clip's **Drums** context submenu can rewrite or reroll one voice while preserving
-the other voices' notes and performance settings.
-See [Drum sound measurement](drums.md) for assigning a configured instrument by its actual audio.
-
-A row in the form is a *playing*, not a section: a name that appears twice is one section played
-twice, and editing either row edits the one section, because that is what makes it recognisably
-the same chorus. The section picker offers the song's own names first — choosing one of those is a
-repeat — and under a rule a fresh one of each: once there is a verse, `verse 2` is one click, which
-is how a song gets two verses that are not the same eight bars.
-
-The picker calls `pre` **Pre-Chorus** (Bメロ in Japanese) and `bridge` **Bridge** (Cメロ),
-with numbered labels for later sections just as for verses and choruses. These names appear
-consistently in the form, lyrics, participation matrix and shared-melody picker. The saved
-identifiers stay `pre` and `bridge`; custom section names keep their text.
-New section choices skip numbers already used by the song, including a preset's compact
-names such as `pre2`.
-
 The `pop-band` form places a four-bar pre-chorus before each of its first two choruses,
 then an eight-bar bridge and a final chorus. The pre-chorus rises from ii through V over
 a separate chart; the bridge starts on vi with keys, strings, bass and lead before the full
 band returns. Its second pre-chorus and final chorus have separate lyrics and share their
 original vocal melodies.
 
-Presets already include separate `verse2` and, where applicable, `chorus2` sections. Each has
-its own lyrics box and shares the original section's vocal melody through **Shared melody**.
-For a third verse, add a section and choose its original there. In a specification this is
-`melody_from = "verse"`. Line breaks and sentence punctuation divide musical phrases: each
-phrase must have the same number of moras as its original, and both sections must have enough
-bars for every note. The editor shows the actual and required phrase counts. An incompatible
-lyric keeps the sheet open for correction before the current project changes. An empty lyric
-leaves that section instrumental.
+Presets include separate `verse2` and, where applicable, `chorus2` sections. Each has
+its own lyrics and can share an original vocal melody through `melody_from = "verse"`.
+Line breaks and sentence punctuation divide musical phrases. Each phrase must have the
+same mora count as its original, and both sections must have enough bars for every note.
+Incompatible lyrics are rejected before changing the project; empty lyrics leave a
+section instrumental.
 
 **A section can change how a part plays**, as a patch rather than a second declaration: what it
 does not name it does not touch, so a busier chorus is one line. The lead an octave up in the last
@@ -216,53 +117,6 @@ the ear is already in the new key when the section starts. One chord, replaced i
 the bars before a change somebody asked for by hand. It is the single thing in the format that
 rewrites a bar of a progression quoted by name, and `lead_in = "none"` is how to say the plain jump
 was meant.
-
-**A section can play at a tempo of its own**, which is the difference between a chorus that lifts
-and one that is only louder. Its button on the dial row reads `—` for a section that follows the
-song and the tempo itself for one that does not. Click it to type any value from 20 to 400 BPM,
-including decimals; clear the field to follow the song again.
-It is a **step**, in force from that section's first bar until something changes it back — a
-ritardando slows *through* a passage, and neither the specification nor the document's tempo map,
-which is piecewise-constant, can say that. Nothing pretends otherwise. A composed piece arrives
-with the changes already on the timeline's tempo lane, where they can be dragged like any others.
-
-**Who plays is chosen per section**, which is what stops a piece being the same six instruments
-from the first bar to the last. The `7/7` button lists the roster with a tick against the parts
-that come in; turning the pad off in the verse is one click. The last part left cannot be switched
-off — a section that plays nothing is silence, and the specification has no way to write it, since
-naming nobody is already how *everybody* is spelled. Turn the last one back on and it goes back to
-saying everybody, so a part added later plays there too.
-
-**A progression is chosen per section**, which is what lets one change partway through a song. The
-picker lists the ones this song already carries, then **the composer's own**, **Write one…** and
-**Keep in the catalogue…**, then the progressions this installation has been taught, then the whole
-built-in catalogue. Choosing a catalogue entry the song does not carry is what adds it — there is
-no chart list to fill in first.
-
-**The composer's own** leaves the section's progression to the composer to invent — a fresh one
-per seed, drawn from the same corpus of moves the named progressions are made of, leaning onto its
-dominant at the phrase ends. What is stored is the request (`"?"` in the file), not any particular
-deal, so **Another Take** re-deals the chords along with everything else. Two sections left to the
-composer get two different progressions; point one section at the other's chart by name to share
-one.
-
-**Write one…** takes bars of roman numerals (`| IVmaj7 | III7 | vi7 | I7 |`) and files them under
-the section's own name, so a second section can reach the same chords from the same picker.
-**Keep in the catalogue…** puts the one written into `~/.config/auris-studio/progressions.json`,
-where every later song's picker finds it and `auris progressions` lists it. A kept progression is
-*a snippet the picker offers*, not a name a file resolves: choosing one writes its chords into the
-song, so an `.asong` never refers to anything outside itself and still plays for somebody who has
-never seen your book. A name the built-in catalogue already uses is refused, because two `@axis`es
-in one picker is a choice nobody can make.
-
-A composed document **remembers the specification it was written from**, so the sheet reopens on
-the song rather than on the defaults after a save and a reload, and **Another Take** on a piece
-whose `.asong` nobody kept still gives another take of *that* song.
-
-The sheet and the file are two faces of one `SongSpec`, so neither can drift from the other:
-**Compose → Compose from Specification…**, or `auris compose song.asong`, writes a piece from the same
-thing in a TOML document — key, scale, tempo, mood, chord progression, form and parts — that an
-agent can write and a person can edit one line of.
 
 Two are in [`examples/`](../examples): `hello.asong` is three lines, which is a whole song because
 every field has a default, and `neon-drive.asong` is most of the vocabulary with a comment beside
@@ -351,10 +205,8 @@ contour — the *germ* — resampled onto each section's own rhythm, and `motif 
 that contour over instead of leaving it to the seed: scale steps around the first note, the same
 numbers in every key. A busy chorus fills the given line in with passing steps and a sparse verse
 says it in fewer, wider words; the rhythm each section says it in stays the section's own (a
-part's `rhythm` pattern pins that half by hand). The song sheet's XY pads let the mood and seed
-control the contour automatically. Right-clicking a MIDI clip offers **Take as the Motif…**,
-which reads the clip's top voice as scale steps in the document's key and opens the sheet holding
-the result. From the command line, `--set "motif: 0 2 4 2"` supplies it to any specification.
+part's `rhythm` pattern pins that half by hand). From the command line,
+`--set "motif: 0 2 4 2"` supplies the contour to any specification.
 
 A third answer is to give no progression at all: `chords = "?"` (or any `[harmony]` entry set to
 `"?"`) asks the composer to **invent** one. The invention is a weighted walk over the moves the
@@ -395,17 +247,13 @@ TOML quotes it — `--set "key: D minor"`.
 
 ## Looping background music
 
-Choose **game-loop** in **Style** for a sixteen-bar instrumental chiptune BGM, then press
-**Create Song**. It uses two eight-bar sections at 120 BPM, making a 32-second cycle.
-The basic **Ending** selector offers **Loop (BGM)** for any style. The complete form repeats;
-use **Detailed settings** to choose its sections and bar counts. Keep only the sections that
-should play on every repetition, or start from `game-loop`, whose form is already a cycle.
+The `game-loop` preset creates a sixteen-bar instrumental chiptune loop at 120 BPM.
 
 Loop mode adds no final held chord or fade-out. Fills lead back into the opening, and a final
 section in a different key prepares the return according to the opening section's `lead_in`.
 Quoted chords remain unchanged except for that explicitly requested modulation.
 The generated project enables cycle playback over the complete form and remembers the setting
-when saved or reopened. **Another Take** retains the loop mode.
+when saved or reopened.
 
 **File → Export Cycle…** writes exactly one cycle. It warms up instruments and effects before
 recording, so reverb and delay carry into the opening without extending the file with a tail.
@@ -528,9 +376,8 @@ were deliberately adjusted.
 **A drum part says which note it strikes.** General MIDI is the only agreement there is about
 which number is a kick, and a SoundFont is under no obligation to keep it — a kit that puts its
 snare somewhere else came out silent or playing a cowbell, and nothing could say otherwise. The
-song sheet shows the note where a pitched part shows its octave, which costs no room because a kit
-has no octave: its pitches *are* drum numbers. The picker offers the General MIDI kit by name, and
-`note = 12` in the specification reaches anything at all.
+specification records the note instead of a pitched octave, because a kit
+has no octave: its pitches *are* drum numbers. `note = 12` in the specification selects any MIDI key.
 
 ```toml
 [[part]]
@@ -549,7 +396,7 @@ gate        = 0.25
 
 ### A whole song is clips that write themselves too
 
-Everything above applies to **Compose a Song** as well. Each clip a composed piece arrives with
+Each clip created from a song specification
 carries the recipe that describes it, so a piece is re-takeable one clip at a time: right-click the
 chorus bass, choose Another Take, and the chorus bass changes while the verse bass and the chorus
 drums stay exactly where they are. The dial panel opens on any of them, the preset can be swapped,
