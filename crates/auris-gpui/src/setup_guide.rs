@@ -12,32 +12,38 @@ use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*};
 use crate::app::AurisApp;
 use crate::settings_window::SettingsTab;
 use crate::ui::project_chooser::ChooserPage;
+use crate::ui::provider_logo::provider_logo;
 use crate::voice_setup_window::VoiceSetupTab;
 
 /// Installation and follow-up guidance shared by the guide and provider settings.
-pub(crate) const AGENT_SETUP: &[(&str, Key, &str)] = &[
+pub(crate) const AGENT_SETUP: &[(&str, &str, Key, &str)] = &[
     (
         "Codex CLI",
+        "openai",
         Key::SetupInstallCodex,
         "https://learn.chatgpt.com/docs/cli",
     ),
     (
         "Claude Code",
+        "claude",
         Key::SetupInstallClaude,
         "https://code.claude.com/docs/en/setup",
     ),
     (
         "OpenCode",
+        "opencode",
         Key::SetupInstallOpenCode,
         "https://opencode.ai/docs/",
     ),
     (
         "Antigravity CLI",
+        "antigravity",
         Key::SetupInstallAntigravity,
         "https://antigravity.google/docs/getting-started?tab=cli",
     ),
     (
         "Ollama",
+        "ollama",
         Key::SetupInstallOllama,
         "https://ollama.com/download",
     ),
@@ -245,13 +251,20 @@ impl AurisApp {
                     Destination::Settings(SettingsTab::Agent),
                     cx,
                 ));
-                for &(name, help, url) in AGENT_SETUP {
+                for &(name, logo, help, url) in AGENT_SETUP {
                     guidance = guidance.child(
                         div()
                             .flex()
                             .flex_col()
                             .gap(spacing.xs)
-                            .child(setup_link(name, name, url, &theme))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(spacing.sm)
+                                    .child(provider_logo(logo, theme.text))
+                                    .child(setup_link(name, name, url, &theme)),
+                            )
                             .child(paragraph(help)),
                     );
                 }
@@ -480,7 +493,7 @@ mod tests {
         crate::harness::click("setup-next", cx);
         crate::harness::paint(&app, cx);
         crate::harness::click("Codex CLI", cx);
-        assert_eq!(cx.opened_url().as_deref(), Some(super::AGENT_SETUP[0].2));
+        assert_eq!(cx.opened_url().as_deref(), Some(super::AGENT_SETUP[0].3));
         app.read_with(cx, |app, _| {
             assert_eq!(app.project_chooser.as_ref().unwrap().setup_step, 1);
             assert_eq!(app.session.project(), &before);

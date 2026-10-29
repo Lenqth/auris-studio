@@ -571,9 +571,16 @@ impl SettingsWindow {
                     .child(section_title(self.t(label), theme))
                     .child(self.agent_field(index, cx))
                     .child(note(self.t(help), theme));
-                let (name, help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
+                let (name, logo, help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
                 details = details
-                    .child(crate::setup_guide::setup_link(name, name, url, theme))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(provider_logo(logo, theme.text))
+                            .child(crate::setup_guide::setup_link(name, name, url, theme)),
+                    )
                     .child(note(self.t(help), theme));
                 if let Some(status) = status {
                     if let Some(path) = &status.executable {
