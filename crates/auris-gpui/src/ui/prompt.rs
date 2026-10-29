@@ -2315,6 +2315,7 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     /// that had it. Done here because this is where typing arrives — the key handler never sees a
     /// character, which is what lets an IME compose into the field.
     fn text_changed(&mut self) {
+        self.reset_agent_completions();
         if let Some(palette) = self.palette.as_mut() {
             palette.selected = 0;
         }

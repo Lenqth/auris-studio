@@ -50,6 +50,21 @@ Consecutive tool calls share a collapsed summary showing their count and any
 running or failed calls. Open the group to inspect each call's arguments and
 result; user messages and assistant replies keep separate groups apart.
 
+Type `/model ` in the composer to list available models. Arrow keys choose a
+candidate, Tab completes its name, and Enter switches immediately. Escape hides
+the candidates while keeping the draft. `/model NAME` also accepts partial names,
+spacing and case differences, and small spelling mistakes; exact names rank first.
+Duplicate names include their connection in the completion. A query with no match
+keeps the current model and draft. Switching uses the same saved settings and
+conversation-preserving worker restart as the model menu.
+
+For Ollama, the context setting is a requested ceiling. Before starting a worker,
+Auris caps it at the selected model's advertised maximum and uses that effective
+limit for both `num_ctx` and history budgeting. For example, a 131,072-token setting
+uses 128,000 with a model advertising that maximum. The saved preference stays
+available for models with larger windows. The output limit must fit inside the
+effective window; the panel's context meter uses the same capped limit.
+
 ## Reference attachments
 
 Drop files onto the Agent panel to attach them to the next message. Dropping audio

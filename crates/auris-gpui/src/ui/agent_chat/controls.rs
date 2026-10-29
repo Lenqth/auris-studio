@@ -28,6 +28,8 @@ pub(super) struct Controls {
     pub(super) mode_focus: Option<gpui::FocusHandle>,
     pub(super) effort_focus: Option<gpui::FocusHandle>,
     pub(super) slash_selected: usize,
+    pub(super) slash_dismissed: Option<String>,
+    pub(super) slash_scroll: gpui::ScrollHandle,
 }
 
 pub(super) struct SlashMatch {
@@ -146,6 +148,7 @@ pub(super) fn effort_choices(openai: bool) -> &'static [ReasoningEffort] {
 
 const SLASH_COMMANDS: &[(&str, bool, Key)] = &[
     ("/mode", true, Key::AgentSlashMode),
+    ("/model", true, Key::AgentSlashModel),
     ("/effort", true, Key::AgentSlashEffort),
     ("/permissions", false, Key::AgentSlashPermissions),
     ("/allow", true, Key::AgentSlashAllow),
@@ -165,7 +168,7 @@ pub(super) fn is_control_command(text: &str) -> bool {
     SLASH_COMMANDS.iter().any(|(name, _, _)| *name == command)
 }
 
-pub(super) fn slash_matches(value: &str) -> Vec<SlashMatch> {
+pub(super) fn slash_matches(value: &str, models: &[ModelOption]) -> Vec<SlashMatch> {
     if !value.starts_with('/') || value.contains('\n') {
         return Vec::new();
     }
@@ -182,6 +185,19 @@ pub(super) fn slash_matches(value: &str) -> Vec<SlashMatch> {
             .collect();
     };
     let argument = argument.trim_start();
+    if command == "/model" {
+        return super::model_search::matches(argument, models)
+            .into_iter()
+            .map(|index| SlashMatch {
+                fill: format!(
+                    "/model {}",
+                    super::model_search::command_name(index, models)
+                ),
+                label: super::model_search::command_name(index, models),
+                description: Key::AgentSlashModel,
+            })
+            .collect();
+    }
     let (values, description): (Vec<&str>, Key) = match command {
         "/mode" => (
             vec!["read-only", "edit", "plan", "auto_review", "bypass"],
@@ -246,6 +262,13 @@ fn review_requests(typed: &[String]) -> Vec<String> {
 }
 
 impl AurisApp {
+    /// Native text input and IME commits change the candidates without a key event.
+    pub(crate) fn reset_agent_completions(&mut self) {
+        self.agent_chat.controls.slash_selected = 0;
+        self.agent_chat.controls.slash_dismissed = None;
+        self.agent_chat.controls.slash_scroll.scroll_to_item(0);
+    }
+
     /// Common wire-event route used by polling and the headless desktop harness.
     pub(super) fn route_agent_control_event(&mut self, event: &AgentEvent) -> bool {
         self.observe_agent_trace_event(event);
@@ -643,6 +666,37 @@ impl AurisApp {
             self.agent_mode(mode);
         } else {
             match command {
+                "/model" => {
+                    if !self.agent_chat.models_loaded && !self.agent_chat.fetching_models {
+                        self.agent_refresh_models();
+                    }
+                    if self.agent_chat.fetching_models {
+                        self.agent_chat
+                            .push_entry(ChatEntry::Note(Key::AgentModelSearchLoading));
+                        return true;
+                    }
+                    if self.agent_chat.models.is_empty() {
+                        self.agent_chat
+                            .push_entry(ChatEntry::Note(Key::AgentModelSearchEmpty));
+                        return true;
+                    }
+                    if value.is_empty() {
+                        self.accept_agent_completion("/model ");
+                        return true;
+                    }
+                    let matches = super::model_search::matches(value, &self.agent_chat.models);
+                    if let Some(&index) = matches.first() {
+                        self.choose_agent_model(index);
+                        if self.agent_chat.models_error.is_some() {
+                            return true;
+                        }
+                        self.focus_agent_field(AgentField::Chat);
+                    } else {
+                        self.agent_chat
+                            .push_entry(ChatEntry::Note(Key::AgentModelSearchEmpty));
+                        return true;
+                    }
+                }
                 "/permissions" => {
                     self.set_agent_rules_open(!self.agent_chat.controls.rules_open);
                 }
@@ -1553,18 +1607,18 @@ mod tests {
 
     #[test]
     fn slash_completion_covers_commands_arguments_and_plain_text() {
-        let commands = slash_matches("/m");
-        assert_eq!(commands.len(), 1);
+        let commands = slash_matches("/m", &[]);
+        assert_eq!(commands.len(), 2);
         assert_eq!(commands[0].fill, "/mode ");
 
-        let modes = slash_matches("/mode p");
+        let modes = slash_matches("/mode p", &[]);
         assert_eq!(modes.len(), 1);
         assert_eq!(modes[0].fill, "/mode plan");
 
-        let effort = slash_matches("/effort h");
+        let effort = slash_matches("/effort h", &[]);
         assert_eq!(effort.len(), 1);
         assert_eq!(effort[0].fill, "/effort high");
-        assert!(slash_matches("write a chorus").is_empty());
+        assert!(slash_matches("write a chorus", &[]).is_empty());
     }
 
     #[test]

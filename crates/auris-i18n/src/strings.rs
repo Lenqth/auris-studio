@@ -2191,6 +2191,9 @@ new のオプション
     AgentToolGroupRunning { en: "{count} running", ja: "{count}件実行中" }
     AgentToolGroupFailed { en: "{count} failed", ja: "{count}件失敗" }
     AgentSlashMode { en: "Change approval mode", ja: "承認モードを変更" }
+    AgentSlashModel { en: "Switch model", ja: "モデルを切り替え" }
+    AgentModelSearchLoading { en: "Loading available models. Submit /model again when the list is ready.", ja: "利用可能なモデルを取得中です。一覧の取得後に /model をもう一度実行してください。" }
+    AgentModelSearchEmpty { en: "No matching model is available. Use /model to see available models, or refresh the model list.", ja: "一致するモデルが見つかりません。/model で候補を確認するか、モデル一覧を更新してください。" }
     AgentSlashEffort { en: "Change reasoning effort", ja: "推論レベルを変更" }
     AgentSlashPermissions { en: "Show permission rules", ja: "許可ルールを表示" }
     AgentSlashAllow { en: "Always allow an operation", ja: "操作を常に許可" }

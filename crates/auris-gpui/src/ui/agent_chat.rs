@@ -36,6 +36,7 @@ mod articulation_eval;
 mod composition_eval;
 pub(crate) mod controls;
 mod conversations;
+mod model_search;
 #[cfg(test)]
 mod performance_eval;
 mod queued;
@@ -3164,21 +3165,36 @@ impl AurisApp {
         let completions = if !composing
             && focused == AgentField::Chat
             && self.agent_chat.pending_send.is_none()
+            && self.agent_chat.controls.slash_dismissed.as_deref()
+                != Some(self.agent_chat.input.content())
         {
-            controls::slash_matches(self.agent_chat.input.content())
+            controls::slash_matches(self.agent_chat.input.content(), &self.agent_chat.models)
         } else {
             Vec::new()
         };
         if !completions.is_empty() {
             let selected = self.agent_chat.controls.slash_selected % completions.len();
             match key {
+                "escape" => {
+                    self.agent_chat.controls.slash_dismissed =
+                        Some(self.agent_chat.input.content().to_owned());
+                    return true;
+                }
                 "up" => {
                     self.agent_chat.controls.slash_selected =
                         (selected + completions.len() - 1) % completions.len();
+                    self.agent_chat
+                        .controls
+                        .slash_scroll
+                        .scroll_to_item(self.agent_chat.controls.slash_selected);
                     return true;
                 }
                 "down" => {
                     self.agent_chat.controls.slash_selected = (selected + 1) % completions.len();
+                    self.agent_chat
+                        .controls
+                        .slash_scroll
+                        .scroll_to_item(self.agent_chat.controls.slash_selected);
                     return true;
                 }
                 "tab" => {
@@ -3240,6 +3256,8 @@ impl AurisApp {
             .map(|field| field.apply_key_with_clipboard(key, shift, secondary, true, cx));
         if effect == Some(crate::ui::text_field::KeyEffect::Changed) {
             self.agent_chat.controls.slash_selected = 0;
+            self.agent_chat.controls.slash_dismissed = None;
+            self.agent_chat.controls.slash_scroll.scroll_to_item(0);
         }
         effect.is_some_and(|effect| effect != crate::ui::text_field::KeyEffect::Ignored)
     }
@@ -3248,6 +3266,8 @@ impl AurisApp {
         let length = self.agent_chat.input.content().len();
         self.agent_chat.input.replace(0..length, fill);
         self.agent_chat.controls.slash_selected = 0;
+        self.agent_chat.controls.slash_dismissed = None;
+        self.agent_chat.controls.slash_scroll.scroll_to_item(0);
         self.focus_agent_field(AgentField::Chat);
     }
 
@@ -4815,7 +4835,13 @@ impl AurisApp {
     }
 
     fn agent_slash_completions(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
-        let matches = controls::slash_matches(self.agent_chat.input.content());
+        if self.agent_chat.controls.slash_dismissed.as_deref()
+            == Some(self.agent_chat.input.content())
+        {
+            return div().into_any_element();
+        }
+        let matches =
+            controls::slash_matches(self.agent_chat.input.content(), &self.agent_chat.models);
         if matches.is_empty() {
             return div().into_any_element();
         }
@@ -4823,6 +4849,7 @@ impl AurisApp {
         let theme = &self.theme;
         div()
             .id("agent-slash-completions")
+            .track_scroll(&self.agent_chat.controls.slash_scroll)
             .debug_selector(|| "agent-slash-completions".into())
             .flex()
             .flex_col()
@@ -4852,16 +4879,16 @@ impl AurisApp {
                     )
                     .child(
                         div()
-                            .w(px(112.0))
-                            .flex_shrink_0()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
                             .text_xs()
                             .text_color(theme.text)
                             .child(candidate.label),
                     )
                     .child(
                         div()
-                            .flex_1()
-                            .min_w_0()
+                            .flex_shrink_0()
                             .text_xs()
                             .text_color(theme.text_faint)
                             .child(self.t(candidate.description)),
@@ -5565,6 +5592,115 @@ mod tests {
             assert!(this.agent_chat.controls.rules_open);
             assert_eq!(this.agent_chat.pending_reload, Some(pending));
             assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn model_command_completes_typos_and_switches_provider(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models = vec![ModelOption {
+                name: "lfm3-audio:latest".into(),
+                context_length: Some(128_000),
+                connection: Some(auris_agent::ModelConnection {
+                    backend: "rig".into(),
+                    provider: "ollama".into(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }];
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/model lfm3-auido");
+        cx.simulate_keystrokes("tab");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "/model lfm3-audio:latest");
+            assert_ne!(this.settings.agent.model, "lfm3-audio:latest");
+        });
+        cx.simulate_keystrokes("enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.model, "lfm3-audio:latest");
+            assert_eq!(this.settings.agent.backend, "rig");
+            assert_eq!(this.settings.agent.provider, "ollama");
+            assert_eq!(this.agent_chat.context_window, Some(128_000));
+            assert!(this.agent_chat.input.content().is_empty());
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn model_command_send_handles_typos_and_preserves_unmatched_input(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models = vec![ModelOption {
+                name: "lfm3-audio:latest".into(),
+                ..Default::default()
+            }];
+            this.agent_chat.input = TextField::new("/model lfm3-auido");
+            this.agent_send();
+            assert_eq!(this.settings.agent.model, "lfm3-audio:latest");
+            this.agent_chat.input = TextField::new("/model nonexistent");
+            this.agent_send();
+            assert_eq!(this.settings.agent.model, "lfm3-audio:latest");
+            assert_eq!(this.agent_chat.input.content(), "/model nonexistent");
+            assert!(matches!(
+                this.agent_chat.entries.last(),
+                Some(ChatEntry::Note(Key::AgentModelSearchEmpty))
+            ));
+            assert!(this.agent_chat.link.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn model_candidates_support_arrows_and_escape(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat
+                .load_preferences(&this.settings.agent.clone());
+            this.agent_chat.models_loaded = true;
+            this.agent_chat.models = ["first", "second"]
+                .into_iter()
+                .map(|name| ModelOption {
+                    name: name.into(),
+                    ..Default::default()
+                })
+                .collect();
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("/model ");
+        cx.simulate_keystrokes("escape");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.agent_chat.controls.slash_dismissed.as_deref(),
+                Some("/model "),
+                "focus={:?}, input={:?}, marked={:?}, models={}",
+                this.agent_chat.focused,
+                this.agent_chat.input.content(),
+                this.agent_chat.input.marked(),
+                this.agent_chat.models.len()
+            );
+        });
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.focused, Some(AgentField::Chat))
+        });
+        cx.simulate_keystrokes("backspace");
+        cx.simulate_input(" ");
+        cx.simulate_keystrokes("down enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.model, "second")
         });
     }
 
