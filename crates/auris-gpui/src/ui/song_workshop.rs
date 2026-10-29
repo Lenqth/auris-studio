@@ -49,6 +49,7 @@ pub(crate) struct SongWorkshop {
     view_round: Option<usize>,
     candidates: [Option<Arc<SongCandidate>>; 3],
     played_audio: [Option<Arc<auris_session::prelude::AudioBuffer>>; 3],
+    played_timeline: [Option<Arc<auris_session::AuditionTimeline>>; 3],
     saved: [Option<std::path::PathBuf>; 3],
     errors: [Option<String>; 3],
     pub(crate) players: [PlayerState; 3],
@@ -92,6 +93,7 @@ impl SongWorkshop {
         self.preparing = None;
         self.view_round = Some(index);
         self.played_audio = std::array::from_fn(|_| None);
+        self.played_timeline = std::array::from_fn(|_| None);
         self.saved = std::array::from_fn(|_| None);
         self.errors = std::array::from_fn(|_| None);
         self.refresh_candidates();
@@ -123,6 +125,29 @@ impl SongWorkshop {
             .get(index)?
             .id;
         snapshot.previews.get(&id).map(|p| Arc::clone(&p.audio))
+    }
+    pub(super) fn audition_timeline(
+        &self,
+        index: usize,
+    ) -> Option<Arc<auris_session::AuditionTimeline>> {
+        if let Some(timeline) = &self.played_timeline[index] {
+            return Some(Arc::clone(timeline));
+        }
+        self.latest_timeline(index)
+    }
+    fn latest_timeline(&self, index: usize) -> Option<Arc<auris_session::AuditionTimeline>> {
+        if let Some(candidate) = &self.candidates[index] {
+            return Some(Arc::clone(&candidate.timeline));
+        }
+        let snapshot = self.snapshot.as_ref()?;
+        let id = snapshot
+            .document
+            .rounds
+            .get(self.view_round?)?
+            .candidates
+            .get(index)?
+            .id;
+        snapshot.previews.get(&id).map(|p| Arc::clone(&p.timeline))
     }
     fn text(&self, _: usize) -> &TextField {
         &self.brief
@@ -227,6 +252,7 @@ impl AurisApp {
             view_round: None,
             candidates: std::array::from_fn(|_| None),
             played_audio: std::array::from_fn(|_| None),
+            played_timeline: std::array::from_fn(|_| None),
             saved: std::array::from_fn(|_| None),
             errors: std::array::from_fn(|_| None),
             players: std::array::from_fn(|_| PlayerState::default()),
@@ -2057,12 +2083,50 @@ mod tests {
                 1,
                 auris_agent::workshop::Preview {
                     revision: 1,
+                    timeline: Arc::new(auris_session::AuditionTimeline::from_audio(
+                        &first,
+                        vec![
+                            auris_session::AuditionSection {
+                                label: "Intro".into(),
+                                instance: 1,
+                                start_seconds: 0.0,
+                                end_seconds: 0.5,
+                            },
+                            auris_session::AuditionSection {
+                                label: "Chorus".into(),
+                                instance: 1,
+                                start_seconds: 0.5,
+                                end_seconds: 1.0,
+                            },
+                        ],
+                    )),
                     audio: Arc::clone(&first),
                 },
             );
             this.session.project().clone()
         });
         crate::harness::paint(&app, cx);
+        crate::harness::click("song-preview-0-section-1", cx);
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.players[0].options(1.0).position_seconds, 0.5);
+        });
+        crate::harness::click("song-preview-0-seek", cx);
+        cx.simulate_keystrokes("home right");
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert!(s.players[0].options(1.0).position_seconds > 0.0);
+        });
+        let waveform = cx.debug_bounds("song-preview-0-seek").unwrap();
+        crate::harness::drag(
+            cx,
+            waveform.center(),
+            gpui::point(waveform.left(), waveform.center().y),
+        );
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.players[0].options(1.0).position_seconds, 0.0);
+        });
         crate::harness::click("song-preview-0-play", cx);
         cx.run_until_parked();
         app.update(cx, |this, _| {
@@ -2076,11 +2140,18 @@ mod tests {
                 1,
                 auris_agent::workshop::Preview {
                     revision: 2,
+                    timeline: Arc::new(auris_session::AuditionTimeline::from_audio(
+                        &latest,
+                        vec![],
+                    )),
                     audio: Arc::clone(&latest),
                 },
             );
             // Arrival of new audio does not swap the buffer the user chose to hear.
             assert!(Arc::ptr_eq(s.played_audio[0].as_ref().unwrap(), &first));
+            let timeline = s.audition_timeline(0).unwrap();
+            assert_eq!(timeline.duration_seconds, 1.0);
+            assert_eq!(timeline.sections[1].label, "Chorus");
             assert!(s.candidates[0].is_none());
         });
         crate::harness::paint(&app, cx);
@@ -2107,6 +2178,7 @@ mod tests {
                     .as_ref()
                     .is_some_and(|audio| Arc::ptr_eq(audio, &latest))
             );
+            assert_eq!(s.audition_timeline(0).unwrap().duration_seconds, 2.0);
             assert_eq!(this.session.project(), &before);
         });
     }

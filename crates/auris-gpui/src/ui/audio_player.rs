@@ -198,12 +198,24 @@ impl AurisApp {
             _ => format!("{prefix}-play").into(),
         };
         let playing = player.playing();
+        let timeline = match target {
+            PlayerTarget::Workshop(index) => self
+                .song_workshop
+                .as_ref()
+                .and_then(|s| s.audition_timeline(index)),
+            _ => None,
+        };
         // Draft auditions can update while the captured buffer keeps playing.
-        let duration = player
-            .status
-            .as_ref()
-            .filter(|s| s.is_active())
-            .map_or(duration, OutputPreviewStatus::duration_seconds);
+        let duration = timeline.as_ref().map_or_else(
+            || {
+                player
+                    .status
+                    .as_ref()
+                    .filter(|s| s.is_active())
+                    .map_or(duration, OutputPreviewStatus::duration_seconds)
+            },
+            |t| t.duration_seconds,
+        );
         let position = player.position().min(duration);
         let fraction = if duration > 0.0 {
             (position / duration) as f32
@@ -223,16 +235,12 @@ impl AurisApp {
         } else {
             Key::PreviewMute
         });
-        div()
-            .id(SharedString::from(prefix.clone()))
+        let controls = div()
             .w_full()
             .min_w_0()
             .flex()
             .items_center()
             .gap_2()
-            .p_2()
-            .rounded_md()
-            .bg(theme.surface_raised)
             .child(
                 button_with_content(
                     play_id,
@@ -261,15 +269,18 @@ impl AurisApp {
                 .size_8()
                 .tooltip(keyed_tip(play_label, "", theme)),
             )
-            .child(self.player_slider(
-                format!("{prefix}-seek"),
-                target,
-                false,
-                fraction,
-                duration,
-                enabled && duration > 0.0,
-                cx,
-            ))
+            .when(timeline.is_none(), |row| {
+                row.child(self.player_slider(
+                    format!("{prefix}-seek"),
+                    target,
+                    false,
+                    fraction,
+                    duration,
+                    enabled && duration > 0.0,
+                    cx,
+                ))
+            })
+            .when(timeline.is_some(), |row| row.child(div().flex_1()))
             .child(
                 div()
                     .flex_shrink_0()
@@ -323,6 +334,106 @@ impl AurisApp {
                 duration,
                 enabled,
                 cx,
+            ));
+        div()
+            .id(SharedString::from(prefix.clone()))
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .p_2()
+            .rounded_md()
+            .bg(theme.surface_raised)
+            .when_some(timeline, |player, timeline| {
+                player
+                    .child(self.player_timeline(&prefix, target, &timeline, position, enabled, cx))
+            })
+            .child(controls)
+            .into_any_element()
+    }
+
+    fn player_timeline(
+        &self,
+        prefix: &str,
+        target: PlayerTarget,
+        timeline: &auris_session::AuditionTimeline,
+        position: f64,
+        enabled: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let theme = &self.theme;
+        let duration = timeline.duration_seconds;
+        let mut sections = div()
+            .relative()
+            .h_8()
+            .w_full()
+            .border_1()
+            .border_color(gpui::transparent_black());
+        for (index, section) in timeline.sections.iter().enumerate() {
+            let start = section.start_seconds;
+            let end = section.end_seconds;
+            let current = position >= start && position < end;
+            let repeated = timeline
+                .sections
+                .iter()
+                .filter(|s| s.label == section.label)
+                .count()
+                > 1;
+            let label = if repeated {
+                format!("{} {}", section.label, section.instance)
+            } else {
+                section.label.clone()
+            };
+            let detail = format!("{} · {}–{}", label, time_label(start), time_label(end));
+            sections = sections.child(
+                div()
+                    .absolute()
+                    .left(relative((start / duration) as f32))
+                    .w(relative(((end - start) / duration) as f32))
+                    .h_full()
+                    .pr_1()
+                    .child(
+                        button_with_content(
+                            SharedString::from(format!("{prefix}-section-{index}")),
+                            div().min_w_0().truncate().child(label),
+                            ButtonStyle::Ghost,
+                            ButtonState::available(current, enabled),
+                            theme.selection,
+                            theme,
+                            cx.listener(move |this, _, _, cx| {
+                                if let Some(player) = this.player_mut(target) {
+                                    player.seek(start);
+                                }
+                                cx.notify();
+                            }),
+                        )
+                        .w_full()
+                        .min_w_0()
+                        .rounded_sm()
+                        .px_0()
+                        .tooltip(keyed_tip(detail, "", theme)),
+                    ),
+            );
+        }
+        div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .when(!timeline.sections.is_empty(), |view| view.child(sections))
+            .child(self.player_slider(
+                format!("{prefix}-seek"),
+                target,
+                false,
+                if duration > 0.0 {
+                    (position / duration) as f32
+                } else {
+                    0.0
+                },
+                duration,
+                enabled && duration > 0.0,
+                cx,
             ))
             .into_any_element()
     }
@@ -348,55 +459,102 @@ impl AurisApp {
         } else {
             Key::PreviewSeek
         });
+        let timeline = match target {
+            PlayerTarget::Workshop(index) if !volume => self
+                .song_workshop
+                .as_ref()
+                .and_then(|s| s.audition_timeline(index)),
+            _ => None,
+        };
+        let has_waveform = timeline.is_some();
+        let track = if let Some(timeline) = timeline {
+            let mut waveform = div()
+                .relative()
+                .h_16()
+                .w_full()
+                .rounded_sm()
+                .overflow_hidden()
+                .bg(theme.surface_sunken)
+                .child(atelier::viz::PeakBars::new(timeline.peaks.clone()).progress(fraction))
+                .child(
+                    canvas(move |bounds, _, _| painted.set(bounds), |_, _, _, _| {})
+                        .absolute()
+                        .size_full(),
+                );
+            for section in &timeline.sections {
+                waveform = waveform.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(relative((section.start_seconds / duration) as f32))
+                        .border_l_1()
+                        .border_color(theme.border),
+                );
+            }
+            waveform
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(relative(fraction))
+                        .border_l_1()
+                        .border_color(theme.text),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .relative()
+                .h_1()
+                .w_full()
+                .rounded_full()
+                .bg(theme.surface_sunken)
+                .child(
+                    canvas(move |bounds, _, _| painted.set(bounds), |_, _, _, _| {})
+                        .absolute()
+                        .size_full(),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .h_full()
+                        .w(relative(fraction))
+                        .rounded_full()
+                        .bg(theme.text_muted),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(relative(fraction))
+                        .top(rems(-0.25))
+                        .ml(rems(-0.375))
+                        .size_3()
+                        .rounded_full()
+                        .bg(if enabled {
+                            theme.text
+                        } else {
+                            theme.text_faint
+                        }),
+                )
+                .into_any_element()
+        };
         let slider = div()
             .id(SharedString::from(id))
             .debug_selector(move || selector.clone())
             .relative()
-            .h_8()
+            .when(has_waveform, |s| s.h_16().w_full().flex_shrink_0())
+            .when(!has_waveform, |s| s.h_8())
             .min_w_0()
             .rounded_sm()
             .border_1()
             .border_color(gpui::transparent_black())
             .when(volume, |s| s.w_12().flex_shrink_0())
-            .when(!volume, |s| s.flex_1())
+            .when(!volume && !has_waveform, |s| s.flex_1())
             .flex()
             .items_center()
-            .px_1()
-            .child(
-                div()
-                    .relative()
-                    .h_1()
-                    .w_full()
-                    .rounded_full()
-                    .bg(theme.surface_sunken)
-                    .child(
-                        canvas(move |bounds, _, _| painted.set(bounds), |_, _, _, _| {})
-                            .absolute()
-                            .size_full(),
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .h_full()
-                            .w(relative(fraction))
-                            .rounded_full()
-                            .bg(theme.text_muted),
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .left(relative(fraction))
-                            .top(rems(-0.25))
-                            .ml(rems(-0.375))
-                            .size_3()
-                            .rounded_full()
-                            .bg(if enabled {
-                                theme.text
-                            } else {
-                                theme.text_faint
-                            }),
-                    ),
-            )
+            .when(!has_waveform, |s| s.px_1())
+            .child(track)
             .when(enabled, |s| {
                 s.tab_index(0)
                     .key_context("AurisSlider")
