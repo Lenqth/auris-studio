@@ -569,6 +569,8 @@ pub struct Settings {
     pub voice_paths: Vec<PathBuf>,
     /// How the built-in agent dials a language model.
     pub agent: AgentPreferences,
+    /// Manual library family/icon corrections, keyed by stable source identity.
+    pub sound_icons: std::collections::BTreeMap<String, crate::SoundIcon>,
 }
 
 impl Default for Settings {
@@ -594,6 +596,7 @@ impl Default for Settings {
             singer_acceleration: auris_singer::Acceleration::default(),
             voice_paths: Vec::new(),
             agent: AgentPreferences::default(),
+            sound_icons: Default::default(),
         }
     }
 }
@@ -764,9 +767,12 @@ fn merge_settings_changes(
         previous.as_object(),
         current.as_object(),
     ) {
+        for key in previous.keys().filter(|key| !current.contains_key(*key)) {
+            latest.remove(key);
+        }
         for (key, value) in current {
             if key == "recent"
-                && previous[key] != *value
+                && previous.get(key) != Some(value)
                 && let (Some(added), Some(kept)) = (
                     value.as_array(),
                     latest.get(key).and_then(serde_json::Value::as_array),
@@ -785,7 +791,7 @@ fn merge_settings_changes(
             }
             merge_settings_changes(
                 latest.entry(key.clone()).or_insert(serde_json::Value::Null),
-                &previous[key],
+                previous.get(key).unwrap_or(&serde_json::Value::Null),
                 value,
             );
         }
@@ -845,6 +851,41 @@ fn home() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn adding_the_first_icon_correction_merges_other_windows_corrections() {
+        let previous = serde_json::json!({"sound_icons":{}});
+        let current = serde_json::json!({"sound_icons":{"piano":"guitar"}});
+        let mut latest = serde_json::json!({"sound_icons":{"bass":"bass"}});
+        super::merge_settings_changes(&mut latest, &previous, &current);
+        assert_eq!(
+            latest,
+            serde_json::json!({"sound_icons":{"piano":"guitar","bass":"bass"}})
+        );
+    }
+
+    #[test]
+    fn removing_an_icon_correction_preserves_other_windows_corrections() {
+        let previous = serde_json::json!({"sound_icons":{"piano":"guitar"}});
+        let current = serde_json::json!({"sound_icons":{}});
+        let mut latest = serde_json::json!({"sound_icons":{"piano":"guitar","bass":"bass"}});
+        super::merge_settings_changes(&mut latest, &previous, &current);
+        assert_eq!(latest, serde_json::json!({"sound_icons":{"bass":"bass"}}));
+    }
+
+    #[test]
+    fn icon_corrections_round_trip_and_older_settings_use_automatic_icons() {
+        let mut settings: super::Settings = serde_json::from_str("{}").unwrap();
+        assert!(settings.sound_icons.is_empty());
+        settings
+            .sound_icons
+            .insert("instrument:piano".into(), crate::SoundIcon::Guitar);
+        let encoded = serde_json::to_string(&settings).unwrap();
+        assert_eq!(
+            serde_json::from_str::<super::Settings>(&encoded).unwrap(),
+            settings
+        );
+    }
+
     #[test]
     fn concurrent_settings_edits_preserve_other_windows_changes() {
         let previous = serde_json::json!({"audio":{"device":"A","block_frames":256},"language":"en", "recent":[]});

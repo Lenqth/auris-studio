@@ -20,7 +20,7 @@ Audition uses the selected playable track, or the first playable track. Its mute
 and routing apply, so choose an unmuted dry track for comparisons. Previews are matched to a
 common RMS target with a peak ceiling; closing the map stops the last preview.
 
-## Cluster names and library colors
+## Cluster names, icons and library colors
 
 After a scan, measured default instruments and melodic SoundFont presets use the map's cluster
 color and name in the library tree and search results. Unmeasured choices retain their role
@@ -31,14 +31,45 @@ Each cluster initially takes the name of the measured source closest to its cent
 feature space. The legend shows the source count; its tooltip lists up to eight central examples.
 These names describe exploratory groups rather than fixed instrument categories.
 
-With an agent model configured in Settings, **Name Clusters with AI** requests short labels in
-the interface language. It sends only cluster sizes and bounded representative sound names to the
+With an agent model configured in Settings, **Name and classify with AI** requests short labels in
+the interface language and selects icons from fourteen built-in monochrome SVG presets. It sends
+cluster sizes, bounded representative sound names and family counts from every cluster member to the
 configured backend, without audio, project contents or conversation history. Suggestions are
 display labels inferred from metadata, not a listening assessment. The request cannot use tools
-or edit the project. Every cluster must receive one distinct valid name before any names change.
+or edit the project. Every cluster must receive one distinct valid name and an allowed icon before
+any suggestions change.
 Cancel, closing the map, rescanning or replacing the document invalidates a pending request;
 failure preserves the current labels. **Restore Representative Names** reverts the suggestions.
 Colors and names remain in memory for this scan; rescanning or replacing the document clears them.
+
+Library and map rows choose an icon for each sound: a manual correction takes priority, followed
+by the sound's own instrument-family name, then the cluster's AI icon or a family shared by at
+least two thirds of its members. This keeps a clearly named guitar recognizable inside a mixed
+acoustic group. The classifier recognizes common abbreviations and Japanese family names,
+ignores a map entry's library prefix, and leaves ambiguous names generic. It does not assume that
+arbitrary SoundFont program numbers follow General MIDI.
+
+Select a sound in the map and open **Correct sound category…** to choose a labeled SVG preset.
+Tab and Space reach and select each choice. **Use automatic category** removes the correction.
+Corrections are saved immediately in application preferences and survive rescans, document changes
+and restarts. Future AI naming requests include these corrections in their family counts.
+SoundFonts use resolved file path, bank and patch so equal display names and
+document-local font IDs do not share corrections accidentally. A failed save keeps the previous
+choice and reports the error. Cluster labels and colors keep their acoustic meaning.
+
+The preset families are piano, organ, guitar, bass, strings, brass, woodwinds, drums,
+bells/mallets, voice, synth, pad, plucked strings and other/mixed. All assets use the existing
+24×24 grid and two-pixel monochrome strokes. Metadata regression tests cover standard named GM
+families, mixed clusters, library-name leakage and ambiguous substrings; they do not establish
+accuracy on unnamed sounds or listening quality. Agent transport is tested with mock responses;
+classification quality still depends on the configured model and the supplied metadata.
+
+The opt-in live fixture uses synthetic metadata for thirteen named families, one unknown group
+and one mixed group. On 2026-10-29 the configured Codex backend (`gpt-6.1-terra`) selected the
+expected icon in all 15 cases, including generic icons for the unknown and mixed groups.
+This is a small metadata fixture, not an estimate of accuracy on an audio library. Run it with
+`cargo test -p auris-agent live_configured_model_selects_icons_from_metadata -- --ignored --nocapture`;
+it sends those synthetic names and counts to the configured backend.
 
 ## Measurement and coordinates
 

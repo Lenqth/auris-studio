@@ -298,9 +298,26 @@ strings! {
     TimbreMapGeometry { en: "Color: acoustic group · axes: PC1–PC3 · similarity uses full features", ja: "色：音響クラスタ · 軸：PC1–PC3 · 類似音は元の特徴量で検索" }
     TimbreMapSelect { en: "Select a sound to audition and compare its neighbors", ja: "音色を選ぶと試聴し、似ている音色を確認できます" }
     TimbreMapReady { en: "Scan the library to explore its sounds", ja: "ライブラリを解析すると音色を探索できます" }
-    TimbreMapNameWithAi { en: "Name Clusters with AI", ja: "AIでクラスタに名前を付ける" }
-    TimbreMapNaming { en: "Naming clusters…", ja: "クラスタ名を考えています…" }
-    TimbreMapNamingHint { en: "Send representative sound names and cluster sizes to the configured agent. No audio is sent.", ja: "代表音色の名前とクラスタの音色数を設定済みエージェントに送ります。音声は送信しません。" }
+    TimbreMapNameWithAi { en: "Name and classify with AI", ja: "AIで名前とアイコンを付ける" }
+    TimbreMapNaming { en: "Naming and classifying…", ja: "名前とアイコンを考えています…" }
+    TimbreMapNamingHint { en: "Send representative sound names, family counts and cluster sizes to the configured agent. No audio is sent.", ja: "代表音色の名前・楽器分類の集計・音色数を設定済みエージェントに送ります。音声は送信しません。" }
+    TimbreMapEditIcon { en: "Correct sound category…", ja: "音色の分類を修正…" }
+    TimbreMapAutoIcon { en: "Use automatic category", ja: "自動分類に戻す" }
+    TimbreMapIconHint { en: "Choose an icon for this sound. Corrections are saved across scans and restarts.", ja: "この音色のアイコンを選択します。修正は再解析・再起動後も保持されます。" }
+    SoundIconSound { en: "Other / mixed", ja: "その他・混合" }
+    SoundIconPiano { en: "Piano", ja: "ピアノ" }
+    SoundIconOrgan { en: "Organ", ja: "オルガン" }
+    SoundIconGuitar { en: "Guitar", ja: "ギター" }
+    SoundIconBass { en: "Bass", ja: "ベース" }
+    SoundIconStrings { en: "Strings", ja: "弦楽器" }
+    SoundIconBrass { en: "Brass", ja: "金管楽器" }
+    SoundIconWind { en: "Woodwinds", ja: "木管楽器" }
+    SoundIconDrum { en: "Drums", ja: "ドラム" }
+    SoundIconBell { en: "Bells / mallets", ja: "ベル・鍵盤打楽器" }
+    SoundIconVoice { en: "Voice", ja: "声・合唱" }
+    SoundIconSynth { en: "Synth", ja: "シンセ" }
+    SoundIconPad { en: "Pad", ja: "パッド" }
+    SoundIconPluck { en: "Plucked strings", ja: "撥弦楽器" }
     TimbreMapConfigureAi { en: "Configure an AI model in Settings to suggest cluster names.", ja: "設定でAIモデルを指定すると、クラスタ名を提案できます。" }
     TimbreMapRepresentativeNames { en: "Names from representative sounds", ja: "代表音色の名前を表示中" }
     TimbreMapAiNames { en: "AI-suggested names", ja: "AIが提案した名前を表示中" }

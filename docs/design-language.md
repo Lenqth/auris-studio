@@ -9,8 +9,9 @@ agent surfaces, and the application shell read the corresponding Atelier tokens.
 
 At startup, `atelier::Assets::with_fallback` serves Atelier's embedded icon set first and then
 `ui::provider_logo::ProviderAssets`. The fallback contains the provider marks, the caption glyphs and
-the two Auris-specific 24px SVGs Atelier's set has no counterpart for, punch and notes; they reach
-Atelier's `Icon` as an `IconSource::svg`, and every other glyph is one of Atelier's own. The application icon files
+the Auris-specific 24px SVGs for punch, notes and the [library's musical-family presets](timbre-map.md).
+These share Atelier's grid and stroke geometry and reach its `Icon` as an `IconSource::svg`;
+shared controls use Atelier's own marks. The application icon files
 in `crates/auris-gpui/assets/` are generated Atelier element-cell exports for Auris Studio (`Au`),
 including the editable, size-specific, symbolic, PNG, ICO, and ICNS forms. The redistributed
 canonical icon files carry the upstream Apache-2.0 text in `assets/ATELIER-LICENSE`.

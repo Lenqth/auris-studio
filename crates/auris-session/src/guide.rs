@@ -272,6 +272,11 @@
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
 //! The desktop displays PCA coordinates and clusters, while similarity queries use the complete
 //! standardized features. Only adopting a sound edits a track; audition uses a cached one-shot.
+//! Library family icons are separate metadata: `SoundIcon` interprets each preset's own name,
+//! cluster summaries count every member's family, and an isolated agent completion can suggest
+//! a name and an icon from that fixed vocabulary. Manual corrections live in application
+//! settings, keyed by instrument ID or resolved font path/bank/patch, rather than scan-local
+//! cluster IDs. The desktop applies these corrections before automatic hints.
 //! It also runs an explicitly prepared YAMNet ONNX model for instrument-presence
 //! tagging, using ONNX Runtime's CPU provider. The optional weights are external runtime data,
 //! and inference never downloads them. The session collects written notes or shares source audio with

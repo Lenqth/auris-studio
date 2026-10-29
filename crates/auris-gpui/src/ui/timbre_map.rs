@@ -4,11 +4,11 @@ use crate::{app::AurisApp, theme::Theme};
 use atelier::plot::Plot3d;
 use atelier::{
     Button, ButtonVariant, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar,
-    SectionHeader, Segment, SegmentedControl, StatusBar, StatusDot, TextColor, TextSize,
+    SectionHeader, Segment, SegmentedControl, StatusBar, TextColor, TextSize,
 };
 use auris_agent::timbre_names::{ClusterName, TimbreNamer};
 use auris_i18n::Key;
-use auris_session::{TimbreMap, TimbreMapControl, prelude::*};
+use auris_session::{SoundIcon, TimbreMap, TimbreMapControl, TimbreSound, prelude::*};
 use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
 #[path = "timbre_plot.rs"]
@@ -32,6 +32,7 @@ pub(crate) struct TimbreMapState {
     namer: Option<TimbreNamer>,
     naming_generation: u64,
     naming_error: Option<String>,
+    editing_icon: bool,
 }
 
 impl TimbreMapState {
@@ -40,6 +41,7 @@ impl TimbreMapState {
         self.map = None;
         self.names.clear();
         self.naming_error = None;
+        self.editing_icon = false;
     }
 
     pub(crate) fn cancel(&mut self) {
@@ -72,7 +74,183 @@ fn cluster_color(cluster: usize, theme: &Theme) -> gpui::Hsla {
     theme.group_color(cluster as f32 * 0.618_034)
 }
 
+fn sound_icon_label(icon: SoundIcon) -> Key {
+    match icon {
+        SoundIcon::Sound => Key::SoundIconSound,
+        SoundIcon::Piano => Key::SoundIconPiano,
+        SoundIcon::Organ => Key::SoundIconOrgan,
+        SoundIcon::Guitar => Key::SoundIconGuitar,
+        SoundIcon::Bass => Key::SoundIconBass,
+        SoundIcon::Strings => Key::SoundIconStrings,
+        SoundIcon::Brass => Key::SoundIconBrass,
+        SoundIcon::Wind => Key::SoundIconWind,
+        SoundIcon::Drum => Key::SoundIconDrum,
+        SoundIcon::Bell => Key::SoundIconBell,
+        SoundIcon::Voice => Key::SoundIconVoice,
+        SoundIcon::Synth => Key::SoundIconSynth,
+        SoundIcon::Pad => Key::SoundIconPad,
+        SoundIcon::Pluck => Key::SoundIconPluck,
+    }
+}
+
 impl AurisApp {
+    /// Manual corrections win over name hints, then cluster suggestions fill unknown families.
+    pub(crate) fn library_sound_icon(
+        &self,
+        instrument_id: &str,
+        preset: Option<PresetRef>,
+        name: &str,
+    ) -> SoundIcon {
+        if let Some(icon) = self
+            .session
+            .library_sound_key(instrument_id, preset)
+            .and_then(|key| self.settings.sound_icons.get(&key))
+        {
+            return *icon;
+        }
+        let inferred = SoundIcon::infer(name);
+        if inferred != SoundIcon::Sound {
+            return inferred;
+        }
+        let Some(map) = &self.timbre_map.map else {
+            return SoundIcon::Sound;
+        };
+        let Some(cluster) = map.cluster_for(instrument_id, preset) else {
+            return SoundIcon::Sound;
+        };
+        self.timbre_cluster_icon(cluster)
+    }
+
+    fn timbre_cluster_icon(&self, cluster: usize) -> SoundIcon {
+        self.timbre_map
+            .names
+            .iter()
+            .find(|name| name.id == cluster)
+            .map(|name| name.icon)
+            .or_else(|| {
+                self.timbre_map
+                    .map
+                    .as_ref()?
+                    .cluster_summaries()
+                    .iter()
+                    .find(|summary| summary.id == cluster)
+                    .map(|summary| summary.icon())
+            })
+            .unwrap_or_default()
+    }
+
+    fn correct_sound_icon_with<E: std::fmt::Display>(
+        &mut self,
+        sound: &TimbreSound,
+        icon: Option<SoundIcon>,
+        save: impl FnOnce(&auris_session::Settings) -> Result<(), E>,
+    ) {
+        let Some(key) = self
+            .session
+            .library_sound_key(&sound.instrument_id, sound.preset)
+        else {
+            return;
+        };
+        let previous = self.settings.sound_icons.clone();
+        if let Some(icon) = icon {
+            self.settings.sound_icons.insert(key, icon);
+        } else {
+            self.settings.sound_icons.remove(&key);
+        }
+        match save(&self.settings) {
+            Ok(()) => self.timbre_map.error = None,
+            Err(error) => {
+                self.settings.sound_icons = previous;
+                self.timbre_map.error = Some(error.to_string());
+            }
+        }
+    }
+
+    fn correct_selected_sound_icon(&mut self, icon: Option<SoundIcon>) {
+        let sound = self
+            .timbre_map
+            .map
+            .as_ref()
+            .and_then(|map| self.timbre_map.selected.and_then(|i| map.sounds.get(i)))
+            .cloned();
+        if let Some(sound) = sound {
+            self.correct_sound_icon_with(&sound, icon, self.settings_saver());
+        }
+    }
+
+    fn render_sound_icon_picker(&self, sound: &TimbreSound, cx: &mut Context<Self>) -> AnyElement {
+        let spacing = self.theme.atelier.spacing;
+        let selected = self.library_sound_icon(&sound.instrument_id, sound.preset, &sound.name);
+        let manual = self
+            .session
+            .library_sound_key(&sound.instrument_id, sound.preset)
+            .is_some_and(|key| self.settings.sound_icons.contains_key(&key));
+        let mut picker = div().flex().flex_col().gap(spacing.xs).child(
+            Button::new(
+                "timbre-edit-icon",
+                format!(
+                    "{} · {}",
+                    self.t(sound_icon_label(selected)),
+                    self.t(Key::TimbreMapEditIcon)
+                ),
+            )
+            .icon(atelier::IconSource::svg(super::icons::sound_icon_path(
+                selected,
+            )))
+            .size(ControlSize::Small)
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.timbre_map.editing_icon = !this.timbre_map.editing_icon;
+                cx.notify();
+            })),
+        );
+        if self.timbre_map.editing_icon {
+            picker = picker
+                .child(
+                    Label::new(self.t(Key::TimbreMapIconHint))
+                        .size(TextSize::XSmall)
+                        .color(TextColor::Muted),
+                )
+                .child(
+                    div()
+                        .id("timbre-icon-presets")
+                        .flex()
+                        .flex_wrap()
+                        .gap(spacing.xs)
+                        .max_h(gpui::rems(7.))
+                        .overflow_y_scroll()
+                        .children(SoundIcon::ALL.iter().copied().map(|family| {
+                            Button::new(
+                                SharedString::from(format!("timbre-icon-{}", family.id())),
+                                self.t(sound_icon_label(family)),
+                            )
+                            .icon(atelier::IconSource::svg(super::icons::sound_icon_path(
+                                family,
+                            )))
+                            .ghost()
+                            .selected(selected == family)
+                            .size(ControlSize::Small)
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    this.correct_selected_sound_icon(Some(family));
+                                    cx.notify();
+                                },
+                            ))
+                        })),
+                )
+                .child(
+                    Button::new("timbre-icon-auto", self.t(Key::TimbreMapAutoIcon))
+                        .ghost()
+                        .size(ControlSize::Small)
+                        .disabled(!manual)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.correct_selected_sound_icon(None);
+                            cx.notify();
+                        })),
+                );
+        }
+        picker.into_any_element()
+    }
+
     fn timbre_cluster_name(&self, cluster: usize) -> String {
         if let Some(name) = self.timbre_map.names.iter().find(|name| name.id == cluster) {
             return name.name.clone();
@@ -113,9 +291,16 @@ impl AurisApp {
         if self.timbre_map.namer.is_some() || self.timbre_map.control.is_some() {
             return;
         }
+        let summaries = map.cluster_summaries_with_icons(|sound| {
+            self.session
+                .library_sound_key(&sound.instrument_id, sound.preset)
+                .and_then(|key| self.settings.sound_icons.get(&key))
+                .copied()
+                .unwrap_or_else(|| SoundIcon::infer(&sound.name))
+        });
         let result = TimbreNamer::start(
             self.settings.agent.clone(),
-            map.cluster_summaries(),
+            &summaries,
             self.language.code(),
         );
         self.timbre_map.naming_error = None;
@@ -167,6 +352,7 @@ impl AurisApp {
     pub(crate) fn scan_timbre_map(&mut self, cx: &mut Context<Self>) {
         self.timbre_map.cancel();
         self.timbre_map.selected = None;
+        self.timbre_map.editing_icon = false;
         self.timbre_map.hovered = None;
         self.timbre_map.error = None;
         self.timbre_map.names.clear();
@@ -235,6 +421,7 @@ impl AurisApp {
             return;
         }
         self.timbre_map.selected = Some(index);
+        self.timbre_map.editing_icon = false;
         self.timbre_map.error = None;
         if let Some(track) = self.timbre_map.preview_track.take() {
             self.session.stop_singer_preview(track);
@@ -547,7 +734,15 @@ impl AurisApp {
                                 "",
                                 &self.theme,
                             ))
-                            .child(StatusDot::new(cluster_color(cluster, &self.theme)))
+                            .child(
+                                atelier::Icon::new(atelier::IconSource::svg(
+                                    super::icons::sound_icon_path(
+                                        self.timbre_cluster_icon(cluster),
+                                    ),
+                                ))
+                                .size(window.rem_size())
+                                .color(cluster_color(cluster, &self.theme)),
+                            )
                             .child(
                                 div().min_w_0().truncate().child(
                                     Label::new(format!("{name} · {}", summary.sound_count))
@@ -712,6 +907,7 @@ impl AurisApp {
                                 cx.notify();
                             })),
                     )
+                    .children(selected.map(|sound| self.render_sound_icon_picker(sound, cx)))
                     .child(
                         SegmentedControl::new(
                             "timbre-lists",
@@ -742,7 +938,13 @@ impl AurisApp {
                                     map.sounds[i].name.clone(),
                                 )
                                 .selected(self.timbre_map.selected == Some(i))
-                                .icon(IconName::Music)
+                                .icon(atelier::IconSource::svg(super::icons::sound_icon_path(
+                                    self.library_sound_icon(
+                                        &map.sounds[i].instrument_id,
+                                        map.sounds[i].preset,
+                                        &map.sounds[i].name,
+                                    ),
+                                )))
                                 .icon_color(cluster_color(map.clusters()[i], &self.theme))
                                 .description(self.timbre_cluster_name(map.clusters()[i]))
                                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -883,6 +1085,103 @@ mod tests {
     use crate::harness::{click, open, paint};
     use crate::theme::{SCHEMES, Theme};
     use gpui::{Entity, TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn manual_categories_survive_ai_and_rescans_and_can_be_reset(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let (before, sound, automatic) = app.update(cx, |this, _| {
+            let map = this
+                .session
+                .timbre_map_job()
+                .unwrap()
+                .run(&TimbreMapControl::default())
+                .unwrap();
+            let sound = map.sounds[0].clone();
+            let key = this
+                .session
+                .library_sound_key(&sound.instrument_id, sound.preset)
+                .unwrap();
+            this.settings.sound_icons.remove(&key);
+            this.timbre_map.map = Some(Arc::new(map));
+            this.timbre_map.selected = Some(0);
+            this.timbre_map.open = true;
+            let automatic =
+                this.library_sound_icon(&sound.instrument_id, sound.preset, &sound.name);
+            (this.project().clone(), sound, automatic)
+        });
+        paint(&app, cx);
+        let mut utility = map_window(&app, cx);
+        click("timbre-edit-icon", &mut utility);
+        utility.simulate_keystrokes("tab tab tab tab space");
+        utility.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
+        app.update(&mut utility, |this, _| {
+            let key = this
+                .session
+                .library_sound_key(&sound.instrument_id, sound.preset)
+                .unwrap();
+            assert_eq!(
+                auris_session::Settings::load().sound_icons.get(&key),
+                Some(&SoundIcon::Guitar)
+            );
+            let map = this.timbre_map.map.as_ref().unwrap();
+            let names = map
+                .cluster_summaries()
+                .iter()
+                .map(|summary| ClusterName {
+                    id: summary.id,
+                    name: format!("AI {}", summary.id),
+                    icon: SoundIcon::Voice,
+                })
+                .collect();
+            assert!(
+                this.timbre_map
+                    .finish_naming(this.timbre_map.naming_generation, Ok(names))
+            );
+            assert_eq!(
+                this.library_sound_icon(&sound.instrument_id, sound.preset, &sound.name),
+                SoundIcon::Guitar
+            );
+            this.timbre_map.clear();
+            assert_eq!(
+                this.library_sound_icon(&sound.instrument_id, sound.preset, &sound.name),
+                SoundIcon::Guitar
+            );
+            this.timbre_map.map = Some(Arc::new(
+                this.session
+                    .timbre_map_job()
+                    .unwrap()
+                    .run(&TimbreMapControl::default())
+                    .unwrap(),
+            ));
+            this.timbre_map.selected = Some(0);
+            this.timbre_map.editing_icon = true;
+            assert_eq!(this.project(), &before);
+        });
+        paint(&app, &mut utility);
+        click("timbre-icon-auto", &mut utility);
+        app.update(&mut utility, |this, _| {
+            let key = this
+                .session
+                .library_sound_key(&sound.instrument_id, sound.preset)
+                .unwrap();
+            assert!(
+                !auris_session::Settings::load()
+                    .sound_icons
+                    .contains_key(&key)
+            );
+            assert_eq!(
+                this.library_sound_icon(&sound.instrument_id, sound.preset, &sound.name),
+                automatic
+            );
+            let previous = this.settings.clone();
+            this.correct_sound_icon_with(&sound, Some(SoundIcon::Brass), |_| Err("disk full"));
+            assert_eq!(this.settings, previous);
+            assert_eq!(this.timbre_map.error.as_deref(), Some("disk full"));
+            assert_eq!(this.project(), &before);
+        });
+    }
 
     fn map_window(app: &Entity<AurisApp>, cx: &mut VisualTestContext) -> VisualTestContext {
         let handle = app.read_with(cx, |app, _| {
@@ -1093,6 +1392,7 @@ mod tests {
                 .iter()
                 .map(|cluster| ClusterName {
                     id: cluster.id,
+                    icon: SoundIcon::Piano,
                     name: format!("Named cluster {}", cluster.id),
                 })
                 .collect();
@@ -1130,6 +1430,7 @@ mod tests {
                 obsolete,
                 Ok(vec![ClusterName {
                     id: 0,
+                    icon: SoundIcon::Guitar,
                     name: "Obsolete".into()
                 }])
             ));

@@ -1,8 +1,8 @@
 //! Shared icon vocabulary backed by Atelier's monochrome SVG assets.
 //!
 //! Atelier keeps familiar controls in one 24px SVG family; Auris's
-//! two domain-specific marks (punch and notes) live beside the provider assets, use the same
-//! stroke geometry, and reach Atelier's `Icon` as an `IconSource`.
+//! domain-specific marks live beside the provider assets, use the same stroke geometry,
+//! and reach Atelier's `Icon` as an `IconSource`.
 
 use atelier::{Icon as AtelierIcon, IconName as AtelierIconName, IconSource};
 use gpui::{Hsla, IntoElement, Pixels};
@@ -10,6 +10,8 @@ use gpui::{Hsla, IntoElement, Pixels};
 /// An icon the UI can draw.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Icon {
+    /// A semantic library sound family.
+    Sound(auris_session::SoundIcon),
     /// Return the playhead to the start.
     ToStart,
     /// Start playback.
@@ -82,11 +84,11 @@ impl Icon {
     ///
     /// Atelier deliberately keeps the set small so icon weight, optical centring and state
     /// treatment stay consistent across the editor and agent surfaces. Domain-specific names
-    /// therefore resolve to the nearest established symbol; the two marks the set has no
-    /// counterpart for are Auris's own SVGs, drawn on the same grid and handed to Atelier as an
-    /// [`IconSource`].
+    /// therefore resolve to established symbols; Auris's domain SVGs share that grid and reach
+    /// the renderer as an [`IconSource`].
     pub fn source(self) -> IconSource {
         let name = match self {
+            Self::Sound(family) => return IconSource::svg(sound_icon_path(family)),
             Self::Punch => return IconSource::svg("icons/auris-punch.svg"),
             Self::Notes => return IconSource::svg("icons/auris-notes.svg"),
             Self::ToStart => AtelierIconName::SkipBack,
@@ -119,5 +121,26 @@ impl Icon {
             Self::Bolt => AtelierIconName::Bolt,
         };
         name.into()
+    }
+}
+
+/// Embedded monochrome SVG shared by library rows, map rows and the manual picker.
+pub(crate) fn sound_icon_path(family: auris_session::SoundIcon) -> &'static str {
+    use auris_session::SoundIcon;
+    match family {
+        SoundIcon::Sound => "icons/sound-sound.svg",
+        SoundIcon::Piano => "icons/sound-piano.svg",
+        SoundIcon::Organ => "icons/sound-organ.svg",
+        SoundIcon::Guitar => "icons/sound-guitar.svg",
+        SoundIcon::Bass => "icons/sound-bass.svg",
+        SoundIcon::Strings => "icons/sound-strings.svg",
+        SoundIcon::Brass => "icons/sound-brass.svg",
+        SoundIcon::Wind => "icons/sound-wind.svg",
+        SoundIcon::Drum => "icons/sound-drum.svg",
+        SoundIcon::Bell => "icons/sound-bell.svg",
+        SoundIcon::Voice => "icons/sound-voice.svg",
+        SoundIcon::Synth => "icons/sound-synth.svg",
+        SoundIcon::Pad => "icons/sound-pad.svg",
+        SoundIcon::Pluck => "icons/sound-pluck.svg",
     }
 }

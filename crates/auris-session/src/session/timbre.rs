@@ -37,6 +37,18 @@ pub struct TimbreCluster {
     pub representative: TimbreSound,
     /// Up to eight source names, ordered by distance to the centroid.
     pub examples: Vec<String>,
+    /// Family counts from every member's name, including unknown sounds.
+    pub icon_counts: Vec<(crate::SoundIcon, usize)>,
+}
+
+impl TimbreCluster {
+    /// A family shared by at least two thirds of all members, otherwise a generic icon.
+    pub fn icon(&self) -> crate::SoundIcon {
+        self.icon_counts
+            .iter()
+            .find(|(_, count)| *count * 3 >= self.sound_count * 2)
+            .map_or(crate::SoundIcon::Sound, |(icon, _)| *icon)
+    }
 }
 
 /// Shareable cancellation and completed-source count for a library scan.
@@ -83,6 +95,23 @@ pub struct TimbreMap {
 }
 
 impl Session {
+    /// Persistent identity for a library correction. Font IDs are document-local, so fonts use
+    /// their resolved path and exact bank/patch instead. This performs no filesystem access.
+    pub fn library_sound_key(
+        &self,
+        instrument_id: &str,
+        preset: Option<PresetRef>,
+    ) -> Option<String> {
+        match preset {
+            None => Some(format!("instrument:{instrument_id}")),
+            Some(preset) => {
+                let font = self.soundfonts().find(|font| font.id == preset.font)?;
+                let path = font.path.resolve(self.project_folder())?;
+                serde_json::to_string(&(instrument_id, path, preset.bank, preset.patch)).ok()
+            }
+        }
+    }
+
     /// Snapshots built-in melodic instruments and loaded melodic SoundFont presets, up to 512.
     ///
     /// Fonts are shared immutably in a new bank so a later project load cannot change this job.
@@ -271,6 +300,24 @@ impl TimbreMap {
     pub fn cluster_summaries(&self) -> &[TimbreCluster] {
         &self.summaries
     }
+    /// Copy summaries using per-sound family corrections for the naming request.
+    /// Acoustic membership and representatives remain unchanged.
+    pub fn cluster_summaries_with_icons(
+        &self,
+        mut family: impl FnMut(&TimbreSound) -> crate::SoundIcon,
+    ) -> Vec<TimbreCluster> {
+        let mut summaries = self.summaries.clone();
+        for summary in &mut summaries {
+            let mut counts = std::collections::BTreeMap::new();
+            for (sound, cluster) in self.sounds.iter().zip(self.clusters()) {
+                if *cluster == summary.id {
+                    *counts.entry(family(sound)).or_insert(0) += 1;
+                }
+            }
+            summary.icon_counts = counts.into_iter().collect();
+        }
+        summaries
+    }
     /// Find a measured library sound by identity, never by its display name.
     ///
     /// Built-in entries represent default patches only. Callers must not use their labels for
@@ -350,6 +397,15 @@ fn cluster_summaries(sounds: &[TimbreSound], projection: &TimbreProjection) -> V
         summaries.push(TimbreCluster {
             id,
             sound_count: members.len(),
+            icon_counts: {
+                let mut counts = std::collections::BTreeMap::new();
+                for &i in &members {
+                    *counts
+                        .entry(crate::SoundIcon::infer(&sounds[i].name))
+                        .or_insert(0) += 1;
+                }
+                counts.into_iter().collect()
+            },
             representative: sounds[members[0]].clone(),
             examples: members
                 .iter()
@@ -446,6 +502,78 @@ mod tests {
     use auris_core::Ticks;
 
     #[test]
+    fn correction_keys_follow_font_paths_and_exact_presets_across_documents() {
+        let mut first = Session::new(SessionOptions::headless()).unwrap();
+        let mut second = Session::new(SessionOptions::headless()).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("Guitar.sf2");
+        let other = root.path().join("Other.sf2");
+        let a = first
+            .project
+            .add_soundfont("Same", auris_core::AssetPath::external(&path), 0);
+        second
+            .project
+            .add_soundfont("Same", auris_core::AssetPath::external(&other), 0);
+        let b = second
+            .project
+            .add_soundfont("Same", auris_core::AssetPath::external(&path), 0);
+        assert_ne!(a, b);
+        let preset = PresetRef {
+            font: a,
+            bank: 0,
+            patch: 24,
+        };
+        let key = first.library_sound_key("sampler", Some(preset));
+        assert_eq!(
+            key,
+            second.library_sound_key("sampler", Some(PresetRef { font: b, ..preset }))
+        );
+        assert_ne!(
+            key,
+            first.library_sound_key(
+                "sampler",
+                Some(PresetRef {
+                    patch: 25,
+                    ..preset
+                })
+            )
+        );
+        assert_ne!(
+            key,
+            first.library_sound_key("sampler", Some(PresetRef { bank: 1, ..preset }))
+        );
+    }
+
+    #[test]
+    fn mixed_cluster_icons_use_all_members_rather_than_only_the_representative() {
+        let sounds: Vec<_> = ["Guitar", "Piano", "Piano", "Flute"]
+            .into_iter()
+            .map(|name| TimbreSound {
+                name: name.into(),
+                instrument_id: name.into(),
+                preset: None,
+            })
+            .collect();
+        let projection = TimbreProjection {
+            standardized: vec![vec![0.]; 4],
+            positions: vec![[0.; 3]; 4],
+            clusters: vec![0; 4],
+            explained_variance: 0.,
+        };
+        let summaries = cluster_summaries(&sounds, &projection);
+        assert_eq!(summaries[0].representative.name, "Guitar");
+        assert_eq!(summaries[0].icon(), crate::SoundIcon::Sound);
+        assert_eq!(
+            summaries[0]
+                .icon_counts
+                .iter()
+                .map(|(_, count)| count)
+                .sum::<usize>(),
+            4
+        );
+    }
+
+    #[test]
     fn summaries_use_full_features_and_identity_not_names_or_display_coordinates() {
         let sounds: Vec<_> = (0..4)
             .map(|i| TimbreSound {
@@ -501,6 +629,18 @@ mod tests {
         );
         assert_eq!(map.cluster_for(auris_sampler::SAMPLER_ID, None), None);
         assert_eq!(map.cluster_for("unmeasured", None), None);
+        let corrected = map.cluster_summaries_with_icons(|_| crate::SoundIcon::Guitar);
+        for summary in corrected {
+            assert_eq!(
+                summary.icon_counts,
+                vec![(crate::SoundIcon::Guitar, summary.sound_count)]
+            );
+        }
+        assert!(
+            map.cluster_summaries()
+                .iter()
+                .all(|summary| summary.icon() == crate::SoundIcon::Sound)
+        );
     }
 
     #[test]
