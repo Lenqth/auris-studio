@@ -8,13 +8,13 @@
 use std::time::{Duration, Instant};
 
 use atelier::{
-    Button, Edge, EmptyState, IconName, Label, ListItem, OptionCard, SectionHeader, Sidebar,
+    Button, Edge, EmptyState, IconName, Label, ListItem, Morph, OptionCard, SectionHeader, Sidebar,
     TextColor, TextSize,
 };
 use auris_i18n::Key;
 use gpui::{
-    Animation, AnimationExt, AnyElement, Context, IntoElement, KeyDownEvent, Pixels, Size, Window,
-    div, prelude::*, px, size,
+    Animation, AnimationExt, AnyElement, Bounds, Context, IntoElement, KeyDownEvent, Pixels, Size,
+    Window, div, point, prelude::*, px, size,
 };
 
 use crate::app::{AurisApp, Pane};
@@ -188,8 +188,9 @@ impl AurisApp {
 
     /// The panel-coloured shape that travels between the start panel and the whole body.
     ///
-    /// Opaque as the panel and as opaque as the workshop's veil over the metal as the whole
-    /// body, so the shape becomes the veil rather than covering it and then vanishing.
+    /// Atelier's `Morph` draws the shape; only its opacity is Auris's, because the shape that
+    /// leaves the opaque panel arrives as the workshop's veil over the metal, so it becomes the
+    /// veil rather than covering it and then vanishing.
     pub(crate) fn welcome_morph(
         &self,
         transition: WelcomeTransition,
@@ -197,29 +198,32 @@ impl AurisApp {
     ) -> AnyElement {
         let settle = transition.settle;
         let theme = &self.theme;
-        let (inset_x, inset_y) = panel_insets(body_area(window), theme.atelier.spacing.xl);
+        let area = body_area(window);
+        let (inset_x, inset_y) = panel_insets(area, theme.atelier.spacing.xl);
+        let body = Bounds::new(point(px(0.0), crate::titlebar::HEIGHT), area);
+        let panel = Bounds::new(
+            point(inset_x, crate::titlebar::HEIGHT + inset_y),
+            size(area.width - inset_x * 2.0, area.height - inset_y * 2.0),
+        );
         let radius = theme.atelier.shape.radius_xl;
         let to_workshop = transition.to_workshop;
+        let id = ("welcome-morph", transition.serial as usize);
+        let shape = if to_workshop {
+            Morph::new(id, panel).to(body).radius(radius, px(0.0))
+        } else {
+            Morph::new(id, body).to(panel).radius(px(0.0), radius)
+        };
         div()
             .absolute()
             .inset_0()
-            .bg(theme.surface)
-            .border_1()
-            .border_color(theme.border_subtle)
+            .child(shape.fill(theme.surface))
             .with_animation(
-                ("welcome-morph", transition.serial as usize),
+                ("welcome-veil", transition.serial as usize),
                 Animation::new(theme.atelier.motion.normal).with_easing(atelier::motion::ease_out),
                 move |shape, delta| {
                     // 0 is the start panel, 1 the whole body.
                     let open = if to_workshop { delta } else { 1.0 - delta };
-                    let rest = 1.0 - open;
-                    shape
-                        .left(inset_x * rest)
-                        .right(inset_x * rest)
-                        .top(inset_y * rest)
-                        .bottom(inset_y * rest)
-                        .rounded(radius * rest)
-                        .opacity(atelier::motion::lerp(1.0, settle, open))
+                    shape.opacity(atelier::motion::lerp(1.0, settle, open))
                 },
             )
             .into_any_element()
@@ -309,19 +313,17 @@ impl AurisApp {
         let busy = self.opening_project.is_some();
         let recent_count = self.settings.recent.len();
         let item = |id: &'static str, label: Key, icon: IconName, target: ChooserPage| {
-            div().debug_selector(move || id.into()).child(
-                ListItem::new(id, self.t(label))
-                    .icon(icon)
-                    .selected(page == target)
-                    .when(target == ChooserPage::Recent && recent_count > 0, |item| {
-                        item.trailing(
-                            Label::new(recent_count.to_string())
-                                .size(TextSize::XSmall)
-                                .color(TextColor::Faint),
-                        )
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| this.set_chooser_page(target, cx))),
-            )
+            ListItem::new(id, self.t(label))
+                .icon(icon)
+                .selected(page == target)
+                .when(target == ChooserPage::Recent && recent_count > 0, |item| {
+                    item.trailing(
+                        Label::new(recent_count.to_string())
+                            .size(TextSize::XSmall)
+                            .color(TextColor::Faint),
+                    )
+                })
+                .on_click(cx.listener(move |this, _, _, cx| this.set_chooser_page(target, cx)))
         };
         Sidebar::new(Edge::Left)
             // Narrow windows give the cards the room; the sidebar is what yields first.
@@ -347,17 +349,15 @@ impl AurisApp {
             .child(div().flex_1())
             // Setup is help, not a way to start: it lives with navigation, not with the commit.
             .child(
-                div().debug_selector(|| "chooser-setup".into()).child(
-                    Button::new("chooser-setup", self.t(Key::SetupGuide))
-                        .ghost()
-                        .icon(IconName::Info)
-                        .selected(page == ChooserPage::Setup)
-                        .disabled(busy)
-                        .full_width()
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.set_chooser_page(ChooserPage::Setup, cx)
-                        })),
-                ),
+                Button::new("chooser-setup", self.t(Key::SetupGuide))
+                    .ghost()
+                    .icon(IconName::Info)
+                    .selected(page == ChooserPage::Setup)
+                    .disabled(busy)
+                    .full_width()
+                    .on_click(
+                        cx.listener(|this, _, _, cx| this.set_chooser_page(ChooserPage::Setup, cx)),
+                    ),
             )
     }
 
@@ -452,24 +452,20 @@ impl AurisApp {
                     .unwrap_or_default()
                     .to_string_lossy()
                     .into_owned();
-                div()
-                    .debug_selector(move || format!("chooser-recent-{index}"))
-                    .child(
-                        ListItem::new(("chooser-recent", index), title)
-                            .icon(IconName::File)
-                            .description(path.display().to_string())
-                            .selected(selected == index)
-                            .on_click(cx.listener(
-                                move |this, event: &gpui::ClickEvent, window, cx| {
-                                    if let Some(chooser) = &mut this.project_chooser {
-                                        chooser.selected = index;
-                                    }
-                                    if event.click_count() == 2 {
-                                        this.choose_project(window, cx);
-                                    }
-                                    cx.notify();
-                                },
-                            )),
+                ListItem::new(("chooser-recent", index), title)
+                    .icon(IconName::File)
+                    .description(path.display().to_string())
+                    .selected(selected == index)
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            if let Some(chooser) = &mut this.project_chooser {
+                                chooser.selected = index;
+                            }
+                            if event.click_count() == 2 {
+                                this.choose_project(window, cx);
+                            }
+                            cx.notify();
+                        }),
                     )
             });
         div()
@@ -503,34 +499,20 @@ impl AurisApp {
             Key::ChooseCreate
         });
         vec![
-            div()
-                .debug_selector(|| "chooser-browse".into())
-                .child(
-                    Button::new("chooser-browse", self.t(Key::ChooseExisting))
-                        .icon(IconName::Folder)
-                        .disabled(busy)
-                        .on_click(cx.listener(|this, _, _, cx| this.pick_and_open_project(cx))),
-                )
+            Button::new("chooser-browse", self.t(Key::ChooseExisting))
+                .icon(IconName::Folder)
+                .disabled(busy)
+                .on_click(cx.listener(|this, _, _, cx| this.pick_and_open_project(cx)))
                 .into_any_element(),
             div().flex_1().into_any_element(),
-            div()
-                .debug_selector(|| "chooser-close".into())
-                .child(
-                    Button::new("chooser-close", self.t(Key::ChooseClose))
-                        .disabled(busy)
-                        .on_click(cx.listener(|_, _, window, _| window.remove_window())),
-                )
+            Button::new("chooser-close", self.t(Key::ChooseClose))
+                .disabled(busy)
+                .on_click(cx.listener(|_, _, window, _| window.remove_window()))
                 .into_any_element(),
-            div()
-                .debug_selector(|| "chooser-confirm".into())
-                .child(
-                    Button::new("chooser-confirm", commit)
-                        .primary()
-                        .disabled(!can_choose)
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.choose_project(window, cx)),
-                        ),
-                )
+            Button::new("chooser-confirm", commit)
+                .primary()
+                .disabled(!can_choose)
+                .on_click(cx.listener(|this, _, window, cx| this.choose_project(window, cx)))
                 .into_any_element(),
         ]
     }

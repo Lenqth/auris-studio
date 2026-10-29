@@ -218,21 +218,15 @@ impl AurisApp {
                     .gap(theme.atelier.spacing.sm)
                     .child(div().flex_1().min_w_0().truncate().child(title))
                     .child(
-                        div()
-                            .debug_selector(|| "close-attachment-preview".into())
-                            .child(
-                                atelier::Button::new(
-                                    "close-attachment-preview",
-                                    self.t(Key::AttachmentClosePreview),
-                                )
-                                .ghost()
-                                .on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.attachment_preview = None;
-                                        cx.notify();
-                                    },
-                                )),
-                            ),
+                        atelier::Button::new(
+                            "close-attachment-preview",
+                            self.t(Key::AttachmentClosePreview),
+                        )
+                        .ghost()
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.attachment_preview = None;
+                            cx.notify();
+                        })),
                     ),
             )
             .child(match &preview.content {

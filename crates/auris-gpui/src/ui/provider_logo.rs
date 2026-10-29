@@ -62,36 +62,12 @@ const MARKS: &[(&str, &[u8])] = &[
         include_bytes!("../../assets/icons/sound-pluck.svg"),
     ),
     (
-        "icons/auris-volume.svg",
-        include_bytes!("../../assets/icons/auris-volume.svg"),
-    ),
-    (
-        "icons/auris-volume-muted.svg",
-        include_bytes!("../../assets/icons/auris-volume-muted.svg"),
-    ),
-    (
         "icons/auris-punch.svg",
         include_bytes!("../../assets/icons/auris-punch.svg"),
     ),
     (
         "icons/auris-notes.svg",
         include_bytes!("../../assets/icons/auris-notes.svg"),
-    ),
-    (
-        "icons/auris-keyboard.svg",
-        include_bytes!("../../assets/icons/auris-keyboard.svg"),
-    ),
-    (
-        "icons/auris-knob.svg",
-        include_bytes!("../../assets/icons/auris-knob.svg"),
-    ),
-    (
-        "icons/auris-redo.svg",
-        include_bytes!("../../assets/icons/auris-redo.svg"),
-    ),
-    (
-        "icons/auris-bolt.svg",
-        include_bytes!("../../assets/icons/auris-bolt.svg"),
     ),
     (
         "icons/caption-minimize.svg",
@@ -196,14 +172,21 @@ mod tests {
         let paths: Vec<_> = auris_session::SoundIcon::ALL
             .iter()
             .copied()
-            .map(crate::ui::icons::sound_icon_path)
+            .map(
+                |family| match crate::ui::icons::Icon::Sound(family).source() {
+                    atelier::IconSource::Svg(path) => path,
+                    other => {
+                        panic!("sound family {family:?} must use its embedded SVG, got {other:?}")
+                    }
+                },
+            )
             .collect();
         assert_eq!(
             paths.iter().collect::<std::collections::HashSet<_>>().len(),
             paths.len()
         );
         for path in paths {
-            assert!(ProviderAssets.load(path).unwrap().is_some(), "{path}");
+            assert!(ProviderAssets.load(&path).unwrap().is_some(), "{path}");
         }
     }
 
@@ -237,7 +220,7 @@ mod tests {
             .map(|(path, _)| *path)
             .filter(|path| path.starts_with("icons/auris-"))
             .collect();
-        assert_eq!(paths.len(), 8);
+        assert_eq!(paths.len(), 2);
         assert_eq!(
             paths.iter().collect::<std::collections::HashSet<_>>().len(),
             paths.len()
