@@ -880,6 +880,9 @@ mod tests {
             // for asynchronous conversation-store initialization.
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent = Default::default();
+            // This form test must enqueue before networking. Ollama's startup preflight can
+            // fail on the deliberately closed endpoint before the first message is sent.
+            this.settings.agent.provider = "openai".into();
             this.settings.agent.url = "http://127.0.0.1:1".into();
             this.agent_chat.configuring = true;
             let prefs = this.settings.agent.clone();
