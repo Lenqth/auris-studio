@@ -304,9 +304,11 @@ and `name` names the piano track. Notes remain estimates; review timing and timb
 See the [external note API](transcription-api.md) for its validation and permission contract.
 
 For a new song, write its musical decisions into the document with `edit_harmony`, for example
-`{"start_bar":1,"bars":16,"key":"D major","chords":["I","vi","IV","V"]}`.
-Each array entry is one bar. For two chords sharing one bar, use one entry such as
-`"I V"`. Explicit pipe-delimited strings such as `"| I | vi | IV | V |"`, single
+`{"start_bar":1,"bars":16,"key":"D major","chords":["I","IV V","vi","ii V"]}`.
+Each array entry is one bar, with one or more chords sharing it equally. In 4/4,
+`"IV V"` places IV on beat 1 and V on beat 3. Mix different numbers of chords
+per bar to suit the phrase. Explicit pipe-delimited strings such as
+`"| I | IV V | vi | ii V |"`, single
 chords and catalogue references are also accepted. A bare multi-chord string such as
 `"I V vi IV"` is ambiguous and is rejected before editing. The response includes
 `chart_bars` and the number of `chord_changes` in the range to check the placement.
@@ -314,6 +316,14 @@ The chart repeats over the requested bars. The previous key resumes after the ra
 supplied keys replace interior key changes. The operation edits the key/chord map, preserves notes
 and mix, and is one Undo step. Audible chord notes alone do not populate this map.
 `clear_chords:true` clears the selected range; omit `chords` when clearing.
+
+`inspect_audio` reports `harmony_events` for the inspected range: the harmony in
+force at the start, then every chord or key change, including changes inside a
+bar. Each event has absolute `tick`, 1-based `bar`/`beat`, `tick_in_beat` and
+range-relative `start_seconds`. Ticks use 960 per quarter; the beat follows the
+local meter. At most 128 events are returned; check `harmony_event_count` and
+`harmony_events_truncated`, and use `inspect_project` for full maps when needed.
+`harmony_at_bar_starts` remains a summary, so it cannot verify intra-bar changes.
 
 Write the form into the section lane too. For example,
 `{"start_bar":1,"bars":4,"section":"Intro"}` and

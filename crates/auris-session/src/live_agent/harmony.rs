@@ -180,23 +180,35 @@ mod tests {
     }
 
     #[test]
-    fn explicit_within_bar_groups_keep_their_subdivisions() {
+    fn mixed_harmonic_rhythm_keeps_bar_and_within_bar_positions() {
         for chords in [
-            serde_json::json!(["I V", "vi IV"]),
-            serde_json::json!("| I V | vi IV |"),
+            serde_json::json!(["I", "IV V", "vi", "ii V"]),
+            serde_json::json!("| I | IV V | vi | ii V |"),
         ] {
             let mut session =
                 Session::new(crate::SessionOptions::headless().with_balance(false)).unwrap();
             let command = serde_json::from_value(serde_json::json!({
-                "action":"edit_harmony", "start_bar":1, "bars":2, "chords":chords,
+                "action":"edit_harmony", "start_bar":1, "bars":4, "chords":chords,
             }))
             .unwrap();
-            session.agent_command(command).unwrap();
-            for (beat, expected) in [(0, "C"), (2, "G"), (4, "Am"), (6, "F")] {
+            let result: serde_json::Value =
+                serde_json::from_str(&session.agent_command(command).unwrap()).unwrap();
+            assert_eq!(result["chart_bars"], 4);
+            assert_eq!(result["chord_changes"], 6);
+            for (beat, expected) in [
+                (0, "C"),
+                (4, "F"),
+                (6, "G"),
+                (8, "Am"),
+                (12, "Dm"),
+                (14, "G"),
+            ] {
+                let at = Ticks::QUARTER * beat;
+                assert_eq!(session.harmony().chords.change_at(at), Some(at));
                 assert_eq!(
                     session
                         .harmony()
-                        .chord_at(Ticks::QUARTER * beat)
+                        .chord_at(at + Ticks::QUARTER)
                         .unwrap()
                         .to_string(),
                     expected
