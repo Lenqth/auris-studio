@@ -79,6 +79,38 @@ pub fn icon(icon: Icon, size: Pixels, color: Hsla) -> impl IntoElement + use<> {
     AtelierIcon::new(icon.source()).size(size).color(color)
 }
 
+/// Semantic tool identity, shared by chat logs and candidate activity summaries.
+pub(crate) fn tool_icon(name: &str) -> Icon {
+    let name = name.rsplit("__").next().unwrap_or(name);
+    if name.contains("sing") || name.contains("vocal") || name.contains("lyric") {
+        Icon::Microphone
+    } else if name.contains("instrument") || name.contains("soundfont") {
+        Icon::Keyboard
+    } else if name.contains("effect") || name.contains("mix") || name.contains("volume") {
+        Icon::Faders
+    } else if name.contains("audio") || name.contains("render") || name.contains("export") {
+        Icon::Wave
+    } else if name.contains("play") || name.contains("transport") {
+        Icon::Play
+    } else if name.contains("note")
+        || name.contains("phrase")
+        || name.contains("harmon")
+        || name.contains("compos")
+        || name.contains("track")
+        || name.contains("clip")
+    {
+        Icon::Notes
+    } else if name.contains("inspect") || name.contains("diagnos") || name.starts_with("get_") {
+        Icon::Inspector
+    } else if name.contains("read") || name.contains("record") || name.contains("reference") {
+        Icon::Log
+    } else if name.contains("search") || name.contains("list") {
+        Icon::Library
+    } else {
+        Icon::Knob
+    }
+}
+
 impl Icon {
     /// Maps Auris's domain vocabulary onto Atelier's shared 24px icon family.
     ///

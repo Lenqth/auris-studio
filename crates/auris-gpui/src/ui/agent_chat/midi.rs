@@ -192,7 +192,7 @@ impl AurisApp {
         .detach();
     }
 
-    fn choose_midi_attachment(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn choose_midi_attachment(&mut self, cx: &mut gpui::Context<Self>) {
         let owner = self.music_owner();
         cx.spawn(async move |this, cx| {
             let Some(file) = rfd::AsyncFileDialog::new()
@@ -267,50 +267,70 @@ impl AurisApp {
         locked: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let theme = self.theme.clone();
-        let available = !locked
-            && !self.music_references().midi_loading
-            && self.music_references().midi_draft.is_none();
-        let has_clip = self
-            .selected_clip
-            .and_then(|id| self.session.midi_clip(id))
-            .is_some();
+        let menu_open = self.menu.as_ref().is_some_and(|menu| {
+            menu.entries.iter().any(|entry| {
+                matches!(entry,
+                super::super::context_menu::MenuEntry::Item(item)
+                    if matches!(item.command, MenuCommand::ComposerMelody(_)))
+            })
+        });
         div()
             .flex()
-            .flex_wrap()
+            .items_center()
             .gap_1()
             .min_w_0()
-            .children(
-                [
-                    (Key::AgentMidiNew, "agent-midi-new", false, true),
-                    (Key::AgentMidiClip, "agent-midi-clip", true, has_clip),
-                ]
-                .into_iter()
-                .map(|(label, id, selection, enabled)| {
-                    bounded_button_enabled(
-                        id,
-                        self.t(label),
-                        ButtonStyle::Ghost,
-                        ButtonState::available(false, available && enabled),
-                        theme.accent,
-                        &theme,
-                        cx.listener(move |this, _, _, cx| {
-                            this.start_midi_draft(selection);
-                            cx.notify();
-                        }),
-                    )
-                }),
+            .child(
+                atelier::Button::new("music-reference-menu", self.t(Key::AgentMusicReferences))
+                    .ghost()
+                    .size(atelier::ControlSize::Small)
+                    .icon(atelier::IconName::More)
+                    .icon_after(atelier::IconName::ChevronDown)
+                    .selected(menu_open)
+                    .disabled(locked)
+                    .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
+                        if this.music_composer_locked() {
+                            return;
+                        }
+                        let available = this.can_attach_agent_music();
+                        let midi_available = available
+                            && !this.music_references().midi_loading
+                            && this.music_references().midi_draft.is_none();
+                        let has_clip = this
+                            .selected_clip
+                            .and_then(|id| this.session.midi_clip(id))
+                            .is_some();
+                        let mut menu =
+                            ContextMenu::new(event.position(), this.t(Key::AgentMusicReferences))
+                                .item_greyed_unless(
+                                    midi_available,
+                                    this.t(Key::AgentMidiNew),
+                                    MenuCommand::ComposerMelody(false),
+                                )
+                                .item_greyed_unless(
+                                    midi_available && has_clip,
+                                    this.t(Key::AgentMidiClip),
+                                    MenuCommand::ComposerMelody(true),
+                                )
+                                .item_greyed_unless(
+                                    midi_available,
+                                    this.t(Key::AgentMidiFile),
+                                    MenuCommand::ComposerMidi,
+                                )
+                                .item_greyed_unless(
+                                    available,
+                                    this.t(Key::AgentChords),
+                                    MenuCommand::ComposerChords,
+                                )
+                                .item_greyed_unless(
+                                    available,
+                                    this.t(Key::AgentSound),
+                                    MenuCommand::ComposerSound,
+                                );
+                        menu.step(1);
+                        this.open_menu(menu);
+                        cx.notify();
+                    })),
             )
-            .child(bounded_button_enabled(
-                "agent-midi-file",
-                self.t(Key::AgentMidiFile),
-                ButtonStyle::Ghost,
-                ButtonState::available(false, available),
-                theme.accent,
-                &theme,
-                cx.listener(|this, _, _, cx| this.choose_midi_attachment(cx)),
-            ))
-            .child(self.music_composer_controls(!locked, cx))
             .when(self.music_references().midi_loading, |row| {
                 row.child(self.t(Key::AgentMidiLoading))
             })
