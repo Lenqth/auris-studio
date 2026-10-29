@@ -1,5 +1,6 @@
 //! Permission decisions and controls owned by the desktop session.
 use super::*;
+use crate::ui::chat_commands::{self, Scope};
 use auris_session::agent_policy::{Decision, Mode, OPERATIONS, Operation};
 
 const MODES: [Mode; 5] = [
@@ -27,15 +28,7 @@ pub(super) struct Controls {
     pub(super) effort_menu: bool,
     pub(super) mode_focus: Option<gpui::FocusHandle>,
     pub(super) effort_focus: Option<gpui::FocusHandle>,
-    pub(super) slash_selected: usize,
-    pub(super) slash_dismissed: Option<String>,
-    pub(super) slash_scroll: gpui::ScrollHandle,
-}
-
-pub(super) struct SlashMatch {
-    pub(super) fill: String,
-    pub(super) label: String,
-    pub(super) description: Key,
+    pub(super) slash: chat_commands::Completions,
 }
 
 pub(super) struct Pending {
@@ -146,103 +139,6 @@ pub(super) fn effort_choices(openai: bool) -> &'static [ReasoningEffort] {
     }
 }
 
-const SLASH_COMMANDS: &[(&str, bool, Key)] = &[
-    ("/mode", true, Key::AgentSlashMode),
-    ("/model", true, Key::AgentSlashModel),
-    ("/effort", true, Key::AgentSlashEffort),
-    ("/permissions", false, Key::AgentSlashPermissions),
-    ("/allow", true, Key::AgentSlashAllow),
-    ("/deny", true, Key::AgentSlashDeny),
-    ("/default", true, Key::AgentSlashDefault),
-    ("/compact", false, Key::AgentSlashCompact),
-    ("/read-only", false, Key::AgentSlashMode),
-    ("/edit", false, Key::AgentSlashMode),
-    ("/plan", false, Key::AgentSlashMode),
-    ("/auto-review", false, Key::AgentSlashMode),
-    ("/bypass", false, Key::AgentSlashMode),
-];
-
-/// Whether the text is handled locally before model and project-reload checks.
-pub(super) fn is_control_command(text: &str) -> bool {
-    let command = text.split_once(' ').map_or(text, |(command, _)| command);
-    SLASH_COMMANDS.iter().any(|(name, _, _)| *name == command)
-}
-
-pub(super) fn slash_matches(value: &str, models: &[ModelOption]) -> Vec<SlashMatch> {
-    if !value.starts_with('/') || value.contains('\n') {
-        return Vec::new();
-    }
-    let Some((command, argument)) = value.split_once(' ') else {
-        return SLASH_COMMANDS
-            .iter()
-            .copied()
-            .filter(|(name, _, _)| name.starts_with(value))
-            .map(|(name, takes_argument, description)| SlashMatch {
-                fill: format!("{name}{}", if takes_argument { " " } else { "" }),
-                label: name.to_string(),
-                description,
-            })
-            .collect();
-    };
-    let argument = argument.trim_start();
-    if command == "/model" {
-        return super::model_search::matches(argument, models)
-            .into_iter()
-            .map(|index| SlashMatch {
-                fill: format!(
-                    "/model {}",
-                    super::model_search::command_name(index, models)
-                ),
-                label: super::model_search::command_name(index, models),
-                description: Key::AgentSlashModel,
-            })
-            .collect();
-    }
-    let (values, description): (Vec<&str>, Key) = match command {
-        "/mode" => (
-            vec!["read-only", "edit", "plan", "auto_review", "bypass"],
-            Key::AgentSlashMode,
-        ),
-        "/effort" => (
-            vec![
-                "default", "none", "minimal", "low", "medium", "high", "xhigh", "max",
-            ],
-            Key::AgentSlashEffort,
-        ),
-        "/allow" => (
-            std::iter::once("*")
-                .chain(std::iter::once("edit_project.*"))
-                .chain(OPERATIONS.iter().copied())
-                .collect(),
-            Key::AgentSlashAllow,
-        ),
-        "/deny" => (
-            std::iter::once("*")
-                .chain(std::iter::once("edit_project.*"))
-                .chain(OPERATIONS.iter().copied())
-                .collect(),
-            Key::AgentSlashDeny,
-        ),
-        "/default" => (
-            std::iter::once("*")
-                .chain(std::iter::once("edit_project.*"))
-                .chain(OPERATIONS.iter().copied())
-                .collect(),
-            Key::AgentSlashDefault,
-        ),
-        _ => return Vec::new(),
-    };
-    values
-        .into_iter()
-        .filter(|candidate| candidate.starts_with(argument))
-        .map(|candidate| SlashMatch {
-            fill: format!("{command} {candidate}"),
-            label: candidate.to_string(),
-            description,
-        })
-        .collect()
-}
-
 /// The requests an automatic reviewer may weigh an operation against: the newest ones the user
 /// typed in this window, as many as fit the review's evidence budget.
 fn review_requests(typed: &[String]) -> Vec<String> {
@@ -264,9 +160,7 @@ fn review_requests(typed: &[String]) -> Vec<String> {
 impl AurisApp {
     /// Native text input and IME commits change the candidates without a key event.
     pub(crate) fn reset_agent_completions(&mut self) {
-        self.agent_chat.controls.slash_selected = 0;
-        self.agent_chat.controls.slash_dismissed = None;
-        self.agent_chat.controls.slash_scroll.scroll_to_item(0);
+        self.agent_chat.controls.slash.reset();
     }
 
     /// Common wire-event route used by polling and the headless desktop harness.
@@ -666,6 +560,13 @@ impl AurisApp {
             self.agent_mode(mode);
         } else {
             match command {
+                "/help" => {
+                    self.agent_chat
+                        .push_entry(ChatEntry::Status(chat_commands::help(
+                            Scope::Agent,
+                            self.language(),
+                        )));
+                }
                 "/model" => {
                     if !self.agent_chat.models_loaded && !self.agent_chat.fetching_models {
                         self.agent_refresh_models();
@@ -1607,18 +1508,18 @@ mod tests {
 
     #[test]
     fn slash_completion_covers_commands_arguments_and_plain_text() {
-        let commands = slash_matches("/m", &[]);
+        let commands = chat_commands::slash_matches("/m", &[], Scope::Agent);
         assert_eq!(commands.len(), 2);
         assert_eq!(commands[0].fill, "/mode ");
 
-        let modes = slash_matches("/mode p", &[]);
+        let modes = chat_commands::slash_matches("/mode p", &[], Scope::Agent);
         assert_eq!(modes.len(), 1);
         assert_eq!(modes[0].fill, "/mode plan");
 
-        let effort = slash_matches("/effort h", &[]);
+        let effort = chat_commands::slash_matches("/effort h", &[], Scope::Agent);
         assert_eq!(effort.len(), 1);
         assert_eq!(effort[0].fill, "/effort high");
-        assert!(slash_matches("write a chorus", &[]).is_empty());
+        assert!(chat_commands::slash_matches("write a chorus", &[], Scope::Agent).is_empty());
     }
 
     #[test]

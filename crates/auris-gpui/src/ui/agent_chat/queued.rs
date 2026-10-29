@@ -62,7 +62,7 @@ impl AurisApp {
         {
             return false;
         }
-        if controls::is_control_command(self.agent_chat.input.content().trim()) {
+        if crate::ui::chat_commands::is_control_command(self.agent_chat.input.content().trim()) {
             return !self.agent_operation_busy();
         }
         self.agent_queue_available()
@@ -72,7 +72,7 @@ impl AurisApp {
 
     pub(super) fn enqueue_agent_message(&mut self) -> bool {
         if !self.agent_composer_can_submit()
-            || controls::is_control_command(self.agent_chat.input.content().trim())
+            || crate::ui::chat_commands::is_control_command(self.agent_chat.input.content().trim())
         {
             return false;
         }

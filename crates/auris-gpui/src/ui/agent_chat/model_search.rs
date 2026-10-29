@@ -3,7 +3,7 @@
 use super::ModelOption;
 
 /// Qualify duplicate names so completing a row preserves its provider route.
-pub(super) fn command_name(index: usize, models: &[ModelOption]) -> String {
+pub(crate) fn command_name(index: usize, models: &[ModelOption]) -> String {
     let model = &models[index];
     if models
         .iter()
@@ -73,7 +73,7 @@ fn score(query: &str, name: &str) -> Option<(usize, usize)> {
     None
 }
 
-pub(super) fn matches(query: &str, models: &[ModelOption]) -> Vec<usize> {
+pub(crate) fn matches(query: &str, models: &[ModelOption]) -> Vec<usize> {
     let query = query.trim();
     if query.is_empty() {
         return (0..models.len()).collect();
