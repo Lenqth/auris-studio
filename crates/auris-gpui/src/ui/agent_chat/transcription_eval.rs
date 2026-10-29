@@ -110,7 +110,7 @@ fn run(cx: &mut gpui::TestAppContext, cover: bool) {
             this.agent_attach_files(std::slice::from_ref(audio), cx);
         }
         assert!(!cover || config.audio.is_some());
-        assert!(this.agent_chat.attachment_error.is_none());
+        assert!(this.agent_chat.references.attachment_error.is_none());
         this.agent_chat.input = TextField::new(prompt);
         let before = this.session.project().clone();
         this.agent_send();

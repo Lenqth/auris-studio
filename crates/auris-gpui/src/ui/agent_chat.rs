@@ -36,9 +36,9 @@ mod articulation_eval;
 mod composition_eval;
 pub(crate) mod controls;
 mod conversations;
-mod midi;
+pub(crate) mod midi;
 mod model_search;
-mod music;
+pub(crate) mod music;
 #[cfg(test)]
 mod performance_eval;
 mod queued;
@@ -1175,17 +1175,7 @@ pub(crate) struct AgentChat {
     /// The document whose folder and model history the running child belongs to.
     bound_project: Option<PathBuf>,
     /// Reference files selected by the user for the next message.
-    attachments: Vec<PathBuf>,
-    /// Every file the user attached in this window, whichever conversation it was for.
-    ///
-    /// A saved draft's attachments are restored only from this set. A transcript is a file in the
-    /// project folder, which travels with a project, and a planted one could otherwise put any
-    /// readable path on the next message for the user to send without noticing.
-    attached_here: std::collections::HashSet<PathBuf>,
-    attachment_error: Option<String>,
-    midi_draft: Option<midi::MidiDraft>,
-    midi_loading: bool,
-    midi_lyric_focus: Option<gpui::FocusHandle>,
+    pub(crate) references: music::MusicReferences,
     /// Actual painted bounds used by the window's shared file-drop router.
     pub(crate) drop_bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
     /// A different project produced by the last turn, ready to open explicitly.
@@ -1268,12 +1258,7 @@ impl Default for AgentChat {
             pending_reload: None,
             turn_project: None,
             bound_project: None,
-            attachments: Vec::new(),
-            attached_here: Default::default(),
-            attachment_error: None,
-            midi_draft: None,
-            midi_loading: false,
-            midi_lyric_focus: None,
+            references: Default::default(),
             drop_bounds: Default::default(),
             produced_project: None,
             fresh_history: false,
@@ -1379,7 +1364,7 @@ impl AgentChat {
     /// The message editor's actual focus target, once the panel has been painted.
     pub(crate) fn input_focus(&self) -> Option<&gpui::FocusHandle> {
         if self.focused == Some(AgentField::MidiLyric) {
-            self.midi_lyric_focus.as_ref()
+            self.references.midi_lyric_focus.as_ref()
         } else if self.focused == Some(AgentField::ConversationSearch) {
             self.conversations.focus.as_ref()
         } else {
@@ -1396,7 +1381,7 @@ impl AgentChat {
         }
         Some(match self.focused? {
             AgentField::Chat => &mut self.input,
-            AgentField::MidiLyric => &mut self.midi_draft.as_mut()?.lyric,
+            AgentField::MidiLyric => &mut self.references.midi_draft.as_mut()?.lyric,
             AgentField::ConversationSearch => &mut self.conversations.search,
         })
     }
@@ -1408,7 +1393,7 @@ impl AgentChat {
         }
         Some(match self.focused? {
             AgentField::Chat => &self.input,
-            AgentField::MidiLyric => &self.midi_draft.as_ref()?.lyric,
+            AgentField::MidiLyric => &self.references.midi_draft.as_ref()?.lyric,
             AgentField::ConversationSearch => &self.conversations.search,
         })
     }
@@ -1879,27 +1864,33 @@ impl AurisApp {
         {
             return;
         }
-        self.agent_chat.attachment_error = None;
+        self.agent_chat.references.attachment_error = None;
         for path in paths {
-            if self.agent_chat.attachments.contains(path) {
-                self.agent_chat.attached_here.insert(path.clone());
+            if self.agent_chat.references.attachments.contains(path) {
+                self.agent_chat
+                    .references
+                    .attached_here
+                    .insert(path.clone());
                 continue;
             }
             if auris_agent::attachment_kind(path).is_none() {
-                self.agent_chat.attachment_error =
+                self.agent_chat.references.attachment_error =
                     Some(self.t(Key::AgentAttachmentUnsupported).replace(
                         "{name}",
                         &path.file_name().unwrap_or_default().to_string_lossy(),
                     ));
                 continue;
             }
-            if self.agent_chat.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
-                self.agent_chat.attachment_error =
+            if self.agent_chat.references.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
+                self.agent_chat.references.attachment_error =
                     Some(self.t(Key::AgentAttachmentLimit).to_owned());
                 break;
             }
-            self.agent_chat.attached_here.insert(path.clone());
-            self.agent_chat.attachments.push(path.clone());
+            self.agent_chat
+                .references
+                .attached_here
+                .insert(path.clone());
+            self.agent_chat.references.attachments.push(path.clone());
         }
         cx.notify();
     }
@@ -1924,12 +1915,12 @@ impl AurisApp {
             }
             let navigation = std::mem::take(&mut self.agent_chat.conversations);
             let entries = std::mem::take(&mut self.agent_chat.entries);
-            let attachments = std::mem::take(&mut self.agent_chat.attachments);
+            let attachments = std::mem::take(&mut self.agent_chat.references.attachments);
             let queued = std::mem::take(&mut self.agent_chat.queued);
             self.agent_reset_conversation();
             self.agent_chat.conversations = navigation;
             self.agent_chat.entries = entries;
-            self.agent_chat.attachments = attachments;
+            self.agent_chat.references.attachments = attachments;
             self.agent_chat.queued = queued;
             self.agent_chat.queue_paused = true;
             if let Some(folder) = self.session.project_folder() {
@@ -1956,10 +1947,10 @@ impl AurisApp {
         // The composer belongs to the document the user just renamed, not to the old history
         // file. Preserve it while dropping the worker receiver so queued old-path events cannot
         // be observed under the new path.
-        let attachments = std::mem::take(&mut self.agent_chat.attachments);
+        let attachments = std::mem::take(&mut self.agent_chat.references.attachments);
         let queued = std::mem::take(&mut self.agent_chat.queued);
         self.agent_reset_conversation();
-        self.agent_chat.attachments = attachments;
+        self.agent_chat.references.attachments = attachments;
         self.agent_chat.queued = queued;
         self.agent_chat.queue_paused = true;
     }
@@ -2179,8 +2170,8 @@ impl AurisApp {
         self.agent_chat.produced_project = None;
         self.agent_chat.turn_project = None;
         self.agent_chat.pending_reload = None;
-        self.agent_chat.attachments.clear();
-        self.agent_chat.midi_draft = None;
+        self.agent_chat.references.attachments.clear();
+        self.agent_chat.references.midi_draft = None;
         self.agent_chat.entries.clear();
         self.agent_chat.expanded.clear();
         self.agent_chat.expanded_tool_groups.clear();
@@ -2276,7 +2267,7 @@ impl AurisApp {
     /// The window saves first, so the model reads the document as it stands — the other half
     /// of the bargain is in [`AgentChat::absorb`], where the model's writes come back.
     pub(crate) fn agent_send(&mut self) {
-        if self.agent_chat.midi_loading || !self.commit_midi_draft() {
+        if self.agent_chat.references.midi_loading || !self.commit_agent_midi_draft() {
             return;
         }
         let text = self.agent_chat.input.content().trim().to_string();
@@ -2329,18 +2320,19 @@ impl AurisApp {
             }
             return;
         }
-        if let Err(error) =
-            auris_agent::validate_attachments(&self.settings.agent, &self.agent_chat.attachments)
-        {
-            self.agent_chat.attachment_error = Some(
+        if let Err(error) = auris_agent::validate_attachments(
+            &self.settings.agent,
+            &self.agent_chat.references.attachments,
+        ) {
+            self.agent_chat.references.attachment_error = Some(
                 if self.settings.agent.backend == "antigravity"
-                    && self.agent_chat.attachments.iter().any(|path| {
+                    && self.agent_chat.references.attachments.iter().any(|path| {
                         auris_agent::attachment_kind(path)
                             == Some(auris_agent::AttachmentKind::Image)
                     })
                 {
                     self.t(Key::AgentAttachmentImageUnsupported).to_owned()
-                } else if self.agent_chat.attachments.iter().any(|path| {
+                } else if self.agent_chat.references.attachments.iter().any(|path| {
                     auris_agent::attachment_kind(path) == Some(auris_agent::AttachmentKind::Audio)
                 }) {
                     self.t(Key::AgentAttachmentAudioUnsupported).to_owned()
@@ -2350,7 +2342,7 @@ impl AurisApp {
             );
             return;
         }
-        self.agent_chat.attachment_error = None;
+        self.agent_chat.references.attachment_error = None;
         if self.agent_chat.link.is_some()
             && self.agent_chat.bound_project.as_deref() != self.session.path()
         {
@@ -2364,7 +2356,7 @@ impl AurisApp {
         let message = PendingAgentSend {
             token: self.agent_document_token(),
             text,
-            attachments: self.agent_chat.attachments.clone(),
+            attachments: self.agent_chat.references.attachments.clone(),
             preferences: self.settings.agent.clone(),
             selection_context: self.agent_selection_context().to_string(),
         };
@@ -2469,7 +2461,7 @@ impl AurisApp {
         self.agent_chat.speed.reset();
         self.agent_chat.streamed_answer = false;
         self.agent_chat.input = TextField::new(String::new());
-        self.agent_chat.attachments.clear();
+        self.agent_chat.references.attachments.clear();
         true
     }
 
@@ -3361,10 +3353,11 @@ impl AurisApp {
         if !composer_locked
             && self
                 .agent_chat
+                .references
                 .midi_lyric_focus
                 .as_ref()
                 .is_some_and(|f| f.is_focused(window))
-            && self.agent_chat.midi_draft.is_some()
+            && self.agent_chat.references.midi_draft.is_some()
         {
             self.focus_agent_field(AgentField::MidiLyric);
         } else if !composer_locked && input_focus.is_focused(window) {
@@ -3902,7 +3895,7 @@ impl AurisApp {
     }
 
     /// Opens a historical reference only after an explicit user activation.
-    fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn open_agent_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
         if auris_agent::attachment_kind(&path) == Some(auris_agent::AttachmentKind::Midi) {
             self.edit_midi_attachment(path, cx);
             return;
@@ -4959,7 +4952,7 @@ impl AurisApp {
             || self.agent_chat.conversations.changing_conversation();
         let empty = self.agent_chat.input.content().is_empty();
         let placeholder = self.t(Key::AgentComposerPlaceholder).to_owned();
-        let attachments = self.agent_chat.attachments.clone();
+        let attachments = self.agent_chat.references.attachments.clone();
         let blocker = self.agent_send_blocker();
         let can_send = self.agent_composer_can_submit();
         let cancelable = self.agent_cancelable();
@@ -5028,15 +5021,18 @@ impl AurisApp {
                         )),
                 )
             })
-            .when_some(self.agent_chat.attachment_error.clone(), |this, error| {
-                this.child(
-                    div()
-                        .px_1p5()
-                        .text_xs()
-                        .text_color(theme.danger)
-                        .child(error),
-                )
-            })
+            .when_some(
+                self.agent_chat.references.attachment_error.clone(),
+                |this, error| {
+                    this.child(
+                        div()
+                            .px_1p5()
+                            .text_xs()
+                            .text_color(theme.danger)
+                            .child(error),
+                    )
+                },
+            )
             .when(
                 matches!(
                     self.settings.agent.backend.as_str(),
@@ -5126,11 +5122,15 @@ impl AurisApp {
                                         theme.accent,
                                         &theme,
                                         cx.listener(move |this, _, _, cx| {
-                                            if index < this.agent_chat.attachments.len() {
-                                                let removed =
-                                                    this.agent_chat.attachments.remove(index);
+                                            if index < this.agent_chat.references.attachments.len()
+                                            {
+                                                let removed = this
+                                                    .agent_chat
+                                                    .references
+                                                    .attachments
+                                                    .remove(index);
                                                 this.cancel_midi_for_attachment(&removed);
-                                                this.agent_chat.attachment_error = None;
+                                                this.agent_chat.references.attachment_error = None;
                                             }
                                             cx.notify();
                                         }),
@@ -5147,7 +5147,7 @@ impl AurisApp {
                 )
             })
             .child(self.midi_composer_controls(locked, cx))
-            .when(self.agent_chat.midi_draft.is_some(), |this| {
+            .when(self.agent_chat.references.midi_draft.is_some(), |this| {
                 this.child(self.midi_editor(editor_height, cx))
             })
             .when(locked, |this| {
@@ -5272,7 +5272,7 @@ impl AurisApp {
     ) -> AnyElement {
         let value = match field {
             AgentField::MidiLyric => {
-                let Some(draft) = &self.agent_chat.midi_draft else {
+                let Some(draft) = &self.music_references().midi_draft else {
                     return div().into_any_element();
                 };
                 &draft.lyric
@@ -5358,21 +5358,24 @@ impl AurisApp {
                     MouseButton::Left,
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                         if focused && !composing {
-                            let text = this
-                                .agent_chat
-                                .field()
+                            let text = crate::ui::text_field::HasTextField::readable_field(this)
                                 .map(|f| f.content().to_owned())
                                 .unwrap_or_default();
                             if let Some(offset) = crate::ui::text_area::wrapped_area_offset_at(
                                 window,
                                 &text,
                                 event.position,
-                            ) && let Some(value) = this.agent_chat.field_mut()
+                            ) && let Some(value) =
+                                crate::ui::text_field::HasTextField::field(this)
                             {
                                 value.place_caret(offset, event.modifiers.shift);
                             }
                         }
-                        this.focus_agent_field(field);
+                        if field == AgentField::MidiLyric {
+                            this.focus_music_lyric();
+                        } else {
+                            this.focus_agent_field(field);
+                        }
                         window.focus(&pointer_focus);
                         cx.notify();
                     }),
@@ -6492,7 +6495,7 @@ mod tests {
             this.selected_track = Some(selected);
             this.agent_chat.input = TextField::new("continue the saved conversation");
             this.agent_chat.focused = Some(AgentField::Chat);
-            this.agent_chat.attachments = vec![PathBuf::from("reference.png")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("reference.png")];
             let (_sender, receiver) = std::sync::mpsc::channel();
             let token = this.agent_document_token();
             this.agent_chat.history_load = Some(PendingHistoryLoad { token, receiver });
@@ -6524,7 +6527,7 @@ mod tests {
             // second Send for the immutable submission already waiting on disk history. This
             // also models another Settings window and a canvas click changing live state.
             this.agent_chat.input = TextField::new("later mutation");
-            this.agent_chat.attachments = vec![PathBuf::from("later.png")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("later.png")];
             this.settings.agent.model = "changed-in-another-window".into();
             this.settings.agent.output_tokens = Some(8_192);
             this.settings.agent.policy.mode = auris_session::agent_policy::Mode::Bypass;
@@ -6598,7 +6601,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         app.update(cx, |this, _| {
             this.agent_chat.input = TextField::new("keep this draft");
-            this.agent_chat.attachments = vec![PathBuf::from("keep-reference.wav")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("keep-reference.wav")];
             this.agent_chat.entries = vec![ChatEntry::Agent("old path answer".into())];
             this.agent_chat.busy = true;
             let token = this.agent_document_token();
@@ -6620,7 +6623,7 @@ mod tests {
             );
             assert_eq!(this.agent_chat.input.content(), "keep this draft");
             assert_eq!(
-                this.agent_chat.attachments,
+                this.agent_chat.references.attachments,
                 vec![PathBuf::from("keep-reference.wav")]
             );
             assert!(sender.send(Err("stale load".into())).is_err());
@@ -6756,7 +6759,7 @@ mod tests {
                 ChatEntry::Agent("Project A answer".into()),
             ];
             this.agent_chat.input = TextField::new("draft for the next project");
-            this.agent_chat.attachments = vec![PathBuf::from("Project-A-reference.wav")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("Project-A-reference.wav")];
 
             this.new_project();
 
@@ -6770,7 +6773,7 @@ mod tests {
                 "the visible draft remains available for the next document"
             );
             assert!(
-                this.agent_chat.attachments.is_empty(),
+                this.agent_chat.references.attachments.is_empty(),
                 "attachments never cross a project boundary"
             );
         });
@@ -7555,20 +7558,20 @@ mod tests {
                 .map(PathBuf::from);
                 this.route_files_dropped(&paths, window, cx);
                 assert_eq!(this.project(), &before);
-                assert_eq!(this.agent_chat.attachments.len(), 3);
-                assert!(this.agent_chat.attachment_error.is_some());
+                assert_eq!(this.agent_chat.references.attachments.len(), 3);
+                assert!(this.agent_chat.references.attachment_error.is_some());
             })
         });
         crate::harness::paint(&app, cx);
         // Clicking a reference's name inspects it; only its cross takes it off the message.
         crate::harness::click("agent-attachment-open-1", cx);
         app.read_with(cx, |this, _| {
-            assert_eq!(this.agent_chat.attachments.len(), 3)
+            assert_eq!(this.agent_chat.references.attachments.len(), 3)
         });
         crate::harness::click("agent-attachment-remove-1", cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
-                this.agent_chat.attachments,
+                this.agent_chat.references.attachments,
                 [PathBuf::from("reference.wav"), PathBuf::from("lyrics.md")]
             )
         });
@@ -7681,11 +7684,14 @@ mod tests {
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.input = TextField::new("Inspect this mix");
-            this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("mix.wav")];
             this.agent_send();
-            assert!(this.agent_chat.attachment_error.is_some());
+            assert!(this.agent_chat.references.attachment_error.is_some());
             assert_eq!(this.agent_chat.input.content(), "Inspect this mix");
-            assert_eq!(this.agent_chat.attachments, [PathBuf::from("mix.wav")]);
+            assert_eq!(
+                this.agent_chat.references.attachments,
+                [PathBuf::from("mix.wav")]
+            );
             assert!(this.agent_chat.link.is_none());
         });
     }
@@ -7704,14 +7710,15 @@ mod tests {
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.input = TextField::new("Use these references");
-            this.agent_chat.attachments = vec!["image.png".into(), "reference.wav".into()];
+            this.agent_chat.references.attachments =
+                vec!["image.png".into(), "reference.wav".into()];
             this.agent_send();
             assert_eq!(
-                this.agent_chat.attachment_error.as_deref(),
+                this.agent_chat.references.attachment_error.as_deref(),
                 Some(this.t(Key::AgentAttachmentImageUnsupported))
             );
             assert_eq!(this.agent_chat.input.content(), "Use these references");
-            assert_eq!(this.agent_chat.attachments.len(), 2);
+            assert_eq!(this.agent_chat.references.attachments.len(), 2);
             assert!(this.agent_chat.link.is_none());
         });
     }
@@ -7737,14 +7744,14 @@ mod tests {
                 this.agent_chat
                     .load_preferences(&this.settings.agent.clone());
                 this.agent_chat.input = TextField::new("Inspect this mix");
-                this.agent_chat.attachments = vec![PathBuf::from("mix.wav")];
+                this.agent_chat.references.attachments = vec![PathBuf::from("mix.wav")];
                 let (_sender, receiver) = std::sync::mpsc::channel();
                 this.agent_chat.history_load = Some(PendingHistoryLoad {
                     token: this.agent_document_token(),
                     receiver,
                 });
                 this.agent_send();
-                assert!(this.agent_chat.attachment_error.is_none());
+                assert!(this.agent_chat.references.attachment_error.is_none());
                 let pending = this.agent_chat.pending_send.as_ref().unwrap();
                 assert_eq!(pending.attachments, [PathBuf::from("mix.wav")]);
                 assert_eq!(pending.preferences.backend, backend);
@@ -7924,7 +7931,7 @@ mod tests {
                 ..Default::default()
             }];
             this.agent_chat.input = TextField::new("keep this queued draft");
-            this.agent_chat.attachments = vec![PathBuf::from("keep-reference.png")];
+            this.agent_chat.references.attachments = vec![PathBuf::from("keep-reference.png")];
             let token = this.agent_document_token();
             this.agent_chat.history_load = Some(PendingHistoryLoad {
                 token,
@@ -7972,7 +7979,7 @@ mod tests {
                 assert!(this.agent_chat.history_load.is_none());
                 assert_eq!(this.agent_chat.input.content(), "keep this queued draft");
                 assert_eq!(
-                    this.agent_chat.attachments,
+                    this.agent_chat.references.attachments,
                     vec![PathBuf::from("keep-reference.png")]
                 );
                 assert_eq!(
@@ -8089,7 +8096,7 @@ mod tests {
                 .set_size(crate::dock::Dock::Right, crate::dock::PanelLayout::MIN_SIDE);
             this.agent_chat.models_loaded = true;
             this.agent_chat.models_error = Some("offline fixture".into());
-            this.agent_chat.attachments = vec![PathBuf::from(
+            this.agent_chat.references.attachments = vec![PathBuf::from(
                 "録音素材_ボーカルテイク_".repeat(12) + ".super-long-extension",
             )];
         });
@@ -8158,7 +8165,7 @@ mod tests {
             assert!(cx.debug_bounds("agent-attachment-remove-0").is_none());
         }
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.attachments.is_empty())
+            assert!(this.agent_chat.references.attachments.is_empty())
         });
     }
 
@@ -8204,8 +8211,8 @@ mod tests {
             Some(url::Url::from_file_path(&paths[1]).unwrap().into())
         );
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.attachments.is_empty());
-            assert!(this.agent_chat.attached_here.is_empty());
+            assert!(this.agent_chat.references.attachments.is_empty());
+            assert!(this.agent_chat.references.attached_here.is_empty());
             assert_eq!(this.agent_chat.entries.len(), 1);
         });
     }

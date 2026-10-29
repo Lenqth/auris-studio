@@ -5,6 +5,16 @@ selected clip…** to copy the selected MIDI or singer clip, or **Attach MIDI…
 to open a `.mid`/`.midi` file. Dropped MIDI files appear among the attachments;
 activate the attachment to edit it.
 
+The same controls are available directly in **Create a song with AI**. Its
+composer keeps separate references from the editor's agent panel. MIDI files
+can also be dropped onto that screen. Submit a message such as “use this melody”
+alongside the attachments; the director and every song candidate receive the
+exact note, lyric, chord and instrument data. A failed file read leaves the
+draft available for correction. Submitted reference contents are retained in
+the conversation, so later changes to the source file do not change earlier
+requests. Back keeps attached drafts; after reopening, activate **Reattach**
+to explicitly include a saved local reference in the next message.
+
 The inline piano roll edits a conversation copy. Choose a part with the track
 arrows. The beat arrows page through eight quarter-note beats; octave controls
 change the visible pitch range. Click an empty grid cell to add an eighth note,
@@ -53,7 +63,7 @@ Choose **Choose sound…** to open the existing timbre map. Build the map with
 **Rescan** if needed, then select a sound using the map, all-sounds list, or
 nearest-neighbor list. Existing audition controls remain available when an
 instrument track can play the preview. **Attach to conversation** adds the
-chosen sound and returns to the agent panel; it also works without a selected
+chosen sound and returns to the originating conversation; it also works without a selected
 track. Write the intended role in the message, such as “use this for the lead.”
 
 The attachment identifies the instrument, SoundFont bank/program when present,

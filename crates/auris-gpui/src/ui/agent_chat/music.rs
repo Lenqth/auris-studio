@@ -4,12 +4,117 @@ use super::*;
 use crate::ui::prompt::{Prompt, PromptTarget};
 use auris_session::prelude::Ticks;
 
+/// Independent draft references for each conversation surface.
+#[derive(Default)]
+pub(crate) struct MusicReferences {
+    pub(crate) attachments: Vec<PathBuf>,
+    // Restored paths are display metadata until explicitly attached in this window.
+    pub(crate) attached_here: std::collections::HashSet<PathBuf>,
+    pub(crate) attachment_error: Option<String>,
+    pub(crate) midi_draft: Option<super::midi::MidiDraft>,
+    pub(crate) midi_loading: bool,
+    pub(crate) midi_lyric_focus: Option<gpui::FocusHandle>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum MusicOwner {
+    Workshop(u64),
+    Agent(Option<PathBuf>, Option<String>),
+}
+
 impl AurisApp {
+    pub(crate) fn attach_music_files(&mut self, paths: &[PathBuf], cx: &mut gpui::Context<Self>) {
+        if self.song_workshop.is_none() {
+            self.agent_attach_files(paths, cx);
+            return;
+        }
+        if self.music_composer_locked() {
+            return;
+        }
+        for path in paths {
+            if !matches!(
+                auris_agent::attachment_kind(path),
+                Some(auris_agent::AttachmentKind::Midi | auris_agent::AttachmentKind::Text)
+            ) {
+                self.music_references_mut().attachment_error = Some(
+                    self.t(Key::AgentAttachmentUnsupported)
+                        .replace("{name}", &path.to_string_lossy()),
+                );
+                continue;
+            }
+            if self.music_references().attachments.contains(path) {
+                self.music_references_mut()
+                    .attached_here
+                    .insert(path.clone());
+                self.music_references_mut().attachment_error = None;
+                continue;
+            }
+            if !self.can_attach_agent_music() {
+                self.music_references_mut().attachment_error =
+                    Some(self.t(Key::AgentAttachmentLimit).into());
+                break;
+            }
+            self.music_references_mut().attachments.push(path.clone());
+            self.music_references_mut()
+                .attached_here
+                .insert(path.clone());
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn music_owner(&self) -> MusicOwner {
+        self.song_workshop.as_ref().map_or_else(
+            || {
+                MusicOwner::Agent(
+                    self.session.path().map(Path::to_path_buf),
+                    self.agent_chat.conversations.active_id().map(str::to_owned),
+                )
+            },
+            |workshop| MusicOwner::Workshop(workshop.identity),
+        )
+    }
+
+    pub(crate) fn music_references(&self) -> &MusicReferences {
+        self.song_workshop
+            .as_ref()
+            .map_or(&self.agent_chat.references, |s| &s.references)
+    }
+
+    pub(crate) fn music_references_mut(&mut self) -> &mut MusicReferences {
+        self.song_workshop
+            .as_mut()
+            .map_or(&mut self.agent_chat.references, |s| &mut s.references)
+    }
+
+    pub(crate) fn music_composer_locked(&self) -> bool {
+        self.song_workshop.as_ref().map_or_else(
+            || {
+                self.agent_chat.pending_send.is_some()
+                    || self.agent_chat.conversations.changing_conversation()
+                    || self.agent_chat.conversations.previewing()
+            },
+            |s| s.busy(),
+        )
+    }
+
+    pub(crate) fn music_lyric_focused(&self) -> bool {
+        self.song_workshop.as_ref().map_or(
+            self.agent_chat.focused == Some(AgentField::MidiLyric),
+            |s| s.active_field == Some(1),
+        )
+    }
+
+    pub(crate) fn focus_music_lyric(&mut self) {
+        if let Some(s) = &mut self.song_workshop {
+            s.active_field = Some(1);
+        } else {
+            self.focus_agent_field(AgentField::MidiLyric);
+        }
+    }
+
     pub(crate) fn can_attach_agent_music(&self) -> bool {
-        self.agent_chat.pending_send.is_none()
-            && !self.agent_chat.conversations.changing_conversation()
-            && !self.agent_chat.conversations.previewing()
-            && self.agent_chat.attachments.len() < auris_agent::ATTACHMENT_COUNT_LIMIT
+        !self.music_composer_locked()
+            && self.music_references().attachments.len() < auris_agent::ATTACHMENT_COUNT_LIMIT
     }
 
     pub(crate) fn attach_agent_music_reference(
@@ -20,7 +125,9 @@ impl AurisApp {
         if !self.can_attach_agent_music() {
             return Err(self
                 .t(
-                    if self.agent_chat.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
+                    if self.music_references().attachments.len()
+                        >= auris_agent::ATTACHMENT_COUNT_LIMIT
+                    {
                         Key::AgentAttachmentLimit
                     } else {
                         Key::AgentMusicUnavailable
@@ -30,9 +137,11 @@ impl AurisApp {
         }
         let directory = auris_session::settings::config_dir().join("conversation-midi");
         let path = auris_session::music_reference::save_snapshot(value, &directory, label)?;
-        self.agent_chat.attached_here.insert(path.clone());
-        self.agent_chat.attachments.push(path);
-        self.agent_chat.attachment_error = None;
+        self.music_references_mut()
+            .attached_here
+            .insert(path.clone());
+        self.music_references_mut().attachments.push(path);
+        self.music_references_mut().attachment_error = None;
         Ok(())
     }
 
@@ -114,7 +223,7 @@ mod tests {
         app.read_with(cx, |this, _| {
             assert!(this.prompt.is_none());
             assert_eq!(this.project(), &before);
-            let bytes = std::fs::read(&this.agent_chat.attachments[0]).unwrap();
+            let bytes = std::fs::read(&this.agent_chat.references.attachments[0]).unwrap();
             let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(value["chords"][0]["chord"], "C/E");
             assert_eq!(value["chords"][2]["start_ticks"], 3840);
@@ -126,7 +235,7 @@ mod tests {
         cx.simulate_keystrokes("enter");
         app.read_with(cx, |this, _| {
             assert!(this.prompt.is_some());
-            assert_eq!(this.agent_chat.attachments.len(), 1);
+            assert_eq!(this.agent_chat.references.attachments.len(), 1);
             assert_eq!(this.project(), &before);
         });
     }
@@ -148,7 +257,7 @@ mod tests {
             let value = auris_session::music_reference::sound_reference(&this.session, &sound);
             this.attach_agent_music_reference(&value, "sound-piano")
                 .unwrap();
-            let bytes = std::fs::read(&this.agent_chat.attachments[0]).unwrap();
+            let bytes = std::fs::read(&this.agent_chat.references.attachments[0]).unwrap();
             let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(value["preset"]["bank"], 3);
             assert_eq!(value["preset"]["patch"], 8);

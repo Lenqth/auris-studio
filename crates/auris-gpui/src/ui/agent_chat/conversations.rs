@@ -190,7 +190,7 @@ impl AurisApp {
         self.conversation_operation(Operation::Open(id));
     }
     pub(crate) fn flush_conversation_storage(&mut self) -> Option<Receiver<()>> {
-        if !self.commit_midi_draft() {
+        if !self.commit_agent_midi_draft() {
             return None;
         }
         self.agent_chat.link = None;
@@ -222,7 +222,7 @@ impl AurisApp {
                 })
                 .collect(),
             draft: self.agent_chat.input.content().into(),
-            attachments: self.agent_chat.attachments.clone(),
+            attachments: self.agent_chat.references.attachments.clone(),
             scroll_y: self.agent_chat.scroll.offset().y.into(),
             interrupted: self.agent_chat.busy,
             queued: self
@@ -242,7 +242,7 @@ impl AurisApp {
                 | Operation::Reload(_)
                 | Operation::Copy(_)
                 | Operation::Delete(_)
-        ) && !self.commit_midi_draft()
+        ) && !self.commit_agent_midi_draft()
         {
             return;
         }
@@ -497,7 +497,7 @@ impl AurisApp {
         let initial_draft = if navigation.active.is_none() || navigation.preserve_draft {
             Some((
                 self.agent_chat.input.clone(),
-                self.agent_chat.attachments.clone(),
+                self.agent_chat.references.attachments.clone(),
             ))
         } else {
             None
@@ -529,15 +529,15 @@ impl AurisApp {
             .map(Into::into)
             .collect();
         self.agent_chat.queue_paused = !self.agent_chat.queued.is_empty();
-        self.agent_chat.attachments = restorable_attachments(
+        self.agent_chat.references.attachments = restorable_attachments(
             &conversation.transcript.attachments,
-            &self.agent_chat.attached_here,
+            &self.agent_chat.references.attached_here,
         );
         if let Some((draft, attachments)) = initial_draft
             && (!draft.content().is_empty() || !attachments.is_empty())
         {
             self.agent_chat.input = draft;
-            self.agent_chat.attachments = attachments;
+            self.agent_chat.references.attachments = attachments;
         }
         self.agent_chat
             .scroll
@@ -1611,7 +1611,7 @@ mod tests {
             assert_eq!(this.agent_chat.input.content(), "Try a softer bass");
             assert_eq!(this.agent_chat.entries.len(), 2);
             assert!(matches!(&this.agent_chat.entries[0], ChatEntry::You { attachments, .. } if attachments.len() == 2));
-            assert!(this.agent_chat.attachments.is_empty(), "sent references are not draft attachments");
+            assert!(this.agent_chat.references.attachments.is_empty(), "sent references are not draft attachments");
             assert_eq!(this.project(), &score);
         });
         assert!(cx.debug_bounds("agent-message-attachment-0-0").is_some());
@@ -1624,8 +1624,8 @@ mod tests {
             Some(url::Url::from_file_path(&reference).unwrap().into())
         );
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.attachments.is_empty());
-            assert!(this.agent_chat.attached_here.is_empty());
+            assert!(this.agent_chat.references.attachments.is_empty());
+            assert!(this.agent_chat.references.attached_here.is_empty());
             assert_eq!(this.project(), &score);
         });
     }
@@ -1977,8 +1977,8 @@ mod tests {
                 this.agent_chat.controls.typed_requests.is_empty(),
                 "but it is not something the user asked for here"
             );
-            assert!(this.agent_chat.attachments.is_empty());
-            assert!(this.agent_chat.attached_here.is_empty(), "display metadata never grants file access");
+            assert!(this.agent_chat.references.attachments.is_empty());
+            assert!(this.agent_chat.references.attached_here.is_empty(), "display metadata never grants file access");
         });
     }
 }

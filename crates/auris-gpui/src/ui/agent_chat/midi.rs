@@ -8,14 +8,14 @@ use gpui_component::scroll::{Scrollbar, ScrollbarShow};
 const STEP: i64 = TICKS_PER_QUARTER / 2;
 const PAGE: i64 = 8 * TICKS_PER_QUARTER;
 
-pub(super) struct MidiDraft {
+pub(crate) struct MidiDraft {
     score: MidiReference,
     replacing: Option<PathBuf>,
     track: usize,
     selected: Option<usize>,
     page: i64,
     low_pitch: u8,
-    pub(super) lyric: TextField,
+    pub(crate) lyric: TextField,
     scroll: gpui::ScrollHandle,
 }
 
@@ -96,24 +96,25 @@ impl MidiDraft {
 }
 
 impl AurisApp {
-    pub(super) fn cancel_midi_for_attachment(&mut self, path: &Path) {
+    pub(crate) fn cancel_midi_for_attachment(&mut self, path: &Path) {
         if self
-            .agent_chat
+            .music_references()
             .midi_draft
             .as_ref()
             .is_some_and(|d| d.replacing.as_deref() == Some(path))
         {
-            self.agent_chat.midi_draft = None;
-            if self.agent_chat.focused == Some(AgentField::MidiLyric) {
+            self.music_references_mut().midi_draft = None;
+            if let Some(s) = &mut self.song_workshop {
+                s.active_field = Some(0);
+            } else if self.agent_chat.focused == Some(AgentField::MidiLyric) {
                 self.agent_chat.focused = Some(AgentField::Chat);
             }
         }
     }
-    pub(super) fn start_midi_draft(&mut self, from_selection: bool) {
-        if self.agent_chat.midi_draft.is_some()
-            || self.agent_chat.pending_send.is_some()
-            || self.agent_chat.midi_loading
-            || self.agent_chat.conversations.changing_conversation()
+    pub(crate) fn start_midi_draft(&mut self, from_selection: bool) {
+        if self.music_references().midi_draft.is_some()
+            || self.music_composer_locked()
+            || self.music_references().midi_loading
         {
             return;
         }
@@ -131,31 +132,29 @@ impl AurisApp {
             ))
         };
         match score {
-            Ok(score) => self.agent_chat.midi_draft = Some(MidiDraft::new(score, None)),
-            Err(error) => self.agent_chat.attachment_error = Some(error),
+            Ok(score) => self.music_references_mut().midi_draft = Some(MidiDraft::new(score, None)),
+            Err(error) => self.music_references_mut().attachment_error = Some(error),
         }
     }
 
-    pub(super) fn edit_midi_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
-        if self.agent_chat.midi_draft.is_some()
-            || self.agent_chat.midi_loading
-            || self.agent_chat.pending_send.is_some()
-            || self.agent_chat.conversations.changing_conversation()
+    pub(crate) fn edit_midi_attachment(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
+        if self.music_references().midi_draft.is_some()
+            || self.music_references().midi_loading
+            || self.music_composer_locked()
         {
             return;
         }
         if !path.is_absolute() {
-            self.agent_chat.attachment_error = Some(
+            self.music_references_mut().attachment_error = Some(
                 self.t(Key::AgentAttachmentUnavailable)
                     .replace("{path}", &path.to_string_lossy()),
             );
             cx.notify();
             return;
         }
-        let from_draft = self.agent_chat.attachments.contains(&path);
-        self.agent_chat.midi_loading = true;
-        let conversation = self.agent_chat.conversations.active_id().map(str::to_owned);
-        let project = self.session.path().map(Path::to_path_buf);
+        let from_draft = self.music_references().attachments.contains(&path);
+        self.music_references_mut().midi_loading = true;
+        let owner = self.music_owner();
         cx.spawn(async move |this, cx| {
             let source = path.clone();
             let result = cx
@@ -163,22 +162,29 @@ impl AurisApp {
                 .spawn(async move { MidiReference::read(&source) })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                this.agent_chat.midi_loading = false;
-                if this.agent_chat.conversations.active_id() != conversation.as_deref()
-                    || this.session.path() != project.as_deref()
-                    || this.agent_chat.pending_send.is_some()
-                    || this.agent_chat.conversations.changing_conversation()
-                    || this.agent_chat.midi_draft.is_some()
-                    || (from_draft && !this.agent_chat.attachments.contains(&path))
+                if this.music_owner() != owner {
+                    if let super::music::MusicOwner::Agent(project, conversation) = &owner
+                        && this.session.path() == project.as_deref()
+                        && this.agent_chat.conversations.active_id() == conversation.as_deref()
+                    {
+                        this.agent_chat.references.midi_loading = false;
+                    }
+                    cx.notify();
+                    return;
+                }
+                this.music_references_mut().midi_loading = false;
+                if this.music_composer_locked()
+                    || this.music_references().midi_draft.is_some()
+                    || (from_draft && !this.music_references().attachments.contains(&path))
                 {
                     return;
                 }
                 match result {
                     Ok(score) => {
-                        this.agent_chat.midi_draft =
+                        this.music_references_mut().midi_draft =
                             Some(MidiDraft::new(score, from_draft.then_some(path)))
                     }
-                    Err(error) => this.agent_chat.attachment_error = Some(error),
+                    Err(error) => this.music_references_mut().attachment_error = Some(error),
                 }
                 cx.notify();
             });
@@ -187,8 +193,7 @@ impl AurisApp {
     }
 
     fn choose_midi_attachment(&mut self, cx: &mut gpui::Context<Self>) {
-        let conversation = self.agent_chat.conversations.active_id().map(str::to_owned);
-        let project = self.session.path().map(Path::to_path_buf);
+        let owner = self.music_owner();
         cx.spawn(async move |this, cx| {
             let Some(file) = rfd::AsyncFileDialog::new()
                 .add_filter("MIDI", &["mid", "midi"])
@@ -199,21 +204,21 @@ impl AurisApp {
             };
             let path = file.path().to_path_buf();
             let _ = this.update(cx, |this, cx| {
-                if this.agent_chat.conversations.active_id() != conversation.as_deref()
-                    || this.session.path() != project.as_deref()
-                {
+                if this.music_owner() != owner {
                     return;
                 }
-                this.agent_attach_files(std::slice::from_ref(&path), cx);
+                this.attach_music_files(std::slice::from_ref(&path), cx);
                 this.edit_midi_attachment(path, cx);
             });
         })
         .detach();
     }
 
-    /// Commit before sending or changing conversations, so drafts cannot cross owners.
-    pub(super) fn commit_midi_draft(&mut self) -> bool {
-        let Some(draft) = self.agent_chat.midi_draft.as_mut() else {
+    /// Commit the visible surface's independent draft before submitting or leaving it.
+    pub(crate) fn commit_midi_draft(&mut self) -> bool {
+        let limit_error = self.t(Key::AgentAttachmentLimit).to_owned();
+        let refs = self.music_references_mut();
+        let Some(draft) = refs.midi_draft.as_mut() else {
             return true;
         };
         if draft.lyric.marked().is_some() {
@@ -223,44 +228,49 @@ impl AurisApp {
         let replacing = draft
             .replacing
             .as_ref()
-            .and_then(|path| self.agent_chat.attachments.iter().position(|p| p == path));
-        if replacing.is_none()
-            && self.agent_chat.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT
-        {
-            self.agent_chat.attachment_error = Some(self.t(Key::AgentAttachmentLimit).to_owned());
+            .and_then(|path| refs.attachments.iter().position(|p| p == path));
+        if replacing.is_none() && refs.attachments.len() >= auris_agent::ATTACHMENT_COUNT_LIMIT {
+            refs.attachment_error = Some(limit_error);
             return false;
         }
         let directory = auris_session::settings::config_dir().join("conversation-midi");
         match draft.score.save_snapshot(&directory) {
             Ok(path) => {
-                self.agent_chat.attached_here.insert(path.clone());
+                refs.attached_here.insert(path.clone());
                 if let Some(index) = replacing {
-                    self.agent_chat.attachments[index] = path;
+                    refs.attachments[index] = path;
                 } else {
-                    self.agent_chat.attachments.push(path);
+                    refs.attachments.push(path);
                 }
-                self.agent_chat.midi_draft = None;
-                self.agent_chat.attachment_error = None;
-                if self.agent_chat.focused == Some(AgentField::MidiLyric) {
+                refs.midi_draft = None;
+                refs.attachment_error = None;
+                if let Some(s) = &mut self.song_workshop {
+                    s.active_field = Some(0);
+                } else if self.agent_chat.focused == Some(AgentField::MidiLyric) {
                     self.agent_chat.focused = Some(AgentField::Chat);
                 }
                 true
             }
             Err(error) => {
-                self.agent_chat.attachment_error = Some(error);
+                refs.attachment_error = Some(error);
                 false
             }
         }
     }
 
-    pub(super) fn midi_composer_controls(
+    pub(super) fn commit_agent_midi_draft(&mut self) -> bool {
+        self.song_workshop.is_some() || self.commit_midi_draft()
+    }
+
+    pub(crate) fn midi_composer_controls(
         &mut self,
         locked: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let theme = self.theme.clone();
-        let available =
-            !locked && !self.agent_chat.midi_loading && self.agent_chat.midi_draft.is_none();
+        let available = !locked
+            && !self.music_references().midi_loading
+            && self.music_references().midi_draft.is_none();
         let has_clip = self
             .selected_clip
             .and_then(|id| self.session.midi_clip(id))
@@ -301,18 +311,18 @@ impl AurisApp {
                 cx.listener(|this, _, _, cx| this.choose_midi_attachment(cx)),
             ))
             .child(self.music_composer_controls(!locked, cx))
-            .when(self.agent_chat.midi_loading, |row| {
+            .when(self.music_references().midi_loading, |row| {
                 row.child(self.t(Key::AgentMidiLoading))
             })
             .into_any_element()
     }
 
-    pub(super) fn midi_editor(
+    pub(crate) fn midi_editor(
         &mut self,
         max_height: gpui::Pixels,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let Some(draft) = &self.agent_chat.midi_draft else {
+        let Some(draft) = &self.music_references().midi_draft else {
             return div().into_any_element();
         };
         let theme = self.theme.clone();
@@ -327,7 +337,7 @@ impl AurisApp {
         let lyric_empty = draft.lyric.content().is_empty();
         let scroll = draft.scroll.clone();
         let focus = self
-            .agent_chat
+            .music_references_mut()
             .midi_lyric_focus
             .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
             .clone();
@@ -382,7 +392,7 @@ impl AurisApp {
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |this, _, _, cx| {
-                                if let Some(draft) = &mut this.agent_chat.midi_draft {
+                                if let Some(draft) = &mut this.music_references_mut().midi_draft {
                                     draft.add(pitch, at);
                                 }
                                 cx.stop_propagation();
@@ -416,7 +426,7 @@ impl AurisApp {
                     theme.accent,
                     &theme,
                     cx.listener(move |this, _, _, cx| {
-                        if let Some(draft) = &mut this.agent_chat.midi_draft {
+                        if let Some(draft) = &mut this.music_references_mut().midi_draft {
                             draft.select(Some(index));
                         }
                         cx.notify();
@@ -629,7 +639,7 @@ impl AurisApp {
                 .child(self.panel_field(
                     "agent-midi-lyric",
                     AgentField::MidiLyric,
-                    self.agent_chat.focused == Some(AgentField::MidiLyric),
+                    self.music_lyric_focused(),
                     lyric_empty,
                     self.t(Key::AgentMidiLyricPlaceholder).to_owned(),
                     focus,
@@ -680,7 +690,7 @@ impl AurisApp {
             self.theme.accent,
             &self.theme,
             cx.listener(move |this, _, _, cx| {
-                if let Some(draft) = &mut this.agent_chat.midi_draft {
+                if let Some(draft) = &mut this.music_references_mut().midi_draft {
                     edit(draft);
                 }
                 cx.notify();
@@ -689,11 +699,16 @@ impl AurisApp {
         .into_any_element()
     }
 
-    pub(super) fn close_midi_editor(&mut self, window: &mut Window) {
-        self.agent_chat.midi_draft = None;
-        self.focus_agent_field(AgentField::Chat);
-        if let Some(focus) = &self.agent_chat.input_focus {
-            window.focus(focus);
+    pub(crate) fn close_midi_editor(&mut self, window: &mut Window) {
+        self.music_references_mut().midi_draft = None;
+        if let Some(s) = &mut self.song_workshop {
+            s.active_field = Some(0);
+            window.focus(&s.foci[0]);
+        } else {
+            self.focus_agent_field(AgentField::Chat);
+            if let Some(focus) = &self.agent_chat.input_focus {
+                window.focus(focus);
+            }
         }
     }
 }
@@ -745,7 +760,12 @@ mod tests {
             this.agent_chat.busy = true;
             for pitch in [60, 67] {
                 this.start_midi_draft(false);
-                this.agent_chat.midi_draft.as_mut().unwrap().add(pitch, 0);
+                this.agent_chat
+                    .references
+                    .midi_draft
+                    .as_mut()
+                    .unwrap()
+                    .add(pitch, 0);
                 this.agent_chat.input = TextField::new("Use this melody");
                 assert!(this.enqueue_agent_message());
             }
@@ -780,15 +800,21 @@ mod tests {
         cx.simulate_input("きみ");
         app.read_with(cx, |this, _| {
             assert_eq!(
-                this.agent_chat.midi_draft.as_ref().unwrap().lyric.content(),
+                this.agent_chat
+                    .references
+                    .midi_draft
+                    .as_ref()
+                    .unwrap()
+                    .lyric
+                    .content(),
                 "きみ"
             );
             assert!(this.session.midi_clip(clip).unwrap().notes.is_empty());
         });
         crate::harness::click("agent-midi-apply", cx);
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.midi_draft.is_none());
-            let score = MidiReference::read(&this.agent_chat.attachments[0]).unwrap();
+            assert!(this.agent_chat.references.midi_draft.is_none());
+            let score = MidiReference::read(&this.agent_chat.references.attachments[0]).unwrap();
             assert_eq!(score.tracks[0].notes[0].pitch, 61);
             assert_eq!(score.tracks[0].notes[0].lyric, "きみ");
             assert!(this.session.midi_clip(clip).unwrap().notes.is_empty());
@@ -802,15 +828,20 @@ mod tests {
             this.panels.show(crate::dock::Panel::Agent);
             this.agent_chat.models_loaded = true;
             this.start_midi_draft(false);
-            this.agent_chat.midi_draft.as_mut().unwrap().add(60, 0);
+            this.agent_chat
+                .references
+                .midi_draft
+                .as_mut()
+                .unwrap()
+                .add(60, 0);
         });
         crate::harness::paint(&app, cx);
         crate::harness::click("agent-midi-lyric", cx);
         cx.simulate_input("discard me");
         cx.simulate_keystrokes("escape");
         app.read_with(cx, |this, _| {
-            assert!(this.agent_chat.midi_draft.is_none());
-            assert!(this.agent_chat.attachments.is_empty());
+            assert!(this.agent_chat.references.midi_draft.is_none());
+            assert!(this.agent_chat.references.attachments.is_empty());
             assert_eq!(this.agent_chat.focused, Some(AgentField::Chat));
         });
     }

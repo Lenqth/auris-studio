@@ -2218,6 +2218,7 @@ new のオプション
         en: "Remove attachment: {name}",
         ja: "添付ファイルを削除：{name}"
     }
+    AgentReattachReference { en: "Reattach {name}", ja: "{name} を再添付" }
     AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
     AgentOpenAttachment {
         en: "Open attachment: {path}",

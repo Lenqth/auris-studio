@@ -2,7 +2,21 @@
 use super::*;
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
-    pub(super) fn render_workshop_input(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn workshop_chord_prompt(&self) -> bool {
+        self.song_workshop.is_some()
+            && self.prompt.as_ref().is_some_and(|p| {
+                matches!(
+                    p.target(),
+                    Some(crate::ui::prompt::PromptTarget::AgentChordReference { .. })
+                )
+            })
+    }
+
+    pub(super) fn render_workshop_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(s) = &self.song_workshop else {
             return div().into_any_element();
         };
@@ -24,8 +38,14 @@ impl AurisApp {
         ));
         let focused = s.active_field == Some(0);
         let busy = s.busy();
-        let can_send =
-            !busy && !s.brief.content().trim().is_empty() && s.preferences.is_configured();
+        let can_send = !busy
+            && !s.references.midi_loading
+            && !s.brief.content().trim().is_empty()
+            && s.preferences.is_configured();
+        let model_error = s.model_error.clone();
+        let attachment_error = s.references.attachment_error.clone();
+        let attachments = s.references.attachments.clone();
+        let attached_here = s.references.attached_here.clone();
         let action = if busy {
             agent_components::composer_action(
                 "song-cancel",
@@ -56,10 +76,80 @@ impl AurisApp {
             "song-workshop-composer",
             &theme,
             focused,
-            s.model_error.is_some(),
+            model_error.is_some(),
         )
         .debug_selector(|| "song-workshop-composer".to_owned())
         .m_0()
+        .child(self.midi_composer_controls(busy, cx))
+        .child(div().flex().flex_wrap().min_w_0().gap_1().children(
+            attachments.into_iter().enumerate().map(|(index, path)| {
+                let reattach = !attached_here.contains(&path);
+                let name = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                div()
+                    .flex()
+                    .min_w_0()
+                    .max_w_full()
+                    .child(
+                        crate::ui::widgets::bounded_button_enabled(
+                            ("workshop-reference", index),
+                            if reattach {
+                                self.t(Key::AgentReattachReference).replace("{name}", &name)
+                            } else {
+                                name
+                            },
+                            crate::ui::widgets::ButtonStyle::Ghost,
+                            crate::ui::widgets::ButtonState::available(false, !busy),
+                            theme.accent,
+                            &theme,
+                            cx.listener(move |this, _, _, cx| {
+                                if reattach {
+                                    this.music_references_mut()
+                                        .attached_here
+                                        .insert(path.clone());
+                                    this.music_references_mut().attachment_error = None;
+                                }
+                                if auris_agent::attachment_kind(&path)
+                                    == Some(auris_agent::AttachmentKind::Midi)
+                                {
+                                    this.edit_midi_attachment(path.clone(), cx);
+                                } else if !reattach {
+                                    this.open_agent_attachment(path.clone(), cx);
+                                }
+                                cx.notify();
+                            }),
+                        )
+                        .flex_1()
+                        .flex_shrink(),
+                    )
+                    .child(crate::ui::widgets::button_enabled(
+                        ("workshop-reference-remove", index),
+                        self.t(Key::MenuRemove),
+                        crate::ui::widgets::ButtonStyle::Ghost,
+                        crate::ui::widgets::ButtonState::available(false, !busy),
+                        theme.accent,
+                        &theme,
+                        cx.listener(move |this, _, _, cx| {
+                            if let Some(s) = &mut this.song_workshop
+                                && index < s.references.attachments.len()
+                            {
+                                let removed = s.references.attachments.remove(index);
+                                this.cancel_midi_for_attachment(&removed);
+                            }
+                            cx.notify();
+                        }),
+                    ))
+            }),
+        ))
+        .when(self.music_references().midi_draft.is_some(), |body| {
+            body.child(self.midi_editor(window.viewport_size().height * 0.3, cx))
+        })
+        .when_some(attachment_error, |body, error| {
+            body.child(agent_components::error_notice(error))
+        })
         .child(self.workshop_field(0, Key::WorkshopBriefHint, true, cx))
         .child(
             agent_components::composer_controls("workshop-composer-controls", &theme)
@@ -132,7 +222,7 @@ impl AurisApp {
                 .child(div().flex_1())
                 .child(action),
         );
-        if let Some(error) = &s.model_error {
+        if let Some(error) = &model_error {
             body = body.child(crate::ui::agent_components::error_notice(error.clone()));
         }
         body.into_any_element()
@@ -144,6 +234,50 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.workshop_chord_prompt() {
+            if self.prompt_key(event, window, cx) {
+                cx.stop_propagation();
+                cx.notify();
+            }
+            return;
+        }
+        if self.music_lyric_focused() {
+            let composing = self
+                .music_references()
+                .midi_draft
+                .as_ref()
+                .is_some_and(|d| d.lyric.marked().is_some());
+            if composing {
+                return;
+            }
+            match event.keystroke.key.as_str() {
+                "escape" => self.close_midi_editor(window),
+                "enter" => {
+                    if self.commit_midi_draft() {
+                        self.close_midi_editor(window);
+                    }
+                }
+                _ => {
+                    if let Some(draft) = &mut self.music_references_mut().midi_draft {
+                        if draft.lyric.apply_key_with_clipboard(
+                            &event.keystroke.key,
+                            event.keystroke.modifiers.shift,
+                            event.keystroke.modifiers.secondary(),
+                            false,
+                            cx,
+                        ) == KeyEffect::Ignored
+                        {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                }
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if self.menu_key(event, window, cx) {
             cx.stop_propagation();
             cx.notify();
@@ -152,7 +286,7 @@ impl AurisApp {
         if let Some(s) = &mut self.song_workshop
             && s.foci[0].is_focused(window)
         {
-            if s.brief.marked().is_some() {
+            if s.submitted || s.brief.marked().is_some() {
                 return;
             }
             if event.keystroke.key == "enter" {

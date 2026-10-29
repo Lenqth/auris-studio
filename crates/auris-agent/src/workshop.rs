@@ -33,7 +33,7 @@ pub const AUTO_RECOVERY_LIMIT: u32 = 3;
 /// Commands accepted by the background workshop owner.
 pub enum Command {
     /// Submit one natural-language message with model settings captured at submission.
-    Send(String, Box<AgentPreferences>),
+    Send(String, Vec<PathBuf>, Box<AgentPreferences>),
     /// Choose an exact completed candidate without closing the conversation.
     Select(u64, Box<AgentPreferences>, String),
     /// Retry only this candidate in a new artifact directory.
@@ -45,7 +45,7 @@ pub enum Command {
     /// Stop one candidate, or all work when absent.
     Stop(Option<u64>),
     /// Persist an unsent draft before closing.
-    Draft(String),
+    Draft(String, Vec<PathBuf>),
     /// Enable or disable cross-project preference evidence.
     Memory(bool),
     /// Forget all recorded preferences.
@@ -170,9 +170,13 @@ pub fn handoff(
                     pending.push('\n');
                 }
                 pending.push_str(&message.text);
+                for reference in &message.references {
+                    pending.push('\n');
+                    pending.push_str(&reference.text);
+                }
                 ConversationContent::User {
                     text: message.text.clone(),
-                    attachments: vec![],
+                    attachments: message.references.iter().map(|r| r.path.clone()).collect(),
                 }
             } else {
                 memory.push(&pending, &message.text);
@@ -200,9 +204,52 @@ pub fn handoff(
         );
     }
     conversation.transcript.draft = document.draft;
+    conversation.transcript.attachments = document.draft_attachments;
     store.save(&conversation.info.id, &conversation.transcript)?;
     memory.save(&store.memory_path(&conversation.info.id)?)?;
     Ok((store, conversation.info.id))
+}
+
+/// Decode explicitly attached symbolic references once, on the background owner.
+fn capture_references(
+    paths: &[PathBuf],
+) -> Result<Vec<auris_session::workshop::Reference>, String> {
+    if paths.len() > crate::ATTACHMENT_COUNT_LIMIT {
+        return Err("Too many music references".into());
+    }
+    for path in paths {
+        if !matches!(
+            crate::attachment_kind(path),
+            Some(crate::AttachmentKind::Midi | crate::AttachmentKind::Text)
+        ) {
+            return Err("The song workshop accepts MIDI and text music references".into());
+        }
+    }
+    let names: Vec<_> = paths
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let decoded = crate::attachments::read_references(
+        &names,
+        crate::ATTACHMENT_TOTAL_CEILING,
+        crate::ATTACHMENT_COUNT_LIMIT,
+    )?;
+    paths
+        .iter()
+        .zip(decoded)
+        .map(|(path, reference)| match reference {
+            crate::attachments::Reference::Text(text) => Ok(auris_session::workshop::Reference {
+                path: path.clone(),
+                text,
+            }),
+            _ => Err("Expected a symbolic music reference".into()),
+        })
+        .collect()
+}
+
+fn composition_assignment(candidate: &Candidate, document: &Document) -> String {
+    json!({"assignment":candidate.direction.instructions,"conversation":document.messages})
+        .to_string()
 }
 
 #[derive(serde::Deserialize)]
@@ -359,6 +406,7 @@ impl Owner {
                     Err(e) => self.snapshot.error = Some(e),
                     Ok(answer) => {
                         self.snapshot.document.messages.push(Message {
+                            references: vec![],
                             user: false,
                             text: answer.reply,
                         });
@@ -472,19 +520,31 @@ impl Owner {
         }
         // Draft commands sent immediately before Drop must still be durable.
         for command in commands.try_iter() {
-            if let Command::Draft(draft) = command {
+            if let Command::Draft(draft, attachments) = command {
                 self.snapshot.document.draft = draft;
+                self.snapshot.document.draft_attachments = attachments;
             }
         }
         self.publish(true);
     }
     fn command(&mut self, command: Command) {
         match command {
-            Command::Send(text, prefs) if self.planner.is_none() && self.jobs.is_empty() => {
+            Command::Send(text, attachments, prefs)
+                if self.planner.is_none() && self.jobs.is_empty() =>
+            {
                 if text.trim().is_empty() || text.chars().count() > 16000 {
                     self.snapshot.error = Some("Enter 1..16000 characters".into());
                     return;
                 }
+                self.snapshot.document.draft = text.clone();
+                self.snapshot.document.draft_attachments = attachments.clone();
+                let references = match capture_references(&attachments) {
+                    Ok(references) => references,
+                    Err(error) => {
+                        self.snapshot.error = Some(error);
+                        return;
+                    }
+                };
                 self.prefs = *prefs;
                 self.selection_followup = false;
                 self.planned_parent = self.snapshot.document.selected;
@@ -497,10 +557,12 @@ impl Owner {
                     }
                 }
                 self.snapshot.document.draft.clear();
-                self.snapshot
-                    .document
-                    .messages
-                    .push(Message { user: true, text });
+                self.snapshot.document.draft_attachments.clear();
+                self.snapshot.document.messages.push(Message {
+                    user: true,
+                    text,
+                    references,
+                });
                 let selected = self
                     .snapshot
                     .document
@@ -571,6 +633,7 @@ impl Owner {
                 self.selection_followup = true;
                 self.planned_parent = Some(id);
                 self.snapshot.document.messages.push(Message {
+                    references: vec![],
                     user: true,
                     text: message,
                 });
@@ -651,7 +714,10 @@ impl Owner {
                     }
                 }
             }
-            Command::Draft(draft) => self.snapshot.document.draft = draft,
+            Command::Draft(draft, attachments) => {
+                self.snapshot.document.draft = draft;
+                self.snapshot.document.draft_attachments = attachments;
+            }
             Command::View(index) => {
                 if let Some(round) = self.snapshot.document.rounds.get(index) {
                     let ids: Vec<_> = round
@@ -725,7 +791,8 @@ impl Owner {
             .parent
             .map(|id| self.store.candidate_path(id).join("song/song.auris"));
         let id = candidate.id;
-        candidate.direction.instructions = json!({"assignment":candidate.direction.instructions,"conversation":self.snapshot.document.messages}).to_string();
+        candidate.direction.instructions =
+            composition_assignment(&candidate, &self.snapshot.document);
         match std::thread::Builder::new()
             .name(format!("auris-composer-{id}"))
             .spawn(move || {
@@ -1290,10 +1357,12 @@ mod tests {
         let document = Document {
             messages: vec![
                 Message {
+                    references: vec![],
                     user: true,
                     text: "Keep the melody".into(),
                 },
                 Message {
+                    references: vec![],
                     user: false,
                     text: "I will change only the accompaniment".into(),
                 },
@@ -1312,6 +1381,97 @@ mod tests {
             "I will change only the accompaniment"
         );
     }
+    #[test]
+    fn music_references_reach_the_director_composer_and_saved_history() {
+        use auris_session::midi_reference::MidiReference;
+        use auris_session::prelude::{Note, SignatureMap, TempoMap, Ticks};
+        let dir = tempfile::tempdir().unwrap();
+        let mut score = MidiReference::new(
+            "Melody".into(),
+            TempoMap::constant(120.),
+            SignatureMap::default(),
+        );
+        let mut note = Note::new(61, Ticks(240), Ticks(720));
+        note.lyric = "きみ".into();
+        score.tracks[0].notes.push(note);
+        let midi = score.save_snapshot(dir.path()).unwrap();
+        let chords = auris_session::music_reference::save_snapshot(
+            &json!({"reference_type":"chord_progression","chords":["C/E","G7"]}),
+            dir.path(),
+            "chords",
+        )
+        .unwrap();
+        let sound = auris_session::music_reference::save_snapshot(&json!({"reference_type":"instrument_choice","instrument_id":"test.piano","preset":{"bank":3,"patch":8}}), dir.path(), "sound").unwrap();
+        let paths = vec![midi.clone(), chords, sound];
+        let answer = json!({"role":"assistant","content":"{\"reply\":\"I have the references\",\"directions\":[]}"}).to_string();
+        let (url, seen) =
+            crate::tests::mock_server(vec![crate::tests::completion(&answer, "stop")]);
+        let prefs = AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            ..Default::default()
+        };
+        let (events, _) = mpsc::channel();
+        let store = Store::new(dir.path().join("history"));
+        let mut owner = Owner::new(store.clone(), Settings::default(), events);
+        owner.command(Command::Send(
+            "Use these references".into(),
+            paths.clone(),
+            Box::new(prefs),
+        ));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(result) = owner.planner.as_mut().unwrap().poll_text() {
+                result.unwrap();
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let requests = seen.lock().unwrap();
+        for expected in ["きみ", "C/E", "test.piano"] {
+            assert!(requests[0].contains(expected), "{expected}");
+        }
+        drop(requests);
+        let assignment = composition_assignment(&assignment(), &owner.snapshot.document);
+        for expected in ["きみ", "C/E", "test.piano"] {
+            assert!(assignment.contains(expected));
+        }
+        std::fs::write(&midi, b"changed after submission").unwrap();
+        store.save(&owner.snapshot.document).unwrap();
+        let restored = store.load().unwrap();
+        assert!(
+            restored.messages[0].references[0]
+                .text
+                .contains("\"pitch\":61")
+        );
+        let (editor, id) = handoff(dir.path().join("editor"), false, restored).unwrap();
+        let conversation = editor.load(&id).unwrap();
+        assert!(
+            matches!(&conversation.transcript.messages[0].content, auris_session::conversations::ConversationContent::User { attachments, .. } if attachments == &paths)
+        );
+    }
+
+    #[test]
+    fn invalid_midi_keeps_the_workshop_draft_and_does_not_submit_a_partial_turn() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("broken.mid");
+        std::fs::write(&path, b"invalid MIDI").unwrap();
+        let (events, _) = mpsc::channel();
+        let mut owner = Owner::new(Store::new(dir.path().into()), Settings::default(), events);
+        owner.command(Command::Send(
+            "Use this melody".into(),
+            vec![path.clone()],
+            Box::default(),
+        ));
+        assert!(owner.snapshot.document.messages.is_empty());
+        assert!(owner.snapshot.error.is_some());
+        assert_eq!(owner.snapshot.document.draft, "Use this melody");
+        assert_eq!(owner.snapshot.document.draft_attachments, vec![path]);
+        assert!(owner.planner.is_none());
+    }
+
     fn assignment() -> Candidate {
         Candidate {
             id: 1,

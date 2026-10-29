@@ -263,7 +263,9 @@ impl AurisApp {
         match self.attach_agent_music_reference(&value, &format!("sound-{}", sound.name)) {
             Ok(()) => {
                 self.close_timbre_map();
-                self.panels.show(crate::dock::Panel::Agent);
+                if self.song_workshop.is_none() {
+                    self.panels.show(crate::dock::Panel::Agent);
+                }
             }
             Err(error) => self.timbre_map.error = Some(error),
         }

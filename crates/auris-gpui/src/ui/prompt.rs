@@ -2246,6 +2246,9 @@ impl AurisApp {
         // the text typed into the workshop, or every letter vanishes while Backspace, which the
         // workshop handles as a key, still works.
         if self.project_chooser.is_some() {
+            if self.workshop_chord_prompt() {
+                return self.prompt.as_mut()?.field_mut();
+            }
             if let Some(browser) = self.song_library.as_mut() {
                 return browser.focused.then_some(&mut browser.search);
             }
@@ -2298,6 +2301,9 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         }
         // In step with `writable_field`.
         if self.project_chooser.is_some() {
+            if self.workshop_chord_prompt() {
+                return self.prompt.as_ref()?.field();
+            }
             if let Some(browser) = self.song_library.as_ref() {
                 return browser.focused.then_some(&browser.search);
             }

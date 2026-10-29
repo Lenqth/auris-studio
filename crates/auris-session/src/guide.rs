@@ -99,6 +99,11 @@
 //! [`crate::music_reference`] also captures bar-delimited chords in a fixed key and meter,
 //! and instrument/preset identities selected in the timbre map. These immutable JSON references
 //! use the existing text-attachment transport and never apply harmony or instrument edits.
+//! The new-song workshop shares the desktop reference editor but owns a separate draft.
+//! Its background owner decodes references once when a message is submitted and retains the
+//! resulting text in [`crate::workshop::Message`]. Both the director and isolated composers
+//! receive those snapshots, including on recovery; later source-file edits do not rewrite them.
+//! Editor handoff keeps readable attachment paths and model reference context.
 //! Each user message retains its attachment references as display metadata, so the transcript
 //! can identify sent files after reopening. These references never repopulate the next draft
 //! or authorize file access; only files explicitly attached in the current window can do that.

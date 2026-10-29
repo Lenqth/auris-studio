@@ -151,7 +151,6 @@ impl Reference {
     }
 }
 
-#[cfg(test)]
 pub(super) fn read_references(
     paths: &[String],
     total_ceiling: u64,
