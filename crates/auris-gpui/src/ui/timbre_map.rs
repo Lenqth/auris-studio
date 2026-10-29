@@ -336,14 +336,13 @@ impl AurisApp {
                         self.timbre_map.camera.azimuth,
                         self.timbre_map.camera.elevation,
                     );
-                for summary in map.cluster_summaries() {
-                    let cluster = summary.id;
-                    let points = positions
-                        .iter()
-                        .enumerate()
-                        .filter(|(i, _)| map.clusters()[*i] == cluster)
-                        .map(|(_, p)| *p)
-                        .collect();
+                for batch in
+                    self.timbre_map
+                        .camera
+                        .scatter_batches(map.clusters(), &positions, extent)
+                {
+                    let cluster = map.clusters()[batch[0]];
+                    let points = batch.into_iter().map(|i| positions[i]).collect();
                     plot = plot.scatter(points, Some(cluster_color(cluster, &self.theme)));
                 }
                 // Small three-axis crosses identify the selected source without relying on hue.

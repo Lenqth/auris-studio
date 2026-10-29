@@ -119,6 +119,31 @@ impl TimbreCamera {
             })
             .map(|(i, _)| i)
     }
+
+    /// Runs of equally colored points in the painter's order used by Plot3d.
+    pub fn scatter_batches(
+        &self,
+        clusters: &[usize],
+        positions: &[[f32; 3]],
+        extent: f32,
+    ) -> Vec<Vec<usize>> {
+        let projected = self.projected(positions, extent);
+        let mut order: Vec<_> = (0..positions.len()).collect();
+        // Plot3d sorts inside each scatter call, but blends successive calls in submission
+        // order on both render paths. Sort globally first; equal depths paint the pick tie last.
+        order.sort_by(|&a, &b| projected[b].1.total_cmp(&projected[a].1).then(b.cmp(&a)));
+        let mut batches: Vec<Vec<usize>> = Vec::new();
+        for index in order {
+            if let Some(batch) = batches.last_mut()
+                && clusters[batch[0]] == clusters[index]
+            {
+                batch.push(index);
+            } else {
+                batches.push(vec![index]);
+            }
+        }
+        batches
+    }
 }
 
 pub(super) fn plot_data(positions: &[[f64; 3]]) -> (Vec<[f32; 3]>, f32) {
@@ -167,5 +192,23 @@ mod tests {
         assert!(camera.drag(start + point(px(30.), px(20.)), true));
         assert!(!camera.release());
         assert_eq!(camera.preset, None);
+    }
+
+    #[test]
+    fn scatter_layers_and_picking_agree_across_clusters_and_equal_depths() {
+        let mut camera = TimbreCamera::default();
+        camera
+            .bounds
+            .set(Bounds::new(point(px(0.), px(0.)), size(px(500.), px(400.))));
+        camera.set_view(2);
+        // Same screen position, with the front source in the earlier cluster.
+        let positions = [[0., -0.8, 0.], [0., 0.8, 0.], [0., -0.8, 0.]];
+        let batches = camera.scatter_batches(&[0, 1, 2], &positions, 1.);
+        let painted: Vec<_> = batches.into_iter().flatten().collect();
+        assert_eq!(painted, vec![1, 2, 0]);
+        assert_eq!(
+            painted.last().copied(),
+            camera.pick(&positions, 1., camera.bounds.get().center())
+        );
     }
 }
