@@ -160,6 +160,11 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
             actions::OpenProject,
             "file.open",
         ),
+        command(
+            t(Key::CmdCloseTab),
+            actions::CloseProjectTab,
+            "file.close_tab",
+        ),
         MenuRow::Separator,
         command(t(Key::CmdSave), actions::SaveProject, "file.save"),
         command(
@@ -633,11 +638,20 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                     panels.is_detached(panel),
                 )
             })
-            .chain([command(
-                t(Key::VisualizerTitle),
-                actions::ToggleVisualizer,
-                "visualizer.toggle",
-            )])
+            .chain([
+                command(
+                    t(Key::VisualizerTitle),
+                    actions::ToggleVisualizer,
+                    "visualizer.toggle",
+                ),
+                MenuRow::Separator,
+                command(t(Key::CmdNextTab), actions::NextProjectTab, "view.next_tab"),
+                command(
+                    t(Key::CmdPreviousTab),
+                    actions::PreviousProjectTab,
+                    "view.previous_tab",
+                ),
+            ])
             .collect(),
     });
 

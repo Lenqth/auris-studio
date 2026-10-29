@@ -407,8 +407,9 @@ impl AurisApp {
                 MenuRow::System { .. } => px(0.0),
             })
             .fold(MENU_FRAME_HEIGHT, |height, row| height + row);
-        let available_height = (viewport_height - crate::titlebar::HEIGHT - HEIGHT)
-            .max(ROW_HEIGHT + MENU_FRAME_HEIGHT);
+        let available_height =
+            (viewport_height - crate::titlebar::HEIGHT - self.project_tabs_height() - HEIGHT)
+                .max(ROW_HEIGHT + MENU_FRAME_HEIGHT);
         let height = natural_height.min(available_height);
         let scroll = self.menu_bar_scroll.clone();
         let needs_scroll = natural_height > available_height;

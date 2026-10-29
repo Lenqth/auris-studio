@@ -832,6 +832,9 @@ strings! {
     CmdPanic { en: "Panic", ja: "パニック" }
     CmdNewProject { en: "New Project", ja: "新規プロジェクト" }
     CmdOpenProject { en: "Open Project", ja: "プロジェクトを開く" }
+    CmdCloseTab { en: "Close tab", ja: "タブを閉じる" }
+    CmdNextTab { en: "Next tab", ja: "次のタブ" }
+    CmdPreviousTab { en: "Previous tab", ja: "前のタブ" }
     CmdAccompanyMelody { en: "Accompany the Melody", ja: "旋律に伴奏をつける" }
     CmdBalanceLevels { en: "Balance the Mix", ja: "ミックスの自動調整" }
     CmdOpenPluginWindow { en: "Open Plugin Window", ja: "プラグインの画面を開く" }

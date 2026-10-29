@@ -1368,8 +1368,10 @@ pub(crate) struct DiskWatchTaskState {
     pub(crate) cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
-/// One project window, its session and its editing state.
+/// One project tab, its session and its editing state.
 pub struct AurisApp {
+    pub(crate) project_tabs: Option<gpui::WeakEntity<crate::project_tabs::ProjectTabs>>,
+    pub(crate) tab_bar_height: Pixels,
     pub(crate) pending_audition: Option<crate::project_windows::AuditionRequest>,
     pub(crate) opening_project: Option<std::path::PathBuf>,
     pub(crate) project_chooser: Option<crate::ui::project_chooser::ProjectChooser>,
@@ -1954,6 +1956,8 @@ impl AurisApp {
             song_workshop: None,
             attachment_preview: None,
             project_window: None,
+            project_tabs: None,
+            tab_bar_height: px(0.0),
             session,
             theme,
             appearance,
@@ -3390,7 +3394,10 @@ impl AurisApp {
         // hit tests are measuring the same thing.
         let available = match dock {
             Dock::Bottom => {
-                self.viewport_height - Self::chrome_height() - PanelLayout::MIN_ARRANGEMENT
+                self.viewport_height
+                    - Self::chrome_height()
+                    - self.project_tabs_height()
+                    - PanelLayout::MIN_ARRANGEMENT
             }
             Dock::Left | Dock::Right => {
                 start_size + self.arrangement_width - PanelLayout::MIN_ARRANGEMENT_WIDTH
@@ -3448,7 +3455,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() - Metrics::STATUS_HEIGHT
+                    Self::chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT
                         + self.panels.lanes.header_height(),
                 )
             },
@@ -3462,7 +3469,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() - Metrics::STATUS_HEIGHT,
+                    Self::chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT,
                 )
             },
             |bounds| bounds.origin,
