@@ -25,6 +25,8 @@ pub struct Preview {
     pub revision: u64,
     /// Rendered audio; never mutated while the user is listening.
     pub audio: Arc<auris_session::prelude::AudioBuffer>,
+    /// Waveform and score sections captured for the same content revision.
+    pub timeline: Arc<auris_session::AuditionTimeline>,
 }
 
 /// Automatic restarts allowed per candidate and explicit recovery request.

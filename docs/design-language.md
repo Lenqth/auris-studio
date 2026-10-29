@@ -2,14 +2,16 @@
 
 Auris Studio uses the Atelier design language from `uthree/design-language`, pinned in
 `crates/auris-gpui/Cargo.toml` to revision
-`ae5b23ed61b23e6e0366c9aeaaae134c009da0c3`. The application selects Atelier's Glass direction and
+`22d3a55316b22d749af91ebff918758e41c39226`. The application selects Atelier's Glass direction and
 adapts its existing `Theme` through the `Theme::atelier` field, `Theme::install`, and
 `Theme::sync_atelier`. Existing Auris palette identifiers remain available while shared controls,
 agent surfaces, and the application shell read the corresponding Atelier tokens.
 
 At startup, `atelier::Assets::with_fallback` serves Atelier's embedded icon set first and then
-`ui::provider_logo::ProviderAssets`. The fallback contains the provider marks and Auris-specific
-24px SVGs for volume, mute, punch, notes, keyboard, and knob controls. The application icon files
+`ui::provider_logo::ProviderAssets`. The fallback contains the provider marks, the caption glyphs and
+the Auris-specific 24px SVGs for punch, notes and the [library's musical-family presets](timbre-map.md).
+These share Atelier's grid and stroke geometry and reach its `Icon` as an `IconSource::svg`;
+shared controls use Atelier's own marks. The application icon files
 in `crates/auris-gpui/assets/` are generated Atelier element-cell exports for Auris Studio (`Au`),
 including the editable, size-specific, symbolic, PNG, ICO, and ICNS forms. The redistributed
 canonical icon files carry the upstream Apache-2.0 text in `assets/ATELIER-LICENSE`.
@@ -19,8 +21,8 @@ messages, status and error notices, thinking indicators, the composer frame, its
 lane, and keyboard-operable send/stop commands. The adapter keeps
 the existing Auris session state, editable fields, attachments, and permission handling in their
 own views while giving both workflows the same Atelier agent presentation primitives.
-An agent answer is drawn without Atelier's avatar-and-name line: a conversation has exactly two
-voices, the person's is the accent bubble on the trailing edge, and whatever is not in a bubble
+An agent answer is Atelier's `AssistantMessage::anonymous()`, without the avatar-and-name line:
+a conversation has exactly two voices, the person's is the accent bubble on the trailing edge, and whatever is not in a bubble
 is the agent. The agent itself is marked by Atelier's sparkle wherever it is opened, and the
 composer's fast mode is a single bolt.
 
@@ -53,7 +55,8 @@ window shows the chooser. Inactive windows hold a still frame of the metal, and 
 policy stills it entirely.
 
 Choosing "Create with AI" hands the panel over to the song workshop: for one `motion.normal` the
-metal stays mounted while a panel-coloured shape grows from the chooser panel to the whole body
+metal stays mounted while Atelier's `Morph` grows a panel-coloured shape from the chooser panel to
+the whole body
 and the workshop fades in over it; Back plays the same hand-over in reverse. The metal stays
 under the workshop too, behind a veil of the surface colour that the shape turns into as it
 arrives: thin while the conversation is empty, thicker once there is a transcript, and solid
@@ -67,10 +70,10 @@ beneath it with "Use my preferences" as a `Switch`.
 Settings and the singing-backend setup are preferences windows in one shape: a leading
 `Sidebar` names every page in full (the settings search sits at its head, the setup guide at its
 foot), and each page opens with a `SectionHeader` saying what it covers, on a surface at a
-reading width with its own actions and status underneath. Atelier has no form pattern yet, so
-fields follow its `TextField` metrics with the label above the field and groups under a
-section-weight heading. The rows are `ui::widgets::nav_item` rather than Atelier's `ListItem`,
-which is pointer-only, so every page stays in the Tab order.
+reading width with its own actions and status underneath. The navigation rows are Atelier's
+`ListItem`s, each a tab stop. The General page is built from `FormGroup`s of `FormField`s, with
+yes-or-no settings as a `Switch` beside its label, and the search sits in Atelier's `TextField`
+frame around Auris's own editable text.
 
 Toolbar icon buttons are Atelier ghost buttons: no fill or hairline until hovered, and filled
 with their signal colour when latched.

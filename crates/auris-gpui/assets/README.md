@@ -16,3 +16,7 @@ The generated source and size-specific exports are kept in the design-language r
 packaging may replace these committed development files with the versioned output from its app-icon
 action. The redistributed canonical files are covered by the upstream Apache-2.0 text in
 `ATELIER-LICENSE`.
+
+The original `icons/sound-*.svg` library presets share Atelier's 24×24 grid, two-pixel stroke,
+rounded caps and monochrome masks. Their semantic identifiers live in `auris_session::SoundIcon`;
+the executable embeds every preset for both automatic classifications and manual corrections.

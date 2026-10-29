@@ -381,6 +381,8 @@ pub struct SongCandidate {
     project: Project,
     /// Original render; prepare it for the current output rate before auditioning.
     pub audio: Arc<AudioBuffer>,
+    /// Waveform and score sections captured for this exact audition.
+    pub timeline: Arc<crate::AuditionTimeline>,
     _assets: Option<tempfile::TempDir>,
 }
 
@@ -426,6 +428,7 @@ impl SongCandidate {
             .map_err(|e| e.to_string())?;
         Ok(Self {
             idea,
+            timeline: Arc::new(crate::AuditionTimeline::from_project(&project, &audio)),
             project,
             audio: Arc::new(audio),
             _assets: None,
@@ -643,6 +646,7 @@ impl SongCandidate {
         };
         Ok(Self {
             idea,
+            timeline: Arc::new(crate::AuditionTimeline::from_project(&project, &audio)),
             project,
             audio: Arc::new(audio),
             _assets: assets,
@@ -1103,6 +1107,7 @@ mod tests {
                     idea: idea(),
                     project: Project::new(format!("Draft {index}"), 48_000.0),
                     audio: Arc::clone(&audio),
+                    timeline: Default::default(),
                     _assets: None,
                 };
                 std::thread::spawn(move || {
@@ -1147,6 +1152,7 @@ mod tests {
             idea: idea(),
             project: Project::new("Candidate", 48_000.0),
             audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.25; 480]], 48_000.0).unwrap()),
+            timeline: Default::default(),
             _assets: None,
         };
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -1181,6 +1187,7 @@ mod tests {
             idea: idea(),
             project,
             audio: buffer,
+            timeline: Default::default(),
             _assets: Some(assets),
         };
         let root = tempfile::tempdir().unwrap();
@@ -1198,6 +1205,7 @@ mod tests {
             idea: idea(),
             project: Project::new("Other", 48_000.0),
             audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.5; 480]], 48_000.0).unwrap()),
+            timeline: Default::default(),
             _assets: None,
         };
         assert!(matches!(
@@ -1237,6 +1245,7 @@ mod tests {
             idea: idea(),
             project,
             audio: buffer,
+            timeline: Default::default(),
             _assets: Some(assets),
         };
         let mut target = Session::new(SessionOptions::headless()).unwrap();
@@ -1364,6 +1373,7 @@ mod tests {
             idea: idea(),
             project: source.project().clone(),
             audio: Arc::new(AudioBuffer::from_planar(vec![vec![0.1; 100]], 48_000.0).unwrap()),
+            timeline: Default::default(),
             _assets: None,
         };
         let mut target = Session::new(SessionOptions::headless()).unwrap();
@@ -1392,6 +1402,7 @@ mod tests {
             idea: idea(),
             project,
             audio: buffer,
+            timeline: Default::default(),
             _assets: Some(assets),
         };
         let mut target = Session::new(SessionOptions::headless()).unwrap();

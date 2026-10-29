@@ -4,7 +4,7 @@
 //! the same two voices. Keeping those voices in one adapter makes the Atelier design language
 //! visible in both places and prevents a new entry point from inventing a third chat treatment.
 
-use atelier::agent::{ChatNotice, ThinkingIndicator};
+use atelier::agent::{AssistantMessage, ChatNotice, ThinkingIndicator};
 use gpui::prelude::*;
 use gpui::{AnyElement, ElementId, IntoElement, ParentElement, SharedString, div};
 
@@ -282,44 +282,19 @@ pub(crate) fn user_message(
 /// Draws an agent answer: the prose alone, with no avatar or name above it.
 ///
 /// Both conversations have exactly two voices, and the person's own sits in an accent bubble on
-/// the trailing edge; whatever is not in a bubble is the agent. Atelier's `AssistantMessage`
-/// always draws an identity line, which here only repeats what the layout already says, so the
-/// answer is drawn directly with the same type, spacing, arrival and streaming caret.
+/// the trailing edge; whatever is not in a bubble is the agent, so the identity line is left out.
 pub(crate) fn assistant_message(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
     body: Option<AnyElement>,
     streaming: bool,
-    theme: &Theme,
-    cx: &gpui::App,
 ) -> AnyElement {
-    let id = id.into();
-    let text = text.into();
-    let atelier = &theme.atelier;
-    let body = body.unwrap_or_else(|| div().child(text).into_any_element());
-    let caret = streaming.then(|| {
-        atelier::motion::looping(
-            div()
-                .w(gpui::px(7.0))
-                .h(atelier.typography.size_md)
-                .rounded(gpui::px(1.0))
-                .bg(atelier.colors.agent),
-            (id.clone(), "caret"),
-            std::time::Duration::from_millis(1000),
-            1.0,
-            cx,
-            |caret, delta| caret.opacity(gpui::pulsating_between(0.2, 1.0)(delta)),
-        )
-    });
-    let message = div()
-        .flex()
-        .flex_col()
-        .gap(atelier.spacing.sm)
-        .text_size(atelier.typography.size_md)
-        .text_color(atelier.colors.text)
-        .child(body)
-        .children(caret);
-    atelier::motion::appear(message, id, cx, |row, delta| row.opacity(delta))
+    AssistantMessage::new(text)
+        .id(id)
+        .anonymous()
+        .streaming(streaming)
+        .when_some(body, |message, body| message.body(body))
+        .into_any_element()
 }
 
 /// Draws a workshop message through the same shared agent transcript primitives.
@@ -346,7 +321,7 @@ pub(crate) fn workshop_message(
             window,
             cx,
         );
-        assistant_message(id, text, Some(body), false, theme, cx)
+        assistant_message(id, text, Some(body), false)
     }
 }
 

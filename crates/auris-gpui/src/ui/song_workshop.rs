@@ -49,6 +49,7 @@ pub(crate) struct SongWorkshop {
     view_round: Option<usize>,
     candidates: [Option<Arc<SongCandidate>>; 3],
     played_audio: [Option<Arc<auris_session::prelude::AudioBuffer>>; 3],
+    played_timeline: [Option<Arc<auris_session::AuditionTimeline>>; 3],
     saved: [Option<std::path::PathBuf>; 3],
     errors: [Option<String>; 3],
     pub(crate) players: [PlayerState; 3],
@@ -92,6 +93,7 @@ impl SongWorkshop {
         self.preparing = None;
         self.view_round = Some(index);
         self.played_audio = std::array::from_fn(|_| None);
+        self.played_timeline = std::array::from_fn(|_| None);
         self.saved = std::array::from_fn(|_| None);
         self.errors = std::array::from_fn(|_| None);
         self.refresh_candidates();
@@ -123,6 +125,29 @@ impl SongWorkshop {
             .get(index)?
             .id;
         snapshot.previews.get(&id).map(|p| Arc::clone(&p.audio))
+    }
+    pub(super) fn audition_timeline(
+        &self,
+        index: usize,
+    ) -> Option<Arc<auris_session::AuditionTimeline>> {
+        if let Some(timeline) = &self.played_timeline[index] {
+            return Some(Arc::clone(timeline));
+        }
+        self.latest_timeline(index)
+    }
+    fn latest_timeline(&self, index: usize) -> Option<Arc<auris_session::AuditionTimeline>> {
+        if let Some(candidate) = &self.candidates[index] {
+            return Some(Arc::clone(&candidate.timeline));
+        }
+        let snapshot = self.snapshot.as_ref()?;
+        let id = snapshot
+            .document
+            .rounds
+            .get(self.view_round?)?
+            .candidates
+            .get(index)?
+            .id;
+        snapshot.previews.get(&id).map(|p| Arc::clone(&p.timeline))
     }
     fn text(&self, _: usize) -> &TextField {
         &self.brief
@@ -227,6 +252,7 @@ impl AurisApp {
             view_round: None,
             candidates: std::array::from_fn(|_| None),
             played_audio: std::array::from_fn(|_| None),
+            played_timeline: std::array::from_fn(|_| None),
             saved: std::array::from_fn(|_| None),
             errors: std::array::from_fn(|_| None),
             players: std::array::from_fn(|_| PlayerState::default()),
@@ -332,29 +358,25 @@ impl AurisApp {
             .song_workshop
             .as_ref()
             .is_some_and(|s| s.copied == Some(id));
-        div()
-            .debug_selector(move || format!("{}-{}", id.0, id.1))
-            .child(
-                Button::new(
-                    id,
-                    self.t(if copied {
-                        Key::CopiedToClipboard
-                    } else {
-                        label
-                    }),
-                )
-                .ghost()
-                .size(atelier::ControlSize::Small)
-                .when(copied, |button| button.tooltip(self.t(label)))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone()));
-                    if let Some(s) = &mut this.song_workshop {
-                        s.copied = Some(id);
-                    }
-                    cx.notify();
-                })),
-            )
-            .into_any_element()
+        Button::new(
+            id,
+            self.t(if copied {
+                Key::CopiedToClipboard
+            } else {
+                label
+            }),
+        )
+        .ghost()
+        .size(atelier::ControlSize::Small)
+        .when(copied, |button| button.tooltip(self.t(label)))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone()));
+            if let Some(s) = &mut this.song_workshop {
+                s.copied = Some(id);
+            }
+            cx.notify();
+        }))
+        .into_any_element()
     }
 
     pub(crate) fn poll_song_workshop(&mut self, cx: &mut Context<Self>) {
@@ -704,18 +726,19 @@ impl AurisApp {
                                     .unwrap_or_default()
                                     .to_string_lossy()
                                     .into_owned();
-                                div()
-                                    .debug_selector(move || {
-                                        format!("song-attachment-{i}-{file_index}")
-                                    })
-                                    .child(
-                                        Button::new(("song-attachment", i * 8 + file_index), name)
-                                            .ghost()
-                                            .icon(IconName::File)
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.open_agent_attachment(path.clone(), cx)
-                                            })),
-                                    )
+                                Button::new(
+                                    gpui::ElementId::Name(
+                                        format!("song-attachment-{i}-{file_index}").into(),
+                                    ),
+                                    name,
+                                )
+                                .ghost()
+                                .icon(IconName::File)
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.open_agent_attachment(path.clone(), cx)
+                                    },
+                                ))
                             },
                         ))
                         .child(
@@ -791,20 +814,11 @@ impl AurisApp {
             }
             if !snapshot.document.rounds.is_empty() {
                 transcript = transcript.child(text_panel(
-                    div()
-                        .debug_selector(|| "song-more-candidates".into())
-                        .child(
-                            Button::new(
-                                "song-more-candidates",
-                                self.t(Key::WorkshopMoreCandidates),
-                            )
-                            .disabled(s.busy())
-                            .on_click(cx.listener(
-                                |this, _, window, cx| {
-                                    this.request_more_song_candidates(window, cx);
-                                },
-                            )),
-                        ),
+                    Button::new("song-more-candidates", self.t(Key::WorkshopMoreCandidates))
+                        .disabled(s.busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.request_more_song_candidates(window, cx);
+                        })),
                     &theme,
                 ));
             }
@@ -878,41 +892,35 @@ impl AurisApp {
             .border_1()
             .border_color(theme.border_subtle)
             .child(
-                div().debug_selector(|| "song-memory".into()).child(
-                    atelier::Switch::new("song-memory", memory)
-                        .label(self.t(Key::WorkshopMemory))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if let Some(s) = &this.song_workshop {
-                                s.send(Command::Memory(!memory));
-                            }
-                            cx.notify();
-                        })),
-                ),
+                atelier::Switch::new("song-memory", memory)
+                    .label(self.t(Key::WorkshopMemory))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(s) = &this.song_workshop {
+                            s.send(Command::Memory(!memory));
+                        }
+                        cx.notify();
+                    })),
             )
             .child(
-                div().debug_selector(|| "song-memory-view".into()).child(
-                    Button::new("song-memory-view", self.t(Key::WorkshopMemoryView))
-                        .ghost()
-                        .icon(IconName::History)
-                        .selected(s.show_memory)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            if let Some(s) = &mut this.song_workshop {
-                                s.show_memory = !s.show_memory;
-                            }
-                            cx.notify();
-                        })),
-                ),
+                Button::new("song-memory-view", self.t(Key::WorkshopMemoryView))
+                    .ghost()
+                    .icon(IconName::History)
+                    .selected(s.show_memory)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if let Some(s) = &mut this.song_workshop {
+                            s.show_memory = !s.show_memory;
+                        }
+                        cx.notify();
+                    })),
             )
             .child(div().flex_1())
             .child(
-                div().debug_selector(|| "song-editor".into()).child(
-                    Button::new("song-editor", self.t(Key::WorkshopOpenEditor))
-                        .disabled(!can_open)
-                        .when(!can_open, |button| {
-                            button.tooltip(self.t(Key::WorkshopOpenEditorHint))
-                        })
-                        .on_click(cx.listener(Self::open_workshop_editor_click)),
-                ),
+                Button::new("song-editor", self.t(Key::WorkshopOpenEditor))
+                    .disabled(!can_open)
+                    .when(!can_open, |button| {
+                        button.tooltip(self.t(Key::WorkshopOpenEditorHint))
+                    })
+                    .on_click(cx.listener(Self::open_workshop_editor_click)),
             );
         let footer = div()
             .id("song-workshop-footer")
@@ -937,24 +945,22 @@ impl AurisApp {
             .flex_col()
             .child(body)
             .child(footer);
-        let back = div().debug_selector(|| "song-back".into()).child(
-            Button::new("song-back", self.t(Key::WorkshopBack))
-                .ghost()
-                .icon(IconName::ChevronLeft)
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    if !this.commit_midi_draft() {
-                        cx.notify();
-                        return;
-                    }
-                    this.close_timbre_map();
-                    this.song_workshop = None;
-                    this.attachment_preview = None;
-                    this.session.stop_output_preview();
-                    this.begin_welcome_transition(false, veil, cx);
-                    this.focus.focus(window);
+        let back = Button::new("song-back", self.t(Key::WorkshopBack))
+            .ghost()
+            .icon(IconName::ChevronLeft)
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if !this.commit_midi_draft() {
                     cx.notify();
-                })),
-        );
+                    return;
+                }
+                this.close_timbre_map();
+                this.song_workshop = None;
+                this.attachment_preview = None;
+                this.session.stop_output_preview();
+                this.begin_welcome_transition(false, veil, cx);
+                this.focus.focus(window);
+                cx.notify();
+            }));
         let mut title = crate::titlebar::Parts::new(
             "song-workshop-title",
             title_of(self.t(Key::WorkshopTitle)),
@@ -1291,23 +1297,19 @@ impl AurisApp {
                 .is_some_and(|played| !Arc::ptr_eq(latest, played))
         }) {
             card = card.child(
-                div()
-                    .debug_selector(move || format!("song-preview-latest-{index}"))
-                    .child(
-                        Button::new(
-                            ("song-preview-latest", index),
-                            self.t(Key::WorkshopLatestPreview),
-                        )
-                        .ghost()
-                        .icon(IconName::Refresh)
-                        .disabled(s.preparing.is_some())
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if let Some(state) = &mut this.song_workshop {
-                                state.players[index].reset_audio();
-                            }
-                            this.preview_song_candidate(index, cx);
-                        })),
-                    ),
+                Button::new(
+                    ("song-preview-latest", index),
+                    self.t(Key::WorkshopLatestPreview),
+                )
+                .ghost()
+                .icon(IconName::Refresh)
+                .disabled(s.preparing.is_some())
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if let Some(state) = &mut this.song_workshop {
+                        state.players[index].reset_audio();
+                    }
+                    this.preview_song_candidate(index, cx);
+                })),
             );
         }
         let usable = ready && !running;
@@ -1319,66 +1321,52 @@ impl AurisApp {
                 .flex_wrap()
                 .gap(spacing.sm)
                 .child(
-                    div()
-                        .debug_selector(move || format!("song-adopt-{index}"))
-                        .child(
-                            Button::new(("song-adopt", index), self.t(Key::WorkshopContinue))
-                                .icon(IconName::Check)
-                                .disabled(!usable)
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.adopt_song_candidate(index, window, cx)
-                                })),
-                        ),
+                    Button::new(("song-adopt", index), self.t(Key::WorkshopContinue))
+                        .icon(IconName::Check)
+                        .disabled(!usable)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.adopt_song_candidate(index, window, cx)
+                        })),
                 )
                 .child(
-                    div()
-                        .debug_selector(move || format!("song-retry-{index}"))
-                        .child(
-                            Button::new(
-                                ("song-retry", index),
-                                self.t(if running {
-                                    Key::WorkshopCancel
-                                } else if unfinished {
-                                    Key::WorkshopRecover
-                                } else {
-                                    Key::WorkshopRetry
-                                }),
-                            )
-                            .ghost()
-                            .icon(if running {
-                                IconName::Stop
+                    Button::new(
+                        ("song-retry", index),
+                        self.t(if running {
+                            Key::WorkshopCancel
+                        } else if unfinished {
+                            Key::WorkshopRecover
+                        } else {
+                            Key::WorkshopRetry
+                        }),
+                    )
+                    .ghost()
+                    .icon(if running {
+                        IconName::Stop
+                    } else {
+                        IconName::Refresh
+                    })
+                    .disabled(!retry_enabled)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(s) = &this.song_workshop {
+                            s.send(if running {
+                                Command::Stop(Some(id))
+                            } else if unfinished {
+                                Command::Recover(id, Box::new(s.preferences.clone()))
                             } else {
-                                IconName::Refresh
-                            })
-                            .disabled(!retry_enabled)
-                            .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    if let Some(s) = &this.song_workshop {
-                                        s.send(if running {
-                                            Command::Stop(Some(id))
-                                        } else if unfinished {
-                                            Command::Recover(id, Box::new(s.preferences.clone()))
-                                        } else {
-                                            Command::Retry(id)
-                                        });
-                                    }
-                                    cx.notify();
-                                },
-                            )),
-                        ),
+                                Command::Retry(id)
+                            });
+                        }
+                        cx.notify();
+                    })),
                 )
                 .child(
-                    div()
-                        .debug_selector(move || format!("song-save-{index}"))
-                        .child(
-                            Button::new(("song-save", index), self.t(Key::WorkshopSave))
-                                .ghost()
-                                .icon(IconName::Folder)
-                                .disabled(!usable)
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.save_song_candidate(index, window, cx)
-                                })),
-                        ),
+                    Button::new(("song-save", index), self.t(Key::WorkshopSave))
+                        .ghost()
+                        .icon(IconName::Folder)
+                        .disabled(!usable)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.save_song_candidate(index, window, cx)
+                        })),
                 ),
         )
         .into_any_element()
@@ -2082,12 +2070,50 @@ mod tests {
                 1,
                 auris_agent::workshop::Preview {
                     revision: 1,
+                    timeline: Arc::new(auris_session::AuditionTimeline::from_audio(
+                        &first,
+                        vec![
+                            auris_session::AuditionSection {
+                                label: "Intro".into(),
+                                instance: 1,
+                                start_seconds: 0.0,
+                                end_seconds: 0.5,
+                            },
+                            auris_session::AuditionSection {
+                                label: "Chorus".into(),
+                                instance: 1,
+                                start_seconds: 0.5,
+                                end_seconds: 1.0,
+                            },
+                        ],
+                    )),
                     audio: Arc::clone(&first),
                 },
             );
             this.session.project().clone()
         });
         crate::harness::paint(&app, cx);
+        crate::harness::click("song-preview-0-section-1", cx);
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.players[0].options(1.0).position_seconds, 0.5);
+        });
+        crate::harness::click("song-preview-0-seek", cx);
+        cx.simulate_keystrokes("home right");
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert!(s.players[0].options(1.0).position_seconds > 0.0);
+        });
+        let waveform = cx.debug_bounds("song-preview-0-seek").unwrap();
+        crate::harness::drag(
+            cx,
+            waveform.center(),
+            gpui::point(waveform.left(), waveform.center().y),
+        );
+        app.read_with(cx, |this, _| {
+            let s = this.song_workshop.as_ref().unwrap();
+            assert_eq!(s.players[0].options(1.0).position_seconds, 0.0);
+        });
         crate::harness::click("song-preview-0-play", cx);
         cx.run_until_parked();
         app.update(cx, |this, _| {
@@ -2101,11 +2127,18 @@ mod tests {
                 1,
                 auris_agent::workshop::Preview {
                     revision: 2,
+                    timeline: Arc::new(auris_session::AuditionTimeline::from_audio(
+                        &latest,
+                        vec![],
+                    )),
                     audio: Arc::clone(&latest),
                 },
             );
             // Arrival of new audio does not swap the buffer the user chose to hear.
             assert!(Arc::ptr_eq(s.played_audio[0].as_ref().unwrap(), &first));
+            let timeline = s.audition_timeline(0).unwrap();
+            assert_eq!(timeline.duration_seconds, 1.0);
+            assert_eq!(timeline.sections[1].label, "Chorus");
             assert!(s.candidates[0].is_none());
         });
         crate::harness::paint(&app, cx);
@@ -2132,6 +2165,7 @@ mod tests {
                     .as_ref()
                     .is_some_and(|audio| Arc::ptr_eq(audio, &latest))
             );
+            assert_eq!(s.audition_timeline(0).unwrap().duration_seconds, 2.0);
             assert_eq!(this.session.project(), &before);
         });
     }

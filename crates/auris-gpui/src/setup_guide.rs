@@ -173,11 +173,9 @@ impl AurisApp {
         destination: Destination,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        div()
-            .debug_selector(move || id.into())
-            .child(Button::new(id, self.t(label)).on_click(
-                cx.listener(move |this, _, _, cx| this.open_setup_destination(destination, cx)),
-            ))
+        Button::new(id, self.t(label)).on_click(
+            cx.listener(move |this, _, _, cx| this.open_setup_destination(destination, cx)),
+        )
     }
 
     /// The guide's page: a heading, the row of steps, and the current step's advice.
@@ -190,25 +188,19 @@ impl AurisApp {
                 .flex_wrap()
                 .gap(spacing.xs)
                 .children(STEPS.iter().enumerate().map(|(index, key)| {
-                    div()
-                        .debug_selector(move || format!("setup-step-{index}"))
-                        .child(
-                            Button::new(
-                                ("setup-step", index),
-                                format!("{}. {}", index + 1, self.t(*key)),
-                            )
-                            .variant(ButtonVariant::Ghost)
-                            .size(ControlSize::Small)
-                            .selected(step == index)
-                            .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    if let Some(chooser) = &mut this.project_chooser {
-                                        chooser.setup_step = index;
-                                    }
-                                    cx.notify();
-                                },
-                            )),
-                        )
+                    Button::new(
+                        ("setup-step", index),
+                        format!("{}. {}", index + 1, self.t(*key)),
+                    )
+                    .variant(ButtonVariant::Ghost)
+                    .size(ControlSize::Small)
+                    .selected(step == index)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(chooser) = &mut this.project_chooser {
+                            chooser.setup_step = index;
+                        }
+                        cx.notify();
+                    }))
                 }));
         let paragraph = |key: Key| {
             Label::new(self.t(key))
@@ -417,36 +409,24 @@ impl AurisApp {
     ) -> Vec<AnyElement> {
         let last = step + 1 == STEPS.len();
         vec![
-            div()
-                .debug_selector(|| "setup-later".into())
-                .child(
-                    Button::new("setup-later", self.t(Key::SetupLater))
-                        .ghost()
-                        .on_click(cx.listener(|this, _, _, cx| this.dismiss_setup_guide(cx))),
-                )
+            Button::new("setup-later", self.t(Key::SetupLater))
+                .ghost()
+                .on_click(cx.listener(|this, _, _, cx| this.dismiss_setup_guide(cx)))
                 .into_any_element(),
             div().flex_1().into_any_element(),
-            div()
-                .debug_selector(|| "setup-back".into())
-                .child(
-                    Button::new("setup-back", self.t(Key::WorkshopBack))
-                        .icon(IconName::ChevronLeft)
-                        .disabled(step == 0)
-                        .on_click(cx.listener(|this, _, _, cx| this.step_setup_guide(false, cx))),
-                )
+            Button::new("setup-back", self.t(Key::WorkshopBack))
+                .icon(IconName::ChevronLeft)
+                .disabled(step == 0)
+                .on_click(cx.listener(|this, _, _, cx| this.step_setup_guide(false, cx)))
                 .into_any_element(),
-            div()
-                .debug_selector(|| "setup-next".into())
-                .child(
-                    Button::new(
-                        "setup-next",
-                        self.t(if last { Key::SetupDone } else { Key::SetupNext }),
-                    )
-                    .primary()
-                    .when(!last, |button| button.icon_after(IconName::ChevronRight))
-                    .on_click(cx.listener(|this, _, _, cx| this.step_setup_guide(true, cx))),
-                )
-                .into_any_element(),
+            Button::new(
+                "setup-next",
+                self.t(if last { Key::SetupDone } else { Key::SetupNext }),
+            )
+            .primary()
+            .when(!last, |button| button.icon_after(IconName::ChevronRight))
+            .on_click(cx.listener(|this, _, _, cx| this.step_setup_guide(true, cx)))
+            .into_any_element(),
         ]
     }
 
