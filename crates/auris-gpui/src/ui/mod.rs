@@ -9,6 +9,7 @@ pub(crate) mod agent_components;
 mod agent_markdown;
 pub mod analyser;
 pub mod arrangement;
+pub(crate) mod attachment_preview;
 pub(crate) mod audio_player;
 pub mod automation;
 pub mod commands;

@@ -1528,6 +1528,7 @@ pub struct AurisApp {
     /// [`crate::ui::project_chooser::WelcomeTransition`].
     pub(crate) welcome_transition: Option<crate::ui::project_chooser::WelcomeTransition>,
     pub(crate) song_workshop: Option<crate::ui::song_workshop::SongWorkshop>,
+    pub(crate) attachment_preview: Option<crate::ui::attachment_preview::AttachmentPreview>,
     pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
     pub(crate) session: Session,
@@ -2136,6 +2137,7 @@ impl AurisApp {
             project_chooser: None,
             welcome_transition: None,
             song_workshop: None,
+            attachment_preview: None,
             project_window: None,
             session,
             theme,

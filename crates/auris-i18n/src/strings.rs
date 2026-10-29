@@ -41,7 +41,7 @@ macro_rules! strings {
 
 strings! {
     WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
-    WorkshopChatHint { en: "Describe the music you want. Discuss ideas, compare alternatives and keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。相談しながら候補を聴き比べ、気に入った曲を育てていけます。" }
+    WorkshopChatHint { en: "Describe the music you want. Ask for one to three candidates, request more ideas, or keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。候補は1〜3案で指定でき、追加の案を頼んだり、気に入った曲を育てたりできます。" }
     WorkshopMessage { en: "Message", ja: "メッセージ" }
     WorkshopSend { en: "Send", ja: "送信" }
     WorkshopYou { en: "You", ja: "あなた" }
@@ -59,7 +59,7 @@ strings! {
     WorkshopMelodyProgress { en: "Writing the melody", ja: "メロディラインを作っています" }
     WorkshopArrangeProgress { en: "Editing the arrangement", ja: "編曲を進めています" }
     WorkshopStopping { en: "Stopping", ja: "停止しています" }
-    WorkshopHint { en: "Choose a direction, audition three songs, then continue editing your favourite.", ja: "曲の方向性を決め、3つの候補を聴き比べてから編集を始めます。" }
+    WorkshopHint { en: "Choose a direction, audition song candidates, then continue editing your favourite.", ja: "曲の方向性を決め、候補を聴いてから気に入った曲の編集を始めます。" }
     WorkshopNext { en: "Next", ja: "次へ" }
     WorkshopDirection { en: "Direction", ja: "曲の方向性" }
     WorkshopVocals { en: "Vocals and lyrics", ja: "歌・歌詞" }
@@ -127,7 +127,12 @@ strings! {
     WorkshopAdopt { en: "Edit this song", ja: "この曲を編集" }
     WorkshopBack { en: "Back", ja: "戻る" }
     WorkshopCancel { en: "Stop generation", ja: "生成を停止" }
-    WorkshopGenerate { en: "Generate 3 candidates", ja: "3つの候補を生成" }
+    WorkshopGenerate { en: "Generate candidates", ja: "候補を生成" }
+    WorkshopMoreCandidates { en: "Request more candidates…", ja: "追加の候補を依頼…" }
+    WorkshopMoreCandidatesRequest { en: "Please create more candidates with different approaches from the previous proposals, keeping my requirements.", ja: "条件はそのままで、これまでとは別の方向性の候補を追加で作ってください。" }
+    WorkshopCopyTitle { en: "Copy title", ja: "タイトルをコピー" }
+    WorkshopCopyConcept { en: "Copy concept", ja: "コンセプトをコピー" }
+    WorkshopCopyMessage { en: "Copy message", ja: "メッセージをコピー" }
     SetupGuide { en: "Setup Guide", ja: "セットアップガイド" }
     SetupWelcome { en: "Welcome to Auris Studio", ja: "Auris Studioへようこそ" }
     SetupWelcomeHelp { en: "Choose the tools you want to use. You can reopen this guide from Settings or the project chooser.", ja: "使いたい機能を設定しましょう。このガイドは設定画面やプロジェクト選択画面からいつでも開けます。" }
@@ -138,7 +143,7 @@ strings! {
     SetupSinging { en: "Singing Voices", ja: "歌唱バックエンド" }
     SetupAppearance { en: "Appearance & Keys", ja: "表示・キー設定" }
     SetupAudioHelp { en: "Check the output device for your speakers or headphones. If you use a microphone or audio interface, choose its input device too. Start with the default sample rate and buffer size; adjust them if you hear dropouts or need lower latency.", ja: "スピーカーやヘッドホンの出力先を確認します。マイクやオーディオインターフェースを使う場合は入力先も選びましょう。サンプルレートやバッファサイズはまず既定値を使い、音切れや遅延が気になる場合に調整できます。" }
-    SetupAgentHelp { en: "Connect an AI agent to create three song candidates, discuss arrangements and edit a project through conversation. Choose a backend and model in Settings, then use its connection check. A configured model name alone does not confirm that the connection works.", ja: "AIエージェントを接続すると、曲の候補生成や編曲の相談、会話によるプロジェクト編集ができます。設定画面でバックエンドとモデルを選び、接続を確認してください。モデル名の設定だけでは接続成功を意味しません。" }
+    SetupAgentHelp { en: "Connect an AI agent to create song candidates, discuss arrangements and edit a project through conversation. Choose a backend and model in Settings, then use its connection check. A configured model name alone does not confirm that the connection works.", ja: "AIエージェントを接続すると、曲の候補生成や編曲の相談、会話によるプロジェクト編集ができます。設定画面でバックエンドとモデルを選び、接続を確認してください。モデル名の設定だけでは接続成功を意味しません。" }
     SetupSelectedModel { en: "Selected model", ja: "選択中のモデル" }
     SetupInputNotes { en: "Piano roll: create a MIDI clip on an instrument track, then draw and edit notes in the piano roll.", ja: "ピアノロール：音源トラックにMIDIクリップを作り、ピアノロールでノートを入力・編集できます。" }
     SetupInputTyping { en: "Computer keyboard: select an instrument track and enable Musical Typing from the Transport menu to play notes with your keyboard.", ja: "PCキーボード：音源トラックを選び、トランスポートメニューの「ミュージックタイピング」を有効にすると、キーボードで音を鳴らせます。" }
@@ -159,7 +164,7 @@ strings! {
     ChooseEmpty { en: "Empty project", ja: "空のプロジェクト" }
     ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement.", ja: "音源トラックから、自由に曲を作り始めます。" }
     ChooseStartHelp { en: "Choose how to begin your song.", ja: "曲の始め方を選んでください。" }
-    ChooseAiHelp { en: "Describe your idea and compare three song candidates.", ja: "作りたい曲を伝えて、3つの候補を聴き比べます。" }
+    ChooseAiHelp { en: "Describe your idea and listen to song candidates.", ja: "作りたい曲を伝えて、候補を聴いてみましょう。" }
     ChooseStartAi { en: "Start with AI…", ja: "AIで作り始める…" }
     ChooseRecentEmpty { en: "No recent projects. Open an existing project to get started.", ja: "最近使ったプロジェクトはありません。既存のプロジェクトを開いて始められます。" }
     ChooseExisting { en: "Open existing project…", ja: "既存のプロジェクトを開く…" }
@@ -2219,9 +2224,12 @@ new のオプション
         ja: "添付ファイルを削除：{name}"
     }
     AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
+    AttachFiles { en: "Attach files", ja: "ファイルを添付" }
+    AttachmentClosePreview { en: "Close preview", ja: "プレビューを閉じる" }
+    AttachmentLoading { en: "Loading preview…", ja: "プレビューを読み込み中…" }
     AgentOpenAttachment {
-        en: "Open attachment: {path}",
-        ja: "添付ファイルを開く：{path}"
+        en: "Preview attachment: {path}",
+        ja: "添付ファイルをプレビュー：{path}"
     }
     AgentAttachmentUnavailable {
         en: "Cannot open attachment: {path}. Check whether the file was moved or deleted.",
