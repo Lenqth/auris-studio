@@ -420,10 +420,11 @@ impl AurisApp {
         let mut sound_rows = self.singer_rows(track_id, cx);
         if is_singer || instrument_id.is_some() {
             let preset = self.session.track_preset(track_id);
-            let patch = preset.map(|preset| preset.patch);
+            let id = instrument_id.as_deref().unwrap_or("");
+            let family = self.library_sound_icon(id, preset, &sound_summary);
             let artwork = sound_artwork(
-                instrument_id.as_deref().unwrap_or(""),
-                patch,
+                id,
+                family,
                 is_drum
                     || self
                         .session
@@ -1190,23 +1191,31 @@ impl AurisApp {
     }
 }
 
-/// Presentation artwork follows the selected sound, including General MIDI families.
-fn sound_artwork(id: &str, patch: Option<i32>, drum: bool, singer: bool) -> &'static str {
+/// Presentation artwork follows the shared sound classification and manual corrections.
+fn sound_artwork(
+    id: &str,
+    family: auris_session::SoundIcon,
+    drum: bool,
+    singer: bool,
+) -> &'static str {
     if singer {
         return "sounds/voice.svg";
     }
     if drum {
         return "sounds/drums.svg";
     }
-    if let Some(patch) = patch {
-        return match patch {
-            0..=7 | 16..=23 => "sounds/keys.svg",
-            8..=15 => "sounds/mallet.svg",
-            24..=55 => "sounds/strings.svg",
-            56..=79 => "sounds/wind.svg",
-            112..=119 => "sounds/drums.svg",
-            _ => "sounds/synth.svg",
-        };
+    use auris_session::SoundIcon;
+    match family {
+        SoundIcon::Piano | SoundIcon::Organ => return "sounds/keys.svg",
+        SoundIcon::Guitar | SoundIcon::Bass | SoundIcon::Strings | SoundIcon::Pluck => {
+            return "sounds/strings.svg";
+        }
+        SoundIcon::Brass | SoundIcon::Wind => return "sounds/wind.svg",
+        SoundIcon::Drum => return "sounds/drums.svg",
+        SoundIcon::Bell => return "sounds/bell.svg",
+        SoundIcon::Voice => return "sounds/voice.svg",
+        SoundIcon::Synth | SoundIcon::Pad => return "sounds/synth.svg",
+        SoundIcon::Sound => {}
     }
     match id {
         "auris.physical.piano" => "sounds/keys.svg",
@@ -1441,30 +1450,58 @@ mod tests {
     }
 
     #[test]
-    fn sound_artwork_tracks_midi_families_and_track_roles() {
+    fn sound_artwork_tracks_classification_and_track_roles() {
         assert_eq!(
-            sound_artwork("auris.sampler", Some(0), false, false),
+            sound_artwork(
+                "auris.sampler",
+                auris_session::SoundIcon::Piano,
+                false,
+                false
+            ),
             "sounds/keys.svg"
         );
         assert_eq!(
-            sound_artwork("auris.sampler", Some(40), false, false),
+            sound_artwork(
+                "auris.sampler",
+                auris_session::SoundIcon::Strings,
+                false,
+                false
+            ),
             "sounds/strings.svg"
         );
         assert_eq!(
-            sound_artwork("auris.sampler", Some(65), false, false),
+            sound_artwork(
+                "auris.sampler",
+                auris_session::SoundIcon::Wind,
+                false,
+                false
+            ),
             "sounds/wind.svg"
         );
         assert_eq!(
-            sound_artwork("auris.sampler", Some(0), true, false),
+            sound_artwork(
+                "auris.sampler",
+                auris_session::SoundIcon::Piano,
+                true,
+                false
+            ),
             "sounds/drums.svg"
         );
-        assert_eq!(sound_artwork("", None, false, true), "sounds/voice.svg");
         assert_eq!(
-            sound_artwork("auris.synth.fm2", None, false, false),
+            sound_artwork("", auris_session::SoundIcon::Sound, false, true),
+            "sounds/voice.svg"
+        );
+        assert_eq!(
+            sound_artwork(
+                "auris.synth.fm2",
+                auris_session::SoundIcon::Sound,
+                false,
+                false
+            ),
             "sounds/synth.svg"
         );
         assert_eq!(
-            sound_artwork("third.party", None, false, false),
+            sound_artwork("third.party", auris_session::SoundIcon::Sound, false, false),
             "sounds/wave.svg"
         );
     }

@@ -24,6 +24,6 @@ the executable embeds every preset for both automatic classifications and manual
 ## Sound artwork
 
 `sounds/` contains original monochrome SVG illustrations for instrument families in the
-inspector. These are embedded alongside the UI icons and tinted by the active theme. Built-in
-instruments have explicit assignments; SoundFont presets use General MIDI families, with a
-waveform for unrecognised third-party instruments.
+inspector. These are embedded alongside the UI icons and tinted by the active theme. The shared sound
+classification and manual corrections select the artwork, with explicit built-in fallbacks and
+a waveform for unrecognised sounds.
