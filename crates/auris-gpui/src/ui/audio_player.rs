@@ -111,6 +111,7 @@ impl PlayerState {
 #[derive(Clone, Copy)]
 pub(crate) enum PlayerTarget {
     Workshop(usize),
+    Attachment,
     Chords,
 }
 
@@ -132,6 +133,7 @@ impl AurisApp {
         match target {
             PlayerTarget::Workshop(index) => self.song_workshop.as_ref().map(|s| &s.players[index]),
             PlayerTarget::Chords => Some(&self.song_preview.player),
+            PlayerTarget::Attachment => self.attachment_preview.as_ref().map(|s| &s.player),
         }
     }
 
@@ -141,6 +143,7 @@ impl AurisApp {
                 self.song_workshop.as_mut().map(|s| &mut s.players[index])
             }
             PlayerTarget::Chords => Some(&mut self.song_preview.player),
+            PlayerTarget::Attachment => self.attachment_preview.as_mut().map(|s| &mut s.player),
         }
     }
 
@@ -188,6 +191,7 @@ impl AurisApp {
         let prefix = match target {
             PlayerTarget::Workshop(i) => format!("song-preview-{i}"),
             PlayerTarget::Chords => "chord-player".into(),
+            PlayerTarget::Attachment => "attachment-player".into(),
         };
         let play_id: SharedString = match target {
             PlayerTarget::Chords => "song-preview-play".into(),
@@ -248,6 +252,7 @@ impl AurisApp {
                                     this.preview_song_candidate(index, cx)
                                 }
                                 PlayerTarget::Chords => this.preview_song_chords(false, cx),
+                                PlayerTarget::Attachment => this.play_attachment_preview(cx),
                             }
                         }
                         cx.notify();

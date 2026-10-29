@@ -226,6 +226,13 @@ impl ConversationStore {
         Ok(self.folder(id)?.join("memory.json"))
     }
 
+    /// Archive files explicitly attached by the user before sending a message.
+    pub fn capture_attachments(&self, id: &str, paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+        let _lock = self.lock()?;
+        self.info(id)?;
+        crate::conversation_attachments::capture(&self.folder(id)?, paths)
+    }
+
     fn info(&self, id: &str) -> Result<ConversationInfo, String> {
         let info: ConversationInfo = read_json(&self.folder(id)?.join("meta.json"))?;
         if info.id != id || info.deleted {
@@ -298,7 +305,11 @@ impl ConversationStore {
     pub fn load(&self, id: &str) -> Result<Conversation, String> {
         let _lock = self.lock()?;
         let info = self.info(id)?;
-        let transcript = read_json(&self.folder(id)?.join("transcript.json"))?;
+        let folder = self.folder(id)?;
+        let mut transcript = read_json(&folder.join("transcript.json"))?;
+        map_attachments(&mut transcript, |path| {
+            crate::conversation_attachments::resolve(&folder, path)
+        });
         Ok(Conversation { info, transcript })
     }
 
@@ -312,7 +323,10 @@ impl ConversationStore {
         let _lock = self.lock()?;
         let mut info = self.info(id)?;
         let folder = self.folder(id)?;
-        let previous: ConversationTranscript = read_json(&folder.join("transcript.json"))?;
+        let mut previous: ConversationTranscript = read_json(&folder.join("transcript.json"))?;
+        map_attachments(&mut previous, |path| {
+            crate::conversation_attachments::resolve(&folder, path)
+        });
         if previous.revision != transcript.revision {
             return Err(
                 "Conversation changed in another window. Reopen it before continuing.".into(),
@@ -344,7 +358,11 @@ impl ConversationStore {
         if previous.messages != transcript.messages {
             info.updated_at = now_millis();
         }
-        write_json(&folder.join("transcript.json"), &transcript)?;
+        let mut stored = transcript.clone();
+        map_attachments(&mut stored, |path| {
+            crate::conversation_attachments::portable(&folder, path)
+        });
+        write_json(&folder.join("transcript.json"), &stored)?;
         write_json(&folder.join("meta.json"), &info)?;
         Ok(Conversation { info, transcript })
     }
@@ -379,7 +397,12 @@ impl ConversationStore {
         info.preview.clear();
         let folder = self.folder(id)?;
         write_json(&folder.join("meta.json"), &info)?;
-        std::fs::remove_file(folder.join("transcript.json")).map_err(|e| e.to_string())
+        std::fs::remove_file(folder.join("transcript.json")).map_err(|e| e.to_string())?;
+        let attachments = folder.join("attachments");
+        if attachments.exists() {
+            std::fs::remove_dir_all(attachments).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     /// Import the old single-conversation memory exactly once, preserving the source file.
@@ -493,6 +516,7 @@ impl ConversationStore {
                     matches!((read(&source), read(&target)), (Ok(a), Ok(b)) if a == b)
                 });
                 if existing == info && same_transcript && same_production {
+                    crate::conversation_attachments::copy_to(&source, &target)?;
                     continue;
                 }
                 return Err(
@@ -507,10 +531,21 @@ impl ConversationStore {
                 }
             }
             write_json(&target.join("meta.json"), &info)?;
+            crate::conversation_attachments::copy_to(&source, &target)?;
         }
         crate::workshop::Store::new(self.root.clone())
             .copy_to(&crate::workshop::Store::new(destination.root.clone()))?;
         Ok(())
+    }
+}
+
+fn map_attachments(transcript: &mut ConversationTranscript, map: impl Fn(&Path) -> PathBuf) {
+    for message in &mut transcript.messages {
+        if let ConversationContent::User { attachments, .. } = &mut message.content {
+            for path in attachments {
+                *path = map(path);
+            }
+        }
     }
 }
 
@@ -571,6 +606,50 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sent_attachments_survive_original_deletion_and_save_as() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("reference.txt");
+        std::fs::write(&source, "Original reference").unwrap();
+        let store = ConversationStore::for_project(&dir.path().join("first"));
+        let mut conversation = store.create().unwrap();
+        let attachments = store
+            .capture_attachments(&conversation.info.id, std::slice::from_ref(&source))
+            .unwrap();
+        conversation.transcript.messages.push(ConversationMessage {
+            id: 0,
+            model: String::new(),
+            content: ConversationContent::User {
+                text: "Use this reference".into(),
+                attachments,
+            },
+        });
+        store
+            .save(&conversation.info.id, &conversation.transcript)
+            .unwrap();
+        std::fs::remove_file(source).unwrap();
+        let destination = ConversationStore::for_project(&dir.path().join("second"));
+        store.copy_to(&destination).unwrap();
+        let loaded = destination.load(&conversation.info.id).unwrap();
+        let ConversationContent::User { attachments, .. } = &loaded.transcript.messages[0].content
+        else {
+            panic!("user message")
+        };
+        assert!(attachments[0].starts_with(destination.root()));
+        assert_eq!(
+            std::fs::read_to_string(&attachments[0]).unwrap(),
+            "Original reference"
+        );
+        let stored = std::fs::read_to_string(
+            destination
+                .folder(&conversation.info.id)
+                .unwrap()
+                .join("transcript.json"),
+        )
+        .unwrap();
+        assert!(!stored.contains(&dir.path().to_string_lossy().replace('\\', "\\\\")));
+    }
 
     #[test]
     fn queued_messages_round_trip_without_becoming_sent_history() {

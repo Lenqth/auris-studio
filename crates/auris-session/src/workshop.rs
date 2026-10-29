@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 /// One readable turn, kept independently from provider memory.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
+    /// Archived user references, resolved for display and explicit reuse by the workshop.
+    #[serde(default)]
+    pub attachments: Vec<PathBuf>,
     /// Whether the user authored this message.
     pub user: bool,
     /// Original text, including authored lyric line breaks.
@@ -197,11 +200,35 @@ impl Store {
     }
     /// Load the full conversation or start a new one.
     pub fn load(&self) -> Result<Document, String> {
-        read_or_default(&self.root.join("conversation.json"))
+        let mut document: Document = read_or_default(&self.root.join("conversation.json"))?;
+        for message in &mut document.messages {
+            for path in &mut message.attachments {
+                *path = crate::conversation_attachments::resolve(&self.root, path);
+            }
+        }
+        Ok(document)
     }
     /// Atomically save a conversation.
     pub fn save(&self, document: &Document) -> Result<(), String> {
-        write(&self.root.join("conversation.json"), document)
+        let mut document = document.clone();
+        for message in &mut document.messages {
+            for path in &mut message.attachments {
+                *path = crate::conversation_attachments::portable(&self.root, path);
+            }
+        }
+        write(&self.root.join("conversation.json"), &document)
+    }
+    /// Preserve explicitly attached files before passing them to the director.
+    pub fn capture_attachments(&self, paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+        crate::conversation_attachments::capture(&self.root, paths)
+    }
+    /// Return only references owned by this workshop; restored metadata cannot grant file access.
+    pub fn owned_attachments(&self, paths: &[PathBuf]) -> Vec<PathBuf> {
+        paths
+            .iter()
+            .filter(|path| crate::conversation_attachments::owns(&self.root, path))
+            .cloned()
+            .collect()
     }
 }
 
@@ -273,6 +300,33 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn attached_files_follow_the_workshop_without_trusting_external_history_paths() {
+        let folder = tempfile::tempdir().unwrap();
+        let source = folder.path().join("lyrics.txt");
+        std::fs::write(&source, "夜の雨").unwrap();
+        let store = Store::new(folder.path().join("first"));
+        let attachments = store
+            .capture_attachments(std::slice::from_ref(&source))
+            .unwrap();
+        let mut document = Document::default();
+        document.messages.push(Message {
+            user: true,
+            text: "Use these lyrics".into(),
+            attachments,
+        });
+        store.save(&document).unwrap();
+        let destination = Store::new(folder.path().join("second"));
+        store.copy_to(&destination).unwrap();
+        let restored = destination.load().unwrap();
+        let files = destination.owned_attachments(&restored.messages[0].attachments);
+        assert_eq!(files.len(), 1);
+        assert_eq!(std::fs::read_to_string(&files[0]).unwrap(), "夜の雨");
+        assert!(destination.owned_attachments(&[source]).is_empty());
+        let legacy: Message =
+            serde_json::from_str(r#"{"user":true,"text":"Older message"}"#).unwrap();
+        assert!(legacy.attachments.is_empty());
+    }
     fn selection(round: u64, candidate: u64) -> Selection {
         Selection {
             conversation: "test".into(),
@@ -346,6 +400,7 @@ mod tests {
         let store = Store::new(dir.path().into());
         let mut document = Document::default();
         document.messages.push(Message {
+            attachments: Vec::new(),
             user: true,
             text: "歌詞\n二行目".into(),
         });
