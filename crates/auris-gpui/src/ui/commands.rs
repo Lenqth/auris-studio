@@ -211,10 +211,7 @@ impl AurisApp {
 
     /// Starts a due recovery write without performing filesystem work on the repaint callback.
     pub(crate) fn poll_autosave_task(&mut self, cx: &mut Context<Self>) {
-        if self.autosave_task.is_some()
-            || self.background_command.is_some()
-            || self.compose_progress.is_some()
-        {
+        if self.autosave_task.is_some() || self.background_command.is_some() {
             return;
         }
         let job = match self.session.begin_autosave_job() {
@@ -2759,101 +2756,6 @@ impl AurisApp {
         .detach();
     }
 
-    /// Prompts for a song specification and replaces the document with what it describes.
-    ///
-    /// The whole piece is one undo step, so a composition that is not what was wanted is one
-    /// press away from the document that was there before it.
-    pub(crate) fn compose_from_spec(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if self.compose_progress.is_some() {
-            return;
-        }
-        let language = self.language();
-        cx.spawn(async move |this, cx| {
-            let handle = rfd::AsyncFileDialog::new()
-                .set_title(Key::DialogComposeSpec.get(language))
-                .add_filter(
-                    Key::FilterSpec.get(language),
-                    &[auris_session::SPEC_EXTENSION],
-                )
-                .pick_file()
-                .await;
-            let Some(handle) = handle else { return };
-            let path = handle.path().to_path_buf();
-
-            let _ = this.update(cx, |this, cx| {
-                this.compose_file(&path, cx);
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    /// Reads, parses and composes one specification file.
-    ///
-    /// Split out of the dialog so the failure paths are reachable without one: a file that will
-    /// not open, will not parse, or asks for nothing this build can play.
-    fn compose_file(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
-        if self.compose_progress.is_some() {
-            return;
-        }
-        let language = self.language();
-        let shown = path.display().to_string();
-        let path = path.to_path_buf();
-        let revision = self.session.revision();
-        let label = self.t(Key::CmdComposeSong).to_string();
-        let Some((id, cancelled, _)) = self.start_background_command(label, false) else {
-            return;
-        };
-        cx.spawn(async move |this, cx| {
-            let parsed = cx
-                .background_executor()
-                .spawn(async move {
-                    if cancelled.load(Ordering::Relaxed) {
-                        return None;
-                    }
-                    let parsed = auris_session::settings::read_config_text(&path)
-                        .map(|text| SongSpec::parse(&text));
-                    (!cancelled.load(Ordering::Relaxed)).then_some(parsed)
-                })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                if !this.finish_background_command(id) {
-                    return;
-                }
-                if this.session.revision() != revision {
-                    this.set_status(this.t(Key::BackgroundCommandChanged).to_string());
-                    cx.notify();
-                    return;
-                }
-                match parsed {
-                    None => {
-                        this.set_status(this.t(Key::BackgroundCommandCancelled).to_string());
-                    }
-                    Some(Err(error)) => this.set_failed_status(messages::failed(
-                        language,
-                        this.t(Key::CmdComposeSong),
-                        &error.to_string(),
-                    )),
-                    Some(Ok(Ok(spec))) => {
-                        this.compose_spec(&spec, false, cx);
-                    }
-                    Some(Ok(Err(errors))) => {
-                        // Every complaint, in a sheet. They were joined with newlines into the
-                        // status bar, which is one row twenty-two pixels tall: the whole point —
-                        // say all of it at once — was thrown away by where the answer was put.
-                        this.set_failed_status(messages::spec_rejected(language, &shown));
-                        this.open_prompt(crate::ui::prompt::Prompt::notice(
-                            this.t(Key::SpecRejectedTitle),
-                            errors.iter().map(|error| error.to_string().into()),
-                        ));
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
     /// Renders every track alone, measures it, and sets the mix from what came out.
     pub(crate) fn balance_levels(&mut self, cx: &mut Context<Self>) {
         let Some((id, cancelled, progress)) =
@@ -3329,10 +3231,6 @@ impl AurisApp {
         // native binary at the same index, and stale disclosure state must never load it without
         // a new click from the user.
         self.library.forget_plugin_files();
-        if let Some(browser) = self.song_library.as_mut() {
-            browser.tree.forget_plugin_files();
-            browser.reveal = None;
-        }
     }
 
     /// Asks for a track's new name.

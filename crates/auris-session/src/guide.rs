@@ -1656,22 +1656,13 @@ pub mod composition {
     //! The top-level `singer` field selects a voice model path, and `singer_speaker` optionally
     //! names its speaker. The session validates both before replacing the document and assigns
     //! the voice and speaker's timing tables to the generated vocal track in the same undo step.
-    //! The desktop song sheet offers installed voices, a file picker and speaker selection,
-    //! including asynchronous VOICEVOX Engine discovery before any singer track exists. The basic
-    //! view pairs lyrics with style, voice, title, tempo and a brightness/energy XY pad. Detailed
-    //! settings discloses key, meter, groove, seed, the second XY pad and section/part controls;
-    //! toggling the presentation preserves every setting and the active lyrics editor. A separate
-    //! drum area selects one kit source, while melodic parts have their own roster and add control.
-    //! Detailed performance controls can be expanded, and section tempo accepts any BPM in the
-    //! specification's range, with an empty field following the song tempo.
     //!
     //! A part's optional `source` names an exact SoundFont file, bank and patch, or a CLAP/VST3
     //! instrument and its stable plugin id. The session validates these sources before replacing
     //! the document, including hosted instrument activation, and never substitutes another sound.
-    //! Imported picker fonts are cached without changing the open document until composition.
     //! Chosen sources use the existing sampler and hosted track representation for playback and
     //! saving. Collect Assets and asset recovery also update the stored song specification, so
-    //! reopening the sheet and composing again follow the same file as the saved arrangement.
+    //! subsequent composition follows the same file as the saved arrangement.
     //!
     //! [`auris_compose`] turns a text document into notes on a timeline through
     //! [`compose`](auris_compose::compose). Generation is a pure function of the specification
@@ -1702,20 +1693,6 @@ pub mod composition {
     //! defaults, not promises about how a scale must feel. The generator shares modal phrase
     //! shapes, building chords from the selected scale and retaining its characteristic tones
     //! through chord colouring and section arrivals. Explicit `key`/`scale` and `tempo` win.
-    //! The song sheet uses these same choices, while the saved specification contains their
-    //! resolved musical values. Exact key, rhythmic detail and arrangement live in its advanced view.
-    //!
-    //! The song sheet can audition a section's block chords before writing the song.
-    //! [`crate::ChordPreviewJob`] snapshots the request and renders up to eight complete bars
-    //! on a fixed FM keyboard on a worker. The preview bypasses the document's tracks and mixer,
-    //! stops arrangement playback, and works in an empty project. Replacement buffers travel
-    //! back through the engine's retired-data channel; the callback never frees their storage.
-    //! [`crate::ChordPreview::apply_to`] adopts the full section chart as given harmony, including
-    //! explicit chord qualities, while retaining the melody seed and other sections. The GUI
-    //! rejects stale completions after edits, section changes, cancellation or an audio-rate change.
-    //! Storage uses [`auris_core::theory::chart::Chart::to_text`] so a pinned major V in minor
-    //! survives saving and regeneration. Trial candidates do not modify the document or history.
-    //!
     //! A detailed specification can name every musical choice:
     //!
     //! ```text
@@ -1820,15 +1797,6 @@ pub mod composition {
     //! composing it again. The runnable `compose_search` example and `docs/composition-search.md`
     //! show the request and report format.
     //!
-    //! The desktop song sheet captures its inputs and session revision, then runs
-    //! [`search_composition_with_progress`](crate::composition_search::search_composition_with_progress)
-    //! on a worker. Its observer publishes attempt counts and the best density. Changing the
-    //! sheet or document invalidates the run; cancellation keeps the worker busy until the
-    //! current composition finishes. A generation guard prevents a closed sheet's late result
-    //! from reaching a newly opened sheet. Explicit adoption uses the retained score in the
-    //! ordinary source-preparation and balance pipeline, as one undoable composition command;
-    //! playback begins only after successful completion.
-    //!
     //! # Auditioning rendered audio
     //!
     //! Retained renders are auditioned through
@@ -1841,7 +1809,7 @@ pub mod composition {
     //! pause, seek and volume controls through [`OutputPreviewStatus`](crate::OutputPreviewStatus).
     //! These use atomics, never callback locks or allocations, and do not edit the document mixer.
     //! Initial position and volume are queued together with PCM, including muted starts. Completion,
-    //! cancellation and device loss remain terminal; replay queues a fresh request. Both desktop
+    //! cancellation and device loss remain terminal; replay queues a fresh request. Desktop
     //! preview surfaces compose the same player with keyboard-operable seek and volume sliders.
     //!
     //! Workshop auditions retain an [`AuditionTimeline`](crate::AuditionTimeline) with each
@@ -2128,11 +2096,9 @@ pub mod singing {
     //! does not wait for a running render. A cold voice has no cached speaker list yet; an
     //! explicit picker action may load it, while repainting the inspector must not.
     //! Artwork follows a separate path: [`Session::singer_portrait_source`](crate::Session::singer_portrait_source)
-    //! snapshots the selected voice without I/O. The song sheet uses
-    //! [`SingerPortraitSource::for_voice`](crate::SingerPortraitSource::for_voice) before a
-    //! track exists, and takes priority over the inspector while open. Both use the same
-    //! bounded display and asynchronous cache. [`load_singer_portrait`](crate::load_singer_portrait)
-    //! reads its optional image on a worker. VOICEVOX resolves the decoding style's singer
+    //! snapshots the selected voice without I/O. The inspector uses a bounded display and
+    //! asynchronous cache. [`load_singer_portrait`](crate::load_singer_portrait) reads its
+    //! optional image on a worker. VOICEVOX resolves the decoding style's singer
     //! UUID and requests `/singer_info` in URL format, downloading only the selected style's
     //! portrait or its character fallback. The frontend bounds decoded image dimensions, caches
     //! missing artwork and failures too, and only displays results for the current saved source
@@ -2166,7 +2132,7 @@ pub mod singing {
     //! below the selected voicebank, and a saved VOICEVOX connection may contact only a numeric
     //! loopback address. An explicitly loaded model that exceeds those background rules is not
     //! reused by the automatic cache. The inspector applies the same loopback rule before it
-    //! requests VOICEVOX artwork. The manual Sing command, voice picker, and open song sheet
+    //! requests VOICEVOX artwork. The manual Sing command and voice picker
     //! retain ordinary explicit access to the path or service the person chose.
     //!
     //! A backend that predicts pitch also returns the acoustic curve used for decoding, after
@@ -2772,14 +2738,14 @@ pub mod harmony {
     //! with independent expression, and gives the band one shared ensemble group. Guitar
     //! strokes, quiet ghost pickups and solo pitch gestures remain clip transforms; they never
     //! enter the writers or their note digests. The optional `performance` field survives the
-    //! song sheet and `.asong` round trips. Omitting it retains plain lean/wander behavior.
+    //! `.asong` round trips. Omitting it retains plain lean/wander behavior.
     //! Retaking updates inherited ghost/expression seeds without replacing edited controls or
     //! ensemble groups. Singing melody parts keep the singer's separate ornament pipeline.
     //!
     //! The independent `writing_style` field selects the written vocabulary: phrase span,
     //! melodic moves, bass figures, comping rhythm and lyric rhythm. It uses the same palette
     //! names but is stored in `ClipRecipe::style` for regeneration. Changing only `performance`
-    //! still cannot alter the score. Presets select both; the song sheet preserves both fields.
+    //! still cannot alter the score. Presets select both fields.
     //!
     //! [`set_clip_transforms`](crate::Session::set_clip_transforms) replaces the stack whole,
     //! and [`freeze_clip_transforms`](crate::Session::freeze_clip_transforms) is the recipe's

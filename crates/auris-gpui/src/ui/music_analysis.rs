@@ -361,28 +361,6 @@ mod tests {
     }
 
     #[gpui::test]
-    fn the_song_sheet_and_analysis_results_use_separate_windows(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        cx.dispatch_action(crate::actions::OpenAnalysisResults);
-        paint(&app, cx);
-        assert!(cx.debug_bounds("analysis-close").is_none());
-        let mut analysis = analysis_window(&app, cx);
-        assert!(analysis.debug_bounds("analysis-close").is_some());
-        cx.dispatch_action(crate::actions::ComposeSong);
-        paint(&app, cx);
-        app.read_with(cx, |this, _| assert!(this.song_sheet.is_some()));
-
-        click("song-sheet-cancel", cx);
-        app.read_with(cx, |this, _| {
-            assert!(this.song_sheet.is_none());
-            assert!(
-                this.analysis_panel,
-                "closing a composition sheet must leave analysis results open"
-            );
-        });
-    }
-
-    #[gpui::test]
     fn stale_cancelled_and_replaced_documents_do_not_receive_worker_results(
         cx: &mut TestAppContext,
     ) {

@@ -1008,9 +1008,7 @@ fn save_checkpointed(session: &mut Session) -> Result<(), String> {
 
 /// A session with no audio device and no GPU, with the shipped SoundFonts.
 ///
-/// The fonts for the same reason `auris compose` loads them: `compose` here and **Compose a
-/// Song…** in the window have to write the same piece, and half the instruments a piece asks
-/// for are in that library.
+/// Loads the same font library used by the desktop application.
 fn headless() -> Result<Session, String> {
     cancellation::check()?;
     let mut options = SessionOptions::headless()

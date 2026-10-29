@@ -1,4 +1,4 @@
-//! Renders the same block-chord audition used by the song sheet, without an audio device.
+//! Renders a section as block chords without an audio device.
 
 use auris_session::{ChordPreviewJob, prelude::SongSpec};
 use std::{error::Error, path::Path, sync::atomic::AtomicBool};

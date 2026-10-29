@@ -2,12 +2,7 @@
 
 [日本語](composition-intent.ja.md)
 
-In the song sheet, choose a mood, major or minor, and a speed, then create the song.
-For example, **Dark**, **Minor**, and **Slow** asks for a dark minor-key song at 80 BPM.
-**Follow the mood** chooses a scale from the mood and picks a slow, moderate, or fast tempo
-from its energy. **Sound** optionally selects a more specific character, with a plain-language
-description beside the scale name. A selected sound stays fixed when the mood or style changes.
-The style chooses the instruments and form, using newly generated harmony.
+Song specifications accept mood, tonality and pace. The style supplies instruments and form.
 
 | Sound | Scale | Automatic mood example |
 | --- | --- | --- |
@@ -19,12 +14,7 @@ The style chooses the instruments and form, using newly generated harmony.
 | Tense and dark | Phrygian | Tense |
 
 These descriptions are starting points: rhythm, register and instruments also shape the mood.
-The automatic rules use the mood's continuous values, so the advanced mood pads work too.
-An explicit **Major** or **Minor** tonality uses that scale and resets Sound to automatic.
-Choosing a specific sound updates the major/minor family to match; choosing **Automatic** in
-Sound returns the scale to following the mood. The automatic Sound label shows the resolved key.
-
-The same request works in a `.asong` file through the CLI or composition tools:
+The request can be written in a `.asong` file through the CLI or composition tools:
 
 ```toml
 style = "pop-band"
@@ -42,28 +32,7 @@ An explicit `sound` wins over `tonality`, which wins over mood-based scale selec
 An explicit `key` or `scale` wins over both; an explicit `tempo` wins over `pace`.
 `chords` supplies an explicit progression if desired.
 
-The advanced view exposes exact key, chord progressions, arrangement, and performance controls.
-Saved specifications contain the resolved settings, so reopening a song retains the key and
-tempo it was saved with. Choose **Automatic** in Sound to make the scale follow the mood again.
-An exact key entered in the advanced view remains explicit when the mood changes.
-
-## Auditioning chords before composing
-
-The bottom of the song sheet has a section picker and **Preview chords**. It renders the
-first eight bars (or fewer for a short section or a thirty-second limit) as simultaneous
-keyboard chords, with a fixed timbre, velocity and playback level. The section's tempo and
-chord-change timing are retained. Chord names appear in playback order.
-
-**Stop preview** stops sound without discarding the rendered candidate. **Another progression**
-invents an alternative for the selected section. **Use these chords** adopts its complete
-progression, including chord colours, into the draft; **Create song** then uses those chords.
-Adoption does not change other sections or the melody seed. A long section's preview covers
-only its opening, while adoption retains the complete section. Saved specifications keep the
-adopted progression explicit.
-
-Previewing pauses arrangement playback and bypasses the project's mixer. It requires no track
-or SoundFont and makes no document edits. Changing the draft or closing the sheet cancels stale
-audio and render results. Previewing is unavailable during recording.
+## Auditioning chords
 
 For a headless WAV using the same renderer:
 

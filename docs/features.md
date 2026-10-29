@@ -124,7 +124,7 @@ every note you tried to pick up.
 The wheel over the arrangement moves down the tracks; ⇧ turns it sideways along the song, and
 **Ctrl or ⌥** zooms the time axis about the pointer, so the bar being looked at stays where it is.
 
-**No bar takes the wheel.** A fader, a plugin parameter, a dial on the song sheet — every one of
+**No bar takes the wheel.** A fader, a plugin parameter, a clip dial — every one of
 them is swept with the pointer and none of them answers a scroll. They all sit inside panels that
 scroll, and rolling down a column of tracks used to change the level of whichever fader the pointer
 crossed on the way: silently, with no drag to remember having started, and nothing on screen saying
@@ -400,23 +400,10 @@ hear and what the model is told stay one story.
 
 ### Lyrics in a composed song
 
-**Compose → Compose a Song…** accepts lyrics for each section. In the detailed song sheet,
-each section has a multi-line lyrics box alongside the form. Each mora becomes one note,
-and the melody follows the section's harmony and the lyric's spoken pitch accent when the Japanese
-dictionary is available.
-
-An `.asong` specification says the same thing as `lyrics = "..."` on a `[section]`. Click a
-box and it is a real editor in place: Return breaks a phrase, Tab walks to the next
-section, a click lands the caret on the character under it, and every keystroke is already
-on the song sheet — Escape merely puts the keyboard down, because nothing is left
-uncommitted. The margin measures the words as they are typed: each line shows the notes it
-would sing (one per mora), and the box's heading tallies the bars the sung rhythm needs
-against the bars the section has, turning red once the words would outrun it — computed by
-the same reading and the same rhythm Write uses, so the numbers cannot drift from what
-happens. Writing the piece then adds a Vocal track beside the band, one clip per
-playing of each lyrical section, the melody searched over that section's own harmony; a
-chorus sings the same words on every playing, which is what makes it the same chorus. Leave
-a section's box empty and it is instrumental, exactly as before.
+An `.asong` specification accepts `lyrics = "..."` on each section. Each mora becomes
+one note, and the melody follows the section harmony and spoken pitch accent when the
+Japanese dictionary is available. Composition creates a vocal track with one clip for
+each playing of a lyrical section. Empty lyrics leave a section instrumental.
 
 A composed vocal also arrives **ornamented, by rule**: the first note of each phrase scoops
 in, any note held past half a second carries a vibrato that waits out the front of the note

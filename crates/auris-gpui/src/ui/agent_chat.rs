@@ -5686,6 +5686,7 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent = Default::default();
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.models_loaded = true;
