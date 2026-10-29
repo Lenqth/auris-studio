@@ -59,6 +59,36 @@ pub struct Candidate {
     /// Automatic recoveries consumed since the last explicit recovery request.
     #[serde(default)]
     pub recoveries: u32,
+    /// Tool usage across all attempts, retained with the conversation.
+    #[serde(default)]
+    pub tools: std::collections::BTreeMap<String, ToolUsage>,
+}
+
+/// Execution counts for one tool, including unfinished and interrupted calls.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ToolUsage {
+    /// Calls observed starting.
+    pub total: u64,
+    /// Calls that returned successfully.
+    pub succeeded: u64,
+    /// Calls that returned an error.
+    pub failed: u64,
+    /// Calls interrupted before a result was received.
+    pub interrupted: u64,
+}
+
+impl ToolUsage {
+    /// Calls still awaiting a result.
+    pub fn running(&self) -> u64 {
+        self.total
+            .saturating_sub(self.succeeded + self.failed + self.interrupted)
+    }
+
+    /// Finish pending observations without treating cancellation as a tool failure.
+    pub fn interrupt(&mut self) {
+        self.interrupted += self.running();
+    }
 }
 
 /// A comparison is retained even after another round is generated.
@@ -322,6 +352,39 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn interrupted_calls_remain_distinct_from_tool_failures_after_reload() {
+        let mut usage = ToolUsage {
+            total: 5,
+            succeeded: 2,
+            failed: 1,
+            interrupted: 0,
+        };
+        assert_eq!(usage.running(), 2);
+        usage.interrupt();
+        usage.interrupt();
+        let saved = serde_json::to_string(&usage).unwrap();
+        let restored: ToolUsage = serde_json::from_str(&saved).unwrap();
+        assert_eq!(
+            restored,
+            ToolUsage {
+                total: 5,
+                succeeded: 2,
+                failed: 1,
+                interrupted: 2
+            }
+        );
+        assert_eq!(restored.running(), 0);
+    }
+
+    #[test]
+    fn older_candidates_open_without_tool_usage() {
+        let candidate: Candidate = serde_json::from_value(serde_json::json!({
+            "id": 1, "parent": null, "direction": {"title":"Song", "description":"Piano", "instructions":"Compose"},
+            "ready": false, "error": null
+        })).unwrap();
+        assert!(candidate.tools.is_empty());
+    }
     #[test]
     fn attached_files_follow_the_workshop_without_trusting_external_history_paths() {
         let folder = tempfile::tempdir().unwrap();

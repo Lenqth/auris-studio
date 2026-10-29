@@ -2230,6 +2230,7 @@ new のオプション
     AgentToolArguments { en: "Arguments", ja: "引数" }
     AgentToolResult { en: "Result", ja: "実行結果" }
     AgentToolGroup { en: "Tools ({count})", ja: "ツール実行（{count}件）" }
+    WorkshopToolCounts { en: "{total} tool calls · {succeeded} succeeded · {failed} failed · {running} running · {interrupted} interrupted", ja: "ツール計{total}件 · 成功{succeeded} · 失敗{failed} · 実行中{running} · 中断{interrupted}" }
     AgentToolGroupRunning { en: "{count} running", ja: "{count}件実行中" }
     AgentToolGroupFailed { en: "{count} failed", ja: "{count}件失敗" }
     AgentSlashMode { en: "Change approval mode", ja: "承認モードを変更" }

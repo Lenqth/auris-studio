@@ -295,10 +295,42 @@ fn decision(text: &str) -> Result<Decision, String> {
 }
 
 enum JobEvent {
+    Tool(u64, String, Option<bool>),
     Progress(u64, String),
     Preview(u64, Result<Preview, String>),
     Recovering(u64, u32, String),
     Done(u64, Result<Arc<SongCandidate>, String>),
+}
+
+// Backends can repeat call notifications while streaming. Count each invocation once,
+// and keep IDs local to an attempt because a restarted backend may reuse them.
+fn observe_tool_event(
+    candidate: u64,
+    event: &serde_json::Value,
+    calls: &mut BTreeMap<String, bool>,
+    sender: &mpsc::Sender<JobEvent>,
+) {
+    let kind = event["event"].as_str().unwrap_or_default();
+    if !matches!(kind, "call" | "result") {
+        return;
+    }
+    let name = event["tool"].as_str().unwrap_or_default();
+    if name.is_empty() {
+        return;
+    }
+    let id = event["call_id"].as_str().unwrap_or(name).to_owned();
+    if let std::collections::btree_map::Entry::Vacant(entry) = calls.entry(id.clone()) {
+        entry.insert(false);
+        let _ = sender.send(JobEvent::Tool(candidate, name.into(), None));
+    }
+    if kind == "result" && calls.get(&id) == Some(&false) {
+        calls.insert(id, true);
+        let _ = sender.send(JobEvent::Tool(
+            candidate,
+            name.into(),
+            Some(event["ok"] == true),
+        ));
+    }
 }
 struct Owner {
     store: Store,
@@ -324,6 +356,9 @@ impl Owner {
             Document::default()
         });
         for candidate in document.rounds.iter_mut().flat_map(|r| &mut r.candidates) {
+            for usage in candidate.tools.values_mut() {
+                usage.interrupt();
+            }
             if !candidate.ready && candidate.error.is_none() {
                 candidate.error = Some("Production was interrupted; retry this candidate".into());
             }
@@ -428,6 +463,7 @@ impl Owner {
                                     ready: false,
                                     error: None,
                                     recoveries: 0,
+                                    tools: Default::default(),
                                 });
                             }
                             self.snapshot.document.rounds.push(Round {
@@ -444,6 +480,24 @@ impl Owner {
             }
             while let Ok(event) = self.job_receiver.try_recv() {
                 match event {
+                    JobEvent::Tool(id, name, result) if self.jobs.contains_key(&id) => {
+                        if let Some(candidate) = self
+                            .snapshot
+                            .document
+                            .rounds
+                            .iter_mut()
+                            .flat_map(|r| &mut r.candidates)
+                            .find(|c| c.id == id)
+                        {
+                            let usage = candidate.tools.entry(name).or_default();
+                            match result {
+                                None => usage.total += 1,
+                                Some(true) => usage.succeeded += 1,
+                                Some(false) => usage.failed += 1,
+                            }
+                        }
+                        self.publish(true);
+                    }
                     JobEvent::Preview(id, result)
                         if self
                             .jobs
@@ -471,6 +525,9 @@ impl Owner {
                             .find(|c| c.id == id)
                         {
                             candidate.recoveries = count;
+                            for usage in candidate.tools.values_mut() {
+                                usage.interrupt();
+                            }
                             candidate.error = Some(error);
                         }
                         self.snapshot.progress.insert(id, "recovering".into());
@@ -500,6 +557,9 @@ impl Owner {
                                 .flat_map(|r| &mut r.candidates)
                                 .find(|c| c.id == id);
                             if let Some(entry) = entry {
+                                for usage in entry.tools.values_mut() {
+                                    usage.interrupt();
+                                }
                                 match result {
                                     Ok(candidate) => {
                                         entry.ready = true;
@@ -524,6 +584,16 @@ impl Owner {
         self.planner = None;
         for handle in self.handles.drain(..) {
             let _ = handle.join();
+        }
+        for usage in self
+            .snapshot
+            .document
+            .rounds
+            .iter_mut()
+            .flat_map(|r| &mut r.candidates)
+            .flat_map(|c| c.tools.values_mut())
+        {
+            usage.interrupt();
         }
         // Draft commands sent immediately before Drop must still be durable.
         for command in commands.try_iter() {
@@ -732,6 +802,7 @@ impl Owner {
                 if let Some(mut candidate) = candidate {
                     self.snapshot.document.next_id += 1;
                     candidate.id = self.snapshot.document.next_id;
+                    candidate.tools.clear();
                     candidate.ready = false;
                     candidate.error = None;
                     candidate.recoveries = 0;
@@ -1107,6 +1178,7 @@ fn compose(
     let mut edits = 0;
     let mut denials = 0;
     let mut last_failure = String::new();
+    let mut tool_calls = BTreeMap::new();
     let completion = loop {
         if cancel.load(Ordering::Acquire) {
             return Err("Cancelled".into());
@@ -1124,6 +1196,7 @@ fn compose(
             }
             Err(_) => return Err("Candidate worker stopped".into()),
         };
+        observe_tool_event(candidate.id, &event, &mut tool_calls, sender);
         match event["event"].as_str().unwrap_or_default() {
             "permission" => {
                 let allowed = auris_session::agent_policy::Operation::parse(
@@ -1312,6 +1385,41 @@ fn execute(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tool_observations_count_parallel_calls_once_and_accept_result_only_events() {
+        use super::*;
+        let (sender, receiver) = mpsc::channel();
+        let mut calls = BTreeMap::new();
+        for event in [
+            json!({"event":"call","call_id":"a","tool":"edit_notes"}),
+            json!({"event":"call","call_id":"a","tool":"edit_notes"}),
+            json!({"event":"call","call_id":"b","tool":"edit_notes"}),
+            json!({"event":"result","call_id":"a","tool":"edit_notes","ok":true}),
+            json!({"event":"result","call_id":"a","tool":"edit_notes","ok":true}),
+            json!({"event":"result","call_id":"b","tool":"edit_notes","ok":false}),
+            json!({"event":"result","call_id":"c","tool":"inspect_project","ok":true}),
+        ] {
+            observe_tool_event(1, &event, &mut calls, &sender);
+        }
+        let observed: Vec<_> = receiver
+            .try_iter()
+            .map(|event| match event {
+                JobEvent::Tool(id, name, result) => (id, name, result),
+                _ => panic!("Expected a tool observation"),
+            })
+            .collect();
+        assert_eq!(
+            observed,
+            vec![
+                (1, "edit_notes".into(), None),
+                (1, "edit_notes".into(), None),
+                (1, "edit_notes".into(), Some(true)),
+                (1, "edit_notes".into(), Some(false)),
+                (1, "inspect_project".into(), None),
+                (1, "inspect_project".into(), Some(true)),
+            ]
+        );
+    }
     use super::*;
     #[test]
     #[ignore = "real model inference; requires AURIS_WORKSHOP_EVAL_OUTPUT and AURIS_WORKSHOP_EVAL_MODEL"]
@@ -1614,6 +1722,7 @@ mod tests {
             ready: false,
             error: None,
             recoveries: 0,
+            tools: Default::default(),
             direction: Direction {
                 title: "Test".into(),
                 description: "A short instrumental".into(),
@@ -2016,9 +2125,26 @@ mod tests {
         assert!(dir.path().join("1/song/song.auris").is_file());
         assert_eq!(seen.lock().unwrap().len(), 5);
         assert!(seen.lock().unwrap()[1].contains("worker_lifetime"));
+        let events: Vec<_> = receiver.try_iter().collect();
+        let completed: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                JobEvent::Tool(_, name, Some(ok)) => Some((name.as_str(), *ok)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            completed,
+            vec![
+                ("production_record", true),
+                ("add_track", true),
+                ("generate_phrase", true),
+                ("inspect_audio", true)
+            ]
+        );
         assert!(
-            receiver
-                .try_iter()
+            events
+                .iter()
                 .any(|e| matches!(e, JobEvent::Progress(_, stage) if stage == "compose"))
         );
     }

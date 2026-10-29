@@ -4073,6 +4073,22 @@ impl AurisApp {
             }
             _ => div().child(text).into_any_element(),
         };
+        let body = if let ChatEntry::Tool { name, .. } = entry {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .min_w_0()
+                .child(icon(
+                    super::icons::tool_icon(name),
+                    theme.atelier.typography.size_sm,
+                    colour,
+                ))
+                .child(div().flex_1().min_w_0().child(body))
+                .into_any_element()
+        } else {
+            body
+        };
         div()
             .id(("agent-line", index))
             .debug_selector(move || format!("agent-line-{index}"))

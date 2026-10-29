@@ -23,6 +23,15 @@ fn title_of(label: &str) -> String {
     label.trim_end_matches(['…', '.']).to_owned()
 }
 
+fn tool_counts(template: &str, usage: &auris_session::workshop::ToolUsage) -> String {
+    template
+        .replace("{total}", &usage.total.to_string())
+        .replace("{succeeded}", &usage.succeeded.to_string())
+        .replace("{failed}", &usage.failed.to_string())
+        .replace("{running}", &usage.running().to_string())
+        .replace("{interrupted}", &usage.interrupted.to_string())
+}
+
 #[path = "song_workshop/chat_input.rs"]
 mod input;
 mod input_assist;
@@ -795,6 +804,20 @@ impl AurisApp {
                         ));
                         continue;
                     }
+                    let mut usage = auris_session::workshop::ToolUsage::default();
+                    for tool in round.candidates.iter().flat_map(|c| c.tools.values()) {
+                        usage.total += tool.total;
+                        usage.succeeded += tool.succeeded;
+                        usage.failed += tool.failed;
+                        usage.interrupted += tool.interrupted;
+                    }
+                    if usage.total > 0 {
+                        transcript = transcript.child(text_panel(
+                            Label::new(tool_counts(self.t(Key::WorkshopToolCounts), &usage))
+                                .size(TextSize::Small),
+                            &theme,
+                        ));
+                    }
                     let mut cards = div()
                         .id(("song-candidates", round_index))
                         .w_full()
@@ -1185,6 +1208,55 @@ impl AurisApp {
                 .text_size(theme.atelier.typography.size_sm)
                 .text_color(theme.text_muted),
             );
+        }
+        if !candidate.tools.is_empty() {
+            let mut total = auris_session::workshop::ToolUsage::default();
+            for usage in candidate.tools.values() {
+                total.total += usage.total;
+                total.succeeded += usage.succeeded;
+                total.failed += usage.failed;
+                total.interrupted += usage.interrupted;
+            }
+            let mut tools = div()
+                .flex()
+                .flex_col()
+                .gap(spacing.xs)
+                .debug_selector(move || format!("song-candidate-tools-{index}"))
+                .child(
+                    Label::new(tool_counts(self.t(Key::WorkshopToolCounts), &total))
+                        .size(TextSize::Small),
+                );
+            for (name, usage) in &candidate.tools {
+                tools = tools.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(spacing.sm)
+                        .min_w_0()
+                        .child(super::icons::icon(
+                            super::icons::tool_icon(name),
+                            theme.atelier.typography.size_sm,
+                            if usage.running() > 0 {
+                                colors.agent
+                            } else {
+                                theme.text_muted
+                            },
+                        ))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_size(theme.atelier.typography.size_sm)
+                                .child(div().child(name.clone()))
+                                .child(
+                                    div()
+                                        .text_color(theme.text_muted)
+                                        .child(tool_counts(self.t(Key::WorkshopToolCounts), usage)),
+                                ),
+                        ),
+                );
+            }
+            card = card.child(tools);
         }
         card = card.child(
             div()
@@ -1757,6 +1829,7 @@ mod tests {
                     ready: false,
                     error: None,
                     recoveries: 0,
+                    tools: Default::default(),
                     direction: Direction {
                         title: "夜の散歩".into(),
                         description: "静かなピアノ\n柔らかな弦楽器".into(),
@@ -1850,6 +1923,7 @@ mod tests {
                         ready: false,
                         error: None,
                         recoveries: 0,
+                        tools: Default::default(),
                         direction: Direction {
                             title: format!("Candidate {id}"),
                             description: "Piano and strings".into(),
@@ -1860,6 +1934,15 @@ mod tests {
                     .collect(),
             });
             snapshot.progress.insert(0, "melody".into());
+            snapshot.document.rounds[0].candidates[0].tools.insert(
+                "edit_notes".into(),
+                auris_session::workshop::ToolUsage {
+                    total: 3,
+                    succeeded: 1,
+                    failed: 1,
+                    interrupted: 0,
+                },
+            );
             snapshot.planning = true;
         });
         for width in [1200.0, 800.0] {
@@ -1872,9 +1955,27 @@ mod tests {
             assert!(a.right() < b.left() && b.right() < c.left());
             assert!(a.size.width >= gpui::px(300.0));
             assert!(cx.debug_bounds("song-candidate-activity-0").is_some());
+            assert!(cx.debug_bounds("song-candidate-tools-0").is_some());
             assert!(cx.debug_bounds("song-candidate-activity-1").is_none());
             assert!(cx.debug_bounds("song-planning-activity").is_some());
         }
+        app.update(cx, |this, _| {
+            let snapshot = this
+                .song_workshop
+                .as_mut()
+                .unwrap()
+                .snapshot
+                .as_mut()
+                .unwrap();
+            snapshot.progress.clear();
+            snapshot.document.rounds[0].candidates[0]
+                .tools
+                .get_mut("edit_notes")
+                .unwrap()
+                .interrupt();
+        });
+        crate::harness::paint(&app, cx);
+        assert!(cx.debug_bounds("song-candidate-tools-0").is_some());
     }
 
     #[gpui::test]
@@ -2032,6 +2133,7 @@ mod tests {
                     ready: false,
                     error: None,
                     recoveries: 0,
+                    tools: Default::default(),
                     direction: Direction {
                         title: "Draft".into(),
                         description: "A melody being written".into(),
