@@ -55,6 +55,21 @@ strings! {
     WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
     WorkshopForget { en: "Clear preference history", ja: "好みの履歴を消去" }
     WorkshopForgetChoice { en: "Forget this choice", ja: "この選択を記録から除く" }
+    PreferenceHeading { en: "Song personalization", ja: "曲作りのパーソナライズ" }
+    PreferenceTab { en: "Personalization", ja: "パーソナライズ" }
+    PreferenceHelp { en: "Choices from “Create a song with AI” are stored locally across projects. Edit the request or selected alternative below. Changes apply to your next request; current instructions take priority.", ja: "「AIで曲を作る」での選択を、プロジェクト共通の好みとしてこの端末に保存しています。依頼内容や選んだ候補を修正できます。変更は次の依頼から使われ、今回の指示が優先されます。" }
+    PreferenceEmpty { en: "No choices recorded yet. Choose a song with preference recording enabled to build your history.", ja: "記録された選択はありません。好みの記録を有効にして曲を選ぶと、ここに履歴が表示されます。" }
+    PreferenceRefresh { en: "Refresh history", ja: "履歴を再読み込み" }
+    PreferenceEdit { en: "Edit choice", ja: "選択を編集" }
+    PreferenceRequest { en: "Request and context", ja: "依頼内容・背景" }
+    PreferenceChosen { en: "Selected alternative", ja: "選んだ候補" }
+    PreferenceSave { en: "Save choice", ja: "選択を保存" }
+    PreferenceLoading { en: "Loading preferences…", ja: "好みの履歴を読み込み中…" }
+    PreferenceSaving { en: "Saving preferences…", ja: "好みの履歴を保存中…" }
+    PreferenceResetQuestion { en: "Clear all recorded choices? This cannot be undone. Songs and conversations are kept; preference recording stays as it is.", ja: "記録した選択をすべて消去しますか？ 元には戻せません。曲と会話は残り、好みの記録の有効・無効は変わりません。" }
+    PreferenceInvalid { en: "Enter a request and select an alternative.", ja: "依頼内容を入力し、候補を選んでください。" }
+    PreferenceUnavailable { en: "Selected alternative is unavailable", ja: "選んだ候補が見つかりません" }
+    PreferenceSaved { en: "Preferences saved", ja: "好みの履歴を保存しました" }
     WorkshopHarmonyProgress { en: "Writing the chord progression", ja: "コード進行を決めています" }
     WorkshopMelodyProgress { en: "Writing the melody", ja: "メロディラインを作っています" }
     WorkshopArrangeProgress { en: "Editing the arrangement", ja: "編曲を進めています" }
@@ -852,6 +867,9 @@ strings! {
     CmdPanic { en: "Panic", ja: "パニック" }
     CmdNewProject { en: "New Project", ja: "新規プロジェクト" }
     CmdOpenProject { en: "Open Project", ja: "プロジェクトを開く" }
+    CmdCloseTab { en: "Close tab", ja: "タブを閉じる" }
+    CmdNextTab { en: "Next tab", ja: "次のタブ" }
+    CmdPreviousTab { en: "Previous tab", ja: "前のタブ" }
     CmdComposeSong { en: "Compose a Song…", ja: "曲を作る…" }
     CmdAccompanyMelody { en: "Accompany the Melody", ja: "旋律に伴奏をつける" }
     CmdComposeFromSpec { en: "Compose from Specification…", ja: "仕様ファイルから作曲…" }

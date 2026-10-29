@@ -7,8 +7,8 @@ use crate::ui::widgets::button_with_content;
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
     selected_connection: auris_agent::ModelConnection,
-    pub(super) fields: [TextField; 7],
-    pub(super) focus: [FocusHandle; 7],
+    pub(super) fields: [TextField; 8],
+    pub(super) focus: [FocusHandle; 8],
     pub(super) active: Option<usize>,
     expanded_providers: [bool; 4],
     provider_status: [Option<auris_agent::ProviderStatus>; 5],
@@ -23,6 +23,7 @@ pub(super) struct AgentSettings {
 
 impl AgentSettings {
     pub(super) const PROMPT_FIELD: usize = 6;
+    pub(super) const PREFERENCE_FIELD: usize = 7;
 
     pub(super) fn new(prefs: AgentPreferences, cx: &mut Context<SettingsWindow>) -> Self {
         let selected_connection = auris_agent::ModelConnection::from_preferences(&prefs);
@@ -44,8 +45,10 @@ impl AgentSettings {
                 TextField::new(prefs.opencode_path.clone()),
                 TextField::new(prefs.antigravity_path.clone()),
                 prompt,
+                TextField::new(String::new()),
             ],
             focus: [
+                cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
@@ -305,33 +308,39 @@ impl SettingsWindow {
         let Some(index) = self.agent.active else {
             return false;
         };
-        if index == AgentSettings::PROMPT_FIELD {
-            self.agent.prompt_viewport.borrow_mut().follow_caret();
+        if index == AgentSettings::PREFERENCE_FIELD && self.personalization.busy {
+            return event.keystroke.key != "tab";
+        }
+        if index >= AgentSettings::PROMPT_FIELD {
+            if index == AgentSettings::PREFERENCE_FIELD {
+                self.personalization.viewport.borrow_mut().follow_caret();
+            } else {
+                self.agent.prompt_viewport.borrow_mut().follow_caret();
+            }
             let key = event.keystroke.key.as_str();
             let shift = event.keystroke.modifiers.shift;
             let secondary = event.keystroke.modifiers.secondary();
-            if self.agent.fields[AgentSettings::PROMPT_FIELD]
-                .marked()
-                .is_some()
-            {
+            if self.agent.fields[index].marked().is_some() {
                 return false;
             }
             match key {
-                "enter" if secondary => self.apply_agent(cx),
-                "enter" => self.agent.fields[AgentSettings::PROMPT_FIELD].insert("\n"),
-                "up" => self.agent.fields[AgentSettings::PROMPT_FIELD].move_up(shift),
-                "down" => self.agent.fields[AgentSettings::PROMPT_FIELD].move_down(shift),
-                "home" if secondary => {
-                    self.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(0, shift)
+                "enter" if secondary => {
+                    if index == AgentSettings::PREFERENCE_FIELD {
+                        self.save_preference(cx);
+                    } else {
+                        self.apply_agent(cx);
+                    }
                 }
+                "enter" => self.agent.fields[index].insert("\n"),
+                "up" => self.agent.fields[index].move_up(shift),
+                "down" => self.agent.fields[index].move_down(shift),
+                "home" if secondary => self.agent.fields[index].place_caret(0, shift),
                 "end" if secondary => {
-                    let end = self.agent.fields[AgentSettings::PROMPT_FIELD]
-                        .content()
-                        .len();
-                    self.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(end, shift);
+                    let end = self.agent.fields[index].content().len();
+                    self.agent.fields[index].place_caret(end, shift);
                 }
                 _ => {
-                    let handled = self.agent.fields[AgentSettings::PROMPT_FIELD]
+                    let handled = self.agent.fields[index]
                         .apply_key_with_clipboard(key, shift, secondary, true, cx)
                         != KeyEffect::Ignored;
                     if handled {
@@ -419,13 +428,30 @@ impl SettingsWindow {
             .into_any_element()
     }
 
-    fn agent_prompt(&self, cx: &mut Context<Self>) -> AnyElement {
-        let field = &self.agent.fields[AgentSettings::PROMPT_FIELD];
-        let focus = self.agent.focus[AgentSettings::PROMPT_FIELD].clone();
+    pub(super) fn agent_prompt(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        let viewport = if index == AgentSettings::PREFERENCE_FIELD {
+            self.personalization.viewport.clone()
+        } else {
+            self.agent.prompt_viewport.clone()
+        };
+        let click_viewport = viewport.clone();
+        let field = &self.agent.fields[index];
+        let focus = self.agent.focus[index].clone();
         let pointer_focus = focus.clone();
         div()
-            .id("agent-system-prompt")
-            .debug_selector(|| "agent-system-prompt".to_owned())
+            .id(if index == AgentSettings::PREFERENCE_FIELD {
+                "preference-context"
+            } else {
+                "agent-system-prompt"
+            })
+            .debug_selector(move || {
+                if index == AgentSettings::PREFERENCE_FIELD {
+                    "preference-context"
+                } else {
+                    "agent-system-prompt"
+                }
+                .to_owned()
+            })
             .track_focus(&focus)
             .tab_index(0)
             .w_full()
@@ -442,43 +468,48 @@ impl SettingsWindow {
                 field.content().to_owned().into(),
                 field.selection(),
                 field.marked(),
-                self.agent.active == Some(AgentSettings::PROMPT_FIELD),
+                self.agent.active == Some(index)
+                    && !(index == AgentSettings::PREFERENCE_FIELD && self.personalization.busy),
                 focus,
                 cx.entity(),
                 self.theme.clone(),
-                self.agent.prompt_viewport.clone(),
+                viewport,
             ))
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                    if this.agent.fields[AgentSettings::PROMPT_FIELD]
-                        .marked()
-                        .is_none()
-                        && let Some(offset) = this.agent.prompt_viewport.borrow().offset_at(
+                    if this.agent.fields[index].marked().is_none()
+                        && let Some(offset) = click_viewport.borrow().offset_at(
                             window,
-                            this.agent.fields[AgentSettings::PROMPT_FIELD].content(),
+                            this.agent.fields[index].content(),
                             event.position,
                         )
                     {
-                        this.agent.fields[AgentSettings::PROMPT_FIELD]
-                            .place_caret(offset, event.modifiers.shift);
+                        this.agent.fields[index].place_caret(offset, event.modifiers.shift);
                     }
-                    this.agent.active = Some(AgentSettings::PROMPT_FIELD);
+                    this.agent.active = Some(index);
                     this.editing_search = false;
                     window.focus(&pointer_focus);
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
-                this.agent.prompt_viewport.borrow_mut().scroll_by(
-                    event
-                        .delta
-                        .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
-                        .y,
-                );
-                cx.stop_propagation();
-                cx.notify();
-            }))
+            .on_scroll_wheel(
+                cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
+                    let viewport = if index == AgentSettings::PREFERENCE_FIELD {
+                        &this.personalization.viewport
+                    } else {
+                        &this.agent.prompt_viewport
+                    };
+                    viewport.borrow_mut().scroll_by(
+                        event
+                            .delta
+                            .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
+                            .y,
+                    );
+                    cx.stop_propagation();
+                    cx.notify();
+                }),
+            )
             .into_any_element()
     }
 
@@ -792,7 +823,7 @@ impl SettingsWindow {
                 .into_any_element(),
         );
         rows.push(note(self.t(Key::AgentSystemPromptHelp), &theme));
-        rows.push(self.agent_prompt(cx));
+        rows.push(self.agent_prompt(AgentSettings::PROMPT_FIELD, cx));
         rows.push(
             button(
                 "agent-prompt-reset",

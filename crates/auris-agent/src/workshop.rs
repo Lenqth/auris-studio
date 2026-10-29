@@ -60,6 +60,8 @@ pub enum Command {
     ThreadDraft(String, String, Vec<PathBuf>),
     /// Enable or disable cross-project preference evidence.
     Memory(bool),
+    /// Refresh preferences edited in another application surface.
+    ReloadPreferences,
     /// Forget all recorded preferences.
     Forget,
     /// Remove one incorrect or no-longer-relevant preference observation.
@@ -1008,6 +1010,10 @@ impl Owner {
                     }
                 }
             }
+            Command::ReloadPreferences => match auris_session::workshop::load_preferences() {
+                Ok(p) => self.snapshot.preferences = p,
+                Err(e) => self.snapshot.error = Some(e),
+            },
             Command::Memory(enabled) => {
                 match auris_session::workshop::update_preferences(|p| p.enabled = enabled) {
                     Ok(p) => self.snapshot.preferences = p,

@@ -35,6 +35,7 @@ mod appearance_editor;
 #[cfg(test)]
 mod appearance_tests;
 mod dropdown;
+mod personalization;
 mod search;
 mod toolbar;
 
@@ -52,6 +53,8 @@ pub enum SettingsTab {
     Keys,
     /// Language-model connection and generation settings.
     Agent,
+    /// Locally recorded song choices and their corrections.
+    Personalization,
 }
 
 /// The devices the host could see when the window opened.
@@ -82,6 +85,7 @@ pub struct SettingsWindow {
     font_families: Vec<String>,
     tab: SettingsTab,
     agent: agent::AgentSettings,
+    personalization: personalization::Personalization,
     /// What the host can see, refreshed on request or when the audio host changes.
     devices: AudioDevices,
     hosts: Vec<String>,
@@ -221,6 +225,7 @@ impl SettingsWindow {
             font_families,
             tab: SettingsTab::General,
             agent: agent::AgentSettings::new(agent, cx),
+            personalization: Default::default(),
             devices,
             hosts: Session::audio_hosts(),
             audio,
@@ -357,7 +362,7 @@ impl SettingsWindow {
         cx.notify();
     }
 
-    /// The navigation column: search first, then the four pages, then the setup guide.
+    /// The navigation column: search first, then settings pages, then the setup guide.
     ///
     /// Atelier's preferences layout: a leading `Sidebar` of list rows instead of a row of
     /// latched buttons squeezed into the title bar, so every page is named in full at every
@@ -402,6 +407,12 @@ impl SettingsWindow {
                 SettingsTab::Agent,
             ))
             .child(page(
+                "tab-personalization",
+                Key::PreferenceTab,
+                IconName::Music,
+                SettingsTab::Personalization,
+            ))
+            .child(page(
                 "tab-keys",
                 Key::TabKeys,
                 IconName::Keyboard,
@@ -421,13 +432,14 @@ impl SettingsWindow {
 
     /// The page's own heading: what it is called and what it covers.
     fn render_page_header(&self) -> Option<AnyElement> {
-        if self.searching() {
+        if self.searching() || self.tab == SettingsTab::Personalization {
             return None;
         }
         let (title, description) = match self.tab {
             SettingsTab::General => (Key::TabGeneral, Key::SettingsGeneralHelp),
             SettingsTab::Audio => (Key::TabAudio, Key::SettingsAudioHelp),
             SettingsTab::Agent => (Key::AgentPanel, Key::SettingsAgentHelp),
+            SettingsTab::Personalization => (Key::PreferenceHeading, Key::PreferenceHelp),
             SettingsTab::Keys => (Key::TabKeys, Key::SettingsKeysHelp),
         };
         Some(
@@ -1784,7 +1796,22 @@ impl SettingsWindow {
             return true;
         }
         self.sync_text_focus(window);
+        if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD)
+            && event.keystroke.key == "escape"
+            && self.agent.fields[agent::AgentSettings::PREFERENCE_FIELD]
+                .marked()
+                .is_none()
+            && !self.personalization.busy
+        {
+            self.cancel_preference(window, cx);
+            return true;
+        }
         if self.agent.active.is_some() && self.agent_key(event, cx) {
+            if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD)
+                && self.personalization.busy
+            {
+                window.focus(&self.search_focus);
+            }
             return true;
         }
         if self.agent.active.is_none()
@@ -1899,8 +1926,16 @@ fn output_device_preferences(
 
 impl HasTextField for SettingsWindow {
     fn text_changed(&mut self) {
-        if self.agent.active == Some(agent::AgentSettings::PROMPT_FIELD) {
-            self.agent.prompt_viewport.borrow_mut().follow_caret();
+        if self
+            .agent
+            .active
+            .is_some_and(|index| index >= agent::AgentSettings::PROMPT_FIELD)
+        {
+            if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD) {
+                self.personalization.viewport.borrow_mut().follow_caret();
+            } else {
+                self.agent.prompt_viewport.borrow_mut().follow_caret();
+            }
             return;
         }
         if self.editing_search {
@@ -1917,6 +1952,9 @@ impl HasTextField for SettingsWindow {
 
     fn field(&mut self) -> Option<&mut TextField> {
         if let Some(index) = self.agent.active {
+            if index == agent::AgentSettings::PREFERENCE_FIELD && self.personalization.busy {
+                return None;
+            }
             return Some(&mut self.agent.fields[index]);
         }
         if !self.editing_search {
@@ -1929,6 +1967,9 @@ impl HasTextField for SettingsWindow {
 
     fn readable_field(&self) -> Option<&TextField> {
         if let Some(index) = self.agent.active {
+            if index == agent::AgentSettings::PREFERENCE_FIELD && self.personalization.busy {
+                return None;
+            }
             return Some(&self.agent.fields[index]);
         }
         if !self.editing_search {
@@ -1973,6 +2014,7 @@ impl Render for SettingsWindow {
                 SettingsTab::Audio => self.render_audio(cx),
                 SettingsTab::Keys => self.render_keys(cx),
                 SettingsTab::Agent => self.render_agent(cx),
+                SettingsTab::Personalization => self.render_personalization(cx),
             }
         };
         let status = self.status.clone();
@@ -2161,6 +2203,7 @@ mod tests {
             ("tab-general", SettingsTab::General),
             ("tab-audio", SettingsTab::Audio),
             ("tab-agent", SettingsTab::Agent),
+            ("tab-personalization", SettingsTab::Personalization),
             ("tab-keys", SettingsTab::Keys),
         ] {
             // The pages are a column under the title bar, in reading order, inside the window.

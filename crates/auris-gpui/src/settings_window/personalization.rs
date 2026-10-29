@@ -1,0 +1,418 @@
+//! Local song-choice evidence, edited independently from model connection settings.
+use super::*;
+use auris_session::workshop::{self, Preferences, Selection};
+
+#[derive(Default)]
+pub(super) struct Personalization {
+    preferences: Option<Preferences>,
+    pub(super) busy: bool,
+    error: Option<String>,
+    original: Option<Selection>,
+    chosen: usize,
+    confirm_reset: bool,
+    pub(super) viewport: std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
+}
+
+impl SettingsWindow {
+    pub(super) fn cancel_preference(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.personalization.original = None;
+        self.personalization.error = None;
+        self.agent.active = None;
+        self.editing_search = true;
+        window.focus(&self.search_focus);
+        cx.notify();
+    }
+    fn preference_operation(
+        &mut self,
+        save: bool,
+        operation: impl FnOnce() -> Result<Preferences, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        if self.personalization.busy {
+            return;
+        }
+        self.personalization.busy = true;
+        self.personalization.error = None;
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { operation() })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.personalization.busy = false;
+                match result {
+                    Ok(preferences) => {
+                        this.personalization.preferences = Some(preferences);
+                        this.personalization.original = None;
+                        this.personalization.confirm_reset = false;
+                        if save {
+                            this.status = this.t(Key::PreferenceSaved).to_owned();
+                            let _ = this.app.update(cx, |app, cx| {
+                                if let Some(workshop) = &app.song_workshop {
+                                    workshop
+                                        .send(auris_agent::workshop::Command::ReloadPreferences);
+                                }
+                                cx.notify();
+                            });
+                        }
+                    }
+                    Err(error) => this.personalization.error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub(super) fn save_preference(&mut self, cx: &mut Context<Self>) {
+        let Some(original) = self.personalization.original.clone() else {
+            return;
+        };
+        let context = self.agent.fields[agent::AgentSettings::PREFERENCE_FIELD]
+            .content()
+            .to_owned();
+        let chosen = self.personalization.chosen;
+        if context.trim().is_empty() || chosen >= original.alternatives.len() {
+            self.personalization.error = Some(self.t(Key::PreferenceInvalid).to_owned());
+            cx.notify();
+            return;
+        }
+        self.preference_operation(
+            true,
+            move || workshop::revise_preference(&original, Some((context, chosen))),
+            cx,
+        );
+    }
+
+    pub(super) fn render_personalization(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        if self.personalization.preferences.is_none()
+            && !self.personalization.busy
+            && self.personalization.error.is_none()
+        {
+            self.preference_operation(false, workshop::load_preferences, cx);
+        }
+        let busy = self.personalization.busy;
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .min_w_0()
+            .gap_3()
+            .child(
+                SectionHeader::new(self.t(Key::PreferenceHeading)).action(
+                    Button::new("preferences-refresh", self.t(Key::PreferenceRefresh))
+                        .ghost()
+                        .disabled(busy || self.personalization.original.is_some())
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.preference_operation(false, workshop::load_preferences, cx)
+                        })),
+                ),
+            )
+            .child(note(self.t(Key::PreferenceHelp), &self.theme));
+        if busy {
+            body = body.child(note(
+                self.t(if self.personalization.preferences.is_some() {
+                    Key::PreferenceSaving
+                } else {
+                    Key::PreferenceLoading
+                }),
+                &self.theme,
+            ));
+        }
+        if let Some(error) = &self.personalization.error {
+            body = body.child(div().text_color(self.theme.danger).child(error.clone()));
+        }
+        let Some(preferences) = self.personalization.preferences.clone() else {
+            return body.into_any_element();
+        };
+        body = body.child(
+            FormField::new(self.t(Key::WorkshopMemory)).beside().child(
+                Switch::new("preferences-enabled", preferences.enabled)
+                    .disabled(busy || self.personalization.original.is_some())
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let enabled = !preferences.enabled;
+                        this.preference_operation(
+                            true,
+                            move || workshop::update_preferences(|p| p.enabled = enabled),
+                            cx,
+                        );
+                    })),
+            ),
+        );
+        if let Some(original) = self.personalization.original.clone() {
+            let choices = original
+                .alternatives
+                .iter()
+                .enumerate()
+                .map(|(i, d)| (i, d.title.clone(), d.description.clone()))
+                .collect();
+            let chosen = self.personalization.chosen;
+            let dropdown = self.dropdown(
+                "preference-chosen",
+                choices,
+                &chosen,
+                |this, chosen, cx| {
+                    if !this.personalization.busy {
+                        this.personalization.chosen = chosen;
+                    }
+                    cx.notify();
+                },
+                cx,
+            );
+            body = body
+                .child(section_title(self.t(Key::PreferenceRequest), &self.theme))
+                .child(self.agent_prompt(agent::AgentSettings::PREFERENCE_FIELD, cx))
+                .child(section_title(self.t(Key::PreferenceChosen), &self.theme))
+                .child(dropdown)
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            Button::new("preference-save", self.t(Key::PreferenceSave))
+                                .disabled(busy)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.save_preference(cx);
+                                    if this.personalization.busy {
+                                        window.focus(&this.search_focus);
+                                    }
+                                })),
+                        )
+                        .child(
+                            Button::new("preference-cancel", self.t(Key::Cancel))
+                                .ghost()
+                                .disabled(busy)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.cancel_preference(window, cx)
+                                })),
+                        ),
+                );
+        } else if preferences.selections.is_empty() {
+            body = body.child(note(self.t(Key::PreferenceEmpty), &self.theme));
+        } else {
+            for (index, selection) in preferences.selections.iter().enumerate().rev() {
+                let chosen = selection.alternatives.get(selection.chosen);
+                let original = selection.clone();
+                let remove = original.clone();
+                body = body.child(
+                    ListItem::new(
+                        ("preference-row", index),
+                        chosen
+                            .map(|d| d.title.clone())
+                            .unwrap_or_else(|| self.t(Key::PreferenceUnavailable).to_owned()),
+                    )
+                    .description(selection.context.clone()),
+                );
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap_2()
+                        .child(
+                            Button::new(("preference-edit", index), self.t(Key::PreferenceEdit))
+                                .ghost()
+                                .disabled(busy)
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.agent.fields[agent::AgentSettings::PREFERENCE_FIELD] =
+                                        TextField::new(original.context.clone());
+                                    this.personalization.chosen = original.chosen;
+                                    this.personalization.original = Some(original.clone());
+                                    this.agent.active =
+                                        Some(agent::AgentSettings::PREFERENCE_FIELD);
+                                    this.editing_search = false;
+                                    this.personalization.viewport.borrow_mut().follow_caret();
+                                    window.focus(
+                                        &this.agent.focus[agent::AgentSettings::PREFERENCE_FIELD],
+                                    );
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new(
+                                ("preference-remove", index),
+                                self.t(Key::WorkshopForgetChoice),
+                            )
+                            .ghost()
+                            .disabled(busy)
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    let original = remove.clone();
+                                    this.preference_operation(
+                                        true,
+                                        move || workshop::revise_preference(&original, None),
+                                        cx,
+                                    );
+                                },
+                            )),
+                        ),
+                );
+                if let Some(chosen) = chosen {
+                    body = body.child(note(&chosen.description, &self.theme));
+                }
+            }
+        }
+        if self.personalization.confirm_reset {
+            body = body
+                .child(note(self.t(Key::PreferenceResetQuestion), &self.theme))
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            Button::new("preferences-reset-confirm", self.t(Key::WorkshopForget))
+                                .variant(atelier::ButtonVariant::Danger)
+                                .disabled(busy)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.preference_operation(
+                                        true,
+                                        || workshop::update_preferences(|p| p.selections.clear()),
+                                        cx,
+                                    );
+                                })),
+                        )
+                        .child(
+                            Button::new("preferences-reset-cancel", self.t(Key::Cancel))
+                                .ghost()
+                                .disabled(busy)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.personalization.confirm_reset = false;
+                                    cx.notify();
+                                })),
+                        ),
+                );
+        } else {
+            body = body.child(
+                Button::new("preferences-reset", self.t(Key::WorkshopForget))
+                    .ghost()
+                    .disabled(
+                        busy || preferences.selections.is_empty()
+                            || self.personalization.original.is_some(),
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.personalization.confirm_reset = true;
+                        cx.notify();
+                    })),
+            );
+        }
+        body.into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn preference_history_can_be_corrected_removed_and_reset(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        let original = Selection {
+            conversation: "settings-test".into(),
+            candidate: 1,
+            round: 1,
+            context: "A calm theme".into(),
+            chosen: 0,
+            alternatives: vec![
+                workshop::Direction {
+                    title: "Piano".into(),
+                    description: "Sparse piano".into(),
+                    instructions: "Compose piano".into(),
+                    protected_tracks: vec![],
+                },
+                workshop::Direction {
+                    title: "Strings".into(),
+                    description: "Warm strings".into(),
+                    instructions: "Compose strings".into(),
+                    protected_tracks: vec![],
+                },
+            ],
+        };
+        workshop::update_preferences(|p| {
+            *p = Preferences::default();
+            p.record(original.clone());
+        })
+        .unwrap();
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(1200.0), px(1800.0)));
+        crate::harness::click("tab-personalization", cx);
+        cx.run_until_parked();
+        crate::harness::click("preference-edit-0", cx);
+        cx.simulate_keystrokes("secondary-a");
+        cx.simulate_input("Discard this correction");
+        cx.simulate_keystrokes("escape");
+        handle
+            .read_with(cx, |this, _| {
+                assert!(this.personalization.original.is_none())
+            })
+            .unwrap();
+        assert_eq!(
+            workshop::load_preferences().unwrap().selections[0],
+            original
+        );
+        crate::harness::click("preference-edit-0", cx);
+        cx.simulate_keystrokes("secondary-a");
+        cx.simulate_input("弦楽器のテーマ");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("Keep it warm.");
+        handle
+            .update(cx, |this, _, cx| {
+                this.preference_operation(true, || Err("Cannot write preferences".into()), cx);
+            })
+            .unwrap();
+        cx.run_until_parked();
+        handle
+            .read_with(cx, |this, _| {
+                assert!(this.personalization.original.is_some());
+                assert!(this.personalization.error.is_some());
+                assert_eq!(
+                    this.agent.fields[agent::AgentSettings::PREFERENCE_FIELD].content(),
+                    "弦楽器のテーマ\nKeep it warm."
+                );
+            })
+            .unwrap();
+        assert_eq!(
+            workshop::load_preferences().unwrap().selections[0],
+            original
+        );
+        crate::harness::click("preference-chosen", cx);
+        cx.simulate_keystrokes("down enter");
+        crate::harness::click("preference-save", cx);
+        cx.run_until_parked();
+        let preferences = workshop::load_preferences().unwrap();
+        assert_eq!(
+            preferences.selections[0].context,
+            "弦楽器のテーマ\nKeep it warm."
+        );
+        assert_eq!(preferences.selections[0].chosen, 1);
+        assert_eq!(
+            preferences.selections[0].alternatives,
+            original.alternatives
+        );
+        crate::harness::click("preferences-enabled", cx);
+        cx.run_until_parked();
+        assert!(!workshop::load_preferences().unwrap().enabled);
+        crate::harness::click("preferences-reset", cx);
+        assert_eq!(workshop::load_preferences().unwrap().selections.len(), 1);
+        crate::harness::click("preferences-reset-cancel", cx);
+        assert_eq!(workshop::load_preferences().unwrap().selections.len(), 1);
+        crate::harness::click("preferences-reset", cx);
+        crate::harness::click("preferences-reset-confirm", cx);
+        cx.run_until_parked();
+        let preferences = workshop::load_preferences().unwrap();
+        assert!(preferences.selections.is_empty());
+        assert!(!preferences.enabled);
+        // Reload a choice written by another surface and remove it individually.
+        workshop::update_preferences(|p| p.selections.push(original.clone())).unwrap();
+        crate::harness::click("preferences-refresh", cx);
+        cx.run_until_parked();
+        crate::harness::click("preference-remove-0", cx);
+        cx.run_until_parked();
+        assert!(workshop::load_preferences().unwrap().selections.is_empty());
+        handle
+            .read_with(cx, |this, _| assert!(this.personalization.error.is_none()))
+            .unwrap();
+    }
+}

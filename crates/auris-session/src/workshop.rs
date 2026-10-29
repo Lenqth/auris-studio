@@ -29,7 +29,7 @@ pub struct Reference {
 }
 
 /// One independent candidate assignment.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Direction {
     /// Short, user-facing name.
@@ -192,7 +192,7 @@ impl Document {
 }
 
 /// A choice is evidence of a relative preference, never a dislike of every other song.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Selection {
     /// Conversation identity, preventing collisions between projects.
     pub conversation: String,
@@ -229,6 +229,35 @@ impl Default for Preferences {
 }
 
 impl Preferences {
+    /// Correct or remove an observation, rejecting stale edits from another window.
+    /// Candidate identities and the offered alternatives remain unchanged. A correction
+    /// becomes the newest evidence so it is included in the next bounded retrieval.
+    pub fn revise_selection(
+        &mut self,
+        original: &Selection,
+        correction: Option<(String, usize)>,
+    ) -> Result<(), String> {
+        let index = self
+            .selections
+            .iter()
+            .position(|s| s == original)
+            .ok_or_else(|| {
+                "This preference changed. Refresh the history and try again.".to_owned()
+            })?;
+        if let Some((context, chosen)) = correction {
+            if context.trim().is_empty() || chosen >= original.alternatives.len() {
+                return Err("Enter a request and choose one of the offered alternatives.".into());
+            }
+            let mut revised = self.selections.remove(index);
+            revised.context = context;
+            revised.chosen = chosen;
+            self.selections.push(revised);
+        } else {
+            self.selections.remove(index);
+        }
+        Ok(())
+    }
+
     /// Record a choice once; selecting another alternative replaces that comparison's vote.
     pub fn record(&mut self, selection: Selection) {
         if !self.enabled {
@@ -523,6 +552,23 @@ pub fn load_preferences() -> Result<Preferences, String> {
 
 /// Update preferences under a process-safe lock to avoid losing another window's choice.
 pub fn update_preferences(update: impl FnOnce(&mut Preferences)) -> Result<Preferences, String> {
+    try_update_preferences(|preferences| {
+        update(preferences);
+        Ok(())
+    })
+}
+
+/// Atomically correct or remove an existing preference without overwriting concurrent changes.
+pub fn revise_preference(
+    original: &Selection,
+    correction: Option<(String, usize)>,
+) -> Result<Preferences, String> {
+    try_update_preferences(|preferences| preferences.revise_selection(original, correction))
+}
+
+fn try_update_preferences(
+    update: impl FnOnce(&mut Preferences) -> Result<(), String>,
+) -> Result<Preferences, String> {
     let root = crate::config_dir();
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let lock = std::fs::OpenOptions::new()
@@ -534,7 +580,7 @@ pub fn update_preferences(update: impl FnOnce(&mut Preferences)) -> Result<Prefe
         .map_err(|e| e.to_string())?;
     lock.lock().map_err(|e| e.to_string())?;
     let mut preferences = load_preferences()?;
-    update(&mut preferences);
+    update(&mut preferences)?;
     write(&root.join("song-preferences.json"), &preferences)?;
     Ok(preferences)
 }
@@ -811,6 +857,79 @@ mod tests {
             }],
             chosen: 0,
         }
+    }
+    #[test]
+    fn corrections_change_retrieved_evidence_and_preserve_provenance() {
+        let mut original = selection(1, 1);
+        let mut alternative = original.alternatives[0].clone();
+        alternative.title = "Strings".into();
+        original.alternatives.push(alternative);
+        let mut preferences = Preferences::default();
+        preferences.record(original.clone());
+        preferences.record(selection(2, 2));
+        preferences
+            .revise_selection(&original, Some(("A warm theme\nWith strings".into(), 1)))
+            .unwrap();
+        let corrected = &preferences.selections[1];
+        assert_eq!(corrected.conversation, original.conversation);
+        assert_eq!(corrected.candidate, original.candidate);
+        assert_eq!(corrected.round, original.round);
+        assert_eq!(corrected.alternatives, original.alternatives);
+        let evidence: serde_json::Value = serde_json::from_str(&preferences.context()).unwrap();
+        assert_eq!(evidence[0]["chosen"], 1);
+        assert_eq!(evidence[0]["context"], "A warm theme\nWith strings");
+        assert_eq!(preferences.selections[0], selection(2, 2));
+    }
+
+    #[test]
+    fn correcting_older_history_brings_it_into_the_next_retrieval() {
+        let original = selection(1, 1);
+        let mut preferences = Preferences::default();
+        for id in 1..=12 {
+            preferences.record(selection(id, id));
+        }
+        preferences
+            .revise_selection(&original, Some(("Corrected older request".into(), 0)))
+            .unwrap();
+        let evidence: serde_json::Value = serde_json::from_str(&preferences.context()).unwrap();
+        assert_eq!(evidence[0]["context"], "Corrected older request");
+        assert_eq!(preferences.selections.len(), 12);
+    }
+
+    #[test]
+    fn stale_corrections_cannot_restore_reset_or_replaced_choices() {
+        let original = selection(1, 1);
+        let mut preferences = Preferences::default();
+        preferences.record(original.clone());
+        preferences.record(selection(1, 2));
+        assert!(preferences.revise_selection(&original, None).is_err());
+        assert_eq!(preferences.selections[0].candidate, 2);
+        preferences.selections.clear();
+        assert!(
+            preferences
+                .revise_selection(&original, Some(("Stale".into(), 0)))
+                .is_err()
+        );
+        assert!(preferences.selections.is_empty());
+    }
+
+    #[test]
+    fn invalid_correction_preserves_history_and_disabled_history_remains_editable() {
+        let original = selection(1, 1);
+        let mut preferences = Preferences::default();
+        preferences.record(original.clone());
+        for correction in [(" ".into(), 0), ("Valid".into(), 99)] {
+            assert!(
+                preferences
+                    .revise_selection(&original, Some(correction))
+                    .is_err()
+            );
+            assert_eq!(preferences.selections[0], original);
+        }
+        preferences.enabled = false;
+        preferences.revise_selection(&original, None).unwrap();
+        assert!(preferences.selections.is_empty());
+        assert!(!preferences.enabled);
     }
     #[test]
     fn reselecting_replaces_one_vote_but_same_titles_in_new_round_count() {

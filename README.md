@@ -17,8 +17,13 @@ for portable downloads and command-line paths. Built-in physical instruments are
 To build from source with Rust 1.95 or newer:
 
 ```sh
+git clone https://github.com/uthree/auris-studio.git
+cd auris-studio
 cargo run --release
 ```
+
+To install the executables with `cargo install`, see
+[Building and installing from source](docs/installation.md#building-and-installing-from-source).
 
 Windows also requires Visual Studio C++ Build Tools and LLVM. Run
 `.\tools\setup-windows.ps1 -InstallLlvm` in a Visual Studio developer PowerShell terminal

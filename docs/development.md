@@ -201,6 +201,17 @@ of the system cannot drift away from the system without the build saying so.
 
 ## Testing the window
 
+Project tabs retain independent `AurisApp` entities inside `ProjectTabs`, the native window's
+root view. Each document keeps its session, Undo history, selection, chat and background jobs.
+Only the selected document is painted. The tab strip uses the shared themed buttons and scrolls
+horizontally; Ctrl+Tab and Ctrl+Shift+Tab cycle tabs, and Command+W on macOS or Ctrl+W elsewhere
+closes the current tab. New Project opens another start screen in the same window. Opening an
+already-open project selects its existing tab. Window close checks every tab's unsaved changes;
+application quit checks every document across all windows. Approval is tied to a document's
+revision and is rechecked after asynchronous saves. Tab selection releases held preview notes
+but does not transfer realtime audio; explicit audio commands do that, and recording blocks
+transfer. `harness::open_tabs` exercises the complete container with isolated preferences.
+
 The Window menu switches each dock panel between the main window and a separate native window.
 The layout file preserves that choice, visibility and the return dock. Closing a detached panel
 hides it; the View menu reopens it, and clearing its Window-menu check returns it to its dock.
