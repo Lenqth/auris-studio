@@ -4,7 +4,10 @@
 //! project and should not compete with it for space. It holds a weak handle to the main view
 //! and applies every change through that, so there is still exactly one owner of the session.
 
-use atelier::{Edge, IconName, SectionHeader, Sidebar};
+use atelier::{
+    Button, ControlSize, Edge, FormField, FormGroup, IconName, ListItem, SectionHeader, Sidebar,
+    Switch,
+};
 use auris_i18n::{Key, Language, messages};
 use auris_session::prelude::*;
 use auris_session::session::AudioStatus;
@@ -24,7 +27,7 @@ use crate::titlebar;
 use crate::ui::icons::Icon;
 use crate::ui::palette;
 use crate::ui::text_field::{HasTextField, KeyEffect, TextField};
-use crate::ui::widgets::{ButtonStyle, button, chain_button, divider, nav_item};
+use crate::ui::widgets::{ButtonStyle, button, chain_button, divider};
 use crate::voice_setup_window::VoiceSetupTab;
 
 mod agent;
@@ -275,7 +278,6 @@ impl SettingsWindow {
         assign: fn(&mut PointerGestures, PointerGesture),
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let theme = self.theme.clone();
         let choices = PointerGesture::ALL
             .into_iter()
             .filter(|gesture| offered(*gesture))
@@ -292,18 +294,7 @@ impl SettingsWindow {
             },
             cx,
         );
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .w(px(200.0))
-                    .flex_shrink_0()
-                    .text_xs()
-                    .text_color(theme.text_muted)
-                    .child(self.t(label)),
-            )
+        FormField::new(self.t(label))
             .child(div().flex_1().min_w_0().child(control))
             .into_any_element()
     }
@@ -370,24 +361,17 @@ impl SettingsWindow {
     ///
     /// Atelier's preferences layout: a leading `Sidebar` of list rows instead of a row of
     /// latched buttons squeezed into the title bar, so every page is named in full at every
-    /// window size and the title bar keeps only the title. The rows are [`nav_item`]s rather
-    /// than Atelier's `ListItem` so the pages stay in the Tab order.
+    /// window size and the title bar keeps only the title. Each row is a tab stop.
     fn render_nav(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let theme = self.theme.clone();
         let spacing = theme.atelier.spacing;
         let current = (!self.searching()).then_some(self.tab);
         let search = self.render_search(cx);
         let page = |id: &'static str, label: Key, icon: IconName, tab: SettingsTab| {
-            nav_item(
-                id,
-                self.t(label),
-                None,
-                icon,
-                current == Some(tab),
-                true,
-                &theme,
-                cx.listener(move |this, _, window, cx| this.select_tab(tab, window, cx)),
-            )
+            ListItem::new(id, self.t(label))
+                .icon(icon)
+                .selected(current == Some(tab))
+                .on_click(cx.listener(move |this, _, window, cx| this.select_tab(tab, window, cx)))
         };
         Sidebar::new(Edge::Left)
             .w(if window.viewport_size().width < px(640.0) {
@@ -420,22 +404,18 @@ impl SettingsWindow {
             .child(page(
                 "tab-keys",
                 Key::TabKeys,
-                IconName::Code,
+                IconName::Keyboard,
                 SettingsTab::Keys,
             ))
             .child(div().flex_1())
             .child(
-                div()
-                    .debug_selector(|| "settings-setup-guide".into())
-                    .child(
-                        atelier::Button::new("settings-setup-guide", self.t(Key::SetupGuide))
-                            .ghost()
-                            .icon(IconName::Info)
-                            .full_width()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let _ = this.app.update(cx, |app, cx| app.open_setup_guide(cx));
-                            })),
-                    ),
+                atelier::Button::new("settings-setup-guide", self.t(Key::SetupGuide))
+                    .ghost()
+                    .icon(IconName::Info)
+                    .full_width()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let _ = this.app.update(cx, |app, cx| app.open_setup_guide(cx));
+                    })),
             )
     }
 
@@ -541,234 +521,195 @@ impl SettingsWindow {
             |this, value, cx| this.apply_singer_acceleration(value, cx),
             cx,
         );
+        let switch = |id: &'static str,
+                      label: Key,
+                      note: Key,
+                      on: bool,
+                      toggle: fn(&mut Self, &mut Context<Self>)| {
+            FormField::new(self.t(label))
+                .description(self.t(note))
+                .beside()
+                .child(
+                    Switch::new(id, on)
+                        .on_click(cx.listener(move |this, _, _, cx| toggle(this, cx))),
+                )
+        };
+        let autosave = switch(
+            "autosave",
+            Key::Autosave,
+            Key::AutosaveNote,
+            self.autosave,
+            |this, cx| this.apply_autosave(!this.autosave, cx),
+        );
+        let auto_update = switch(
+            "auto-update",
+            Key::AutoUpdate,
+            Key::AutoUpdateNote,
+            self.auto_update,
+            |this, cx| this.apply_auto_update(!this.auto_update, cx),
+        );
+        let snap = switch(
+            "snap-note-lengths",
+            Key::SnapNoteLengths,
+            Key::SnapNoteLengthsNote,
+            self.snap_note_lengths,
+            |this, cx| this.apply_snap_note_lengths(!this.snap_note_lengths, cx),
+        );
+        let installed_dictionary = auris_session::library::installed_dictionary();
+        let dictionary = FormField::new(self.t(Key::JapaneseDictionaryHeading))
+            .description(self.t(Key::JapaneseDictionaryNote))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(theme.atelier.typography.size_sm)
+                    .text_color(match (&self.japanese_dictionary, &installed_dictionary) {
+                        (None, None) => theme.text_muted,
+                        _ => theme.text,
+                    })
+                    .truncate()
+                    // An empty setting is not an empty state: the shipped dictionary stands in,
+                    // and the row should say which one is answering.
+                    .child(match &self.japanese_dictionary {
+                        Some(folder) => folder.display().to_string(),
+                        None => match installed_dictionary {
+                            Some(_) => self.t(Key::ValueShippedDictionary).to_string(),
+                            None => self.t(Key::ValueNotSet).to_string(),
+                        },
+                    }),
+            )
+            .child(
+                Button::new("dictionary-choose", self.t(Key::MenuChoose))
+                    .size(ControlSize::Small)
+                    .on_click(cx.listener(|this, _, _, cx| this.choose_japanese_dictionary(cx))),
+            )
+            .child(
+                Button::new("dictionary-clear", self.t(Key::MenuClear))
+                    .ghost()
+                    .size(ControlSize::Small)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.apply_japanese_dictionary(None, cx);
+                    })),
+            );
+        let setup = |id: &'static str, label: Key, tab: VoiceSetupTab| {
+            Button::new(id, self.t(label))
+                .on_click(cx.listener(move |this, _, _, cx| this.open_voice_setup(tab, cx)))
+        };
+        let voice_setup = FormField::new(self.t(Key::VoiceSetupTitle)).child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap(theme.atelier.spacing.sm)
+                .child(setup(
+                    "settings-setup-voicevox",
+                    Key::BrowserSetupVoicevox,
+                    VoiceSetupTab::Voicevox,
+                ))
+                .child(setup(
+                    "settings-setup-diffsinger",
+                    Key::BrowserSetupDiffSinger,
+                    VoiceSetupTab::DiffSinger,
+                ))
+                .child(setup(
+                    "settings-setup-leapsinger",
+                    Key::BrowserSetupLeapSinger,
+                    VoiceSetupTab::LeapSinger,
+                )),
+        );
+        let pointer_note = if self.pointer.create == PointerGesture::Click {
+            // Only while it applies. A standing warning about a setting nobody has chosen is a
+            // line every user reads once and no user acts on.
+            format!(
+                "{} {}",
+                self.t(Key::PointerNote),
+                self.t(Key::PointerClickNote)
+            )
+        } else {
+            self.t(Key::PointerNote).to_owned()
+        };
+        let pointer_create = self.gesture_row(
+            "pointer-create",
+            Key::PointerCreate,
+            self.pointer.create,
+            |_| true,
+            PointerGestures::set_create,
+            cx,
+        );
+        let pointer_delete = self.gesture_row(
+            "pointer-delete",
+            Key::PointerDelete,
+            self.pointer.delete,
+            PointerGesture::may_delete,
+            PointerGestures::set_delete,
+            cx,
+        );
+        let voice_paths = self.render_voice_paths(cx);
+
+        let language = self.matches_section(Section::Language);
+        let project = [Section::Autosave, Section::AutoUpdate, Section::Snap]
+            .iter()
+            .any(|section| self.matches_section(*section));
+        let general = language || project || self.matches_section(Section::Dictionary);
         div()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap(theme.atelier.spacing.xl)
             .when(self.matches_section(Section::Appearance), |view| {
                 view.child(appearance_control)
             })
-            .when(self.matches_section(Section::Language), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::LanguageHeading), &theme))
-                    .child(language_control)
-                    .child(note(self.t(Key::LanguageNote), &theme))
+            .when(general, |view| {
+                view.child(
+                    FormGroup::untitled()
+                        .when(language, |group| {
+                            group.child(
+                                FormField::new(self.t(Key::LanguageHeading))
+                                    .description(self.t(Key::LanguageNote))
+                                    .child(div().flex_1().min_w_0().child(language_control)),
+                            )
+                        })
+                        .when(self.matches_section(Section::Autosave), |group| {
+                            group.child(autosave)
+                        })
+                        .when(self.matches_section(Section::AutoUpdate), |group| {
+                            group.child(auto_update)
+                        })
+                        .when(self.matches_section(Section::Snap), |group| {
+                            group.child(snap)
+                        })
+                        .when(self.matches_section(Section::Dictionary), |group| {
+                            group.child(dictionary)
+                        }),
+                )
             })
             .when(self.matches_section(Section::Pointer), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::PointerHeading), &theme))
-                    .child(self.gesture_row(
-                        "pointer-create",
-                        Key::PointerCreate,
-                        self.pointer.create,
-                        |_| true,
-                        PointerGestures::set_create,
-                        cx,
-                    ))
-                    .child(self.gesture_row(
-                        "pointer-delete",
-                        Key::PointerDelete,
-                        self.pointer.delete,
-                        PointerGesture::may_delete,
-                        PointerGestures::set_delete,
-                        cx,
-                    ))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .child(self.t(Key::PointerNote)),
-                    )
-                    // Only while it applies. A standing warning about a setting nobody has chosen is a
-                    // line every user reads once and no user acts on.
-                    .when(self.pointer.create == PointerGesture::Click, |this| {
-                        this.child(
-                            div()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(self.t(Key::PointerClickNote)),
-                        )
-                    })
-            })
-            .when(self.matches_section(Section::Autosave), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::Autosave), &theme))
-                    .child(div().flex().gap_1().child(button(
-                        "autosave",
-                        self.t(if self.autosave {
-                            Key::ValueOn
-                        } else {
-                            Key::ValueOff
-                        }),
-                        ButtonStyle::Normal,
-                        self.autosave,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.apply_autosave(!this.autosave, cx);
-                        }),
-                    )))
-                    .child(note(self.t(Key::AutosaveNote), &theme))
-            })
-            .when(self.matches_section(Section::AutoUpdate), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::AutoUpdate), &theme))
-                    .child(div().flex().gap_1().child(button(
-                        "auto-update",
-                        self.t(if self.auto_update {
-                            Key::ValueOn
-                        } else {
-                            Key::ValueOff
-                        }),
-                        ButtonStyle::Normal,
-                        self.auto_update,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.apply_auto_update(!this.auto_update, cx);
-                        }),
-                    )))
-                    .child(note(self.t(Key::AutoUpdateNote), &theme))
-            })
-            .when(self.matches_section(Section::Snap), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::SnapNoteLengths), &theme))
-                    .child(div().flex().gap_1().child(button(
-                        "snap-note-lengths",
-                        self.t(if self.snap_note_lengths {
-                            Key::ValueOn
-                        } else {
-                            Key::ValueOff
-                        }),
-                        ButtonStyle::Normal,
-                        self.snap_note_lengths,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.apply_snap_note_lengths(!this.snap_note_lengths, cx);
-                        }),
-                    )))
-                    .child(note(self.t(Key::SnapNoteLengthsNote), &theme))
-            })
-            .when(self.matches_section(Section::Dictionary), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(
-                        self.t(Key::JapaneseDictionaryHeading),
-                        &theme,
-                    ))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_sm()
-                                    .text_color(
-                                        match (
-                                            &self.japanese_dictionary,
-                                            auris_session::library::installed_dictionary(),
-                                        ) {
-                                            (None, None) => theme.text_muted,
-                                            _ => theme.text,
-                                        },
-                                    )
-                                    .truncate()
-                                    // An empty setting is not an empty state: the shipped dictionary
-                                    // stands in, and the row should say which one is answering.
-                                    .child(match &self.japanese_dictionary {
-                                        Some(folder) => folder.display().to_string(),
-                                        None => {
-                                            match auris_session::library::installed_dictionary() {
-                                                Some(_) => {
-                                                    self.t(Key::ValueShippedDictionary).to_string()
-                                                }
-                                                None => self.t(Key::ValueNotSet).to_string(),
-                                            }
-                                        }
-                                    }),
-                            )
-                            .child(button(
-                                "dictionary-choose",
-                                self.t(Key::MenuChoose),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| this.choose_japanese_dictionary(cx)),
-                            ))
-                            .child(button(
-                                "dictionary-clear",
-                                self.t(Key::MenuClear),
-                                ButtonStyle::Ghost,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.apply_japanese_dictionary(None, cx);
-                                }),
-                            )),
-                    )
-                    .child(note(self.t(Key::JapaneseDictionaryNote), &theme))
+                view.child(
+                    FormGroup::new(self.t(Key::PointerHeading))
+                        .description(pointer_note)
+                        .child(pointer_create)
+                        .child(pointer_delete),
+                )
             })
             .when(self.matches_section(Section::Singer), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::SingerComputeHeading), &theme))
-                    .child(acceleration_control)
-                    .child(note(self.t(Key::SingerComputeNote), &theme))
-                    .child(section_title(self.t(Key::BrowserVoices), &theme))
-                    .child(self.render_voice_paths(cx))
-                    .child(note(self.t(Key::VoiceFoldersNote), &theme))
-                    .child(section_title(self.t(Key::VoiceSetupTitle), &theme))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_2()
-                            .child(button(
-                                "settings-setup-voicevox",
-                                self.t(Key::BrowserSetupVoicevox),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.open_voice_setup(VoiceSetupTab::Voicevox, cx);
-                                }),
-                            ))
-                            .child(button(
-                                "settings-setup-diffsinger",
-                                self.t(Key::BrowserSetupDiffSinger),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.open_voice_setup(VoiceSetupTab::DiffSinger, cx);
-                                }),
-                            ))
-                            .child(button(
-                                "settings-setup-leapsinger",
-                                self.t(Key::BrowserSetupLeapSinger),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.open_voice_setup(VoiceSetupTab::LeapSinger, cx);
-                                }),
-                            )),
-                    )
+                view.child(
+                    FormGroup::new(self.t(Key::SingerComputeHeading))
+                        .child(
+                            FormField::new(self.t(Key::SingerComputeHeading))
+                                .description(self.t(Key::SingerComputeNote))
+                                .child(div().flex_1().min_w_0().child(acceleration_control)),
+                        )
+                        .child(
+                            FormField::new(self.t(Key::BrowserVoices))
+                                .description(self.t(Key::VoiceFoldersNote))
+                                .child(div().flex_1().min_w_0().child(voice_paths)),
+                        )
+                        .child(voice_setup),
+                )
             })
             .when(self.matches_section(Section::Panels), |view| {
-                view.child(divider(&theme))
-                    .child(self.render_panel_positions(cx))
+                view.child(self.render_panel_positions(cx))
             })
             .when(self.matches_section(Section::Toolbar), |view| {
-                view.child(divider(&theme))
-                    .child(self.render_toolbar_settings(cx))
+                view.child(self.render_toolbar_settings(cx))
             })
             .into_any_element()
     }
@@ -1539,19 +1480,15 @@ impl SettingsWindow {
         let theme = self.theme.clone();
         let armed = self.capturing.is_some();
         let empty = self.search.content().is_empty();
-        div()
+        // Atelier's field frame around Auris's own editable text: the placeholder stays inside
+        // the editable region rather than in the frame's, for the reason given below.
+        atelier::TextField::new()
             .id("settings-search")
-            .debug_selector(|| "settings-search".to_owned())
             .track_focus(&self.search_focus)
             .tab_index(0)
-            .flex()
-            .items_center()
-            .h(px(28.0))
-            .mb_2()
-            .rounded(Metrics::RADIUS_SM)
-            .bg(theme.surface_sunken)
-            .border_1()
-            .border_color(if armed { theme.border } else { theme.accent })
+            .icon(IconName::Search)
+            .empty(false)
+            .size(ControlSize::Small)
             .child(
                 div()
                     .relative()
@@ -1609,17 +1546,15 @@ impl SettingsWindow {
                 }),
             )
             .when(!empty, |view| {
-                view.child(button(
-                    "clear-settings-search",
-                    self.t(Key::MenuClear),
-                    ButtonStyle::Ghost,
-                    false,
-                    theme.accent,
-                    &theme,
-                    cx.listener(|this, _, window, cx| {
-                        this.select_tab(this.tab, window, cx);
-                    }),
-                ))
+                view.trailing(
+                    Button::icon_only("clear-settings-search", IconName::Close)
+                        .ghost()
+                        .size(ControlSize::Small)
+                        .tooltip(self.t(Key::MenuClear))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.select_tab(this.tab, window, cx);
+                        })),
+                )
             })
             .into_any_element()
     }

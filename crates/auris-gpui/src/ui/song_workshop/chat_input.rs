@@ -183,21 +183,17 @@ impl AurisApp {
                 .items_center()
                 .gap(theme.atelier.spacing.xs)
                 .child(
-                    div()
-                        .debug_selector(|| "workshop-accept-suggestion".into())
-                        .min_w_0()
-                        .overflow_hidden()
-                        .child(
-                            atelier::Button::new("workshop-accept-suggestion", suffix.to_owned())
-                                .ghost()
-                                .size(atelier::ControlSize::Small)
-                                .tooltip(suffix.to_owned())
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.focus_workshop_input(window);
-                                    this.accept_workshop_suggestion();
-                                    cx.notify();
-                                })),
-                        ),
+                    div().min_w_0().overflow_hidden().child(
+                        atelier::Button::new("workshop-accept-suggestion", suffix.to_owned())
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .tooltip(suffix.to_owned())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.focus_workshop_input(window);
+                                this.accept_workshop_suggestion();
+                                cx.notify();
+                            })),
+                    ),
                 )
                 .child(
                     div()
@@ -234,70 +230,54 @@ impl AurisApp {
                         ),
                 )
                 .child(
-                    div()
-                        .debug_selector(|| "workshop-model".into())
-                        .min_w_0()
-                        .max_w_full()
-                        .overflow_hidden()
-                        .child(
-                            atelier::Button::new("workshop-model", model)
-                                .ghost()
-                                .size(atelier::ControlSize::Small)
-                                .icon_after(atelier::IconName::ChevronDown)
-                                .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                                    this.workshop_model_menu(event.position());
-                                    cx.notify();
-                                })),
-                        ),
-                )
-                .child(
-                    div().debug_selector(|| "workshop-effort".into()).child(
-                        atelier::Button::new(
-                            "workshop-effort",
-                            format!("{}: {effort}", self.t(Key::AgentEffort)),
-                        )
-                        .ghost()
-                        .size(atelier::ControlSize::Small)
-                        .icon(atelier::IconName::Brain)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            if let Some(s) = &mut this.song_workshop {
-                                let levels = s
-                                    .models
-                                    .iter()
-                                    .find(|m| m.matches(&s.preferences))
-                                    .and_then(|m| m.efforts.clone())
-                                    .unwrap_or_else(|| {
-                                        vec![auris_session::ReasoningEffort::Default]
-                                    });
-                                if !levels.is_empty() {
-                                    let index = levels
-                                        .iter()
-                                        .position(|e| *e == s.preferences.effort)
-                                        .map_or(0, |i| (i + 1) % levels.len());
-                                    s.preferences.effort = levels[index];
-                                }
-                            }
-                            cx.notify();
-                        })),
+                    div().min_w_0().max_w_full().overflow_hidden().child(
+                        atelier::Button::new("workshop-model", model)
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .icon_after(atelier::IconName::ChevronDown)
+                            .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
+                                this.workshop_model_menu(event.position());
+                                cx.notify();
+                            })),
                     ),
                 )
                 .child(
-                    div()
-                        .debug_selector(|| "workshop-model-settings".into())
-                        .child(
-                            atelier::Button::icon_only(
-                                "workshop-model-settings",
-                                atelier::IconName::Settings,
-                            )
-                            .size(atelier::ControlSize::Small)
-                            .tooltip(self.t(Key::AgentConfigure))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.open_settings_tab(
-                                    crate::settings_window::SettingsTab::Agent,
-                                    cx,
-                                )
-                            })),
-                        ),
+                    atelier::Button::new(
+                        "workshop-effort",
+                        format!("{}: {effort}", self.t(Key::AgentEffort)),
+                    )
+                    .ghost()
+                    .size(atelier::ControlSize::Small)
+                    .icon(atelier::IconName::Brain)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if let Some(s) = &mut this.song_workshop {
+                            let levels = s
+                                .models
+                                .iter()
+                                .find(|m| m.matches(&s.preferences))
+                                .and_then(|m| m.efforts.clone())
+                                .unwrap_or_else(|| vec![auris_session::ReasoningEffort::Default]);
+                            if !levels.is_empty() {
+                                let index = levels
+                                    .iter()
+                                    .position(|e| *e == s.preferences.effort)
+                                    .map_or(0, |i| (i + 1) % levels.len());
+                                s.preferences.effort = levels[index];
+                            }
+                        }
+                        cx.notify();
+                    })),
+                )
+                .child(
+                    atelier::Button::icon_only(
+                        "workshop-model-settings",
+                        atelier::IconName::Settings,
+                    )
+                    .size(atelier::ControlSize::Small)
+                    .tooltip(self.t(Key::AgentConfigure))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.open_settings_tab(crate::settings_window::SettingsTab::Agent, cx)
+                    })),
                 )
                 .child(div().flex_1())
                 .child(action),

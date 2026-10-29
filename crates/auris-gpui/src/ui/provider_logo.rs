@@ -6,36 +6,12 @@ use gpui::{AssetSource, Hsla, IntoElement, SharedString, div, prelude::*, svg};
 
 const MARKS: &[(&str, &[u8])] = &[
     (
-        "icons/auris-volume.svg",
-        include_bytes!("../../assets/icons/auris-volume.svg"),
-    ),
-    (
-        "icons/auris-volume-muted.svg",
-        include_bytes!("../../assets/icons/auris-volume-muted.svg"),
-    ),
-    (
         "icons/auris-punch.svg",
         include_bytes!("../../assets/icons/auris-punch.svg"),
     ),
     (
         "icons/auris-notes.svg",
         include_bytes!("../../assets/icons/auris-notes.svg"),
-    ),
-    (
-        "icons/auris-keyboard.svg",
-        include_bytes!("../../assets/icons/auris-keyboard.svg"),
-    ),
-    (
-        "icons/auris-knob.svg",
-        include_bytes!("../../assets/icons/auris-knob.svg"),
-    ),
-    (
-        "icons/auris-redo.svg",
-        include_bytes!("../../assets/icons/auris-redo.svg"),
-    ),
-    (
-        "icons/auris-bolt.svg",
-        include_bytes!("../../assets/icons/auris-bolt.svg"),
     ),
     (
         "icons/caption-minimize.svg",
@@ -165,7 +141,7 @@ mod tests {
             .map(|(path, _)| *path)
             .filter(|path| path.starts_with("icons/auris-"))
             .collect();
-        assert_eq!(paths.len(), 8);
+        assert_eq!(paths.len(), 2);
         assert_eq!(
             paths.iter().collect::<std::collections::HashSet<_>>().len(),
             paths.len()
