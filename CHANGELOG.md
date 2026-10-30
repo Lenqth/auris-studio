@@ -7,6 +7,20 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.15.1 — 2026-10-30
+
+### Agent limits
+
+* **Configure Auris tool calls per request in Settings > Agent.** The default is 1000;
+  choose between 100 and 10000. The setting is shared by the agent panel and AI song creation,
+  with a separate allowance for each parallel candidate.
+* Stop before executing a call beyond the allowance, retaining completed edits and candidate
+  checkpoints. Show localized limit messages and allow explicit continuation after increasing
+  the limit. API model-turn allowances follow the configured tool-call allowance.
+* Include the tool-call limit in settings drafts, saved preferences and Revert behavior.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.15.0.
+
 ## 0.15.0 — 2026-10-30
 
 ### Projects and conversations
