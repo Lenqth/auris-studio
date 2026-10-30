@@ -49,7 +49,6 @@ strings! {
     WorkshopContinue { en: "Continue with this song", ja: "この曲で続ける" }
     WorkshopSelected { en: "Current song", ja: "制作中の曲" }
     WorkshopOpenEditor { en: "Open editor", ja: "エディタで開く" }
-    WorkshopOpenEditorHint { en: "Continue with a song to open it", ja: "曲を選ぶと開けます" }
     WorkshopGenerating { en: "Generating", ja: "生成中" }
     WorkshopMemory { en: "Use my preferences", ja: "好みを記録・活用" }
     WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
@@ -323,7 +322,10 @@ strings! {
     TimbreMapUse { en: "Use on Selected Track", ja: "選択トラックに適用" }
     TimbreMapVariance { en: "Variance shown", ja: "3D空間に保持した情報量" }
     TimbreMapSkipped { en: "Silent references skipped", ja: "基準音が無音のため除外" }
-    TimbreMapAudition { en: "Audition through track (including its mixer settings)", ja: "試聴先トラック（ミキサー設定も反映）" }
+    TimbreMapKeyboard { en: "Preview notes · C4–C5", ja: "鍵盤で試聴 · C4〜C5" }
+    TimbreMapReplay { en: "Play C4", ja: "C4を再生" }
+    TimbreMapStop { en: "Stop preview", ja: "試聴を停止" }
+    TimbreMapPreparing { en: "Preparing sound", ja: "試聴を準備中" }
     TimbreMapEmpty { en: "No audible sounds. Load a SoundFont and rescan.", ja: "測定できる音色がありません。SoundFontを読み込んで再解析してください。" }
     // ------------------------------------------------------------------ transport bar
     ExportWav { en: "Export Audio", ja: "オーディオ書き出し" }

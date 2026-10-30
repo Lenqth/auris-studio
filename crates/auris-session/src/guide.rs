@@ -283,7 +283,10 @@
 //! snapshot shares immutable SoundFonts with independent background instruments, measures matched
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
 //! The desktop displays PCA coordinates and clusters, while similarity queries use the complete
-//! standardized features. Only adopting a sound edits a track; audition uses a cached one-shot.
+//! standardized features. Only adopting a sound edits a track. Map audition uses independent
+//! output previews, including in an empty project. [`crate::Session::timbre_preview_job`] reuses
+//! the cached middle-C one-shot or renders an actual note from the same immutable library snapshot
+//! on a worker. The desktop cancels obsolete requests before replacing or closing the preview.
 //! Library family icons are separate metadata: `SoundIcon` interprets each preset's own name,
 //! cluster summaries count every member's family, and an isolated agent completion can suggest
 //! a name and an icon from that fixed vocabulary. Manual corrections live in application

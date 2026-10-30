@@ -35,8 +35,9 @@ The choice is recorded automatically when **Use my preferences** is enabled, bef
 requesting the director's response, so a provider failure does not lose the choice.
 Explicitly protected note tracks are checked before a descendant is published.
 
-**Open editor** adopts the selected document as an undoable edit and opens a normal
-agent conversation containing the songwriting history and selected direction. The
+Each finished candidate has an **Open editor** button. It adopts that candidate's exact document
+as an undoable edit and opens a normal agent conversation containing the songwriting history
+and that candidate's direction, without requiring **Continue with this** first. The
 editor's model continues against the current document. Candidate documents and
 auditions remain available in the workshop history.
 

@@ -598,7 +598,7 @@ impl AurisApp {
         cx.notify();
     }
 
-    fn open_workshop_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_workshop_editor(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
         if !self.commit_midi_draft() {
             cx.notify();
             return;
@@ -612,12 +612,17 @@ impl AurisApp {
         let Some(snapshot) = &s.snapshot else {
             return;
         };
-        let Some(candidate) = snapshot
+        if !snapshot
             .document
-            .selected
-            .and_then(|id| snapshot.candidates.get(&id))
-            .cloned()
-        else {
+            .rounds
+            .iter()
+            .flat_map(|round| &round.candidates)
+            .any(|candidate| candidate.id == id && candidate.ready)
+            || snapshot.progress.contains_key(&id)
+        {
+            return;
+        }
+        let Some(candidate) = snapshot.candidates.get(&id).cloned() else {
             return;
         };
         let Some(folder) = self
@@ -631,6 +636,7 @@ impl AurisApp {
         let revision = self.session.revision();
         let selected = snapshot.document.selected;
         let mut document = snapshot.document.clone();
+        document.selected = Some(id);
         document.draft = s.brief.content().to_owned();
         document.draft_attachments = s.references.attachments.clone();
         let identity = s.identity;
@@ -652,6 +658,10 @@ impl AurisApp {
                     s.submitted = false;
                     if this.session.revision() != revision
                         || s.snapshot.as_ref().and_then(|s| s.document.selected) != selected
+                        || s.snapshot
+                            .as_ref()
+                            .and_then(|s| s.candidates.get(&id))
+                            .is_none_or(|current| !Arc::ptr_eq(current, &candidate))
                     {
                         s.error = Some(
                             "The selected song changed while opening the editor. Try again.".into(),
@@ -1014,12 +1024,7 @@ impl AurisApp {
             .flex_col()
             .items_center()
             .child(transcript);
-        let selected = s
-            .snapshot
-            .as_ref()
-            .is_some_and(|s| s.document.selected.is_some());
         let memory = s.snapshot.as_ref().is_some_and(|s| s.preferences.enabled);
-        let can_open = selected && !s.busy();
         // On a surface of its own for the same reason the transcript's text is: see `text_panel`.
         let options = div()
             .flex()
@@ -1054,15 +1059,6 @@ impl AurisApp {
                         }
                         cx.notify();
                     })),
-            )
-            .child(div().flex_1())
-            .child(
-                Button::new("song-editor", self.t(Key::WorkshopOpenEditor))
-                    .disabled(!can_open)
-                    .when(!can_open, |button| {
-                        button.tooltip(self.t(Key::WorkshopOpenEditorHint))
-                    })
-                    .on_click(cx.listener(Self::open_workshop_editor_click)),
             );
         let footer = div()
             .id("song-workshop-footer")
@@ -1579,6 +1575,13 @@ impl AurisApp {
                         })),
                 )
                 .child(
+                    Button::new(("song-editor", index), self.t(Key::WorkshopOpenEditor))
+                        .disabled(!usable || s.busy() || self.agent_chat.busy)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.open_workshop_editor(id, window, cx);
+                        })),
+                )
+                .child(
                     Button::new(
                         ("song-retry", index),
                         self.t(if running {
@@ -1682,15 +1685,6 @@ impl AurisApp {
             .filter(|candidate| snapshot.progress.contains_key(&candidate.id))
             .count();
         Some(messages::workshop_round(self.language(), total, running))
-    }
-
-    fn open_workshop_editor_click(
-        &mut self,
-        _: &gpui::ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_workshop_editor(window, cx);
     }
 }
 
@@ -2095,6 +2089,114 @@ mod tests {
             assert_eq!(attachments.len(), 2);
             assert!(!attachments.contains(&text));
         });
+    }
+
+    #[gpui::test]
+    fn each_editor_button_opens_its_own_candidate_without_a_prior_selection(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use auris_session::workshop::{Candidate, Direction, Message, Round};
+        let songs: Vec<_> = ["First", "Second"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, title)| {
+                Arc::new(
+                    SongCandidate::generate(
+                        SongIdea {
+                            title: title.into(),
+                            description: "Bright keys".into(),
+                            preset: "chiptune".into(),
+                            tempo: 120.,
+                            key: "C major".into(),
+                            density: 0.5,
+                            lead: "piano".into(),
+                        },
+                        "Bright instrumental",
+                        30,
+                        i as u64 + 42,
+                        &AtomicBool::new(false),
+                    )
+                    .unwrap(),
+                )
+            })
+            .collect();
+        for selected in [None, Some(100)] {
+            let (app, cx) = crate::harness::open(cx);
+            cx.update(|window, cx| {
+                app.update(cx, |this, cx| {
+                    this.show_project_chooser(window, cx);
+                    this.open_song_workshop(window, cx);
+                })
+            });
+            make_ready(&app, cx);
+            let before = app.update(cx, |this, _| {
+                let s = this.song_workshop.as_mut().unwrap();
+                s.view_round = Some(0);
+                let snapshot = s.snapshot.as_mut().unwrap();
+                snapshot.document.selected = selected;
+                snapshot.document.messages.push(Message {
+                    user: false,
+                    text: "Two finished alternatives".into(),
+                    references: vec![],
+                    attachments: vec![],
+                });
+                snapshot.document.rounds.push(Round {
+                    after_message: 1,
+                    candidates: songs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, song)| Candidate {
+                            id: i as u64 + 100,
+                            parent: None,
+                            ready: true,
+                            error: None,
+                            recoveries: 0,
+                            tools: Default::default(),
+                            feedback: None,
+                            direction: Direction {
+                                title: song.idea.title.clone(),
+                                description: song.idea.description.clone(),
+                                instructions: String::new(),
+                                protected_tracks: vec![],
+                            },
+                        })
+                        .collect(),
+                });
+                snapshot.candidates = songs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, song)| (i as u64 + 100, Arc::clone(song)))
+                    .collect();
+                s.refresh_candidates();
+                this.project().clone()
+            });
+            crate::harness::resize(&app, cx, gpui::size(gpui::px(1400.), gpui::px(1100.)));
+            assert!(cx.debug_bounds("song-editor").is_none());
+            for (card, button) in [
+                ("song-candidate-0", "song-editor-0"),
+                ("song-candidate-1", "song-editor-1"),
+            ] {
+                let card = cx.debug_bounds(card).unwrap();
+                let button = cx.debug_bounds(button).unwrap();
+                assert!(card.contains(&button.center()));
+            }
+            crate::harness::click("song-editor-1", cx);
+            cx.run_until_parked();
+            app.read_with(cx, |this, _| {
+                assert!(this.song_workshop.is_none());
+                assert!(
+                    this.project()
+                        .creation_brief
+                        .as_ref()
+                        .unwrap()
+                        .contains("Second")
+                );
+            });
+            app.update(cx, |this, _| {
+                this.session.undo();
+                assert_eq!(this.project(), &before);
+            });
+        }
     }
 
     #[gpui::test]
