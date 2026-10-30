@@ -511,7 +511,9 @@ fn response_error(endpoint: &str, status: u16, reader: impl Read) -> SingError {
 
 fn request_error(endpoint: &str, error: ureq::Error) -> SingError {
     let reason = error.to_string();
-    SingError::Inference(format!("VOICEVOX {endpoint}: {reason}"))
+    SingError::Inference(format!(
+        "VOICEVOX {endpoint}: Check that VOICEVOX Engine is running, then try again. {reason}"
+    ))
 }
 
 pub(crate) struct VoicevoxBackend {

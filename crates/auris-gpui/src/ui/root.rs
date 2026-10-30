@@ -161,6 +161,8 @@ impl Render for AurisApp {
         // Pointer coordinates arrive in window space, and the resize handlers need to know how
         // tall the window is to bound the bottom panel; record it once per frame.
         self.viewport_height = window.viewport_size().height;
+        self.transport_height =
+            super::transport_bar::transport_height(window.viewport_size().width);
         // Where the window is, kept for next time. Read rather than written: the file is put
         // out once, on the way out.
         self.remember_window(window);
@@ -256,7 +258,6 @@ impl Render for AurisApp {
             .text_size(theme.atelier.typography.size_md)
             .child(title_bar)
             .children(project_tabs)
-            .children(menu_bar)
             .child(transport)
             .child(
                 div()
@@ -291,6 +292,7 @@ impl Render for AurisApp {
             .child(status)
             .child(drop_ring)
             .children(overlays)
+            .children(menu_bar)
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
@@ -313,6 +315,17 @@ impl AurisApp {
         {
             return Vec::new();
         }
+        // A menu owns Enter/Space while open; they must not activate its focused trigger.
+        let menu_open = self.menu.is_some() || self.menu_bar.is_some();
+        if menu_open && self.menu_focus_return.is_none() {
+            self.menu_focus_return = Some(window.focused(cx).unwrap_or_else(|| self.focus.clone()));
+            window.focus(&self.menu_focus);
+        } else if !menu_open
+            && let Some(trigger) = self.menu_focus_return.take()
+            && self.menu_focus.contains_focused(window, cx)
+        {
+            window.focus(&trigger);
+        }
         let export_overlay = self.render_export_overlay(cx);
         let export_dialog = self.render_export_dialog(cx);
         let prompt = self.render_prompt(cx);
@@ -326,7 +339,7 @@ impl AurisApp {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .top(crate::titlebar::HEIGHT + menu_bar::HEIGHT)
+                    .top(crate::titlebar::HEIGHT)
                     .occlude()
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -490,6 +503,12 @@ impl AurisApp {
                         },
                     ))
                     .on_action(Self::window_listener(cx, Self::on_toggle_log))
+                    .on_action(Self::window_listener(
+                        cx,
+                        |this, _: &actions::ReportProblem, _, cx| {
+                            this.open_issue_report(None, cx);
+                        },
+                    ))
                     .on_action(Self::window_listener(cx, Self::on_toggle_agent))
                     .on_action(Self::window_listener(cx, Self::on_toggle_structure_lane))
                     .on_action(Self::window_listener(cx, Self::on_toggle_harmony_lane))
@@ -655,6 +674,13 @@ impl AurisApp {
             .on_mouse_up_out(gpui::MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_key_down(Self::window_listener(cx, Self::on_key_down))
             .capture_key_up(cx.listener(|this, event: &gpui::KeyUpEvent, window, cx| {
+                if this.menu_activation.as_ref().is_some_and(|(id, key)| {
+                    *id == window.window_handle().window_id() && *key == event.keystroke.key
+                }) {
+                    this.menu_activation = None;
+                    // Menu teardown can restore a button before this release arrives.
+                    cx.stop_propagation();
+                }
                 if event.keystroke.key == "space"
                     && this.transport_space_window.take()
                         == Some(window.window_handle().window_id())
@@ -750,12 +776,27 @@ impl AurisApp {
             Some(_) => self.panels.size(dock),
             None => px(0.0),
         };
+        // Atelier's density thresholds are the responsive contract for desktop panes. Below the
+        // sidebar threshold, navigation folds away while the selected work surface stays reachable.
+        let collapse_sidebar = viewport.width <= self.theme.atelier.density.sidebar_width;
+        // Keep the selected trailing work surface reachable. `side_widths` clamps it against the
+        // arrangement minimum after the leading navigation dock has folded away.
         // The headers sit in the same column as the lanes, so they are part of what has to be
         // kept — the minimum is a width for the *lanes*, which is what `resize_dock` compares a
         // dragged splitter against.
+        // The header column is part of the arrangement's usable width even after the leading
+        // navigation dock folds. Keeping it here prevents the timeline lanes from collapsing to
+        // zero while a trailing work panel remains available on a narrow window.
         let keep = PanelLayout::MIN_ARRANGEMENT_WIDTH + self.panels.header_width;
         let (left, right) = PanelLayout::side_widths(
-            (asked(Dock::Left), asked(Dock::Right)),
+            (
+                if collapse_sidebar {
+                    px(0.0)
+                } else {
+                    asked(Dock::Left)
+                },
+                asked(Dock::Right),
+            ),
             viewport.width,
             keep,
         );
@@ -765,9 +806,8 @@ impl AurisApp {
             bottom: PanelLayout::bottom_height(
                 asked(Dock::Bottom),
                 viewport.height,
-                // The same chrome `resize_dock` clamps against — menu bar included, where one
-                // is drawn — or the drawn dock and the dragged limit disagree by a row.
-                Self::chrome_height() + self.project_tabs_height(),
+                // Keep the dock's drawn size and drag limit on the same responsive chrome.
+                self.chrome_height() + self.project_tabs_height(),
             ),
         }
     }
@@ -1430,10 +1470,6 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.move_audio_player(event, cx) {
-            return;
-        }
-
         // A key of the drawn keyboard held by a pointer that is no longer pressing anything is a
         // key whose release never arrived: letting go over another application, or off the edge of
         // the screen, is a mouse-up the platform hands to somebody else. Checked before the drag,
@@ -2012,7 +2048,6 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.audio_player_drag = None;
         let reordered = match &self.drag {
             Some(Drag::DrumLaneReorder { track, .. }) => Some(*track),
             _ => None,
@@ -2081,6 +2116,8 @@ impl AurisApp {
             self.palette_key(event, window, cx)
         } else if self.prompt.is_some() {
             self.prompt_key(event, window, cx)
+        } else if self.timbre_map.open && self.timbre_map.search_focused {
+            self.timbre_search_key(event, cx)
         } else if self.library_search_focused {
             self.library_search_key(event, cx)
         } else {
@@ -2323,8 +2360,20 @@ impl AurisApp {
             }
             "left" | "right" => {
                 let delta = if event.keystroke.key == "left" { -1 } else { 1 };
-                let index = menu_bar::stepped_section(sections.len(), open.index, delta);
-                self.set_menu_bar(Some(menu_bar::OpenMenu::at(index)));
+                let pinned = self.titlebar_menu_layout(window);
+                let index = if open.from_titlebar && !pinned.is_empty() {
+                    let position = pinned
+                        .iter()
+                        .position(|(index, _, _)| *index == open.index)
+                        .unwrap_or(0);
+                    pinned[menu_bar::stepped_section(pinned.len(), position, delta)].0
+                } else {
+                    menu_bar::stepped_section(sections.len(), open.index, delta)
+                };
+                self.set_menu_bar(Some(menu_bar::OpenMenu {
+                    from_titlebar: open.from_titlebar,
+                    ..menu_bar::OpenMenu::at(index)
+                }));
             }
             "down" | "up" | "home" | "end" => {
                 let key = event.keystroke.key.as_str();
@@ -2394,6 +2443,7 @@ impl AurisApp {
         }
         self.menu = None;
         let next = match self.menu_bar {
+            Some(open) if open.from_titlebar => Some(menu_bar::OpenMenu::at(open.index)),
             Some(_) => None,
             None => Some(menu_bar::OpenMenu::at(0)),
         };
@@ -2409,12 +2459,20 @@ impl AurisApp {
     pub(crate) fn menu_key(
         &mut self,
         event: &gpui::KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         let Some(menu) = self.menu.as_mut() else {
             return false;
         };
+        if !event.keystroke.modifiers.modified()
+            && matches!(event.keystroke.key.as_str(), "enter" | "space")
+        {
+            self.menu_activation = Some((
+                window.window_handle().window_id(),
+                event.keystroke.key.clone(),
+            ));
+        }
         match event.keystroke.key.as_str() {
             // Handled here rather than left to the Escape *binding*, which no longer fires: an
             // open menu takes every binding out of reach so that walking it with the arrow keys
@@ -3652,7 +3710,7 @@ mod window_tests {
     }
 
     #[gpui::test]
-    fn transport_shortcuts_do_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
+    fn focused_loop_owns_space_and_enter_before_transport(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         let transport_commands = std::rc::Rc::new(std::cell::Cell::new(0));
         let observed = transport_commands.clone();
@@ -3670,24 +3728,36 @@ mod window_tests {
         click("loop", cx);
         paint(&app, cx);
         assert!(app.read_with(cx, |this, _| this.project().loop_enabled));
-        // A real key gesture includes the release: GPUI's implicit button activation runs there.
-        for key in ["space", "space"] {
+        // A focused native control owns activation. The transport action observer must not also
+        // receive the same gesture, even though the default transport bindings use these keys.
+        for (key, enabled) in [("space", false), ("enter", true)] {
             cx.simulate_keystrokes(key);
             cx.simulate_event(gpui::KeyUpEvent {
                 keystroke: gpui::Keystroke::parse(key).unwrap(),
             });
             paint(&app, cx);
-            assert!(
+            assert_eq!(
                 app.read_with(cx, |this, _| this.project().loop_enabled),
-                "{key} must not click the Loop button again"
+                enabled
             );
         }
-        // No audio thread acknowledges transport state in this harness; observe its commands.
-        assert_eq!(transport_commands.get(), 2);
+        assert_eq!(transport_commands.get(), 0);
+
+        // Returning focus to the application canvas restores the transport shortcut path.
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| this.focus.focus(window));
+        });
+        cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
+        assert_eq!(transport_commands.get(), 1);
     }
 
     #[gpui::test]
-    fn unbound_transport_keys_still_activate_the_focused_button(cx: &mut TestAppContext) {
+    fn focused_loop_keeps_space_and_enter_when_transport_bindings_are_removed(
+        cx: &mut TestAppContext,
+    ) {
         let (app, cx) = open(cx);
         cx.update(|_, cx| {
             let mut keymap = crate::keymap::Keymap::default();
@@ -3711,7 +3781,7 @@ mod window_tests {
     }
 
     #[gpui::test]
-    fn remapped_transport_space_does_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
+    fn focused_loop_precedes_remapped_transport_space(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         cx.update(|_, cx| {
             let mut keymap = crate::keymap::Keymap::default();
@@ -3726,7 +3796,7 @@ mod window_tests {
             keystroke: gpui::Keystroke::parse("space").unwrap(),
         });
         paint(&app, cx);
-        assert!(app.read_with(cx, |this, _| this.project().loop_enabled));
+        assert!(!app.read_with(cx, |this, _| this.project().loop_enabled));
     }
 
     #[gpui::test]
@@ -3808,6 +3878,9 @@ mod window_tests {
         });
 
         cx.simulate_keystrokes("tab tab enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
@@ -3825,6 +3898,9 @@ mod window_tests {
             });
         });
         cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
         paint(&app, cx);
         cx.update(|window, cx| {
             app.read_with(cx, |this, cx| {
@@ -3917,6 +3993,9 @@ mod window_tests {
             assert!(!this.export.as_ref().unwrap().cancelling());
         });
         cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         app.read_with(cx, |this, _| {
             assert!(
                 this.export.as_ref().unwrap().cancelling(),
@@ -3929,6 +4008,9 @@ mod window_tests {
         });
         paint(&app, cx);
         cx.simulate_keystrokes("shift-tab space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
         app.read_with(cx, |this, _| {
             assert!(
                 this.export.is_none(),

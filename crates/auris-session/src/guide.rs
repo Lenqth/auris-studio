@@ -1,4 +1,26 @@
 //! How Auris Studio fits together.
+//!
+//! # Issue drafts and disclosure consent
+//!
+//! [`crate::issue_report::Draft`] is ephemeral and excludes application logs, user prompts and
+//! musical preference evidence until the person approves each exact local excerpt. Consent
+//! is scoped to one draft, never persisted in settings, and cannot be granted by a model or
+//! permission-bypass mode. Editing or removing a private excerpt revokes its approval and
+//! invalidates any derived AI assessment. The desktop snapshots this launch's bounded logs,
+//! the current chat/selected song conversation, and recent preference evidence; it does not
+//! attach project files or audio. Local redaction is best-effort, so review remains necessary.
+//!
+//! `suggest_issue_report` returns only an optional invitation, after distinguishing application
+//! limitations from missing agent tools, configuration, denied permissions and transient errors.
+//! The desktop opens it only on a human action. Optional AI diagnosis separately asks to send the
+//! displayed draft to the configured provider, with no tools, saved instructions or history.
+//! It examines supplied evidence and cannot establish reproduction or source-level root cause.
+//! Clipboard and browser actions use the same consent-filtered body. GitHub opens without a body
+//! in its URL; the person pastes, reviews and publishes there.
+//! Model-authored title/explanation proposals also require local review before entering the draft.
+//!
+//! # Runtime tools
+//!
 //! Saved-project MCP registers and dispatches through the toolbox execution registry.
 //! Runtime discovery and help use the same enabled tool set as execution.
 //! Built-in backends share documentation search, discovery, help and capability tools.
@@ -51,9 +73,19 @@
 //! parallel; voice inference and final audition rendering use a bounded audio-work gate.
 //! Progress describes observed command stages, never simulated elapsed-time percentages.
 //! Selecting an exact candidate sets the baseline for further edits without closing the chat.
+//! Without an explicit selection, the latest successful round supplies the baseline only when
+//! it contains a single candidate. Failed revisions retain that earlier baseline; comparisons
+//! require an explicit choice. This implicit continuation does not record a preference selection.
+//! A successful single-candidate edit of the selected song advances the baseline to that result.
+//! Comparisons, cancelled jobs and recovery of older rounds do not change the selection.
 //! Descendants open that candidate's saved score; selection never regenerates the music.
 //! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
-//! documents and audition assets. Save As copies the store together with conversations.
+//! documents and audition assets. Each project can keep multiple named workshop conversations,
+//! including their drafts, attachments and candidate feedback. Archiving is reversible; opening
+//! another conversation waits until production has stopped. The legacy workshop remains the
+//! default conversation. Save As copies every workshop conversation and its assets.
+//! Explicit one-to-five-star ratings and comments belong to the exact candidate and inform
+//! subsequent requests in that conversation; they never change the score or start production.
 //! The frontend owns presentation, provider selection, audition and explicit editor handoff.
 //! Local cross-project preference evidence records contextual choices. It is optional, inspectable
 //! and clearable, and does not infer dislike from nonselection or override explicit instructions.
@@ -211,6 +243,19 @@
 //! bounded handle eviction and process restart invalidate IDs; heavyweight catalog eviction does
 //! not redirect an issued handle. Neither discovery nor measurement edits the document.
 //!
+//! Character discovery shares [`crate::TimbreTargets`] between the map and `search_instruments`
+//! mode `character`. Matched reference notes also produce fixed-scale brightness, attack speed,
+//! held sustain, captured release and noise descriptors. These do not depend on catalogue PCA
+//! normalization. Local Japanese/English impression terms map to target hypotheses; explicit
+//! targets override them. Arbitrary prose and negation are translated by the calling agent into
+//! targets, not interpreted by the local dictionary. Responses expose targets, recognized terms,
+//! measured descriptors and relative mismatch, never a probability or listening judgment.
+//! Optional reference IDs blend full-feature resemblance with target distance; ordinary name,
+//! source and library constraints still apply. Character and similarity searches reuse one bounded
+//! background index. Isolated native plugins remain metadata-only. Release uses the captured
+//! 400 ms tail and explicitly marks censored lower bounds. Desktop browsing keeps PCA and semantic
+//! coordinates separate; searching changes the result order/highlights without moving points.
+//!
 //! The live agent queries the owning session for built-in instruments, loaded SoundFont
 //! presets and installed CLAP/VST3 instruments. The frontend supplies its configured plugin
 //! search folders. Discovery caches plugin descriptors and issues opaque, session-local
@@ -278,7 +323,10 @@
 //! snapshot shares immutable SoundFonts with independent background instruments, measures matched
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
 //! The desktop displays PCA coordinates and clusters, while similarity queries use the complete
-//! standardized features. Only adopting a sound edits a track; audition uses a cached one-shot.
+//! standardized features. Only adopting a sound edits a track. Map audition uses independent
+//! output previews, including in an empty project. [`crate::Session::timbre_preview_job`] reuses
+//! the cached middle-C one-shot or renders an actual note from the same immutable library snapshot
+//! on a worker. The desktop cancels obsolete requests before replacing or closing the preview.
 //! Library family icons are separate metadata: `SoundIcon` interprets each preset's own name,
 //! cluster summaries count every member's family, and an isolated agent completion can suggest
 //! a name and an icon from that fixed vocabulary. Manual corrections live in application
@@ -1623,6 +1671,11 @@ pub mod composition {
     //! uses this same check before adoption; unreadable lyrics are incomplete, never a pass.
     //! Source offsets count Unicode scalars in the original lyric. Dictionary output does not
     //! establish character-to-mora alignment, so no such alignment is guessed.
+    //!
+    //! [`Session::write_lyrics_with_reading`](crate::Session::write_lyrics_with_reading) accepts
+    //! written lyrics and an independent kana pronunciation, including without a dictionary.
+    //! The written spelling stays on the first note with `+` continuations; phonemes carry
+    //! pronunciation. Workshop cards read that written score rather than the kana reading.
     //!
     //! Existing singer phrases are compared through explicit
     //! [`ClipComparison`](crate::lyric_harness::ClipComparison) relationships. Each selected span

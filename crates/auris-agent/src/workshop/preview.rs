@@ -14,8 +14,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+type Capture = (
+    u64,
+    RenderJob,
+    Vec<auris_session::AuditionSection>,
+    Vec<auris_session::AuditionTrack>,
+);
+
 pub(super) struct Renderer {
-    sender: Option<mpsc::SyncSender<(u64, RenderJob, Vec<auris_session::AuditionSection>)>>,
+    sender: Option<mpsc::SyncSender<Capture>>,
     stopped: Arc<AtomicBool>,
     busy: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
@@ -24,8 +31,7 @@ pub(super) struct Renderer {
 
 impl Renderer {
     pub(super) fn start(id: u64, events: mpsc::Sender<JobEvent>) -> Result<Self, String> {
-        let (sender, receiver) =
-            mpsc::sync_channel::<(u64, RenderJob, Vec<auris_session::AuditionSection>)>(1);
+        let (sender, receiver) = mpsc::sync_channel::<Capture>(1);
         let stopped = Arc::new(AtomicBool::new(false));
         let cancel = Arc::clone(&stopped);
         let busy = Arc::new(AtomicBool::new(false));
@@ -33,7 +39,7 @@ impl Renderer {
         let handle = std::thread::Builder::new()
             .name(format!("auris-draft-audio-{id}"))
             .spawn(move || {
-                while let Ok((revision, mut job, sections)) = receiver.recv() {
+                while let Ok((revision, mut job, sections, tracks)) = receiver.recv() {
                     let Ok(_gate) = audio_gate(&cancel) else {
                         break;
                     };
@@ -64,7 +70,8 @@ impl Renderer {
                                     timeline: Arc::new(
                                         auris_session::AuditionTimeline::from_audio(
                                             &audio, sections,
-                                        ),
+                                        )
+                                        .with_tracks(tracks),
                                     ),
                                     audio: Arc::new(audio),
                                 }),
@@ -109,6 +116,7 @@ impl Renderer {
                     revision,
                     session.render_job_at(Some(22_050.0)),
                     session.audition_sections(),
+                    session.audition_tracks(),
                 ))
                 .is_ok()
         }) {
@@ -166,6 +174,9 @@ mod tests {
         assert_eq!(id, 7);
         assert_eq!(preview.revision, revision);
         assert_eq!(preview.timeline.sections[0].label, "Intro");
+        assert_eq!(preview.timeline.tracks[0].name, "Lead");
+        assert_eq!(preview.timeline.tracks[0].notes[0].pitch, 72);
+        assert_eq!(preview.timeline.tracks[0].notes[0].end_seconds, 0.5);
         assert_eq!(preview.timeline.peaks.len(), 256);
         assert_eq!(
             preview.timeline.duration_seconds,

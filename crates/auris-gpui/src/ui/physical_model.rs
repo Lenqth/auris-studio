@@ -266,8 +266,6 @@ impl AurisApp {
         Some(
             Card::new()
                 .id("physical-model")
-                .key_context("AurisVisualizationControls")
-                .on_action(|_: &super::widgets::ClaimVisualizationActivation, _, _| {})
                 .debug_selector(|| "physical-model".into())
                 .w_full()
                 .flex_shrink_0()
@@ -1021,6 +1019,10 @@ mod tests {
             assert_eq!(app.project(), &before);
         });
         utility.update(|window, cx| window.focus(&app.read(cx).focus));
+        // Windows and Linux expose the application-menu trigger before the model controls.
+        if crate::app::AurisApp::wants_menu_bar() {
+            utility.simulate_keystrokes("tab");
+        }
         utility.simulate_keystrokes("tab tab tab tab");
         utility.update(|_, cx| assert!(atelier::focus_visible(cx)));
         let gain = app.read_with(&utility, |app, _| app.physical_view.gain);
@@ -1305,10 +1307,9 @@ mod tests {
         assert!(utility.debug_bounds("physical-motion-canvas").is_some());
         harness::click("physical-gain", &mut utility);
         app.read_with(&utility, |app, _| assert_eq!(app.physical_view.gain, 96.));
-        // Mouse activation need not leave keyboard focus on the button. Walk the real
-        // tab order from the window root: Close, both view segments, then display gain.
-        utility.update(|window, cx| window.focus(&app.read(cx).focus));
-        utility.simulate_keystrokes("tab tab tab tab");
+        // Re-enter the native button through the real tab order. Mouse activation may leave
+        // focus on the button, so walk out and back in before testing keyboard activation.
+        utility.simulate_keystrokes("shift-tab tab");
         utility.simulate_keystrokes("enter");
         utility.simulate_event(gpui::KeyUpEvent {
             keystroke: gpui::Keystroke::parse("enter").unwrap(),

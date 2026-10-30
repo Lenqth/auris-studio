@@ -19,6 +19,18 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// Rename an exact project-local song conversation.
+    WorkshopThreadRename(String),
+    /// Archive or restore an exact project-local song conversation.
+    WorkshopThreadArchive(String, bool),
+    /// Opens a reference score draft, optionally from the selected MIDI clip.
+    ComposerMelody(bool),
+    /// Attaches a MIDI file to the current conversation.
+    ComposerMidi,
+    /// Opens the chord reference prompt for the current conversation.
+    ComposerChords,
+    /// Opens the sound map to attach an instrument choice.
+    ComposerSound,
     /// Selects a model for the new-song draft.
     WorkshopModel(usize),
     /// Refreshes the new-song model catalogue.
@@ -131,6 +143,8 @@ pub enum MenuCommand {
         track: TrackId,
         /// The voice entry file.
         path: std::path::PathBuf,
+        /// The saved VOICEVOX style, if this row names one.
+        speaker: Option<String>,
     },
     /// Choose a named speaker or backend style for an explicit singer track.
     SingerSpeaker {
@@ -849,9 +863,13 @@ impl AurisApp {
                 self.select_track(track);
                 self.choose_singer_voice(cx);
             }
-            MenuCommand::SingerVoice { track, path } => {
+            MenuCommand::SingerVoice {
+                track,
+                path,
+                speaker,
+            } => {
                 self.select_track(track);
-                self.apply_singer_voice(track, path, cx);
+                self.apply_singer_voice_selection(track, path, speaker, cx);
             }
             MenuCommand::SingerSpeaker { track, speaker } => {
                 self.set_singer_speaker_for(track, speaker)
@@ -982,7 +1000,20 @@ impl AurisApp {
             MenuCommand::NewAudioTrack => self.add_audio_track(),
             MenuCommand::NewBusTrack => self.add_bus_track(),
             MenuCommand::WorkshopModel(index) => self.choose_workshop_model(index),
+            MenuCommand::WorkshopThreadRename(id) => self.rename_workshop_thread(id, cx),
+            MenuCommand::WorkshopThreadArchive(id, archived) => {
+                self.archive_workshop_thread(id, archived, cx)
+            }
             MenuCommand::WorkshopRefreshModels => self.refresh_workshop_models(),
+            MenuCommand::ComposerMelody(selection) => self.start_midi_draft(selection),
+            MenuCommand::ComposerMidi => self.choose_midi_attachment(cx),
+            MenuCommand::ComposerChords => self.open_agent_chords(),
+            MenuCommand::ComposerSound => {
+                if self.can_attach_agent_music() {
+                    self.timbre_map.open = true;
+                }
+            }
+
             MenuCommand::ClearCurve { clip, which } => {
                 self.session.clear_curve(clip, which);
             }

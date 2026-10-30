@@ -18,10 +18,6 @@ pub enum Icon {
     Play,
     /// Pause playback.
     Pause,
-    /// Audible preview output.
-    Volume,
-    /// Muted preview output.
-    VolumeMuted,
     /// Stop playback and rewind.
     Stop,
     /// Start recording a take.
@@ -44,6 +40,8 @@ pub enum Icon {
     Cross,
     /// Additional commands: three horizontal dots.
     More,
+    /// The application menu: three horizontal lines.
+    Menu,
     /// A menu item that is currently on.
     Check,
     /// The sound library: a folder with a raised tab.
@@ -79,6 +77,38 @@ pub fn icon(icon: Icon, size: Pixels, color: Hsla) -> impl IntoElement + use<> {
     AtelierIcon::new(icon.source()).size(size).color(color)
 }
 
+/// Semantic tool identity, shared by chat logs and candidate activity summaries.
+pub(crate) fn tool_icon(name: &str) -> Icon {
+    let name = name.rsplit("__").next().unwrap_or(name);
+    if name.contains("sing") || name.contains("vocal") || name.contains("lyric") {
+        Icon::Microphone
+    } else if name.contains("instrument") || name.contains("soundfont") {
+        Icon::Keyboard
+    } else if name.contains("effect") || name.contains("mix") || name.contains("volume") {
+        Icon::Faders
+    } else if name.contains("audio") || name.contains("render") || name.contains("export") {
+        Icon::Wave
+    } else if name.contains("play") || name.contains("transport") {
+        Icon::Play
+    } else if name.contains("note")
+        || name.contains("phrase")
+        || name.contains("harmon")
+        || name.contains("compos")
+        || name.contains("track")
+        || name.contains("clip")
+    {
+        Icon::Notes
+    } else if name.contains("inspect") || name.contains("diagnos") || name.starts_with("get_") {
+        Icon::Inspector
+    } else if name.contains("read") || name.contains("record") || name.contains("reference") {
+        Icon::Log
+    } else if name.contains("search") || name.contains("list") {
+        Icon::Library
+    } else {
+        Icon::Knob
+    }
+}
+
 impl Icon {
     /// Maps Auris's domain vocabulary onto Atelier's shared 24px icon family.
     ///
@@ -89,13 +119,12 @@ impl Icon {
     pub fn source(self) -> IconSource {
         let name = match self {
             Self::Sound(family) => return IconSource::svg(sound_icon_path(family)),
-            Self::Punch => return IconSource::svg("icons/auris-punch.svg"),
-            Self::Notes => return IconSource::svg("icons/auris-notes.svg"),
+            Self::Menu => return IconSource::svg("icons/menu.svg"),
+            Self::Punch => AtelierIconName::Punch,
+            Self::Notes => AtelierIconName::Notes,
             Self::ToStart => AtelierIconName::SkipBack,
             Self::Play => AtelierIconName::Play,
             Self::Pause => AtelierIconName::Pause,
-            Self::Volume => AtelierIconName::Volume,
-            Self::VolumeMuted => AtelierIconName::VolumeOff,
             Self::Stop => AtelierIconName::Stop,
             Self::Record => AtelierIconName::Record,
             Self::Loop => AtelierIconName::Loop,

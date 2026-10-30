@@ -1167,6 +1167,17 @@ with fallback fonts retained for Japanese and other scripts. Create a theme from
 palette, give it a name, and enter its accent colour as `#RRGGBB`. The preview leaves the applied
 theme alone until **Save and apply**. Saved custom themes can be selected and edited here.
 
+**Glass effect** is enabled by default and can be switched off independently of the colour
+theme. The choice is saved and applies to every application window. Presets include Solarized
+Dark/Light, Iceberg, Dracula, Nord, Monokai, Rosé Pine, Cobalt and Catppuccin Mocha/Latte.
+**Import theme…** reads VS Code JSON/JSONC themes and their local `include` files, adding a
+custom theme without replacing existing presets. It maps the editor background, accent and
+terminal palette to Auris; surface shades and text contrast follow Auris's readability rules.
+Imported themes can be edited through the same theme editor.
+To export the current VS Code palette, run **Developer: Generate Color Theme from Current
+Settings** in its Command Palette and save the generated JSON, as described in the
+[VS Code theme guide](https://code.visualstudio.com/api/extension-guides/color-theme#create-a-new-color-theme).
+
 Every preset has its own eight track, clip and library palette colours, which the editor
 copies when creating a theme. Changing the base updates inherited colours and keeps colours
 already edited in the draft. Enter `#RRGGBB` for a
@@ -1419,7 +1430,9 @@ project. `inspect_project` reads the current arrangement. The model chooses the 
 parts and writes them through flat track, clip and note tools. `edit_notes` applies bounded atomic patches/replacements using exact ticks and a
 revision from `read_notes`; `edit_timeline` and `set_loop` control tempo/meter and looping.
 Changes appear before the model's final reply. Existing music is preserved unless its
-removal is explicitly requested. Save the project normally when ready.
+removal is explicitly requested. A new song in an untitled document is named with
+`rename_project`, so Save As and the exports offer that title instead of "Untitled". Save the
+project normally when ready.
 
 The panel can attach audio, stop a running turn and start a new conversation. Send with Enter or the Send button. Answers use selectable Markdown blocks with compact headings and indented lists; Copy Markdown copies the complete answer. Opening another
 document rebinds the agent. In saved projects, successful

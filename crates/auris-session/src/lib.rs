@@ -53,6 +53,7 @@ pub mod conversation_attachments;
 pub mod conversations;
 pub mod execution_trace;
 mod export_inspection;
+pub mod issue_report;
 pub mod live_agent;
 pub mod midi_reference;
 pub mod music_reference;
@@ -121,7 +122,7 @@ pub use auris_engine::{OutputPreviewOptions, OutputPreviewStatus};
 pub use auris_io::IoError;
 pub use error::SessionError;
 mod audition;
-pub use audition::{AuditionSection, AuditionTimeline};
+pub use audition::{AuditionNote, AuditionSection, AuditionTimeline, AuditionTrack};
 pub use history::{Edit, History};
 pub use library::{
     DICTIONARY_DIR_VAR, DICTIONARY_FOLDER, GENERAL_MIDI, JAPANESE_DICTIONARY, LIBRARY_DIR_VAR,
@@ -173,7 +174,10 @@ pub use session::{
     SongCandidate, SongIdea, SongRequest, SongSinger, SongSinging, SongSourceChoice,
 };
 pub use session::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
-pub use session::{TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
+pub use session::{
+    TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbrePreviewJob, TimbreSound,
+};
+mod sound_character;
 mod sound_icons;
 pub use session::{TrackConversion, TrackConversionJob};
 pub use settings::{
@@ -182,6 +186,7 @@ pub use settings::{
     WindowPlacement, config_dir,
 };
 pub use singer_portrait::{SingerPortraitError, SingerPortraitSource, load_singer_portrait};
+pub use sound_character::{TimbreCharacter, TimbreTargets};
 pub use sound_icons::SoundIcon;
 pub use transcription::{read_external_transcription_file, read_transcription_file};
 pub use transcription_draft::{

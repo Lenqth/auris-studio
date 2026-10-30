@@ -360,6 +360,21 @@ impl Session {
         indices: &[usize],
         text: &str,
     ) -> Result<usize, SessionError> {
+        self.write_lyrics_with_reading(clip, indices, text, None)
+    }
+
+    /// Write original lyrics with an optional independent kana pronunciation.
+    ///
+    /// An explicit reading works without a dictionary. The original text stays on the
+    /// first note with `+` continuations, while phonemes follow the reading one mora per
+    /// note. Invalid readings and insufficient slots fail before recording an edit.
+    pub fn write_lyrics_with_reading(
+        &mut self,
+        clip: ClipId,
+        indices: &[usize],
+        text: &str,
+        reading: Option<&str>,
+    ) -> Result<usize, SessionError> {
         let Some((_, target)) = self.project.midi_clip(clip) else {
             return Err(SessionError::UnknownClip(clip.0));
         };
@@ -376,20 +391,32 @@ impl Session {
         // Each note's new words, worked out in full before anything is recorded. The moras come
         // with their phonemes attached — asking `kana_phonemes` of each mora on its own would
         // lose ー its vowel, which only the mora before it knows.
-        let mut portions: Vec<(String, Vec<String>)> = match split_kana_lyric(text.trim()) {
-            Some(moras) => moras,
-            None => {
-                let phonemes = lyric_phonemes(text, self.japanese.as_ref())?;
-                phoneme_moras(&phonemes)
-                    .into_iter()
-                    .enumerate()
-                    .map(|(at, mora)| match at {
-                        0 => (text.trim().to_string(), mora),
-                        _ => (LYRIC_CONTINUATION.to_string(), mora),
+        let explicit = reading
+            .map(|reading| {
+                split_kana_lyric(reading.trim())
+                    .filter(|moras| !moras.is_empty() && !text.trim().is_empty())
+                    .ok_or_else(|| {
+                        SessionError::InvalidNotes(
+                            "Supply nonempty written lyrics and a nonempty kana reading".into(),
+                        )
                     })
-                    .collect()
-            }
-        };
+            })
+            .transpose()?;
+        let mut portions: Vec<(String, Vec<String>)> =
+            match explicit.or_else(|| split_kana_lyric(text.trim())) {
+                Some(moras) => moras,
+                None => {
+                    let phonemes = lyric_phonemes(text, self.japanese.as_ref())?;
+                    phoneme_moras(&phonemes)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(at, mora)| match at {
+                            0 => (text.trim().to_string(), mora),
+                            _ => (LYRIC_CONTINUATION.to_string(), mora),
+                        })
+                        .collect()
+                }
+            };
 
         if portions.len() > order.len() {
             return Err(SessionError::InvalidNotes(format!(
@@ -405,7 +432,7 @@ impl Session {
             .filter(|(text, _)| text != LYRIC_CONTINUATION)
             .map(|(text, _)| text.as_str())
             .collect();
-        if surface != text.trim() {
+        if reading.is_some() || surface != text.trim() {
             for (index, (lyric, _)) in portions.iter_mut().enumerate() {
                 *lyric = if index == 0 {
                     text.trim().to_owned()

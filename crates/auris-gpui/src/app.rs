@@ -1380,6 +1380,7 @@ pub struct AurisApp {
     pub(crate) welcome_transition: Option<crate::ui::project_chooser::WelcomeTransition>,
     pub(crate) song_workshop: Option<crate::ui::song_workshop::SongWorkshop>,
     pub(crate) attachment_preview: Option<crate::ui::attachment_preview::AttachmentPreview>,
+    pub(crate) inline_attachments: Vec<crate::ui::attachment_preview::AttachmentPreview>,
     pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
     pub(crate) session: Session,
@@ -1496,7 +1497,6 @@ pub struct AurisApp {
     pub(crate) timbre_map: crate::ui::timbre_map::TimbreMapState,
     /// Invalidates results started before a voice or its connection settings changed.
     pub(crate) sung_preview_generation: u64,
-    pub(crate) audio_player_drag: Option<crate::ui::audio_player::PlayerDrag>,
     /// Drum maps remembered per sound source and copied into each project that uses them.
     pub(crate) drum_maps: auris_session::DrumMapBook,
     /// Installation-wide saved sounds offered by the library.
@@ -1510,6 +1510,13 @@ pub struct AurisApp {
     pub(crate) note_selection_preview: Option<auris_session::NoteSelectionPreview>,
     /// Keyboard focus target, so the action bindings reach this view.
     pub(crate) focus: FocusHandle,
+    /// Focus target owned by the contextual-menu overlay while it is open.
+    ///
+    /// Keeping this separate from the document root lets a menu command move focus to another
+    /// pane without the overlay teardown mistaking that intentional move for a lost menu focus.
+    pub(crate) menu_focus: FocusHandle,
+    /// A menu's activation release, which must not press the control that regains focus.
+    pub(crate) menu_activation: Option<(gpui::WindowId, String)>,
     /// Window whose transport consumed Space, so its release cannot also click a button.
     pub(crate) transport_space_window: Option<gpui::WindowId>,
     /// Stable, focus-trapped keyboard targets for the controls in modal overlays.
@@ -1520,6 +1527,7 @@ pub struct AurisApp {
     pub(crate) last_pane: Pane,
     /// Window height as of the last frame, used only as a fallback before the first paint.
     pub(crate) viewport_height: Pixels,
+    pub(crate) transport_height: Pixels,
     /// Width of the arrangement body as of the last frame.
     pub(crate) arrangement_width: Pixels,
     /// Rectangles the canvases were painted into last frame.
@@ -1552,8 +1560,12 @@ pub struct AurisApp {
     pub(crate) menu_bar_scroll: gpui::ScrollHandle,
     /// The open right-click menu, if any.
     pub(crate) menu: Option<ContextMenu>,
+    /// Trigger focus restored after a contextual menu releases the keyboard.
+    pub(crate) menu_focus_return: Option<gpui::FocusHandle>,
     /// Which menu-bar menu is open, on the platforms that draw their own bar.
     pub(crate) menu_bar: Option<OpenMenu>,
+    /// Painted bounds of pinned menu categories in the current project title bar.
+    pub(crate) menu_title_bounds: crate::ui::menu_bar::MenuTitleBounds,
     /// The open rename sheet, if any.
     pub(crate) prompt: Option<Prompt>,
     /// Background release check, verified download, or an update awaiting application.
@@ -1604,7 +1616,7 @@ pub struct AurisApp {
     pub(crate) plugin_discovery_error: Option<String>,
     /// The singer voices found on this machine, scanned once and kept — the
     /// [`Self::clap_files`] arrangement, cleared when a voice folder is added or forgotten.
-    pub(crate) voices: Option<Vec<(String, std::path::PathBuf)>>,
+    pub(crate) voices: Option<Vec<(String, std::path::PathBuf, Option<String>)>>,
     /// Bounded metadata returned after an opened `.clap` file is inspected in a child process.
     /// Empty results are cached too, so a broken plugin is not retried on every repaint.
     pub(crate) clap_contents:
@@ -1693,6 +1705,8 @@ pub struct AurisApp {
     pub(crate) pointer: PointerGestures,
     /// The settings window, while it is open.
     pub(crate) settings_window: Option<WindowHandle<SettingsWindow>>,
+    pub(crate) issue_report_window:
+        Option<WindowHandle<crate::issue_report_window::IssueReportWindow>>,
     /// The rhythm editor; invalidated when the document is replaced.
     pub(crate) rhythm_window: Option<WindowHandle<crate::ui::rhythm_grid::RhythmWindow>>,
     /// The external singing-backend setup window, while it is open.
@@ -1955,6 +1969,7 @@ impl AurisApp {
             welcome_transition: None,
             song_workshop: None,
             attachment_preview: None,
+            inline_attachments: Vec::new(),
             project_window: None,
             project_tabs: None,
             tab_bar_height: px(0.0),
@@ -2009,18 +2024,20 @@ impl AurisApp {
             sung_preview_generation: 0,
             sung_geometry: std::collections::HashMap::new(),
             sung_geometry_revision: 0,
-            audio_player_drag: None,
             drum_maps: auris_session::DrumMapBook::load(),
             sounds,
             sound_library_error,
             auditioning: None,
             note_selection_preview: None,
             focus: cx.focus_handle(),
+            menu_focus: cx.focus_handle(),
+            menu_activation: None,
             transport_space_window: None,
             modal_focus: ModalFocus::new(cx),
             panes: PaneFocus::new(cx),
             last_pane: Pane::Arrangement,
             viewport_height: px(900.0),
+            transport_height: Metrics::TRANSPORT_HEIGHT,
             arrangement_width: px(900.0),
             canvas: CanvasBounds::default(),
             mixer_scroll: gpui::ScrollHandle::new(),
@@ -2033,7 +2050,9 @@ impl AurisApp {
             log_scroll: gpui::ScrollHandle::new(),
             menu_bar_scroll: gpui::ScrollHandle::new(),
             menu: None,
+            menu_focus_return: None,
             menu_bar: None,
+            menu_title_bounds: Default::default(),
             prompt: None,
             update_phase: crate::ui::updates::UpdatePhase::Idle,
             update_generation: 0,
@@ -2085,6 +2104,7 @@ impl AurisApp {
             pointer: input.pointer,
             keymap,
             settings_window: None,
+            issue_report_window: None,
             rhythm_window: None,
             clicked_key: None,
             _repaint: repaint,
@@ -2149,6 +2169,7 @@ impl AurisApp {
         self.prompt.is_some()
             || self.palette.is_some()
             || self.library_search_focused
+            || (self.timbre_map.open && self.timbre_map.search_focused)
             || self.agent_chat.typing()
     }
 
@@ -2280,6 +2301,17 @@ impl AurisApp {
             if !self.modal_focus.prompt_contains_focused(window) {
                 window.focus(self.modal_focus.prompt_confirm());
             }
+            return;
+        }
+        if self
+            .prompt
+            .as_ref()
+            .and_then(crate::ui::prompt::Prompt::feedback_focus_handles)
+            .is_some_and(|foci| {
+                foci.iter().any(|focus| focus.is_focused(window))
+                    || self.modal_focus.prompt_contains_focused(window)
+            })
+        {
             return;
         }
 
@@ -2980,14 +3012,17 @@ impl AurisApp {
         self.status_failed = true;
     }
 
+    /// The document name shown in the application title bar.
+    ///
+    /// Window chrome owns the product name and save marker separately; keeping this value
+    /// document-only lets Atelier centre the title without duplicating application branding.
+    pub(crate) fn document_title(&self) -> String {
+        self.session.document_title()
+    }
+
     /// Window title, marking unsaved changes the way every editor does.
     pub(crate) fn window_title(&self) -> String {
-        let name = self
-            .session
-            .path()
-            .and_then(|path| path.file_stem())
-            .map(|stem| stem.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.project().name.clone());
+        let name = self.document_title();
         if self.session.is_dirty() {
             format!("{name} • Auris Studio")
         } else {
@@ -3024,6 +3059,7 @@ impl AurisApp {
     pub(crate) fn apply_language(&mut self, preference: Option<Language>, cx: &mut App) {
         self.settings.language = preference;
         self.language = self.settings.language();
+        crate::install_component_language(self.language, cx);
         if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
@@ -3086,6 +3122,9 @@ impl AurisApp {
         appearance: Appearance,
         cx: &mut App,
     ) -> std::io::Result<()> {
+        if self.appearance.titlebar_menus != appearance.titlebar_menus {
+            self.close_menu_bar();
+        }
         self.appearance = appearance.normalised();
         self.theme = self.appearance.theme();
         self.theme.install(cx);
@@ -3372,19 +3411,9 @@ impl AurisApp {
         self.remember_layout();
     }
 
-    /// Fixed rows stacked above and below the central row: the transport, the status bar, and —
-    /// everywhere the application draws its own menu bar — that row too.
-    ///
-    /// One answer for both `resize_dock` and `drawn_dock_sizes`, because they have to subtract
-    /// the same chrome the layout actually stacks: the menu bar was once left out of both, and
-    /// on Windows a bottom dock dragged to its limit overflowed the window by exactly the 26
-    /// pixels the two forgot — a mistake macOS, where development happens, never showed.
-    pub(crate) fn chrome_height() -> Pixels {
-        let menu = match Self::wants_menu_bar() {
-            true => crate::ui::menu_bar::HEIGHT,
-            false => gpui::px(0.0),
-        };
-        crate::titlebar::HEIGHT + Metrics::TRANSPORT_HEIGHT + Metrics::STATUS_HEIGHT + menu
+    /// Chrome reserved around the docks, including responsive transport controls.
+    pub(crate) fn chrome_height(&self) -> Pixels {
+        crate::titlebar::HEIGHT + self.transport_height + Metrics::STATUS_HEIGHT
     }
 
     /// Applies a dock resize drag.
@@ -3395,7 +3424,7 @@ impl AurisApp {
         let available = match dock {
             Dock::Bottom => {
                 self.viewport_height
-                    - Self::chrome_height()
+                    - self.chrome_height()
                     - self.project_tabs_height()
                     - PanelLayout::MIN_ARRANGEMENT
             }
@@ -3455,7 +3484,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT
+                    self.chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT
                         + self.panels.lanes.header_height(),
                 )
             },
@@ -3469,7 +3498,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT,
+                    self.chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT,
                 )
             },
             |bounds| bounds.origin,

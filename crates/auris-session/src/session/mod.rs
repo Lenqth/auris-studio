@@ -156,7 +156,9 @@ pub use spectrogram::{RenderedSpectrogramJob, SpectrogramJob};
 pub use record::{
     Arm, InputChannels, RecordingReport, RecordingStatus, TakeReport, input_level_of,
 };
-pub use timbre::{TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
+pub use timbre::{
+    TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbrePreviewJob, TimbreSound,
+};
 pub use tracks::{MAX_TRACK_HEIGHT, MIN_TRACK_HEIGHT};
 pub use typing::{
     DEFAULT_OCTAVE, DEFAULT_VELOCITY, LAYOUT, MusicalTyping, OCTAVE_RANGE, Played, Release, Struck,
@@ -658,7 +660,7 @@ impl Session {
         let work_dir = autosave::create_session_workspace(options.autosave)?;
         let fonts = SoundFontBank::shared();
         let registry = default_registry(Arc::clone(&fonts));
-        let project = Project::new("Untitled", options.sample_rate);
+        let project = Project::new(Project::UNTITLED, options.sample_rate);
         let mut audio = options.audio_preferences.clone();
         if audio.uses_asio() {
             audio.input_device = audio.device.clone();
@@ -1239,6 +1241,36 @@ impl Session {
     /// Where the document was last saved or loaded from.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// What the document is called wherever a person sees it or a file dialog suggests a name.
+    ///
+    /// The saved file's name first, because that is what the person chose last and what the
+    /// window has been showing them since. Before the first save it is the document's own name —
+    /// which the agent gives a song it writes, so the first Save As offers that title rather than
+    /// [`Project::UNTITLED`].
+    pub fn document_title(&self) -> String {
+        self.path
+            .as_deref()
+            .and_then(Path::file_stem)
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_else(|| match self.project.name.trim() {
+                "" => Project::UNTITLED.to_owned(),
+                name => name.to_owned(),
+            })
+    }
+
+    /// Names the document, as one undoable step. Surrounding whitespace is dropped.
+    ///
+    /// Returns `false`, recording nothing, for a blank name or the name it already has.
+    pub fn rename_project(&mut self, name: &str) -> bool {
+        let name = name.trim();
+        if name.is_empty() || name == self.project.name {
+            return false;
+        }
+        self.record(Edit::RenameProject);
+        self.project.name = name.to_owned();
+        true
     }
 
     /// `true` when there are unsaved changes.

@@ -8,8 +8,11 @@ use gpui::{
 use auris_i18n::Key;
 
 use crate::app::{AurisApp, Pane};
+use crate::ui::icons::Icon;
 use crate::ui::prompt::PendingAction;
-use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button_enabled, button_with_content};
+use crate::ui::widgets::{
+    ButtonState, ButtonStyle, Latch, button_with_content, icon_button_enabled,
+};
 
 /// The documents open in one native window.
 pub(crate) struct ProjectTabs {
@@ -58,6 +61,12 @@ impl ProjectTabs {
                 view.stop_audition();
                 view.release_physical_preview();
                 view.drag = None;
+                // A menu belongs to the document that opened it. Do not let a hidden tab
+                // restore its trigger or activation release when it becomes active again.
+                view.close_menu();
+                view.close_menu_bar();
+                view.menu_focus_return = None;
+                view.menu_activation = None;
             });
             self.active = index;
         }
@@ -127,8 +136,9 @@ impl ProjectTabs {
         };
         self.projects[index].update(cx, |view, _| view.save_window_placement());
         if self.projects.len() == 1 {
-            window.remove_window();
-            return;
+            // Keep the native window and its close handler; replace the closed document
+            // with a fresh start screen so its edits and background work are released.
+            self.add(None, window, cx);
         }
         self.projects.remove(index);
         self.active = if index < self.active {
@@ -262,8 +272,12 @@ impl AurisApp {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
+        self.tab_bar_height = px(0.0);
         let owner = self.project_tabs.as_ref()?.upgrade()?;
         let tabs = owner.read(cx);
+        if tabs.projects.len() <= 1 {
+            return None;
+        }
         let own = cx.entity_id();
         let enabled = !self.modal_blocks_document_actions();
         self.tab_bar_height = window.rem_size() * 2.0;
@@ -325,11 +339,11 @@ impl AurisApp {
                         )),
                     )
                     .child(
-                        button_enabled(
+                        icon_button_enabled(
                             ("close-project-tab", index),
-                            "×",
-                            ButtonStyle::Ghost,
-                            ButtonState::available(Latch::Off, enabled),
+                            Icon::Cross,
+                            false,
+                            enabled,
                             theme.accent,
                             theme,
                             move |_, _, cx| {
@@ -356,11 +370,11 @@ impl AurisApp {
                 .border_color(theme.border_subtle)
                 .child(row)
                 .child(
-                    button_enabled(
+                    icon_button_enabled(
                         "new-project-tab",
-                        "+",
-                        ButtonStyle::Ghost,
-                        ButtonState::available(Latch::Off, enabled),
+                        Icon::Plus,
+                        false,
+                        enabled,
                         theme.accent,
                         theme,
                         cx.listener(|this, _, _, cx| {
@@ -384,10 +398,9 @@ impl AurisApp {
         } else {
             self.opening_project
                 .as_deref()
-                .or(self.session.path())
                 .and_then(|path| path.file_stem())
                 .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| self.project().name.clone())
+                .unwrap_or_else(|| self.session.document_title())
         };
         if self.session.is_dirty() {
             format!("{label} •")
@@ -437,6 +450,149 @@ pub(crate) fn update_window(
 mod tests {
     use crate::harness::{click, paint};
 
+    fn project_window_count(cx: &gpui::App) -> usize {
+        cx.windows()
+            .into_iter()
+            .filter_map(|window| window.downcast::<super::ProjectTabs>())
+            .count()
+    }
+
+    #[gpui::test]
+    fn closing_the_last_tab_returns_to_a_fresh_start_screen(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        let window_id = first.read_with(cx, |view, _| view.project_window);
+        first.update(cx, |view, _| view.project_chooser = None);
+        paint(&first, cx);
+        cx.simulate_keystrokes("secondary-w");
+        cx.run_until_parked();
+
+        let start = tabs.read_with(cx, |tabs, _| {
+            assert_eq!(tabs.projects.len(), 1);
+            tabs.active()
+        });
+        assert_ne!(start.entity_id(), first.entity_id());
+        start.read_with(cx, |view, _| {
+            assert_eq!(view.project_window, window_id);
+            assert!(view.project_chooser.is_some());
+            assert!(view.song_workshop.is_none());
+            assert!(view.session.path().is_none());
+            assert!(!view.session.is_dirty());
+            assert!(view.session.audio_suspended());
+        });
+        paint(&start, cx);
+        click("chooser-empty", cx);
+        paint(&start, cx);
+        click("chooser-confirm", cx);
+        start.read_with(cx, |view, _| {
+            assert!(view.project_chooser.is_none());
+            assert_eq!(view.project_window, window_id);
+        });
+        cx.simulate_keystrokes("secondary-w");
+        cx.run_until_parked();
+        let start = tabs.read_with(cx, |tabs, _| tabs.active());
+        paint(&start, cx);
+        click("chooser-ai", cx);
+        paint(&start, cx);
+        click("chooser-confirm", cx);
+        start.read_with(cx, |view, _| {
+            assert!(view.song_workshop.is_some());
+            assert_eq!(view.project_window, window_id);
+        });
+        cx.cx.update(|cx| assert_eq!(project_window_count(cx), 1));
+    }
+
+    #[gpui::test]
+    fn cancelling_the_last_tabs_close_keeps_the_document(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        first.update(cx, |view, _| {
+            view.project_chooser = None;
+            view.session.add_audio_track("Keep unsaved edits");
+        });
+        paint(&first, cx);
+        cx.simulate_keystrokes("secondary-w");
+        cx.run_until_parked();
+        paint(&first, cx);
+        cx.simulate_keystrokes("escape");
+        first.read_with(cx, |view, _| {
+            assert!(view.prompt.is_none());
+            assert!(view.project_chooser.is_none());
+            assert!(view.session.is_dirty());
+        });
+        assert_eq!(
+            tabs.read_with(cx, |tabs, _| tabs.active()).entity_id(),
+            first.entity_id()
+        );
+    }
+
+    #[gpui::test]
+    fn discarding_the_last_tabs_edits_returns_to_start(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        first.update(cx, |view, _| {
+            view.project_chooser = None;
+            view.session.add_audio_track("Discard these edits");
+        });
+        paint(&first, cx);
+        cx.simulate_keystrokes("secondary-w");
+        cx.run_until_parked();
+        paint(&first, cx);
+        click("prompt-deny", cx);
+        cx.run_until_parked();
+        let start = tabs.read_with(cx, |tabs, _| tabs.active());
+        assert_ne!(start.entity_id(), first.entity_id());
+        assert!(start.read_with(cx, |view, _| view.project_chooser.is_some()));
+        cx.cx.update(|cx| assert_eq!(project_window_count(cx), 1));
+    }
+
+    #[gpui::test]
+    fn closing_the_native_window_still_removes_it(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let id = tabs.read_with(cx, |tabs, cx| {
+            tabs.active().read(cx).project_window.unwrap()
+        });
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.start_close_window(window, cx)));
+        cx.run_until_parked();
+        cx.cx
+            .update(|cx| assert!(cx.windows().iter().all(|window| window.window_id() != id)));
+    }
+
+    #[gpui::test]
+    fn tab_bar_is_visible_only_while_multiple_tabs_are_open(cx: &mut gpui::TestAppContext) {
+        let (tabs, cx) = crate::harness::open_tabs(cx);
+        let first = tabs.read_with(cx, |tabs, _| tabs.active());
+        paint(&first, cx);
+        assert!(cx.debug_bounds("close-project-tab-0").is_none());
+        assert!(cx.debug_bounds("new-project-tab").is_none());
+        assert_eq!(
+            first.read_with(cx, |view, _| view.project_tabs_height()),
+            gpui::px(0.0)
+        );
+
+        cx.update(|window, cx| tabs.update(cx, |tabs, cx| tabs.add(None, window, cx)));
+        let second = tabs.read_with(cx, |tabs, _| tabs.active());
+        paint(&second, cx);
+        assert!(cx.debug_bounds("close-project-tab-0").is_some());
+        assert!(cx.debug_bounds("close-project-tab-1").is_some());
+        assert!(second.read_with(cx, |view, _| view.project_tabs_height()) > gpui::px(0.0));
+
+        click("close-project-tab-1", cx);
+        cx.run_until_parked();
+        paint(&first, cx);
+        assert_eq!(tabs.read_with(cx, |tabs, _| tabs.projects.len()), 1);
+        // GPUI retains debug bounds for elements from earlier frames, including hidden ones.
+        cx.update(|window, cx| {
+            first.update(cx, |view, cx| {
+                assert!(view.render_project_tabs(window, cx).is_none());
+            })
+        });
+        assert_eq!(
+            first.read_with(cx, |view, _| view.project_tabs_height()),
+            gpui::px(0.0)
+        );
+    }
+
     #[gpui::test]
     fn new_and_cycle_shortcuts_keep_the_first_documents_edits(cx: &mut gpui::TestAppContext) {
         let (tabs, cx) = crate::harness::open_tabs(cx);
@@ -477,12 +633,19 @@ mod tests {
             first.read_with(cx, |view, _| view.project().tracks[1].name.clone()),
             "Keep this"
         );
+        first.update(cx, |view, _| {
+            view.menu_bar = Some(crate::ui::menu_bar::OpenMenu::at(0));
+            view.menu_focus_return = Some(view.focus.clone());
+        });
+        paint(&first, cx);
         cx.simulate_keystrokes("ctrl-shift-tab");
         cx.run_until_parked();
         assert_eq!(
             tabs.read_with(cx, |tabs, _| tabs.active()).entity_id(),
             second.entity_id()
         );
+        assert!(first.read_with(cx, |view, _| view.menu_bar.is_none()));
+        assert!(first.read_with(cx, |view, _| view.menu_focus_return.is_none()));
     }
 
     #[gpui::test]

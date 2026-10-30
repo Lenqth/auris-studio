@@ -6,10 +6,10 @@ use auris_session::workshop::{self, Preferences, Selection};
 pub(super) struct Personalization {
     preferences: Option<Preferences>,
     pub(super) busy: bool,
+    confirming: bool,
     error: Option<String>,
     original: Option<Selection>,
     chosen: usize,
-    confirm_reset: bool,
     pub(super) viewport: std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
 }
 
@@ -28,7 +28,7 @@ impl SettingsWindow {
         operation: impl FnOnce() -> Result<Preferences, String> + Send + 'static,
         cx: &mut Context<Self>,
     ) {
-        if self.personalization.busy {
+        if self.personalization.busy || self.personalization.confirming {
             return;
         }
         self.personalization.busy = true;
@@ -44,7 +44,6 @@ impl SettingsWindow {
                     Ok(preferences) => {
                         this.personalization.preferences = Some(preferences);
                         this.personalization.original = None;
-                        this.personalization.confirm_reset = false;
                         if save {
                             this.status = this.t(Key::PreferenceSaved).to_owned();
                             let _ = this.app.update(cx, |app, cx| {
@@ -85,6 +84,60 @@ impl SettingsWindow {
         );
     }
 
+    fn confirm_delete_preference(
+        &mut self,
+        selection: Option<Selection>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.personalization.busy || self.personalization.confirming {
+            return;
+        }
+        let title = self.t(if selection.is_some() {
+            Key::PreferenceDeleteTitle
+        } else {
+            Key::PreferenceResetTitle
+        });
+        let detail = match &selection {
+            Some(selection) => format!(
+                "{}\n\n{}",
+                selection.context,
+                self.t(Key::PreferenceDeleteNote)
+            ),
+            None => self.t(Key::PreferenceResetQuestion).to_owned(),
+        };
+        let answer = window.prompt(
+            gpui::PromptLevel::Warning,
+            title,
+            Some(&detail),
+            &[
+                gpui::PromptButton::cancel(self.t(Key::Cancel)),
+                gpui::PromptButton::new(self.t(Key::MenuDelete)),
+            ],
+            cx,
+        );
+        self.personalization.confirming = true;
+        cx.spawn(async move |this, cx| {
+            let confirmed = matches!(answer.await, Ok(1));
+            let _ = this.update(cx, |this, cx| {
+                this.personalization.confirming = false;
+                if confirmed {
+                    this.preference_operation(
+                        true,
+                        move || match selection {
+                            Some(original) => workshop::revise_preference(&original, None),
+                            None => workshop::update_preferences(|p| p.selections.clear()),
+                        },
+                        cx,
+                    );
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     pub(super) fn render_personalization(&mut self, cx: &mut Context<Self>) -> AnyElement {
         if self.personalization.preferences.is_none()
             && !self.personalization.busy
@@ -92,7 +145,7 @@ impl SettingsWindow {
         {
             self.preference_operation(false, workshop::load_preferences, cx);
         }
-        let busy = self.personalization.busy;
+        let busy = self.personalization.busy || self.personalization.confirming;
         let mut body = div()
             .flex()
             .flex_col()
@@ -110,7 +163,7 @@ impl SettingsWindow {
                 ),
             )
             .child(note(self.t(Key::PreferenceHelp), &self.theme));
-        if busy {
+        if self.personalization.busy {
             body = body.child(note(
                 self.t(if self.personalization.preferences.is_some() {
                     Key::PreferenceSaving
@@ -130,8 +183,8 @@ impl SettingsWindow {
             FormField::new(self.t(Key::WorkshopMemory)).beside().child(
                 Switch::new("preferences-enabled", preferences.enabled)
                     .disabled(busy || self.personalization.original.is_some())
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let enabled = !preferences.enabled;
+                    .on_change(cx.listener(move |this, on: &bool, _, cx| {
+                        let enabled = *on;
                         this.preference_operation(
                             true,
                             move || workshop::update_preferences(|p| p.enabled = enabled),
@@ -236,11 +289,10 @@ impl SettingsWindow {
                             .ghost()
                             .disabled(busy)
                             .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    let original = remove.clone();
-                                    this.preference_operation(
-                                        true,
-                                        move || workshop::revise_preference(&original, None),
+                                move |this, _, window, cx| {
+                                    this.confirm_delete_preference(
+                                        Some(remove.clone()),
+                                        window,
                                         cx,
                                     );
                                 },
@@ -252,49 +304,17 @@ impl SettingsWindow {
                 }
             }
         }
-        if self.personalization.confirm_reset {
-            body = body
-                .child(note(self.t(Key::PreferenceResetQuestion), &self.theme))
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(
-                            Button::new("preferences-reset-confirm", self.t(Key::WorkshopForget))
-                                .variant(atelier::ButtonVariant::Danger)
-                                .disabled(busy)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.preference_operation(
-                                        true,
-                                        || workshop::update_preferences(|p| p.selections.clear()),
-                                        cx,
-                                    );
-                                })),
-                        )
-                        .child(
-                            Button::new("preferences-reset-cancel", self.t(Key::Cancel))
-                                .ghost()
-                                .disabled(busy)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.personalization.confirm_reset = false;
-                                    cx.notify();
-                                })),
-                        ),
-                );
-        } else {
-            body = body.child(
-                Button::new("preferences-reset", self.t(Key::WorkshopForget))
-                    .ghost()
-                    .disabled(
-                        busy || preferences.selections.is_empty()
-                            || self.personalization.original.is_some(),
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.personalization.confirm_reset = true;
-                        cx.notify();
-                    })),
-            );
-        }
+        body = body.child(
+            Button::new("preferences-reset", self.t(Key::WorkshopForget))
+                .ghost()
+                .disabled(
+                    busy || preferences.selections.is_empty()
+                        || self.personalization.original.is_some(),
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.confirm_delete_preference(None, window, cx);
+                })),
+        );
         body.into_any_element()
     }
 }
@@ -394,12 +414,15 @@ mod tests {
         crate::harness::click("preferences-enabled", cx);
         cx.run_until_parked();
         assert!(!workshop::load_preferences().unwrap().enabled);
+        let language = handle.read_with(cx, |this, _| this.language).unwrap();
         crate::harness::click("preferences-reset", cx);
+        assert!(cx.has_pending_prompt());
         assert_eq!(workshop::load_preferences().unwrap().selections.len(), 1);
-        crate::harness::click("preferences-reset-cancel", cx);
+        cx.simulate_prompt_answer(Key::Cancel.get(language));
+        cx.run_until_parked();
         assert_eq!(workshop::load_preferences().unwrap().selections.len(), 1);
         crate::harness::click("preferences-reset", cx);
-        crate::harness::click("preferences-reset-confirm", cx);
+        cx.simulate_prompt_answer(Key::MenuDelete.get(language));
         cx.run_until_parked();
         let preferences = workshop::load_preferences().unwrap();
         assert!(preferences.selections.is_empty());
@@ -409,6 +432,20 @@ mod tests {
         crate::harness::click("preferences-refresh", cx);
         cx.run_until_parked();
         crate::harness::click("preference-remove-0", cx);
+        assert!(cx.has_pending_prompt());
+        assert!(cx.pending_prompt().unwrap().1.contains(&original.context));
+        assert_eq!(
+            workshop::load_preferences().unwrap().selections,
+            vec![original.clone()]
+        );
+        cx.simulate_prompt_answer(Key::Cancel.get(language));
+        cx.run_until_parked();
+        assert_eq!(
+            workshop::load_preferences().unwrap().selections,
+            vec![original.clone()]
+        );
+        crate::harness::click("preference-remove-0", cx);
+        cx.simulate_prompt_answer(Key::MenuDelete.get(language));
         cx.run_until_parked();
         assert!(workshop::load_preferences().unwrap().selections.is_empty());
         handle

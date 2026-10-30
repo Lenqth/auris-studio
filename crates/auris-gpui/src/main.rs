@@ -22,6 +22,7 @@ mod auxiliary_window;
 #[cfg(test)]
 mod harness;
 mod i18n;
+mod issue_report_window;
 mod keymap;
 mod logbook;
 mod menu;
@@ -33,6 +34,7 @@ mod setup_guide;
 mod startup_soundfonts;
 mod termination;
 mod theme;
+mod theme_import;
 mod titlebar;
 mod update_check;
 mod voice_setup_window;
@@ -78,6 +80,7 @@ fn main() {
         // The Markdown renderer and Atelier share the application's resolved palette.
         gpui_component::init(cx);
         appearance::Appearance::load().theme().install(cx);
+        install_component_language(Settings::load().language(), cx);
         // The menu bar is built before the window, so the language comes from the settings file
         // rather than from the view that has not been created yet. `AurisApp` loads the same
         // file a moment later, and rebuilds these menus whenever the choice changes.
@@ -137,6 +140,15 @@ fn main() {
         .detach();
         cx.activate(true);
     });
+}
+
+/// Keeps component-owned labels in the same language as the application.
+pub(crate) fn install_component_language(language: auris_i18n::Language, cx: &mut App) {
+    match language {
+        auris_i18n::Language::English => atelier::Strings::english(),
+        auris_i18n::Language::Japanese => atelier::Strings::japanese(),
+    }
+    .install(cx);
 }
 
 /// The local file a URL from the shell's open-document event names.

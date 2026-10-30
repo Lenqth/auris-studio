@@ -79,10 +79,80 @@ pub enum MenuRow {
 
 /// One menu on the bar.
 pub struct MenuSection {
+    /// Stable identity for configurable title-bar shortcuts; the macOS application menu has none.
+    pub category: Option<MenuCategory>,
     /// Title shown on the bar.
     pub name: SharedString,
     /// The rows, in order.
     pub rows: Vec<MenuRow>,
+}
+
+/// Categories that can be shown directly in the editor title bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuCategory {
+    /// Project files and import/export.
+    File,
+    /// Selection and musical editing.
+    Edit,
+    /// Track commands.
+    Track,
+    /// Accompaniment and level balancing.
+    Compose,
+    /// Panels, lanes and command search.
+    View,
+    /// Playback and recording.
+    Transport,
+    /// Auxiliary windows and project tabs.
+    Window,
+    /// Music and audio analysis.
+    Analysis,
+    /// Documentation and application information.
+    Help,
+}
+
+impl MenuCategory {
+    /// Categories in their conventional menu order.
+    pub const ALL: [Self; 9] = [
+        Self::File,
+        Self::Edit,
+        Self::Track,
+        Self::Compose,
+        Self::View,
+        Self::Transport,
+        Self::Window,
+        Self::Analysis,
+        Self::Help,
+    ];
+
+    /// Stable preference identifier, independent of language and platform menu offsets.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Edit => "edit",
+            Self::Track => "track",
+            Self::Compose => "compose",
+            Self::View => "view",
+            Self::Transport => "transport",
+            Self::Window => "window",
+            Self::Analysis => "analysis",
+            Self::Help => "help",
+        }
+    }
+
+    /// Localized category title.
+    pub fn label(self) -> Key {
+        match self {
+            Self::File => Key::GroupFile,
+            Self::Edit => Key::GroupEdit,
+            Self::Track => Key::GroupTrack,
+            Self::Compose => Key::GroupCompose,
+            Self::View => Key::GroupView,
+            Self::Transport => Key::GroupTransport,
+            Self::Window => Key::MenuWindow,
+            Self::Analysis => Key::GroupAnalysis,
+            Self::Help => Key::GroupHelp,
+        }
+    }
 }
 
 /// A command row: always available, never ticked.
@@ -135,6 +205,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     if cfg!(target_os = "macos") {
         sections.push(MenuSection {
             // The application's own name is not translated — it is what the bundle is called.
+            category: None,
             name: "Auris Studio".into(),
             rows: vec![
                 command(
@@ -237,11 +308,13 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         file.push(command(t(Key::MenuQuitApp), actions::Quit, "file.quit"));
     }
     sections.push(MenuSection {
+        category: Some(MenuCategory::File),
         name: t(Key::GroupFile),
         rows: file,
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Edit),
         name: t(Key::GroupEdit),
         rows: vec![
             command_if(state.can_undo, t(Key::CmdUndo), actions::Undo, "edit.undo"),
@@ -370,6 +443,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Track),
         name: t(Key::GroupTrack),
         rows: vec![
             command(
@@ -442,6 +516,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Compose),
         name: t(Key::GroupCompose),
         rows: vec![
             command(
@@ -460,6 +535,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     // The palette leads, because a menu is where somebody who does not know it exists will find
     // it — and once it is open, everything below is reachable by typing its name instead.
     sections.push(MenuSection {
+        category: Some(MenuCategory::View),
         name: t(Key::GroupView),
         rows: vec![
             command(
@@ -554,6 +630,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Transport),
         name: t(Key::GroupTransport),
         rows: vec![
             // Play is not ticked, though it is as much a switch as the rest: the transport bar
@@ -627,6 +704,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Window),
         name: t(Key::MenuWindow),
         rows: Panel::ALL
             .into_iter()
@@ -656,6 +734,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Analysis),
         name: t(Key::GroupAnalysis),
         rows: vec![
             command(
@@ -693,8 +772,14 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         ],
     });
     sections.push(MenuSection {
+        category: Some(MenuCategory::Help),
         name: t(Key::GroupHelp),
         rows: vec![
+            command(
+                t(Key::IssueReport),
+                actions::ReportProblem,
+                "help.report_problem",
+            ),
             command(
                 t(Key::CmdCheckForUpdates),
                 actions::CheckForUpdates,
@@ -955,6 +1040,7 @@ mod tests {
         assert_eq!(
             labels,
             [
+                Key::IssueReport.get(Language::English),
                 Key::CmdCheckForUpdates.get(Language::English),
                 Key::CmdAbout.get(Language::English),
             ]

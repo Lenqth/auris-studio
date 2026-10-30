@@ -154,12 +154,17 @@ impl CustomScheme {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Appearance {
+    /// Menu category identifiers pinned in the editor title bar on Windows and Linux.
+    /// Empty hides every shortcut while retaining the full application menu.
+    pub titlebar_menus: Vec<String>,
     /// Id of the chosen colour scheme.
     pub scheme: String,
     /// An installed font family, or the platform interface font when unset.
     pub font_family: Option<String>,
     /// Whether live mixer signals show moving directional highlights in addition to level glow.
     pub animate_mixer_signals: bool,
+    /// Whether window chrome uses translucent glass, independently of the colour scheme.
+    pub glass_effect: bool,
     /// Palettes created in the settings window.
     pub custom_schemes: Vec<CustomScheme>,
 }
@@ -167,9 +172,11 @@ pub struct Appearance {
 impl Default for Appearance {
     fn default() -> Self {
         Self {
+            titlebar_menus: ["file", "edit", "view"].map(str::to_owned).to_vec(),
             scheme: DEFAULT_SCHEME.to_string(),
             font_family: None,
             animate_mixer_signals: true,
+            glass_effect: true,
             custom_schemes: Vec::new(),
         }
     }
@@ -215,6 +222,11 @@ impl Appearance {
     pub fn theme(&self) -> Theme {
         let mut theme = Theme::from_scheme(&self.selected_scheme());
         theme.font = ui_font_for(self.font_family.as_deref());
+        theme.atelier.material = if self.glass_effect {
+            atelier::Material::Translucent
+        } else {
+            atelier::Material::Opaque
+        };
         theme.sync_atelier();
         theme
     }
@@ -237,6 +249,13 @@ impl Appearance {
 
     /// Repairs individual invalid preferences while retaining every unrelated valid choice.
     pub fn normalised(mut self) -> Self {
+        let mut pinned = std::collections::HashSet::new();
+        self.titlebar_menus.retain(|id| {
+            crate::menu::MenuCategory::ALL
+                .iter()
+                .any(|category| category.id() == id)
+                && pinned.insert(id.clone())
+        });
         let mut ids = std::collections::BTreeSet::new();
         let mut names: std::collections::BTreeSet<String> = crate::theme::SCHEMES
             .iter()
@@ -283,6 +302,23 @@ mod tests {
     }
 
     #[test]
+    fn titlebar_menu_preferences_keep_empty_choices_and_ignore_unknown_categories() {
+        let old: Appearance = serde_json::from_str(r#"{"scheme":"daylight"}"#).unwrap();
+        assert_eq!(old.titlebar_menus, ["file", "edit", "view"]);
+        let empty: Appearance = serde_json::from_str(r#"{"titlebar_menus":[]}"#).unwrap();
+        assert!(empty.normalised().titlebar_menus.is_empty());
+        let stored: Appearance =
+            serde_json::from_str(r#"{"titlebar_menus":["view","future-category","view","track"]}"#)
+                .unwrap();
+        let normal = stored.normalised();
+        assert_eq!(normal.titlebar_menus, ["view", "track"]);
+        assert_eq!(
+            serde_json::from_str::<Appearance>(&serde_json::to_string(&normal).unwrap()).unwrap(),
+            normal
+        );
+    }
+
+    #[test]
     fn a_scheme_this_build_does_not_have_costs_its_colour_and_nothing_else() {
         // The file outlives the build that wrote it, so this is reachable without anybody doing
         // anything wrong — and starting in the default palette beats not starting.
@@ -301,6 +337,40 @@ mod tests {
         assert_eq!(chosen.theme().scheme, "daylight");
     }
 
+    #[test]
+    fn glass_defaults_on_and_can_be_disabled_for_every_preset_and_custom_palette() {
+        let old: Appearance = serde_json::from_str(r#"{"scheme":"one-dark"}"#).unwrap();
+        assert!(old.glass_effect);
+        let custom = custom();
+        for id in crate::theme::SCHEMES
+            .iter()
+            .map(|scheme| scheme.id)
+            .chain([custom.id.as_str()])
+        {
+            let mut appearance = Appearance {
+                scheme: id.to_owned(),
+                custom_schemes: vec![custom.clone()],
+                ..Appearance::default()
+            };
+            let glass = appearance.theme();
+            assert_eq!(glass.atelier.material, atelier::Material::Translucent);
+            assert!(glass.atelier.colors.chrome.a < 1.0);
+            appearance.glass_effect = false;
+            let solid = appearance.theme();
+            assert_eq!(solid.atelier.material, atelier::Material::Opaque);
+            assert_eq!(solid.atelier.colors.chrome.a, 1.0);
+            assert_eq!(solid.atelier.colors.overlay.a, 1.0);
+            assert_eq!(solid.background, glass.background);
+            assert_eq!(solid.track_palette, glass.track_palette);
+            let saved = serde_json::to_string(&appearance).unwrap();
+            assert!(
+                !serde_json::from_str::<Appearance>(&saved)
+                    .unwrap()
+                    .glass_effect
+            );
+        }
+    }
+
     fn custom() -> CustomScheme {
         CustomScheme::from_scheme(
             "custom-studio".to_owned(),
@@ -314,10 +384,12 @@ mod tests {
         let mut custom = custom();
         custom.accent = 0x66_ddee;
         let appearance = Appearance {
+            titlebar_menus: Appearance::default().titlebar_menus,
             scheme: custom.id.clone(),
             font_family: Some("Example UI".to_owned()),
             custom_schemes: vec![custom],
             animate_mixer_signals: false,
+            glass_effect: false,
         };
         let text = serde_json::to_string(&appearance).unwrap();
         let loaded = serde_json::from_str::<Appearance>(&text)
@@ -447,15 +519,18 @@ mod tests {
         invalid.name = "Invalid".to_owned();
         invalid.base = 0.5;
         let appearance = Appearance {
+            titlebar_menus: Appearance::default().titlebar_menus,
             scheme: invalid.id.clone(),
             font_family: Some("  Example UI  ".to_owned()),
             custom_schemes: vec![invalid, valid.clone()],
             animate_mixer_signals: false,
+            glass_effect: false,
         }
         .normalised();
         assert_eq!(appearance.scheme, DEFAULT_SCHEME);
         assert_eq!(appearance.font_family.as_deref(), Some("Example UI"));
         assert_eq!(appearance.custom_schemes, vec![valid]);
+        assert!(!appearance.glass_effect);
     }
 
     #[test]

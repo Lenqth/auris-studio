@@ -7,6 +7,80 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.16.0 — 2026-10-30
+
+### Editor and project windows
+
+* **Use a compact title bar with Undo/Redo, configurable menu shortcuts and dock switches.**
+  Keep playback controls and readouts together, with the native menu retained on macOS.
+* Move between the start screen and editor in the same window. Closing the last project tab
+  returns to the start screen; a single project keeps its tab bar hidden.
+* Share reasoning-effort and fast-mode controls between the Agent panel and AI song workshop.
+  Keep generated songs and musical attachments inline with quieter copy and activity controls.
+
+### Sound search and singing voices
+
+* **Search sounds using supported Japanese and English impressions and onomatopoeia.**
+  Inspect the interpreted terms and switch the timbre map from similarity coordinates to
+  brightness, attack speed and sustain. The same character search is available to agent tools.
+* Show saved VOICEVOX speakers as individual library voices, and guide users through starting
+  the Engine and recovering a failed connection.
+
+### Appearance and startup
+
+* Switch the glass effect independently of the color theme, choose additional theme presets,
+  and import VS Code JSON/JSONC palettes as editable custom themes.
+* Show available updates, download progress, retry and restart actions on the start screen.
+* Confirm deletion or reset of saved song-personalization preferences.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.15.1.
+
+
+## 0.15.1 — 2026-10-30
+
+### Agent limits
+
+* **Configure Auris tool calls per request in Settings > Agent.** The default is 1000;
+  choose between 100 and 10000. The setting is shared by the agent panel and AI song creation,
+  with a separate allowance for each parallel candidate.
+* Stop before executing a call beyond the allowance, retaining completed edits and candidate
+  checkpoints. Show localized limit messages and allow explicit continuation after increasing
+  the limit. API model-turn allowances follow the configured tool-call allowance.
+* Include the tool-call limit in settings drafts, saved preferences and Revert behavior.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.15.0.
+
+## 0.15.0 — 2026-10-30
+
+### Projects and conversations
+
+* **Edit several projects in tabs within one window.** Keep each project's document and
+  conversations independent, and confirm unsaved changes before closing a tab.
+* Queue follow-up messages while the AI is working, or interrupt the current turn to send a
+  new direction. Restore keyboard focus after sending a waiting message.
+* Give song candidates feedback, inspect their scores, and open a candidate directly from its
+  card. Browse workshop conversations in a sidebar and group musical references in one menu.
+* Show tool-specific icons and persistent activity counts while songs are being authored.
+  Expand tool details when needed without filling the conversation with individual calls.
+* Inspect, edit and reset the local song-personalization history in Settings.
+* Suggest the song's own title when saving projects and exporting audio.
+
+### Sound browsing and desktop interface
+
+* **Audition sounds independently in the timbre map**, with a note keyboard for previews.
+* Identify sound groups with musical icon presets, automatic suggestions and persistent manual
+  corrections in the library.
+* Apply the current Atelier controls and layout guidance across the desktop, including compact
+  layouts, settings, title bars and auxiliary-window glass backdrops.
+
+### Problem reporting and installation
+
+* Prepare problem reports from the application and optionally ask an available AI agent to
+  investigate. Review diagnostic information and explicitly authorize sharing before submission.
+* Document installation from source with Cargo.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.14.0.
+
 ## 0.14.0 — 2026-10-29
 
 ### Conversations and songwriting

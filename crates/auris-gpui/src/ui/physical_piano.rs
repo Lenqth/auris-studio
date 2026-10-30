@@ -181,6 +181,7 @@ fn keyboard(window: &mut Window, stage: PianoStage, drawing: &MotionDrawing<'_>)
 }
 
 fn readout(
+    // atelier: allow — raster annotation within the physical instrument canvas, not a UI control.
     window: &mut Window,
     cx: &mut gpui::App,
     stage: PianoStage,
