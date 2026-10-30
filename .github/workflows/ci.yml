@@ -16,6 +16,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  design-adoption:
+    name: Check Atelier adoption
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check design-language adoption
+        run: bash tools/check-design-adoption.sh crates/auris-gpui/src
+
   # The whole workspace, on the platform the desktop application actually ships for.
   #
   # gpui is built with `runtime_shaders`, so this needs no Xcode beyond the Command Line Tools

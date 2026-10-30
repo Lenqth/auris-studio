@@ -2,10 +2,11 @@
 use super::*;
 use crate::ui::icons::{Icon, icon};
 use crate::ui::provider_logo::provider_logo;
-use crate::ui::widgets::button_with_content;
+use crate::ui::widgets::{ButtonState, button_enabled, button_with_content};
 
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
+    saved: AgentDraft,
     selected_connection: auris_agent::ModelConnection,
     pub(super) fields: [TextField; 8],
     pub(super) focus: [FocusHandle; 8],
@@ -19,6 +20,76 @@ pub(super) struct AgentSettings {
     provider_check: Option<gpui::Task<()>>,
     pub(super) prompt_viewport:
         std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AgentDraft {
+    provider: String,
+    url: String,
+    api_key_env: String,
+    codex_path: String,
+    claude_path: String,
+    opencode_path: String,
+    antigravity_path: String,
+    context_tokens: Option<u32>,
+    output_tokens: Option<u32>,
+    max_tool_failures: Option<u8>,
+    system_prompt: String,
+}
+
+impl AgentSettings {
+    fn draft(&self) -> AgentDraft {
+        let prompt = self.fields[Self::PROMPT_FIELD].content();
+        AgentDraft {
+            provider: self.prefs.provider.clone(),
+            url: self.fields[0].content().trim().to_owned(),
+            api_key_env: self.fields[1].content().trim().to_owned(),
+            codex_path: self.fields[2].content().trim().to_owned(),
+            claude_path: self.fields[3].content().trim().to_owned(),
+            opencode_path: self.fields[4].content().trim().to_owned(),
+            antigravity_path: self.fields[5].content().trim().to_owned(),
+            context_tokens: self.prefs.context_tokens,
+            output_tokens: self.prefs.output_tokens,
+            max_tool_failures: self.prefs.max_tool_failures,
+            system_prompt: if prompt.trim().is_empty()
+                || prompt == auris_agent::default_system_prompt()
+            {
+                String::new()
+            } else {
+                prompt.to_owned()
+            },
+        }
+    }
+
+    fn restore(&mut self, draft: AgentDraft) {
+        self.prefs.provider = draft.provider;
+        self.prefs.url = draft.url.clone();
+        self.prefs.api_key_env = draft.api_key_env.clone();
+        self.prefs.codex_path = draft.codex_path.clone();
+        self.prefs.claude_path = draft.claude_path.clone();
+        self.prefs.opencode_path = draft.opencode_path.clone();
+        self.prefs.antigravity_path = draft.antigravity_path.clone();
+        self.prefs.context_tokens = draft.context_tokens;
+        self.prefs.output_tokens = draft.output_tokens;
+        self.prefs.max_tool_failures = draft.max_tool_failures;
+        self.prefs.system_prompt = draft.system_prompt.clone();
+        for (field, value) in self.fields[..6].iter_mut().zip([
+            draft.url,
+            draft.api_key_env,
+            draft.codex_path,
+            draft.claude_path,
+            draft.opencode_path,
+            draft.antigravity_path,
+        ]) {
+            *field = TextField::new(value);
+        }
+        self.fields[Self::PROMPT_FIELD] = TextField::new(if draft.system_prompt.is_empty() {
+            auris_agent::default_system_prompt().to_owned()
+        } else {
+            draft.system_prompt
+        });
+        self.fields[Self::PROMPT_FIELD].place_caret(0, false);
+    }
 }
 
 impl AgentSettings {
@@ -35,8 +106,26 @@ impl AgentSettings {
             prefs.url.clone_from(&endpoint.url);
             prefs.api_key_env.clone_from(&endpoint.api_key_env);
         }
+        let saved = AgentDraft {
+            provider: prefs.provider.clone(),
+            url: prefs.url.trim().to_owned(),
+            api_key_env: prefs.api_key_env.trim().to_owned(),
+            codex_path: prefs.codex_path.trim().to_owned(),
+            claude_path: prefs.claude_path.trim().to_owned(),
+            opencode_path: prefs.opencode_path.trim().to_owned(),
+            antigravity_path: prefs.antigravity_path.trim().to_owned(),
+            context_tokens: prefs.context_tokens,
+            output_tokens: prefs.output_tokens,
+            max_tool_failures: prefs.max_tool_failures,
+            system_prompt: if prompt.content() == auris_agent::default_system_prompt() {
+                String::new()
+            } else {
+                prefs.system_prompt.clone()
+            },
+        };
         Self {
             selected_connection,
+            saved,
             fields: [
                 TextField::new(prefs.url.clone()),
                 TextField::new(prefs.api_key_env.clone()),
@@ -296,11 +385,23 @@ impl SettingsWindow {
                 if let Some(connection) = connection {
                     self.agent.selected_connection = connection;
                 }
+                self.agent.saved = self.agent.draft();
                 self.t(Key::AgentSettingsApplied).to_owned()
             }
             Ok(Err(error)) => error.to_string(),
             Err(error) => error.to_string(),
         };
+        cx.notify();
+    }
+
+    fn revert_agent(&mut self, cx: &mut Context<Self>) {
+        let saved = self.agent.saved.clone();
+        self.agent.restore(saved);
+        self.agent.active = None;
+        self.agent.prompt_viewport.borrow_mut().follow_caret();
+        self.agent.checked_fields = None;
+        self.agent.provider_status = Default::default();
+        self.status.clear();
         cx.notify();
     }
 
@@ -599,20 +700,20 @@ impl SettingsWindow {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(section_title(self.t(label), theme))
-                    .child(self.agent_field(index, cx))
-                    .child(note(self.t(help), theme));
-                let (name, logo, help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
-                details = details
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(provider_logo(logo, theme.text))
-                            .child(crate::setup_guide::setup_link(name, name, url, theme)),
-                    )
-                    .child(note(self.t(help), theme));
+                        FormField::new(self.t(label))
+                            .description(self.t(help))
+                            .child(self.agent_field(index, cx)),
+                    );
+                let (name, logo, _help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
+                details = details.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(provider_logo(logo, theme.text))
+                        .child(crate::setup_guide::setup_link(name, name, url, theme)),
+                );
                 if let Some(status) = status {
                     if let Some(path) = &status.executable {
                         details = details.child(note(&path.display().to_string(), theme));
@@ -738,12 +839,15 @@ impl SettingsWindow {
                 .child(div().text_base().child(self.t(Key::AgentApiConnection)))
                 .into_any_element(),
             self.agent_provider_status(4),
-            section_title(self.t(Key::AgentProviderLabel), &theme),
-            provider_control,
-            section_title(self.t(Key::AgentUrlLabel), &theme),
-            self.agent_field(0, cx),
-            section_title(self.t(Key::AgentKeyEnvLabel), &theme),
-            self.agent_field(1, cx),
+            FormField::new(self.t(Key::AgentProviderLabel))
+                .child(provider_control)
+                .into_any_element(),
+            FormField::new(self.t(Key::AgentUrlLabel))
+                .child(self.agent_field(0, cx))
+                .into_any_element(),
+            FormField::new(self.t(Key::AgentKeyEnvLabel))
+                .child(self.agent_field(1, cx))
+                .into_any_element(),
         ];
         if self.agent_provider_status_is_current(4)
             && let Some(error) = self.agent.provider_status[4]
@@ -755,75 +859,81 @@ impl SettingsWindow {
         if provider == "ollama" {
             let context = self.agent.prefs.context_tokens.unwrap_or(32768);
             let output = self.agent.prefs.output_tokens.unwrap_or(4096);
-            rows.push(section_title(self.t(Key::AgentContextTokens), &theme));
             rows.push(
-                self.dropdown(
-                    "agent-context-tokens",
-                    [32768, 65536, 131072, 262144]
-                        .into_iter()
-                        .map(|n| (n, format!("{}K", n / 1024), String::new()))
-                        .collect(),
-                    &context,
-                    |this, value, cx| {
-                        this.agent.prefs.context_tokens = Some(value);
-                        this.agent.prefs.output_tokens = Some(
-                            this.agent
-                                .prefs
-                                .output_tokens
-                                .unwrap_or(4096)
-                                .min(value / 4),
-                        );
-                        cx.notify();
-                    },
-                    cx,
-                ),
+                FormField::new(self.t(Key::AgentContextTokens))
+                    .child(
+                        self.dropdown(
+                            "agent-context-tokens",
+                            [32768, 65536, 131072, 262144]
+                                .into_iter()
+                                .map(|n| (n, format!("{}K", n / 1024), String::new()))
+                                .collect(),
+                            &context,
+                            |this, value, cx| {
+                                this.agent.prefs.context_tokens = Some(value);
+                                this.agent.prefs.output_tokens = Some(
+                                    this.agent
+                                        .prefs
+                                        .output_tokens
+                                        .unwrap_or(4096)
+                                        .min(value / 4),
+                                );
+                                cx.notify();
+                            },
+                            cx,
+                        ),
+                    )
+                    .into_any_element(),
             );
-            rows.push(section_title(self.t(Key::AgentOutputTokens), &theme));
             rows.push(
-                self.dropdown(
-                    "agent-output-tokens",
-                    [4096, 8192, 16384, 32768, 65536]
-                        .into_iter()
-                        .map(|n| (n, format!("{}K", n / 1024), String::new()))
-                        .collect(),
-                    &output,
-                    |this, value, cx| {
-                        this.agent.prefs.output_tokens = Some(value);
-                        if value >= this.agent.prefs.context_tokens.unwrap_or(32768) / 2 {
-                            this.agent.prefs.context_tokens = Some(value * 4);
-                        }
-                        cx.notify();
-                    },
-                    cx,
-                ),
+                FormField::new(self.t(Key::AgentOutputTokens))
+                    .child(
+                        self.dropdown(
+                            "agent-output-tokens",
+                            [4096, 8192, 16384, 32768, 65536]
+                                .into_iter()
+                                .map(|n| (n, format!("{}K", n / 1024), String::new()))
+                                .collect(),
+                            &output,
+                            |this, value, cx| {
+                                this.agent.prefs.output_tokens = Some(value);
+                                if value >= this.agent.prefs.context_tokens.unwrap_or(32768) / 2 {
+                                    this.agent.prefs.context_tokens = Some(value * 4);
+                                }
+                                cx.notify();
+                            },
+                            cx,
+                        ),
+                    )
+                    .into_any_element(),
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
-        rows.push(section_title(self.t(Key::AgentToolFailureLimit), &theme));
         rows.push(
-            self.dropdown(
-                "agent-tool-failure-limit",
-                (1..=20usize)
-                    .map(|n| (n, n.to_string(), String::new()))
-                    .collect(),
-                &self.agent.prefs.tool_failure_limit(),
-                |this, value, cx| {
-                    this.agent.prefs.max_tool_failures = Some(value as u8);
-                    cx.notify();
-                },
-                cx,
-            ),
+            FormField::new(self.t(Key::AgentToolFailureLimit))
+                .child(
+                    self.dropdown(
+                        "agent-tool-failure-limit",
+                        (1..=20usize)
+                            .map(|n| (n, n.to_string(), String::new()))
+                            .collect(),
+                        &self.agent.prefs.tool_failure_limit(),
+                        |this, value, cx| {
+                            this.agent.prefs.max_tool_failures = Some(value as u8);
+                            cx.notify();
+                        },
+                        cx,
+                    ),
+                )
+                .into_any_element(),
         );
         rows.push(note(self.t(Key::AgentToolFailureLimitHelp), &theme));
         rows.push(
-            div()
-                .pt_4()
-                .text_base()
-                .child(self.t(Key::AgentSystemPrompt))
+            FormField::new(self.t(Key::AgentSystemPrompt))
+                .description(self.t(Key::AgentSystemPromptHelp))
+                .child(self.agent_prompt(AgentSettings::PROMPT_FIELD, cx))
                 .into_any_element(),
         );
-        rows.push(note(self.t(Key::AgentSystemPromptHelp), &theme));
-        rows.push(self.agent_prompt(AgentSettings::PROMPT_FIELD, cx));
         rows.push(
             button(
                 "agent-prompt-reset",
@@ -843,14 +953,26 @@ impl SettingsWindow {
             .into_any_element(),
         );
         rows.push(
-            button(
+            button_enabled(
                 "agent-apply",
                 self.t(Key::AgentApply),
                 ButtonStyle::Primary,
-                false,
+                ButtonState::available(false, self.agent.draft() != self.agent.saved),
                 theme.accent,
                 &theme,
                 cx.listener(|this, _, _, cx| this.apply_agent(cx)),
+            )
+            .into_any_element(),
+        );
+        rows.push(
+            button_enabled(
+                "agent-revert",
+                self.t(Key::AgentRevert),
+                ButtonStyle::Normal,
+                ButtonState::available(false, self.agent.draft() != self.agent.saved),
+                theme.accent,
+                &theme,
+                cx.listener(|this, _, _, cx| this.revert_agent(cx)),
             )
             .into_any_element(),
         );
@@ -869,6 +991,24 @@ impl SettingsWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn agent_draft_revert_restores_only_the_saved_settings(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        handle
+            .update(cx, |this, _, cx| {
+                assert_eq!(this.agent.draft(), this.agent.saved);
+                this.agent.fields[2] = TextField::new("draft-codex.exe");
+                this.agent.prefs.max_tool_failures = Some(17);
+                assert_ne!(this.agent.draft(), this.agent.saved);
+                this.revert_agent(cx);
+                assert_eq!(this.agent.draft(), this.agent.saved);
+                assert_eq!(this.agent.fields[2].content(), this.agent.saved.codex_path);
+            })
+            .unwrap();
+    }
 
     #[gpui::test]
     fn provider_results_arrive_independently_and_edits_invalidate_only_their_route(

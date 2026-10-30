@@ -1179,13 +1179,12 @@ mod tests {
             let signature = cx.debug_bounds("signature").unwrap();
             let tempo = cx.debug_bounds("tempo").unwrap();
             assert!(signature.left() < tempo.left());
-            let center = cx.debug_bounds("titlebar-transport").unwrap().center().x;
             let position = cx.debug_bounds("position").unwrap();
             assert_eq!(
                 tempo.right() - position.left(),
                 original_readout_width - chord_slot
             );
-            assert_eq!((position.left() + tempo.right()) / 2., center);
+            assert_eq!((position.left() + tempo.right()) / 2., px(width / 2.0));
             let editing = cx.debug_bounds("transport-edit-controls").unwrap();
             let meters = cx.debug_bounds("transport-meters").unwrap();
             assert!(position.left() >= editing.right());

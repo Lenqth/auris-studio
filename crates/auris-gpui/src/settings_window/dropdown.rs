@@ -521,4 +521,67 @@ mod tests {
             .update(cx, |this, _, _| assert_eq!(this.status, "selected 120"))
             .unwrap();
     }
+
+    #[gpui::test]
+    fn audio_preferences_use_form_fields_and_dither_is_a_switch(cx: &mut gpui::TestAppContext) {
+        use auris_session::prelude::{AudioExportFormat, WavBitDepth};
+
+        let (app, cx) = crate::harness::open(cx);
+        let _restore = RestoreSettings(auris_session::Settings::load());
+        app.update(cx, |this, cx| this.open_settings(cx));
+        cx.run_until_parked();
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut gpui::VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(900.0), px(1400.0)));
+        handle
+            .update(cx, |this, _, cx| {
+                this.tab = SettingsTab::Audio;
+                this.export.format = AudioExportFormat::Wav;
+                this.export.bit_depth = WavBitDepth::Int16;
+                this.export.dither = false;
+                cx.notify();
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        // Every picker sits under its own label, each one inside the page's form column.
+        for id in [
+            "audio-host",
+            "output-device",
+            "sample-rate",
+            "block",
+            "export-format",
+        ] {
+            assert!(cx.debug_bounds(id).is_some(), "{id}");
+        }
+        let refresh = cx.debug_bounds("refresh-audio-devices").unwrap();
+        let host = cx.debug_bounds("audio-host").unwrap();
+        assert!(
+            host.right() <= refresh.left(),
+            "Refresh keeps its width beside the driver"
+        );
+
+        // A yes-or-no applies at once from a switch, with no Save after it.
+        crate::harness::click("export-dither", cx);
+        handle
+            .update(cx, |this, _, _| assert!(this.export.dither))
+            .unwrap();
+        crate::harness::click("export-dither", cx);
+        handle
+            .update(cx, |this, _, _| assert!(!this.export.dither))
+            .unwrap();
+
+        // Float cannot be dithered: the switch stays off and a press does nothing.
+        handle
+            .update(cx, |this, _, cx| {
+                this.export.bit_depth = WavBitDepth::Float32;
+                cx.notify();
+            })
+            .unwrap();
+        cx.run_until_parked();
+        crate::harness::click("export-dither", cx);
+        handle
+            .update(cx, |this, _, _| assert!(!this.export.dither))
+            .unwrap();
+    }
 }
