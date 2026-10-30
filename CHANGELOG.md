@@ -7,6 +7,35 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.15.0 — 2026-10-30
+
+### Projects and conversations
+
+* **Edit several projects in tabs within one window.** Keep each project's document and
+  conversations independent, and confirm unsaved changes before closing a tab.
+* Give song candidates feedback, inspect their scores, and open a candidate directly from its
+  card. Browse workshop conversations in a sidebar and group musical references in one menu.
+* Show tool-specific icons and persistent activity counts while songs are being authored.
+  Expand tool details when needed without filling the conversation with individual calls.
+* Inspect, edit and reset the local song-personalization history in Settings.
+* Suggest the song's own title when saving projects and exporting audio.
+
+### Sound browsing and desktop interface
+
+* **Audition sounds independently in the timbre map**, with a note keyboard for previews.
+* Identify sound groups with musical icon presets, automatic suggestions and persistent manual
+  corrections in the library.
+* Apply the current Atelier controls and layout guidance across the desktop, including compact
+  layouts, settings, title bars and auxiliary-window glass backdrops.
+
+### Problem reporting and installation
+
+* Prepare problem reports from the application and optionally ask an available AI agent to
+  investigate. Review diagnostic information and explicitly authorize sharing before submission.
+* Document installation from source with Cargo.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.14.0.
+
 ## 0.14.0 — 2026-10-29
 
 ### Conversations and songwriting
