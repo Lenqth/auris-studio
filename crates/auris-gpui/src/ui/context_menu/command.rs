@@ -143,6 +143,8 @@ pub enum MenuCommand {
         track: TrackId,
         /// The voice entry file.
         path: std::path::PathBuf,
+        /// The saved VOICEVOX style, if this row names one.
+        speaker: Option<String>,
     },
     /// Choose a named speaker or backend style for an explicit singer track.
     SingerSpeaker {
@@ -861,9 +863,13 @@ impl AurisApp {
                 self.select_track(track);
                 self.choose_singer_voice(cx);
             }
-            MenuCommand::SingerVoice { track, path } => {
+            MenuCommand::SingerVoice {
+                track,
+                path,
+                speaker,
+            } => {
                 self.select_track(track);
-                self.apply_singer_voice(track, path, cx);
+                self.apply_singer_voice_selection(track, path, speaker, cx);
             }
             MenuCommand::SingerSpeaker { track, speaker } => {
                 self.set_singer_speaker_for(track, speaker)

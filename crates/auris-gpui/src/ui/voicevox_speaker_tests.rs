@@ -67,6 +67,67 @@ impl Drop for Scratch {
     }
 }
 
+#[gpui::test]
+fn saved_voicevox_speakers_are_separate_library_choices(cx: &mut TestAppContext) {
+    let scratch = Scratch::new();
+    let path = scratch.voice("library.voicevox.json", "http://127.0.0.1:50021");
+    let mut file: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    file["styles"] = serde_json::json!([
+        {"name":"Singer A / Normal","query_style_id":6000,"decode_style_id":3001},
+        {"name":"Singer B / Soft","query_style_id":6000,"decode_style_id":3002}
+    ]);
+    std::fs::write(&path, serde_json::to_vec(&file).unwrap()).unwrap();
+    let (app, cx, track, _) = with_a_singer_clip(cx);
+    app.update(cx, |this, cx| {
+        this.settings.voice_paths.push(scratch.root.clone());
+        this.voices = None;
+        let choices = this.voice_list();
+        assert!(
+            choices
+                .iter()
+                .any(|(_, entry_path, speaker)| entry_path == &path
+                    && speaker.as_deref() == Some("Singer A / Normal"))
+        );
+        assert!(
+            choices
+                .iter()
+                .any(|(_, entry_path, speaker)| entry_path == &path
+                    && speaker.as_deref() == Some("Singer B / Soft"))
+        );
+        this.apply_singer_voice_selection(track, path.clone(), Some("Singer B / Soft".into()), cx);
+    });
+    cx.run_until_parked();
+    app.read_with(cx, |this, _| {
+        assert_eq!(
+            this.session
+                .singer_voice(track)
+                .unwrap()
+                .unwrap()
+                .speaker
+                .as_deref(),
+            Some("Singer B / Soft")
+        );
+    });
+    app.update(cx, |this, cx| {
+        this.apply_singer_voice_selection(
+            track,
+            path.clone(),
+            Some("Singer A / Normal".into()),
+            cx,
+        );
+        assert_eq!(
+            this.session
+                .singer_voice(track)
+                .unwrap()
+                .unwrap()
+                .speaker
+                .as_deref(),
+            Some("Singer A / Normal")
+        );
+    });
+}
+
 struct Engine {
     url: String,
     stop: Arc<AtomicBool>,
@@ -422,7 +483,8 @@ fn a_failed_catalogue_preserves_the_saved_speaker_and_offers_refresh(cx: &mut Te
         assert!(entries.iter().any(|entry| matches!(entry, MenuEntry::Item(item)
             if item.checked && item.label.as_ref() == "Singer / normal")));
         assert!(entries.iter().any(|entry| matches!(entry, MenuEntry::Item(item)
-            if !item.enabled && item.label.as_ref() == "Engine offline")));
+            if !item.enabled && item.label.contains("Engine offline")
+                && (item.label.contains("起動") || item.label.contains("running")))));
         assert!(entries.iter().any(|entry| matches!(entry, MenuEntry::Item(item)
             if item.enabled && matches!(item.command, MenuCommand::RefreshVoicevoxSpeakers { .. }))));
         assert_eq!(this.session.revision(), revision);
