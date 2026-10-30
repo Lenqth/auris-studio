@@ -5,14 +5,15 @@ use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
     pub(crate) fn workshop_prompt_open(&self) -> bool {
         self.song_workshop.is_some()
-            && self.prompt.as_ref().is_some_and(|p| {
-                matches!(
-                    p.target(),
-                    Some(crate::ui::prompt::PromptTarget::AgentChordReference { .. })
-                        | Some(crate::ui::prompt::PromptTarget::WorkshopFeedback { .. })
-                        | Some(crate::ui::prompt::PromptTarget::WorkshopThreadName { .. })
-                )
-            })
+            && (self.startup_update_prompt_open()
+                || self.prompt.as_ref().is_some_and(|p| {
+                    matches!(
+                        p.target(),
+                        Some(crate::ui::prompt::PromptTarget::AgentChordReference { .. })
+                            | Some(crate::ui::prompt::PromptTarget::WorkshopFeedback { .. })
+                            | Some(crate::ui::prompt::PromptTarget::WorkshopThreadName { .. })
+                    )
+                }))
     }
 
     pub(super) fn render_workshop_input(

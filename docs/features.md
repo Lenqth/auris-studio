@@ -1167,6 +1167,17 @@ with fallback fonts retained for Japanese and other scripts. Create a theme from
 palette, give it a name, and enter its accent colour as `#RRGGBB`. The preview leaves the applied
 theme alone until **Save and apply**. Saved custom themes can be selected and edited here.
 
+**Glass effect** is enabled by default and can be switched off independently of the colour
+theme. The choice is saved and applies to every application window. Presets include Solarized
+Dark/Light, Iceberg, Dracula, Nord, Monokai, Rosé Pine, Cobalt and Catppuccin Mocha/Latte.
+**Import theme…** reads VS Code JSON/JSONC themes and their local `include` files, adding a
+custom theme without replacing existing presets. It maps the editor background, accent and
+terminal palette to Auris; surface shades and text contrast follow Auris's readability rules.
+Imported themes can be edited through the same theme editor.
+To export the current VS Code palette, run **Developer: Generate Color Theme from Current
+Settings** in its Command Palette and save the generated JSON, as described in the
+[VS Code theme guide](https://code.visualstudio.com/api/extension-guides/color-theme#create-a-new-color-theme).
+
 Every preset has its own eight track, clip and library palette colours, which the editor
 copies when creating a theme. Changing the base updates inherited colours and keeps colours
 already edited in the draft. Enter `#RRGGBB` for a

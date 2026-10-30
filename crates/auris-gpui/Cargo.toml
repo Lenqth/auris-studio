@@ -49,6 +49,7 @@ sha2.workspace = true
 tempfile.workspace = true
 # Decodes the file URLs macOS hands over when a project is double-clicked in Finder.
 url.workspace = true
+jsonc-parser = { version = "0.26", features = ["serde"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

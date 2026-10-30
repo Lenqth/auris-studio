@@ -34,6 +34,7 @@ mod setup_guide;
 mod startup_soundfonts;
 mod termination;
 mod theme;
+mod theme_import;
 mod titlebar;
 mod update_check;
 mod voice_setup_window;

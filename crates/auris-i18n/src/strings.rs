@@ -829,8 +829,8 @@ strings! {
     }
     AutoUpdate { en: "Automatic Updates", ja: "自動更新" }
     AutoUpdateNote {
-        en: "Downloads new releases in the background and installs them after the app exits.",
-        ja: "バックグラウンドで新しいリリースを取得し、アプリの終了後にインストールします。"
+        en: "Checks for new releases at startup. Installed apps download updates in the background and install them after exiting; portable copies offer the release page.",
+        ja: "起動時に更新を確認します。インストール版はバックグラウンドで取得し、終了後に更新します。ポータブル版はリリースページを案内します。"
     }
     PianoRollSnap { en: "Piano Roll Snap…", ja: "ピアノロールのスナップ…" }
     SnapShort { en: "Snap", ja: "スナップ" }
@@ -1228,6 +1228,14 @@ strings! {
 
     // ------------------------------------------------------------------ appearance
     AppearanceHeading { en: "Colour theme", ja: "カラーテーマ" }
+    GlassEffect { en: "Glass effect", ja: "ガラス効果" }
+    GlassEffectNote { en: "Use translucent window chrome with any colour theme.", ja: "どのカラーテーマでもウィンドウの枠やツールバーを半透明にします。" }
+    ImportTheme { en: "Import theme…", ja: "テーマをインポート…" }
+    ImportThemeNote { en: "Import a VS Code JSON/JSONC theme, including local includes. Background, accent and terminal colours are adapted to Auris; surface shades and text contrast are adjusted for readability.", ja: "VS CodeのJSON／JSONCテーマを読み込めます。ローカルの継承ファイルにも対応しています。背景・アクセント・端末の色をAurisの配色に取り込み、各面の明るさと文字のコントラストを調整します。" }
+    ImportThemeFailed { en: "Could not import the colour theme", ja: "カラーテーマをインポートできませんでした" }
+    PreferenceDeleteTitle { en: "Delete this preference?", ja: "この好みを削除しますか？" }
+    PreferenceDeleteNote { en: "This recorded choice will be deleted and cannot be restored. Songs and conversations are kept.", ja: "この選択の記録を削除します。元には戻せません。曲と会話は残ります。" }
+    PreferenceResetTitle { en: "Delete all preferences?", ja: "好みをすべて削除しますか？" }
     SettingUnavailable { en: "Unavailable", ja: "利用できません" }
     RefreshAudioDevices { en: "Refresh devices", ja: "デバイスを再読み込み" }
     CreateTheme { en: "Create theme…", ja: "テーマを作成…" }

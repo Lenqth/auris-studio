@@ -87,6 +87,10 @@ impl Section {
             ],
             Self::Appearance => &[
                 Key::AppearanceHeading,
+                Key::GlassEffect,
+                Key::GlassEffectNote,
+                Key::ImportTheme,
+                Key::ImportThemeNote,
                 Key::UiFont,
                 Key::UiFontNote,
                 Key::ThemeName,
