@@ -73,6 +73,9 @@
 //! parallel; voice inference and final audition rendering use a bounded audio-work gate.
 //! Progress describes observed command stages, never simulated elapsed-time percentages.
 //! Selecting an exact candidate sets the baseline for further edits without closing the chat.
+//! Without an explicit selection, the latest successful round supplies the baseline only when
+//! it contains a single candidate. Failed revisions retain that earlier baseline; comparisons
+//! require an explicit choice. This implicit continuation does not record a preference selection.
 //! Descendants open that candidate's saved score; selection never regenerates the music.
 //! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
 //! documents and audition assets. Each project can keep multiple named workshop conversations,

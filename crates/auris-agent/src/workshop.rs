@@ -433,13 +433,14 @@ impl Owner {
             Preferences::default()
         });
         let mut candidates = BTreeMap::new();
+        let baseline = document.continuation_candidate().map(|c| c.id);
         for candidate in document
             .rounds
             .iter()
             .flat_map(|r| &r.candidates)
             .filter(|c| {
                 c.ready
-                    && (Some(c.id) == document.selected
+                    && (Some(c.id) == baseline
                         || document
                             .rounds
                             .last()
@@ -794,7 +795,11 @@ impl Owner {
                     }
                 };
                 self.selection_followup = false;
-                self.planned_parent = self.snapshot.document.selected;
+                self.planned_parent = self
+                    .snapshot
+                    .document
+                    .continuation_candidate()
+                    .map(|c| c.id);
                 self.snapshot.error = None;
                 match auris_session::workshop::load_preferences() {
                     Ok(preferences) => self.snapshot.preferences = preferences,
@@ -811,13 +816,7 @@ impl Owner {
                     references,
                     attachments,
                 });
-                let selected = self
-                    .snapshot
-                    .document
-                    .rounds
-                    .iter()
-                    .flat_map(|r| &r.candidates)
-                    .find(|c| Some(c.id) == self.snapshot.document.selected);
+                let selected = self.snapshot.document.continuation_candidate();
                 let voices = auris_session::library::voices_with_settings(&self.settings);
                 let candidate_history: Vec<_> = self.snapshot.document.rounds.iter().map(|round| {
                     json!({"after_message": round.after_message, "candidates": round.candidates.iter().map(|candidate| {
@@ -826,7 +825,7 @@ impl Owner {
                             "feedback": candidate.feedback})
                     }).collect::<Vec<_>>()})
                 }).collect();
-                let prompt = json!({"conversation": self.snapshot.document.messages, "selected": selected, "selected_score":self.snapshot.document.selected.and_then(|id| self.snapshot.candidates.get(&id)).map(|c| c.workshop_outline()),
+                let prompt = json!({"conversation": self.snapshot.document.messages, "selected": selected, "selected_score":self.planned_parent.and_then(|id| self.snapshot.candidates.get(&id)).map(|c| c.workshop_outline()),
                     "candidate_history": candidate_history,
                     "preference_evidence": self.snapshot.preferences.context(), "installed_voices": voices}).to_string();
                 let references = self
@@ -1881,6 +1880,132 @@ mod tests {
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert!(!requests[0].contains("Current Auris permission mode"));
+    }
+
+    #[test]
+    fn unselected_single_song_is_inherited_by_followup_composer_after_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(dir.path().into());
+        let cancel = AtomicBool::new(false);
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        execute(
+            &mut session,
+            json!({"action":"add_track","name":"Original drums","kind":"drum"}),
+            &Settings::default(),
+            &cancel,
+        )
+        .unwrap();
+        execute(
+            &mut session,
+            json!({"action":"generate_phrase","track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}),
+            &Settings::default(),
+            &cancel,
+        ).unwrap();
+        session
+            .finish_workshop_candidate(
+                &store.candidate_path(1),
+                idea(&assignment().direction),
+                &cancel,
+            )
+            .unwrap();
+        let original_tracks = session.project().tracks.clone();
+        let parent_path = store.candidate_path(1).join("song/song.auris");
+        let original_file = std::fs::read(&parent_path).unwrap();
+        drop(session);
+        let mut parent = assignment();
+        parent.ready = true;
+        let mut failed = assignment();
+        failed.id = 2;
+        failed.error = Some("Previous revision started without the original score".into());
+        store
+            .save(&Document {
+                next_id: 2,
+                rounds: vec![
+                    Round {
+                        after_message: 0,
+                        candidates: vec![parent],
+                    },
+                    Round {
+                        after_message: 0,
+                        candidates: vec![failed],
+                    },
+                ],
+                ..Default::default()
+            })
+            .unwrap();
+        let director = json!({"role":"assistant","content":json!({
+            "reply":"Keep the arrangement and slow it down.", "directions":[assignment().direction]
+        }).to_string()})
+        .to_string();
+        let edit = json!({"role":"assistant","tool_calls":[{
+            "id":"tempo", "type":"function", "function":{
+                "name":"edit_timeline", "arguments":json!({"operation":{"kind":"set_tempo","at_tick":0,"bpm":90.0}}).to_string()
+            }
+        }]}).to_string();
+        let answer = json!({"role":"assistant","content":"Finished the tempo change."}).to_string();
+        let (url, seen) = crate::tests::mock_server(vec![
+            crate::tests::completion(&director, "stop"),
+            crate::tests::completion(&edit, "tool_calls"),
+            crate::tests::completion(&answer, "stop"),
+        ]);
+        let (events, snapshots) = mpsc::channel();
+        let mut owner = Owner::new(store.clone(), Settings::default(), events);
+        owner.command(Command::Send(
+            "Keep the arrangement, but slow it to 90 BPM.".into(),
+            Box::new(AgentPreferences {
+                provider: "openai".into(),
+                model: "mock".into(),
+                url,
+                ..Default::default()
+            }),
+            vec![],
+        ));
+        assert_eq!(
+            owner.planned_parent,
+            Some(1),
+            "a followup must start from the saved song"
+        );
+        let (commands, receiver) = mpsc::channel();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop = stopped.clone();
+        let thread = std::thread::spawn(move || owner.run(receiver, stop));
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let snapshot = loop {
+            let snapshot = snapshots
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .unwrap();
+            assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
+            if snapshot.document.rounds.len() == 3 && snapshot.progress.is_empty() {
+                break snapshot;
+            }
+        };
+        stopped.store(true, Ordering::Release);
+        drop(commands);
+        thread.join().unwrap();
+        let child = &snapshot.document.rounds[2].candidates[0];
+        assert!(child.ready, "{:?}", child.error);
+        assert_eq!(child.parent, Some(1));
+        assert_eq!(snapshot.document.selected, None);
+        let mut restored = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        restored
+            .open(&store.candidate_path(3).join("song/song.auris"))
+            .unwrap();
+        assert_eq!(restored.project().tracks, original_tracks);
+        assert_eq!(restored.project().bpm(), 90.0);
+        assert_eq!(std::fs::read(parent_path).unwrap(), original_file);
+        let requests = seen.lock().unwrap();
+        let request: serde_json::Value = serde_json::from_str(&requests[0]).unwrap();
+        let prompt: serde_json::Value = serde_json::from_str(
+            request["messages"].as_array().unwrap().last().unwrap()["content"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(prompt["selected"]["id"], 1);
+        assert_eq!(
+            prompt["selected_score"]["tracks"][0]["name"],
+            "Original drums"
+        );
     }
 
     #[test]

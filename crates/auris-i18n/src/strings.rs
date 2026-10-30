@@ -72,7 +72,7 @@ strings! {
     IssueNoContext { en: "No recorded context is available in this scope.", ja: "この範囲には記録された情報がありません。" }
     IssueInvitation { en: "A limitation or possible defect was found. You can prepare an Issue draft and choose what context to include.", ja: "機能の制約または不具合の可能性があります。補助情報を含めるか選んで、Issueの下書きを作れます。" }
     IssueOpenSuggestion { en: "Prepare Issue draft…", ja: "Issueの下書きを作成…" }
-    WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
+    WorkshopTitle { en: "AI workshop…", ja: "AIワークショップ…" }
     WorkshopChatHint { en: "Describe the music you want. Ask for one to three candidates, request more ideas, or keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。候補は1〜3案で指定でき、追加の案を頼んだり、気に入った曲を育てたりできます。" }
     WorkshopMessage { en: "Message", ja: "メッセージ" }
     WorkshopSend { en: "Send", ja: "送信" }
@@ -88,7 +88,7 @@ strings! {
     WorkshopForgetChoice { en: "Forget this choice", ja: "この選択を記録から除く" }
     PreferenceHeading { en: "Song personalization", ja: "曲作りのパーソナライズ" }
     PreferenceTab { en: "Personalization", ja: "パーソナライズ" }
-    PreferenceHelp { en: "Choices from “Create a song with AI” are stored locally across projects. Edit the request or selected alternative below. Changes apply to your next request; current instructions take priority.", ja: "「AIで曲を作る」での選択を、プロジェクト共通の好みとしてこの端末に保存しています。依頼内容や選んだ候補を修正できます。変更は次の依頼から使われ、今回の指示が優先されます。" }
+    PreferenceHelp { en: "Choices from “AI workshop” are stored locally across projects. Edit the request or selected alternative below. Changes apply to your next request; current instructions take priority.", ja: "「AIワークショップ」での選択を、プロジェクト共通の好みとしてこの端末に保存しています。依頼内容や選んだ候補を修正できます。変更は次の依頼から使われ、今回の指示が優先されます。" }
     PreferenceEmpty { en: "No choices recorded yet. Choose a song with preference recording enabled to build your history.", ja: "記録された選択はありません。好みの記録を有効にして曲を選ぶと、ここに履歴が表示されます。" }
     PreferenceRefresh { en: "Refresh history", ja: "履歴を再読み込み" }
     PreferenceEdit { en: "Edit choice", ja: "選択を編集" }
@@ -231,7 +231,7 @@ strings! {
     ChooseEmpty { en: "Empty project", ja: "空のプロジェクト" }
     ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement.", ja: "音源トラックから、自由に曲を作り始めます。" }
     ChooseStartHelp { en: "Choose how to begin your song.", ja: "曲の始め方を選んでください。" }
-    ChooseAiHelp { en: "Describe your idea and listen to song candidates.", ja: "作りたい曲を伝えて、候補を聴いてみましょう。" }
+    ChooseAiHelp { en: "Create music through conversation with an AI agent.", ja: "AIエージェントと話しながら曲を作る" }
     ChooseStartAi { en: "Start with AI…", ja: "AIで作り始める…" }
     ChooseRecentEmpty { en: "No recent projects. Open an existing project to get started.", ja: "最近使ったプロジェクトはありません。既存のプロジェクトを開いて始められます。" }
     ChooseExisting { en: "Open existing project…", ja: "既存のプロジェクトを開く…" }
@@ -2004,7 +2004,7 @@ new のオプション
     AgentRevert { en: "Revert", ja: "元に戻す" }
     TimelineScrollHelp { en: "Drag the bar or use Shift+wheel to scroll horizontally", ja: "バーをドラッグ、またはShift＋ホイールで横スクロール" }
     AgentToolCallLimit { en: "Tool calls per request", ja: "1回の依頼でのツール呼び出し上限" }
-    AgentToolCallLimitHelp { en: "Shared by the Agent panel and AI song creation. Counts all Auris tools, including reads, help and failed calls. Default: 1000. Applies to the next request or resumed candidate; native CLI tools have their own limits.", ja: "エージェントパネルと「AIで曲を作る」で共通です。読み取り・ヘルプ・失敗も含め、Aurisのツール呼び出しを数えます。既定値は1,000回。次の依頼または候補の復旧から適用されます。CLI独自のツールには別の制限があります。" }
+    AgentToolCallLimitHelp { en: "Shared by the Agent panel and AI workshop. Counts all Auris tools, including reads, help and failed calls. Default: 1000. Applies to the next request or resumed candidate; native CLI tools have their own limits.", ja: "エージェントパネルと「AIワークショップ」で共通です。読み取り・ヘルプ・失敗も含め、Aurisのツール呼び出しを数えます。既定値は1,000回。次の依頼または候補の復旧から適用されます。CLI独自のツールには別の制限があります。" }
     AgentToolFailureLimit { en: "Repeated tool failure limit", ja: "同じツール呼び出しの失敗上限" }
     AgentToolFailureLimitHelp { en: "Failure allowance for the same tool and arguments. Bounds API/Antigravity loops and Claude Code recovery after tool errors. Success resets that call's count. Applies from the next conversation; other CLI runtimes manage their own limits.", ja: "同じツール・引数での失敗上限です。API／Antigravityの実行ループと、Claude Codeがツールエラー後に終了した際の自動継続に使います。成功すると該当する回数をリセットします。次の会話から適用され、他のCLIは独自の制限を使用します。" }
     AgentSystemPrompt { en: "System prompt", ja: "システムプロンプト" }

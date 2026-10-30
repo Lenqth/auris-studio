@@ -1,13 +1,13 @@
-# Conversational songwriting
+# AI workshop
 
-Choose **Create with AI…** in the project chooser. Describe the music in the message
+Choose **AI workshop…** in the project chooser. Describe the music in the message
 box, including instruments, mood, duration, voices, lyrics and any material to preserve.
 Enter sends a message; Shift+Enter inserts a line break. Confirming Japanese IME
 composition does not send the message. Provider/model and reasoning effort are local
 to this workshop; changing them does not overwrite the application's agent settings.
 
 The director asks a focused question when a consequential detail is unclear. Once
-the direction is sufficiently clear, it assigns three alternatives to independent
+the direction is sufficiently clear, it assigns one to three alternatives to independent
 composer workers. Each worker owns its own headless session and edits real music
 through the session tools. Progress reports observed work: harmony, melody,
 arrangement, singing and audition rendering. Model requests run in parallel;
@@ -28,6 +28,10 @@ to one candidate or the entire batch. Regenerating a completed candidate creates
 earlier results available. Selecting **Continue with this song** establishes the
 exact score for the next request without closing the conversation. Ask for revisions
 or new alternatives from that score. Earlier comparisons remain in the transcript.
+Without an explicit selection, further requests use the latest successful round's song
+when that round contains a single candidate. Failed revisions keep that baseline available,
+including after reopening the conversation. Multiple alternatives require a selection.
+Implicit continuation does not record a preference choice.
 Selection appears in the chat immediately while the director prepares three to five
 numbered arrangement or improvement suggestions. Choose an option in the message box
 or describe another change. Suggestions alone do not launch another production batch.
@@ -84,4 +88,4 @@ candidate-local assets retain relative references on disk.
 Only one window may own a workshop store at a time. Reopening retains finished work
 and marks incomplete candidates as interrupted; it does not automatically restart
 model requests. Storage errors are reported rather than replacing unreadable history.
-Audition loading is limited to the viewed comparison and selected baseline.
+Audition loading is limited to the viewed comparison and continuation baseline.

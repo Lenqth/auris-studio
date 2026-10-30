@@ -48,7 +48,7 @@ pub struct Direction {
 pub struct Candidate {
     /// Stable local ID.
     pub id: u64,
-    /// Exact source candidate, when continuing a selected song.
+    /// Exact source candidate, when continuing an existing song.
     pub parent: Option<u64>,
     /// Composition assignment.
     pub direction: Direction,
@@ -150,6 +150,28 @@ pub struct Document {
 }
 
 impl Document {
+    /// Baseline for further edits: an explicit selection, or the latest single finished song.
+    /// Failed rounds do not replace a usable baseline, and comparisons require a user choice.
+    /// This does not change the explicit selection or record preference evidence.
+    pub fn continuation_candidate(&self) -> Option<&Candidate> {
+        if let Some(selected) = self.selected {
+            return self
+                .rounds
+                .iter()
+                .flat_map(|r| &r.candidates)
+                .find(|c| c.id == selected && c.ready);
+        }
+        let round = self
+            .rounds
+            .iter()
+            .rev()
+            .find(|r| r.candidates.iter().any(|c| c.ready))?;
+        match round.candidates.as_slice() {
+            [candidate] => Some(candidate),
+            _ => None,
+        }
+    }
+
     /// Compact sidebar title without treating model output as user metadata.
     pub fn sidebar_title(&self) -> String {
         if !self.title.is_empty() {
@@ -630,6 +652,80 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn round(ids: &[u64], ready: bool) -> Round {
+        Round {
+            after_message: 0,
+            candidates: ids
+                .iter()
+                .map(|id| Candidate {
+                    id: *id,
+                    parent: None,
+                    direction: Direction {
+                        title: "Song".into(),
+                        description: "Piano".into(),
+                        instructions: "Compose".into(),
+                        protected_tracks: Vec::new(),
+                    },
+                    ready,
+                    error: None,
+                    recoveries: 0,
+                    tools: Default::default(),
+                    feedback: None,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn continuation_uses_the_latest_single_finished_song_without_selection() {
+        let document = Document {
+            rounds: vec![round(&[1, 2], true), round(&[3], true)],
+            ..Default::default()
+        };
+        assert_eq!(document.continuation_candidate().map(|c| c.id), Some(3));
+    }
+
+    #[test]
+    fn continuation_keeps_the_last_song_after_an_unsuccessful_revision() {
+        let document = Document {
+            rounds: vec![round(&[1], true), round(&[2], false)],
+            ..Default::default()
+        };
+        assert_eq!(document.continuation_candidate().map(|c| c.id), Some(1));
+    }
+
+    #[test]
+    fn continuation_does_not_choose_between_alternatives_even_when_one_failed() {
+        let mut comparison = round(&[2, 3], true);
+        comparison.candidates[1].ready = false;
+        let document = Document {
+            rounds: vec![round(&[1], true), comparison],
+            ..Default::default()
+        };
+        assert!(document.continuation_candidate().is_none());
+    }
+
+    #[test]
+    fn explicit_selection_takes_precedence_over_an_implicit_baseline() {
+        let document = Document {
+            rounds: vec![round(&[1, 2], true), round(&[3], true)],
+            selected: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(document.continuation_candidate().map(|c| c.id), Some(2));
+    }
+
+    #[test]
+    fn unfinished_songs_cannot_be_used_as_a_continuation_baseline() {
+        let document = Document {
+            rounds: vec![round(&[1], false)],
+            ..Default::default()
+        };
+        assert!(document.continuation_candidate().is_none());
+        assert!(Document::default().continuation_candidate().is_none());
+    }
+
     #[test]
     fn song_threads_preserve_legacy_history_isolate_artifacts_and_follow_save_as() {
         let directory = tempfile::tempdir().unwrap();
