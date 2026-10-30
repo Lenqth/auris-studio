@@ -92,6 +92,48 @@ pub struct Scheme<'a> {
     pub chord_palette: [Option<u32>; 7],
 }
 
+// Editor-inspired palettes share the document-slot mapping and surface derivation.
+const fn editor_scheme(
+    id: &'static str,
+    name: &'static str,
+    neutral: [f32; 3],
+    accent: [f32; 3],
+    palette: [u32; 8],
+) -> Scheme<'static> {
+    Scheme {
+        id,
+        name,
+        hue: neutral[0],
+        chroma: neutral[1],
+        base: neutral[2],
+        accent: Hsla {
+            h: accent[0],
+            s: accent[1],
+            l: accent[2],
+            a: 1.0,
+        },
+        track_palette: [
+            Some(palette[0]),
+            Some(palette[1]),
+            Some(palette[2]),
+            Some(palette[3]),
+            Some(palette[4]),
+            Some(palette[5]),
+            Some(palette[6]),
+            Some(palette[7]),
+        ],
+        velocity_palette: [Some(palette[0]), Some(palette[2])],
+        velocity_stops: &[],
+        signal_palette: [
+            Some(palette[1]),
+            Some(palette[3]),
+            Some(palette[2]),
+            Some(palette[5]),
+        ],
+        chord_palette: [None; 7],
+    }
+}
+
 /// Built-in colour schemes, in the order the settings window offers them.
 ///
 /// Each categorical palette is authored for its scheme, in document slot order:
@@ -516,6 +558,96 @@ pub const SCHEMES: &[Scheme<'static>] = &[
             a: 1.0,
         },
     },
+    editor_scheme(
+        "solarized-dark",
+        "Solarized Dark",
+        [0.533951, 1.000000, 0.105882],
+        [0.568798, 0.693548, 0.486275],
+        [
+            0x48a9e6, 0x9bad28, 0xf48b85, 0xd4aa32, 0xb39bdf, 0x4db8ae, 0xe49359, 0xe98ab8,
+        ],
+    ),
+    editor_scheme(
+        "solarized-light",
+        "Solarized Light",
+        [0.121795, 0.866667, 0.941176],
+        [0.568798, 0.693548, 0.486275],
+        [
+            0x1c6c9e, 0x657610, 0xbb3632, 0x946c00, 0x6754ad, 0x167d78, 0xa75522, 0xb43775,
+        ],
+    ),
+    editor_scheme(
+        "iceberg",
+        "Iceberg",
+        [0.636364, 0.200000, 0.107843],
+        [0.595960, 0.366667, 0.647059],
+        [
+            0x84a0c6, 0xb4be82, 0xe27878, 0xe2a478, 0xa093c7, 0x89b8c2, 0xc6b28c, 0xd49bb4,
+        ],
+    ),
+    editor_scheme(
+        "dracula",
+        "Dracula",
+        [0.642857, 0.148936, 0.184314],
+        [0.735294, 0.894737, 0.776471],
+        [
+            0x8be9fd, 0x50fa7b, 0xff7777, 0xf1fa8c, 0xbd93f9, 0x9ac7ff, 0xffb86c, 0xff79c6,
+        ],
+    ),
+    editor_scheme(
+        "nord",
+        "Nord",
+        [0.611111, 0.163636, 0.200000],
+        [0.537037, 0.433735, 0.674510],
+        [
+            0x88c0d0, 0xa3be8c, 0xd98b95, 0xebcb8b, 0xc8a3c1, 0x9cb9de, 0xdca88e, 0x91c9c0,
+        ],
+    ),
+    editor_scheme(
+        "monokai",
+        "Monokai",
+        [0.194444, 0.081081, 0.145098],
+        [0.222222, 0.756303, 0.533333],
+        [
+            0x66d9ef, 0xa6e22e, 0xff7298, 0xe6db74, 0xae81ff, 0xa1c9f4, 0xfd971f, 0xe9a6d7,
+        ],
+    ),
+    editor_scheme(
+        "rose-pine",
+        "Rosé Pine",
+        [0.692308, 0.220339, 0.115686],
+        [0.742188, 0.571429, 0.780392],
+        [
+            0x9ccfd8, 0xa5c7b5, 0xeb6f92, 0xf6c177, 0xc4a7e7, 0x8db8cf, 0xebbcba, 0xcba6ce,
+        ],
+    ),
+    editor_scheme(
+        "cobalt",
+        "Cobalt",
+        [0.569444, 0.489796, 0.192157],
+        [0.129412, 1.000000, 0.500000],
+        [
+            0x7ac9ff, 0x9bdf93, 0xff8b9d, 0xffdb72, 0xd5adff, 0x80e4df, 0xffaf75, 0xf4a3d4,
+        ],
+    ),
+    editor_scheme(
+        "catppuccin-mocha",
+        "Catppuccin Mocha",
+        [0.666667, 0.210526, 0.149020],
+        [0.742798, 0.835052, 0.809804],
+        [
+            0x89b4fa, 0xa6e3a1, 0xf38ba8, 0xf9e2af, 0xcba6f7, 0x94e2d5, 0xfab387, 0xf5c2e7,
+        ],
+    ),
+    editor_scheme(
+        "catppuccin-latte",
+        "Catppuccin Latte",
+        [0.611111, 0.230769, 0.949020],
+        [0.739011, 0.850467, 0.580392],
+        [
+            0x1e66f5, 0x407d16, 0xd20f39, 0x926c0e, 0x8839ef, 0x167c91, 0xb85413, 0xb72f9e,
+        ],
+    ),
 ];
 
 /// The scheme used when nothing has been chosen, and when a stored choice names one this build
@@ -1058,7 +1190,10 @@ impl Theme {
         colors.meter = [self.meter_low, self.meter_mid, self.meter_high];
         colors.agent = atelier::ensure_contrast(colors.agent, self.surface, 4.5);
         colors.agent_wash = Self::translucent(colors.agent, 0.10);
-        if !self.is_glass {
+        if self.atelier.material == atelier::Material::Opaque {
+            colors.chrome = self.surface_raised;
+            colors.overlay = self.surface_raised;
+        } else if !self.is_glass {
             colors.chrome = Self::translucent(self.surface_raised, 0.55);
             colors.overlay = self.surface_raised;
         }

@@ -365,6 +365,22 @@ impl SettingsWindow {
             .gap_2()
             .child(section_title(self.t(Key::AppearanceHeading), &theme))
             .child(picker)
+            .when(self.appearance_editor.is_none(), |content| {
+                content.child(
+                    FormField::new(self.t(Key::GlassEffect))
+                        .description(self.t(Key::GlassEffectNote))
+                        .beside()
+                        .child(
+                            Switch::new("glass-effect", self.appearance.glass_effect).on_change(
+                                cx.listener(|this, enabled: &bool, _, cx| {
+                                    let mut appearance = this.appearance.clone();
+                                    appearance.glass_effect = *enabled;
+                                    this.apply_appearance_preferences(appearance, cx);
+                                }),
+                            ),
+                        ),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -376,6 +392,11 @@ impl SettingsWindow {
                         |this, window, cx| this.open_theme_editor(false, window, cx),
                         cx,
                     ))
+                    .child(
+                        Button::new("import-theme", self.t(Key::ImportTheme))
+                            .disabled(self.appearance_editor.is_some())
+                            .on_click(cx.listener(|this, _, _, cx| this.import_theme(cx))),
+                    )
                     .when(custom, |row| {
                         row.child(self.appearance_button(
                             "edit-theme",
@@ -385,6 +406,9 @@ impl SettingsWindow {
                         ))
                     }),
             );
+        if self.appearance_editor.is_none() {
+            content = content.child(note(self.t(Key::ImportThemeNote), &theme));
+        }
         if self.appearance_editor.is_some() {
             content = content.child(self.render_theme_editor(cx));
         }
@@ -425,6 +449,55 @@ impl SettingsWindow {
             .clone();
         window.focus(&focus);
         cx.notify();
+    }
+
+    fn import_theme(&mut self, cx: &mut Context<Self>) {
+        let title = self.t(Key::ImportTheme).to_owned();
+        cx.spawn(async move |this, cx| {
+            let Some(file) = rfd::AsyncFileDialog::new()
+                .set_title(title)
+                .add_filter("VS Code colour theme", &["json", "jsonc"])
+                .pick_file()
+                .await
+            else {
+                return;
+            };
+            let path = file.path().to_owned();
+            let result = cx
+                .background_executor()
+                .spawn(async move { crate::theme_import::import_vscode(&path) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(theme) => this.apply_imported_theme(theme, cx),
+                    Err(error) => {
+                        this.status = format!("{}: {error}", this.t(Key::ImportThemeFailed))
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn apply_imported_theme(&mut self, mut theme: CustomScheme, cx: &mut Context<Self>) {
+        let name = theme.name.clone();
+        // Preserve existing presets and imports even when several files use the same name.
+        for number in 1.. {
+            if !self
+                .scheme_choices()
+                .iter()
+                .any(|(_, existing, _)| existing.to_lowercase() == theme.name.to_lowercase())
+            {
+                break;
+            }
+            theme.name = format!("{} ({number})", name.chars().take(65).collect::<String>());
+        }
+        theme.id = next_theme_id(&self.appearance);
+        let mut appearance = self.appearance.clone();
+        appearance.scheme = theme.id.clone();
+        appearance.custom_schemes.push(theme);
+        self.apply_appearance_preferences(appearance, cx);
     }
 
     pub(super) fn apply_appearance_preferences(

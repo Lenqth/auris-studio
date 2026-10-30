@@ -283,6 +283,13 @@ impl AurisApp {
     }
 
     fn chooser_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.startup_update_prompt_open() {
+            if self.prompt_key(event, window, cx) {
+                cx.stop_propagation();
+                cx.notify();
+            }
+            return;
+        }
         let Some(chooser) = self.project_chooser.as_mut() else {
             return;
         };
@@ -542,6 +549,16 @@ impl AurisApp {
         if self.song_workshop.is_some() {
             return self.render_song_workshop(transition.filter(|t| t.to_workshop), window, cx);
         }
+        let prompt = if self.startup_update_prompt_open() {
+            self.reconcile_focus(window, cx);
+            self.render_prompt(cx)
+        } else {
+            if self.modal_focus.prompt_contains_focused(window) {
+                window.focus(&self.focus);
+            }
+            None
+        };
+        let update = self.render_startup_update(cx);
         let project_tabs = self.render_project_tabs(window, cx);
         let transition = transition.filter(|t| !t.to_workshop);
         let theme = self.theme.clone();
@@ -571,7 +588,11 @@ impl AurisApp {
             .flex()
             .flex_col()
             .child(body);
-        let status = (!self.status.is_empty()).then(|| {
+        let status = (!self.status.is_empty()
+            && !update
+                .as_ref()
+                .is_some_and(|(_, message)| message == &self.status))
+        .then(|| {
             div()
                 .px(spacing.xxl)
                 .pb(spacing.md)
@@ -619,6 +640,7 @@ impl AurisApp {
                     .flex_1()
                     .min_w_0()
                     .child(content)
+                    .children(update.map(|(notice, _)| notice))
                     .children(status)
                     .child(footer),
             );
@@ -700,6 +722,7 @@ impl AurisApp {
                     .child(panel),
             )
             .children(crate::titlebar::resize_handles(window))
+            .children(prompt)
             .into_any_element()
     }
 }
