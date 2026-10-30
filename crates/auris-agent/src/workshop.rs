@@ -49,7 +49,7 @@ pub enum Command {
     /// Choose an exact completed candidate without closing the conversation.
     Select(u64, Box<AgentPreferences>, String),
     /// Retry only this candidate in a new artifact directory.
-    Retry(u64),
+    Retry(u64, Box<AgentPreferences>),
     /// Continue an unfinished candidate from its checkpoint with a fresh recovery budget.
     Recover(u64, Box<AgentPreferences>),
     /// Load auditions for an older comparison without retaining every historical WAV.
@@ -936,7 +936,7 @@ impl Owner {
                     self.launch(candidate);
                 }
             }
-            Command::Retry(id)
+            Command::Retry(id, prefs)
                 if self.jobs.len() < 3
                     && !self.jobs.contains_key(&id)
                     && self.planner.is_none() =>
@@ -950,6 +950,7 @@ impl Owner {
                     .find(|c| c.id == id)
                     .cloned();
                 if let Some(mut candidate) = candidate {
+                    self.prefs = *prefs;
                     self.snapshot.document.next_id += 1;
                     candidate.id = self.snapshot.document.next_id;
                     candidate.tools.clear();
@@ -1362,7 +1363,6 @@ fn compose(
             }))}).to_string(),"policy":prefs.policy,"attachments":references}).to_string(),
     )?;
     let deadline = Instant::now() + Duration::from_secs(900);
-    let mut edits = 0;
     let mut denials = 0;
     let mut last_failure = String::new();
     let mut tool_calls = BTreeMap::new();
@@ -1416,10 +1416,6 @@ fn compose(
                 }
             }
             "edit" => {
-                edits += 1;
-                if edits > 160 {
-                    return Err("Candidate exceeded its tool budget".into());
-                }
                 let action = event["command"]["action"].as_str().unwrap_or_default();
                 let stage = match action {
                     "edit_harmony" | "suggest_harmony" => "harmony",
@@ -1462,10 +1458,17 @@ fn compose(
                     .collect::<String>();
             }
             "error" => {
-                return Err(event["message"]
+                let message = event["message"]
                     .as_str()
                     .unwrap_or("Candidate failed")
-                    .into());
+                    .to_owned();
+                // Repeating a deliberately exhausted allowance automatically would multiply
+                // the user's chosen limit. Explicit recovery starts a fresh allowance.
+                return Err(if crate::tool_calls::limit_from_error(&message).is_some() {
+                    AttemptError::permanent(message)
+                } else {
+                    message.into()
+                });
             }
             "ended" => return Err("Candidate ended without completing".into()),
             _ => {}
@@ -2393,6 +2396,102 @@ mod tests {
         restored.open(&folder.join("song/song.auris")).unwrap();
         assert_eq!(restored.project().tracks, original);
         assert!(seen.lock().unwrap()[0].contains("Connection interrupted after writing notes"));
+    }
+
+    #[test]
+    fn tool_call_limit_stops_without_auto_recovery_and_explicit_recovery_keeps_the_score() {
+        let call =
+            |id: String, name: &str, args: serde_json::Value| {
+                crate::tests::completion(&json!({"role":"assistant","tool_calls":[{
+                "id":id,"type":"function","function":{"name":name,"arguments":args.to_string()}
+            }]}).to_string(), "tool_calls")
+            };
+        let mut responses = vec![call(
+            "setup".into(),
+            "add_track",
+            json!({"name":"Kit","kind":"drum"}),
+        )];
+        responses.extend((0..100).map(|id| call(format!("read-{id}"), "capabilities", json!({}))));
+        let (url, seen) = crate::tests::mock_server(responses);
+        let prefs = AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            max_tool_calls: Some(100),
+            ..Default::default()
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("1");
+        let (sender, receiver) = mpsc::channel();
+        let cancel = AtomicBool::new(false);
+        let mut attempts = 0;
+        let result = recover_candidate(
+            &assignment(),
+            &cancel,
+            &sender,
+            |_, _| true,
+            |candidate| {
+                attempts += 1;
+                compose(
+                    candidate,
+                    prefs.clone(),
+                    Settings::default(),
+                    folder.clone(),
+                    None,
+                    &cancel,
+                    &sender,
+                    &[],
+                )
+            },
+        );
+        let error = result
+            .err()
+            .expect("the configured limit must stop this candidate");
+        assert_eq!(crate::tool_calls::limit_from_error(&error), Some(100));
+        assert_eq!(attempts, 1);
+        assert_eq!(seen.lock().unwrap().len(), 101);
+        assert!(
+            !receiver
+                .try_iter()
+                .any(|event| matches!(event, JobEvent::Recovering(..)))
+        );
+        let mut restored = Session::new(SessionOptions::headless()).unwrap();
+        restored
+            .open(&folder.join("checkpoint/checkpoint.auris"))
+            .unwrap();
+        assert_eq!(restored.project().tracks.len(), 1);
+        drop(restored);
+
+        let (url, _) = crate::tests::mock_server(vec![
+            call(
+                "continue".into(),
+                "generate_phrase",
+                json!({"track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}),
+            ),
+            crate::tests::completion(r#"{"role":"assistant","content":"Finished"}"#, "stop"),
+        ]);
+        let mut candidate = assignment();
+        candidate.error = Some(error);
+        let prefs = AgentPreferences {
+            url,
+            max_tool_calls: Some(250),
+            ..prefs
+        };
+        let recovered = compose(
+            &candidate,
+            prefs,
+            Settings::default(),
+            folder.clone(),
+            None,
+            &cancel,
+            &sender,
+            &[],
+        )
+        .unwrap();
+        assert!(recovered.audio.peak() > 1e-8);
+        let mut restored = Session::new(SessionOptions::headless()).unwrap();
+        restored.open(&folder.join("song/song.auris")).unwrap();
+        assert_eq!(restored.project().tracks.len(), 1);
     }
 
     #[test]

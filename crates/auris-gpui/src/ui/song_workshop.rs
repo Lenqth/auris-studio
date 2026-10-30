@@ -477,6 +477,13 @@ impl AurisApp {
         .into_any_element()
     }
 
+    /// Apply the shared allowance without replacing the workshop's local model choice.
+    pub(crate) fn sync_workshop_tool_call_limit(&mut self) {
+        if let Some(workshop) = &mut self.song_workshop {
+            workshop.preferences.max_tool_calls = self.settings.agent.max_tool_calls;
+        }
+    }
+
     pub(crate) fn poll_song_workshop(&mut self, cx: &mut Context<Self>) {
         self.poll_workshop_input_assist(cx);
         let Some(s) = &mut self.song_workshop else {
@@ -1476,7 +1483,12 @@ impl AurisApp {
                     .text_size(theme.atelier.typography.size_sm)
                     .text_color(theme.danger)
                     .child(atelier::Icon::new(IconName::Alert).color(theme.danger))
-                    .child(div().flex_1().min_w_0().child(error.clone())),
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(crate::i18n::agent_error_text(error, self.language(), true)),
+                    ),
             );
         }
         if let Some(saved) = &s.saved[index] {
@@ -1606,7 +1618,7 @@ impl AurisApp {
                             } else if unfinished {
                                 Command::Recover(id, Box::new(s.preferences.clone()))
                             } else {
-                                Command::Retry(id)
+                                Command::Retry(id, Box::new(s.preferences.clone()))
                             });
                         }
                         cx.notify();
@@ -1747,6 +1759,32 @@ fn workshop_veil_layer(has_messages: bool, veil: f32, theme: &crate::theme::Them
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn saved_tool_call_limit_updates_an_open_workshop_without_changing_its_model(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.open_song_workshop(window, cx);
+            })
+        });
+        app.update(cx, |this, _| {
+            let workshop = this.song_workshop.as_mut().unwrap();
+            workshop.preferences.model = "workshop-choice".into();
+        });
+        app.update(cx, |this, _| {
+            let mut prefs = this.settings.agent.clone();
+            prefs.max_tool_calls = Some(5000);
+            this.agent_apply_preferences_with(prefs, |_| Ok::<(), String>(()))
+                .unwrap();
+            let prefs = &this.song_workshop.as_ref().unwrap().preferences;
+            assert_eq!(prefs.tool_call_limit(), 5000);
+            assert_eq!(prefs.model, "workshop-choice");
+        });
+    }
+
     #[gpui::test]
     fn feedback_form_accepts_stars_multiline_impressions_and_preserves_failed_submissions(
         cx: &mut gpui::TestAppContext,

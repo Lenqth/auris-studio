@@ -344,6 +344,9 @@ impl ReasoningEffort {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPreferences {
+    /// Auris tool calls allowed per user request or candidate attempt. Absent uses 1000.
+    /// Hand-edited values are clamped to 100 through 10000.
+    pub max_tool_calls: Option<u32>,
     /// Failed attempts allowed per tool and argument signature in one turn. Absent uses five.
     /// Auris-managed tool loops clamp hand-edited values to 1 through 20.
     pub max_tool_failures: Option<u8>,
@@ -404,6 +407,10 @@ pub struct AgentEndpoint {
 }
 
 impl AgentPreferences {
+    /// Effective tool-call allowance shared by the agent panel and song workshop.
+    pub fn tool_call_limit(&self) -> usize {
+        self.max_tool_calls.unwrap_or(1000).clamp(100, 10000) as usize
+    }
     /// Effective failure budget for one tool and normalized argument signature.
     pub fn tool_failure_limit(&self) -> usize {
         usize::from(self.max_tool_failures.unwrap_or(5).clamp(1, 20))
@@ -430,6 +437,18 @@ impl AgentPreferences {
 #[cfg(test)]
 mod agent_failure_limit_tests {
     use super::AgentPreferences;
+
+    #[test]
+    fn tool_call_limit_defaults_and_round_trips_with_bounded_hand_edits() {
+        let mut prefs: AgentPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(prefs.tool_call_limit(), 1000);
+        for (stored, expected) in [(0, 100), (100, 100), (2000, 2000), (u32::MAX, 10000)] {
+            prefs.max_tool_calls = Some(stored);
+            let restored: AgentPreferences =
+                serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
+            assert_eq!(restored.tool_call_limit(), expected);
+        }
+    }
 
     #[test]
     fn old_settings_default_to_five_and_hand_edits_are_bounded() {

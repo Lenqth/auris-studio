@@ -84,6 +84,7 @@ impl ToolHost {
     pub(crate) async fn call(&self, name: &str, args: Value) -> Result<Value, String> {
         // Keep approval and execution together even when an MCP client calls in parallel.
         let _guard = self.bridge.tool_lock().await;
+        self.bridge.reserve_tool_call()?;
         if !Self::contains(name) {
             return Err(format!("Unknown live tool: {name}"));
         }
@@ -283,6 +284,37 @@ mod tests {
             .unwrap();
             assert_eq!(operation.mutating, kind != "read");
         }
+    }
+
+    #[tokio::test]
+    async fn tool_call_limit_counts_reference_calls_and_refuses_edits_before_permission() {
+        let (bridge, commands, events) = crate::worker::test_bridge();
+        bridge.set_test_tool_call_limit(1);
+        let host = ToolHost::new(bridge.clone());
+        let owner = async {
+            let request = next_event(&events).await;
+            assert_eq!(request["event"], "permission");
+            commands
+                .send(json!({"event":"permission_result","id":request["id"],"ok":true}).to_string())
+                .unwrap();
+        };
+        let (reply, ()) = tokio::join!(host.call("capabilities", json!({})), owner);
+        assert!(reply.unwrap()["ok"] == true);
+        let error = host
+            .call(
+                "add_track",
+                json!({"name":"Must not run","kind":"instrument"}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(crate::tool_calls::limit_from_error(&error), Some(1));
+        assert!(events.try_recv().is_err());
+
+        commands
+            .send(json!({"say":"Continue"}).to_string())
+            .unwrap();
+        bridge.receive().await.unwrap();
+        bridge.reserve_tool_call().unwrap();
     }
 
     #[tokio::test]
