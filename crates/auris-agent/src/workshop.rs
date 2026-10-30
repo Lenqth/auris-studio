@@ -153,6 +153,19 @@ impl Workshop {
     pub fn poll(&self) -> Option<Snapshot> {
         self.receiver.try_iter().last()
     }
+    /// A workshop with no owner thread: the caller receives its commands and supplies its
+    /// snapshots. For a host's tests, which need to see what the window sent and to answer it
+    /// without a model behind it.
+    pub fn loopback() -> (Self, mpsc::Receiver<Command>, mpsc::Sender<Snapshot>) {
+        let (sender, commands) = mpsc::channel();
+        let (snapshots, receiver) = mpsc::channel();
+        let workshop = Self {
+            sender,
+            receiver,
+            stopped: Arc::new(AtomicBool::new(false)),
+        };
+        (workshop, commands, snapshots)
+    }
 }
 
 impl Drop for Workshop {

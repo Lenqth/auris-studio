@@ -41,7 +41,8 @@ impl AurisApp {
         ));
         let focused = s.active_field == Some(0);
         let busy = s.busy();
-        let can_send = !busy
+        let queueing = busy || !s.queued.is_empty();
+        let can_send = !s.brief_locked()
             && !s.references.midi_loading
             && !s.brief.content().trim().is_empty()
             && (s.preferences.is_configured() || s.brief.content().trim().starts_with('/'));
@@ -67,7 +68,7 @@ impl AurisApp {
             self.language(),
             cx,
         );
-        let action = if busy {
+        let stop = busy.then(|| {
             agent_components::composer_action(
                 "song-cancel",
                 self.t(Key::WorkshopCancel),
@@ -77,22 +78,37 @@ impl AurisApp {
                 &theme,
                 cx.listener(|this, _, _, cx| {
                     if let Some(s) = &mut this.song_workshop {
+                        // Stopping means stop: what is waiting stays, and waits to be resumed.
+                        s.queue_paused = true;
                         s.stop();
                     }
                     cx.notify();
                 }),
             )
-        } else {
-            agent_components::composer_action(
-                "song-generate",
-                self.t(Key::WorkshopSend),
-                agent_components::ComposerAction::Send,
-                can_send,
-                true,
-                &theme,
-                cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
+        });
+        // Send stays beside Stop rather than giving way to it, so a message can be written and
+        // put in line while a round is still being composed.
+        let action = agent_components::composer_action(
+            "song-generate",
+            self.t(if queueing {
+                Key::AgentQueue
+            } else {
+                Key::WorkshopSend
+            }),
+            agent_components::ComposerAction::Send,
+            can_send,
+            true,
+            &theme,
+            cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
+        );
+        let interrupt_key = crate::actions::menu_keystroke("secondary-enter");
+        let queue_hint = queueing.then(|| {
+            div().text_xs().text_color(theme.text_muted).child(
+                self.t(Key::AgentQueueHint)
+                    .replace("{interrupt}", &interrupt_key),
             )
-        };
+        });
+        let queue = self.workshop_queue_view(cx);
         let mut body = crate::ui::agent_components::composer_frame(
             "song-workshop-composer",
             &theme,
@@ -175,6 +191,7 @@ impl AurisApp {
         .when_some(attachment_error, |body, error| {
             body.child(agent_components::error_notice(error))
         })
+        .children(queue)
         .children(completions)
         .child(self.workshop_field(0, placeholder, true, cx))
         .children(suggestion.map(|suffix| {
@@ -282,8 +299,10 @@ impl AurisApp {
                     })),
                 )
                 .child(div().flex_1())
+                .children(stop)
                 .child(action),
-        );
+        )
+        .children(queue_hint);
         if let Some(feedback) = &command_feedback {
             body = body.child(match feedback {
                 Ok(text) => agent_components::status_notice(text.clone()),
@@ -354,7 +373,7 @@ impl AurisApp {
         if let Some(s) = &mut self.song_workshop
             && s.foci[0].is_focused(window)
         {
-            if s.submitted || s.switching || s.brief.marked().is_some() {
+            if s.brief_locked() || s.brief.marked().is_some() {
                 return;
             }
             let matches = s
@@ -412,6 +431,10 @@ impl AurisApp {
             if event.keystroke.key == "enter" {
                 if event.keystroke.modifiers.shift {
                     s.brief.insert("\n");
+                } else if event.keystroke.modifiers.secondary()
+                    && (s.busy() || !s.queued.is_empty())
+                {
+                    self.submit_workshop_brief_now();
                 } else {
                     self.start_song_workshop(cx);
                 }

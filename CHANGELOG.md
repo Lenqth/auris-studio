@@ -13,6 +13,8 @@ format rather than a convention: `## <version> — <date>`.
 
 * **Edit several projects in tabs within one window.** Keep each project's document and
   conversations independent, and confirm unsaved changes before closing a tab.
+* Queue follow-up messages while the AI is working, or interrupt the current turn to send a
+  new direction. Restore keyboard focus after sending a waiting message.
 * Give song candidates feedback, inspect their scores, and open a candidate directly from its
   card. Browse workshop conversations in a sidebar and group musical references in one menu.
 * Show tool-specific icons and persistent activity counts while songs are being authored.
