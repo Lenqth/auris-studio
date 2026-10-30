@@ -1180,6 +1180,9 @@ pub(crate) struct AgentChat {
     pub(crate) focused: Option<AgentField>,
     /// Restore approval shortcuts once when a hidden panel is deliberately shown again.
     pub(crate) restore_pending_focus: bool,
+    /// Enter parked the keyboard on Stop while the composer was locked behind a send that had to
+    /// wait; hand it back to the composer once the send leaves, unless it has moved since.
+    return_to_composer: bool,
     /// Whether the settings section is showing.
     pub(crate) configuring: bool,
     /// Whether the settings fields have been seeded from the saved preferences.
@@ -1276,6 +1279,7 @@ impl Default for AgentChat {
             interrupting: false,
             focused: None,
             restore_pending_focus: false,
+            return_to_composer: false,
             configuring: false,
             preferences_loaded: false,
             busy: false,
@@ -3397,6 +3401,11 @@ impl AurisApp {
                 ("enter", AgentField::Chat) => {
                     if event.keystroke.modifiers.shift {
                         self.agent_chat.input.insert("\n");
+                    } else if event.keystroke.modifiers.secondary()
+                        && (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
+                    {
+                        // The queue's "Send now", from the keyboard: interrupt and go first.
+                        self.submit_agent_message_now(cx);
                     } else {
                         self.agent_submit(window, cx);
                     }
@@ -3434,6 +3443,7 @@ impl AurisApp {
             self.agent_chat.focused = None;
             if let Some(focus) = self.agent_chat.stop_focus.as_ref() {
                 window.focus(focus);
+                self.agent_chat.return_to_composer = true;
             }
         }
     }
@@ -3500,6 +3510,18 @@ impl AurisApp {
             // Several controls express "return to the composer" without receiving a Window.
             // Move that logical request onto the real input target on the following frame.
             window.focus(&input_focus);
+        } else if !composer_locked
+            && self.agent_chat.return_to_composer
+            && stop_focus.is_focused(window)
+        {
+            // The send that locked the composer has gone, by whichever road — history read,
+            // attachments saved, an error. Nothing else would bring the keyboard back from
+            // Stop, and the next message would be typed into the window's bindings instead.
+            self.focus_agent_field(AgentField::Chat);
+            window.focus(&input_focus);
+        }
+        if !composer_locked {
+            self.agent_chat.return_to_composer = false;
         }
         // Arrival while hidden cannot keep the input handle focused: `reconcile_focus` correctly
         // releases every hidden field. Showing the panel is the explicit return, so restore its
@@ -5361,13 +5383,12 @@ impl AurisApp {
                         .items_center()
                         .gap_1()
                         .px_1p5()
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(self.t(Key::AgentQueueHint)),
-                        )
+                        .child(div().flex_1().text_xs().text_color(theme.text_muted).child(
+                            self.t(Key::AgentQueueHint).replace(
+                                "{interrupt}",
+                                &crate::actions::menu_keystroke("secondary-enter"),
+                            ),
+                        ))
                         .child(
                             button_enabled(
                                 "agent-send-now",
@@ -6749,6 +6770,104 @@ mod tests {
                 pending.selection_context,
                 this.agent_selection_context().to_string()
             );
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[gpui::test]
+    fn secondary_enter_interrupts_the_running_turn_with_the_composer_message(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent.model = "offline-fixture".into();
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.busy = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("later");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("urgent");
+        cx.simulate_keystrokes("secondary-enter");
+        app.read_with(cx, |this, _| {
+            let queued = this
+                .agent_chat
+                .queued
+                .iter()
+                .map(|message| message.text.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(queued, ["urgent", "later"]);
+            assert!(!this.agent_chat.busy, "the running turn was stopped");
+            assert!(!this.agent_chat.queue_paused);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn the_keyboard_returns_to_the_composer_once_a_waiting_send_leaves(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let root =
+            std::env::temp_dir().join(format!("auris-agent-send-refocus-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let sender = app.update(cx, |this, _| {
+            this.session.save_as(&root.join("Refocus.auris")).unwrap();
+            this.settings.agent.model = "offline-fixture".into();
+            this.panels.show(crate::dock::Panel::Agent);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let token = this.agent_document_token();
+            this.agent_chat.history_load = Some(PendingHistoryLoad { token, receiver });
+            sender
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("first");
+        cx.simulate_keystrokes("enter");
+        crate::harness::paint(&app, cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(this.agent_chat.pending_send.is_some());
+                assert_eq!(this.agent_chat.focused, None);
+                assert!(
+                    this.agent_chat
+                        .stop_focus
+                        .as_ref()
+                        .is_some_and(|focus| focus.is_focused(window))
+                );
+            });
+        });
+
+        // The saved transcript cannot be read, which unlocks the composer with its draft intact
+        // for another try. What is typed next belongs in it rather than in the window's
+        // bindings, where `i` would toggle the inspector and the letters would vanish.
+        app.update(cx, |this, cx| {
+            sender.send(Err("disk unavailable".into())).unwrap();
+            this.poll_agent_history_load(cx);
+            assert!(this.agent_chat.pending_send.is_none());
+        });
+        crate::harness::paint(&app, cx);
+        let inspector = app.read_with(cx, |this, _| {
+            this.panels.is_open(crate::dock::Panel::Inspector)
+        });
+        cx.simulate_input(" again with this");
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert_eq!(this.agent_chat.focused, Some(AgentField::Chat));
+                assert!(
+                    this.agent_chat
+                        .input_focus()
+                        .is_some_and(|focus| focus.is_focused(window))
+                );
+                assert_eq!(this.agent_chat.input.content(), "first again with this");
+                assert_eq!(
+                    this.panels.is_open(crate::dock::Panel::Inspector),
+                    inspector
+                );
+            });
         });
         std::fs::remove_dir_all(root).unwrap();
     }
