@@ -18,10 +18,6 @@ pub enum Icon {
     Play,
     /// Pause playback.
     Pause,
-    /// Audible preview output.
-    Volume,
-    /// Muted preview output.
-    VolumeMuted,
     /// Stop playback and rewind.
     Stop,
     /// Start recording a take.
@@ -121,13 +117,11 @@ impl Icon {
     pub fn source(self) -> IconSource {
         let name = match self {
             Self::Sound(family) => return IconSource::svg(sound_icon_path(family)),
-            Self::Punch => return IconSource::svg("icons/auris-punch.svg"),
-            Self::Notes => return IconSource::svg("icons/auris-notes.svg"),
+            Self::Punch => AtelierIconName::Punch,
+            Self::Notes => AtelierIconName::Notes,
             Self::ToStart => AtelierIconName::SkipBack,
             Self::Play => AtelierIconName::Play,
             Self::Pause => AtelierIconName::Pause,
-            Self::Volume => AtelierIconName::Volume,
-            Self::VolumeMuted => AtelierIconName::VolumeOff,
             Self::Stop => AtelierIconName::Stop,
             Self::Record => AtelierIconName::Record,
             Self::Loop => AtelierIconName::Loop,

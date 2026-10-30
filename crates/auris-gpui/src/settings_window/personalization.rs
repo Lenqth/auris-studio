@@ -130,8 +130,8 @@ impl SettingsWindow {
             FormField::new(self.t(Key::WorkshopMemory)).beside().child(
                 Switch::new("preferences-enabled", preferences.enabled)
                     .disabled(busy || self.personalization.original.is_some())
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let enabled = !preferences.enabled;
+                    .on_change(cx.listener(move |this, on: &bool, _, cx| {
+                        let enabled = *on;
                         this.preference_operation(
                             true,
                             move || workshop::update_preferences(|p| p.enabled = enabled),

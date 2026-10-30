@@ -57,7 +57,7 @@ impl Render for RhythmWindow {
         if !self.focus.contains_focused(window, cx) {
             window.focus(&self.focus);
         }
-        let bar = crate::titlebar::composed(
+        let bar = crate::titlebar::bar(
             window,
             &theme,
             crate::titlebar::Parts::new("rhythm-title", title),

@@ -407,7 +407,7 @@ fn paint_area(
                         origin: point(left + from, row_top(row) + px(1.0)),
                         size: size(to - from + stub, AREA_LINE_HEIGHT - px(2.0)),
                     },
-                    Theme::translucent(theme.accent, 0.35),
+                    theme.atelier.colors.selection,
                 );
             }
 
@@ -607,7 +607,7 @@ fn paint_wrapped_area(
                     local_selection,
                     origin,
                     width,
-                    Theme::translucent(theme.accent, 0.35),
+                    theme.atelier.colors.selection,
                     false,
                 );
             }

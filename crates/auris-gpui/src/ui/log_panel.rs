@@ -120,14 +120,14 @@ fn log_row(index: usize, entry: &Entry, theme: &Theme) -> AnyElement {
         .text_xs()
         .child(
             div()
-                .w(px(44.0))
+                .w(px(32.0))
                 .flex_shrink_0()
                 .text_color(theme.text_faint)
                 .child(format!("{}s", entry.seconds)),
         )
         .child(
             div()
-                .w(px(52.0))
+                .w(px(44.0))
                 .flex_shrink_0()
                 .text_color(level_colour(entry.level, theme))
                 .debug_selector(move || format!("log-level-{index}"))
@@ -136,8 +136,8 @@ fn log_row(index: usize, entry: &Entry, theme: &Theme) -> AnyElement {
         .child(
             div()
                 .id(("log-target", index))
-                .w(px(180.0))
-                .min_w(px(56.0))
+                .w(px(120.0))
+                .min_w(px(24.0))
                 .flex_shrink()
                 .truncate()
                 .text_color(theme.text_faint)

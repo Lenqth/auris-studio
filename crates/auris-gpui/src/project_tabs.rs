@@ -8,8 +8,11 @@ use gpui::{
 use auris_i18n::Key;
 
 use crate::app::{AurisApp, Pane};
+use crate::ui::icons::Icon;
 use crate::ui::prompt::PendingAction;
-use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button_enabled, button_with_content};
+use crate::ui::widgets::{
+    ButtonState, ButtonStyle, Latch, button_with_content, icon_button_enabled,
+};
 
 /// The documents open in one native window.
 pub(crate) struct ProjectTabs {
@@ -58,6 +61,12 @@ impl ProjectTabs {
                 view.stop_audition();
                 view.release_physical_preview();
                 view.drag = None;
+                // A menu belongs to the document that opened it. Do not let a hidden tab
+                // restore its trigger or activation release when it becomes active again.
+                view.close_menu();
+                view.close_menu_bar();
+                view.menu_focus_return = None;
+                view.menu_activation = None;
             });
             self.active = index;
         }
@@ -325,11 +334,11 @@ impl AurisApp {
                         )),
                     )
                     .child(
-                        button_enabled(
+                        icon_button_enabled(
                             ("close-project-tab", index),
-                            "×",
-                            ButtonStyle::Ghost,
-                            ButtonState::available(Latch::Off, enabled),
+                            Icon::Cross,
+                            false,
+                            enabled,
                             theme.accent,
                             theme,
                             move |_, _, cx| {
@@ -356,11 +365,11 @@ impl AurisApp {
                 .border_color(theme.border_subtle)
                 .child(row)
                 .child(
-                    button_enabled(
+                    icon_button_enabled(
                         "new-project-tab",
-                        "+",
-                        ButtonStyle::Ghost,
-                        ButtonState::available(Latch::Off, enabled),
+                        Icon::Plus,
+                        false,
+                        enabled,
                         theme.accent,
                         theme,
                         cx.listener(|this, _, _, cx| {
@@ -477,12 +486,19 @@ mod tests {
             first.read_with(cx, |view, _| view.project().tracks[1].name.clone()),
             "Keep this"
         );
+        first.update(cx, |view, _| {
+            view.menu_bar = Some(crate::ui::menu_bar::OpenMenu::at(0));
+            view.menu_focus_return = Some(view.focus.clone());
+        });
+        paint(&first, cx);
         cx.simulate_keystrokes("ctrl-shift-tab");
         cx.run_until_parked();
         assert_eq!(
             tabs.read_with(cx, |tabs, _| tabs.active()).entity_id(),
             second.entity_id()
         );
+        assert!(first.read_with(cx, |view, _| view.menu_bar.is_none()));
+        assert!(first.read_with(cx, |view, _| view.menu_focus_return.is_none()));
     }
 
     #[gpui::test]

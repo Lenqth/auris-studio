@@ -426,11 +426,19 @@ impl AurisApp {
         // What `Context::listener` does, written out. Its return type borrows the context it was
         // made from, and a handler hung on an element has to outlive the frame that built it.
         let view = cx.entity().downgrade();
-        move |event: &E, _: &mut Window, cx: &mut gpui::App| {
+        move |event: &E, window: &mut Window, cx: &mut gpui::App| {
             let at = event.menu_at();
             view.update(cx, |this, cx| {
                 let menu = build(this, at);
                 let opened = !menu.is_empty();
+                if opened && this.menu_focus_return.is_none() {
+                    this.menu_focus_return =
+                        Some(window.focused(cx).unwrap_or_else(|| this.focus.clone()));
+                    // The menu owns keyboard activation while it is open. Move focus to its
+                    // dedicated target now, before the next render, so Atelier's control
+                    // interceptor cannot press the trigger underneath the overlay.
+                    window.focus(&this.menu_focus);
+                }
                 this.open_menu(menu);
                 if opened {
                     cx.stop_propagation();
@@ -555,6 +563,7 @@ impl AurisApp {
             div()
                 .absolute()
                 .inset_0()
+                .track_focus(&self.menu_focus)
                 .occlude()
                 .on_mouse_down(
                     MouseButton::Left,

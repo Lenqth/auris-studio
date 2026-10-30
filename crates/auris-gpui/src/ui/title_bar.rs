@@ -7,7 +7,7 @@ use crate::app::AurisApp;
 use crate::dock::Dock;
 use crate::titlebar;
 use crate::ui::icons::Icon;
-use crate::ui::widgets::icon_button;
+use crate::ui::widgets::icon_button_enabled;
 
 /// Whether there is room beside playback and the native controls for the panel switches.
 ///
@@ -26,7 +26,6 @@ impl AurisApp {
     ) -> impl IntoElement + use<> {
         let theme = &self.theme;
         let panels = panels_in_titlebar(window.viewport_size().width);
-        let controls_width = titlebar::controls_width(window);
         let controls = titlebar::controls(
             window,
             theme,
@@ -36,85 +35,33 @@ impl AurisApp {
             }),
         );
 
-        titlebar::titlebar(window, theme)
+        let mut trailing = div()
+            .flex()
+            .items_center()
+            .gap(theme.atelier.spacing.xs)
             .child(
                 div()
+                    .debug_selector(|| "titlebar-transport".into())
                     .flex()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
                     .items_center()
-                    // Balance the native macOS buttons so playback remains on the same centre
-                    // line as the readouts below, regardless of which platform owns the frame.
-                    .pr(titlebar::traffic_light_inset(window))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .items_center()
-                            .child(self.render_history_buttons(cx))
-                            .child(
-                                titlebar::drag_region("project-title")
-                                    .flex_1()
-                                    .px_3()
-                                    .text_size(theme.atelier.typography.size_md)
-                                    .font_weight(theme.atelier.typography.label_weight)
-                                    .child(div().truncate().child(self.window_title())),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .debug_selector(|| "titlebar-transport".into())
-                            .flex()
-                            .flex_shrink_0()
-                            .items_center()
-                            .child(self.render_transport_buttons(cx)),
-                    )
-                    .child(
-                        div()
-                            .relative()
-                            .flex()
-                            .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .items_center()
-                            .child(
-                                div()
-                                    // Let panel switches use the balancing inset while the
-                                    // two flex columns keep playback centred in the window.
-                                    .absolute()
-                                    .left_0()
-                                    .right(-titlebar::traffic_light_inset(window))
-                                    .flex()
-                                    .h_full()
-                                    .items_center()
-                                    .pr(controls_width + px(8.0))
-                                    .child(
-                                        titlebar::drag_region("titlebar-space")
-                                            .flex_1()
-                                            .min_w(px(12.0)),
-                                    )
-                                    .when(panels, |bar| {
-                                        bar.children(Dock::ALL.into_iter().map(|dock| {
-                                            div().ml_1().child(self.dock_switches(
-                                                dock,
-                                                px(24.0),
-                                                cx,
-                                            ))
-                                        }))
-                                    }),
-                            ),
-                    ),
-            )
-            .child(
-                controls
-                    .absolute()
-                    .top(titlebar::resize_inset(window))
-                    .right_0()
-                    .h(titlebar::HEIGHT - titlebar::resize_inset(window) - px(1.0)),
-            )
+                    .child(self.render_transport_buttons(cx)),
+            );
+        if panels {
+            trailing = trailing.children(
+                Dock::ALL
+                    .into_iter()
+                    .map(|dock| div().ml_1().child(self.dock_switches(dock, px(24.0), cx))),
+            );
+        }
+
+        titlebar::bar(
+            window,
+            theme,
+            titlebar::Parts::new("project-title", self.document_title())
+                .leading(self.render_history_buttons(cx)),
+            controls,
+        )
+        .trailing(trailing)
     }
 }
 
@@ -127,10 +74,11 @@ impl AurisApp {
     fn render_history_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let theme = &self.theme;
         let step = |id: &'static str, glyph: Icon, enabled: bool, label, command| {
-            icon_button(
+            icon_button_enabled(
                 id,
                 glyph,
                 false,
+                enabled,
                 theme.accent,
                 theme,
                 cx.listener(move |this, _, _, cx| {
@@ -143,7 +91,6 @@ impl AurisApp {
                 }),
             )
             .size(theme.atelier.density.control_sm)
-            .when(!enabled, |button| button.opacity(0.45))
             .tooltip(self.tip(label, command))
         };
         div()
@@ -180,20 +127,31 @@ mod tests {
     #[gpui::test]
     fn titlebar_controls_still_change_the_document_and_relocate_panels(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.document_title(), "Untitled");
+            assert!(this.window_title().contains("Auris Studio"));
+        });
         for width in [1360.0, 640.0, 1100.0] {
             resize(&app, cx, size(px(width), px(700.0)));
+            let title = cx.debug_bounds("project-title").unwrap();
+            // Native title bars keep the title centred until side controls need the room; once
+            // they do, Atelier shifts it away rather than letting it overlap a control.
+            assert!(title.left() >= px(0.0) && title.right() <= px(width));
             let transport = cx.debug_bounds("titlebar-transport").unwrap();
-            assert_eq!(transport.center().x, px(width / 2.0));
+            assert!(transport.right() <= px(width));
             if let Some(minimize) = cx.debug_bounds("window-minimize") {
                 assert!(transport.right() <= minimize.left());
             }
             if super::panels_in_titlebar(px(width)) {
                 // The agent is the last switch in the default right dock.
+                // Atelier's `TitleBar` keeps `spacing.sm` before caption buttons and `spacing.md`
+                // from a bare window edge (macOS, where the traffic lights lead instead).
                 let rightmost = cx.debug_bounds("panel-switch-5").unwrap().right();
-                let controls_left = cx
+                let spacing = app.read_with(cx, |this, _| this.theme.atelier.spacing);
+                let edge = cx
                     .debug_bounds("window-minimize")
-                    .map_or(px(width), |bounds| bounds.left());
-                assert_eq!(rightmost, controls_left - px(8.0));
+                    .map_or(px(width) - spacing.md, |bounds| bounds.left() - spacing.sm);
+                assert_eq!(rightmost, edge);
             }
             let looping = app.read_with(cx, |this, _| this.project().loop_enabled);
             click("loop", cx);

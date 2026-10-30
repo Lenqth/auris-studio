@@ -1,7 +1,7 @@
 //! Library timbre exploration with a background session job and explicit adoption.
 
-use crate::{app::AurisApp, theme::Theme};
-use atelier::plot::Plot3d;
+use crate::app::AurisApp;
+use atelier::plot::{Plot3d, PlotPoint};
 use atelier::{
     Button, ButtonVariant, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar,
     SectionHeader, Segment, SegmentedControl, StatusBar, TextColor, TextSize,
@@ -13,12 +13,40 @@ use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
 #[path = "timbre_plot.rs"]
 mod plot;
-use plot::{TimbreCamera, plot_data};
+use plot::{TimbreView, plot_data};
+
+/// A library row's note of the timbre cluster its sound belongs to.
+pub(crate) struct TimbreClusterTag {
+    /// The cluster's colour, the same in the map, its legend and the library.
+    pub color: gpui::Hsla,
+    /// The cluster's name.
+    pub name: String,
+    /// Whether "Name with AI" wrote the name, so it carries the agent's mark.
+    pub by_ai: bool,
+}
+
+/// A cluster's name in small muted text. The agent's mark follows it when the agent wrote it,
+/// so an AI name reads as one wherever it appears: legend, list or library. The rows that show
+/// it carry their own tooltip, which says who named it, so the label takes none of its own.
+pub(crate) fn cluster_label(name: impl Into<SharedString>, by_ai: bool) -> AnyElement {
+    let name = name.into();
+    if by_ai {
+        atelier::agent::AgentLabel::new(name)
+            .size(TextSize::XSmall)
+            .color(TextColor::Muted)
+            .into_any_element()
+    } else {
+        Label::new(name)
+            .size(TextSize::XSmall)
+            .color(TextColor::Muted)
+            .into_any_element()
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct TimbreMapState {
     pub(crate) open: bool,
-    camera: TimbreCamera,
+    camera: TimbreView,
     hovered: Option<usize>,
     list_nearest: bool,
     pub(crate) map: Option<Arc<TimbreMap>>,
@@ -97,8 +125,9 @@ impl TimbreMapState {
     }
 }
 
-fn cluster_color(cluster: usize, theme: &Theme) -> gpui::Hsla {
-    theme.group_color(cluster as f32 * 0.618_034)
+fn pick_source_index(series: &[Vec<usize>], point: Option<PlotPoint>) -> Option<usize> {
+    let point = point?;
+    series.get(point.series)?.get(point.index).copied()
 }
 
 fn sound_icon_label(icon: SoundIcon) -> Key {
@@ -294,21 +323,28 @@ impl AurisApp {
             .unwrap_or_default()
     }
 
+    /// Whether the cluster's name is one "Name with AI" wrote, which is drawn with the agent's
+    /// mark wherever it appears. The fallback, a representative sound's name, is nobody's.
+    fn timbre_cluster_named_by_ai(&self, cluster: usize) -> bool {
+        self.timbre_map.names.iter().any(|name| name.id == cluster)
+    }
+
     /// Cluster annotation for an exact measured library choice, shared by tree and search rows.
     pub(crate) fn library_timbre_cluster(
         &self,
         instrument_id: &str,
         preset: Option<PresetRef>,
-    ) -> Option<(gpui::Hsla, String)> {
+    ) -> Option<TimbreClusterTag> {
         let cluster = self
             .timbre_map
             .map
             .as_ref()?
             .cluster_for(instrument_id, preset)?;
-        Some((
-            cluster_color(cluster, &self.theme),
-            self.timbre_cluster_name(cluster),
-        ))
+        Some(TimbreClusterTag {
+            color: self.theme.atelier.categorical(cluster),
+            name: self.timbre_cluster_name(cluster),
+            by_ai: self.timbre_cluster_named_by_ai(cluster),
+        })
     }
 
     fn name_timbre_clusters(&mut self, cx: &mut Context<Self>) {
@@ -691,7 +727,14 @@ impl AurisApp {
                     .selected
                     .map(|i| map.nearest(i, 8))
                     .unwrap_or_default();
+                let cluster_ids: Vec<usize> = {
+                    let mut ids = map.clusters().to_vec();
+                    ids.sort_unstable();
+                    ids.dedup();
+                    ids
+                };
                 let mut plot = Plot3d::new()
+                    .id("timbre-plot-content")
                     .labels("PC1", "PC2", "PC3")
                     .x_range(-extent, extent)
                     .y_range(-extent, extent)
@@ -700,14 +743,20 @@ impl AurisApp {
                         self.timbre_map.camera.azimuth,
                         self.timbre_map.camera.elevation,
                     );
-                for batch in
-                    self.timbre_map
-                        .camera
-                        .scatter_batches(map.clusters(), &positions, extent)
-                {
-                    let cluster = map.clusters()[batch[0]];
-                    let points = batch.into_iter().map(|i| positions[i]).collect();
-                    plot = plot.scatter(points, Some(cluster_color(cluster, &self.theme)));
+                // Plot3d numbers every scatter and curve call as a series. Keep the source
+                // indices alongside those calls so picking a highlight cannot be mistaken for
+                // an out-of-range cluster series.
+                let mut pick_sources: Vec<Vec<usize>> = Vec::new();
+                for cluster in cluster_ids.iter().copied() {
+                    let source_indices: Vec<usize> = map
+                        .clusters()
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, value)| (*value == cluster).then_some(i))
+                        .collect();
+                    let points = source_indices.iter().map(|i| positions[*i]).collect();
+                    plot = plot.scatter(points, Some(self.theme.atelier.categorical(cluster)));
+                    pick_sources.push(source_indices);
                 }
                 // Small three-axis crosses identify the selected source without relying on hue.
                 if let Some(index) = self.timbre_map.selected {
@@ -717,14 +766,45 @@ impl AurisApp {
                         a[axis] -= extent * 0.035;
                         b[axis] += extent * 0.035;
                         plot = plot.curve(vec![a, b], Some(theme.colors.text));
+                        pick_sources.push(vec![index, index]);
                     }
                     for (i, _) in &neighbors {
                         plot = plot.scatter(vec![positions[*i]], Some(theme.colors.accent));
+                        pick_sources.push(vec![*i]);
                     }
                 }
-                let bounds = self.timbre_map.camera.bounds.clone();
-                let picking = positions.clone();
-                let hovering = positions;
+                let map_entity = cx.entity().downgrade();
+                let pick_sources = std::sync::Arc::new(pick_sources);
+                let pick_sounds = map.sounds.len();
+                plot = plot
+                    .on_pick(move |hit: &Option<PlotPoint>, _, app| {
+                        let Some(entity) = map_entity.upgrade() else {
+                            return;
+                        };
+                        let index =
+                            pick_source_index(&pick_sources, *hit).filter(|i| *i < pick_sounds);
+                        entity.update(app, |this, cx| {
+                            this.timbre_map.hovered = index;
+                            if let Some(index) = index {
+                                this.select_timbre(index, cx);
+                            }
+                            cx.notify();
+                        });
+                    })
+                    .on_orbit({
+                        let map_entity = cx.entity().downgrade();
+                        move |angles, _, app| {
+                            let Some(entity) = map_entity.upgrade() else {
+                                return;
+                            };
+                            entity.update(app, |this, cx| {
+                                this.timbre_map.camera.azimuth = angles.0;
+                                this.timbre_map.camera.elevation = angles.1;
+                                this.timbre_map.camera.preset = None;
+                                cx.notify();
+                            });
+                        }
+                    });
                 let mut well = div()
                     .id("timbre-plot")
                     .debug_selector(|| "timbre-plot".into())
@@ -735,68 +815,7 @@ impl AurisApp {
                     .rounded(theme.shape.radius_sm)
                     .bg(theme.colors.sunken)
                     .overflow_hidden()
-                    .cursor_grab()
-                    .on_mouse_down(
-                        gpui::MouseButton::Left,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            this.timbre_map.camera.press(event.position);
-                            cx.stop_propagation();
-                        }),
-                    )
-                    .on_mouse_move(
-                        cx.listener(move |this, event: &gpui::MouseMoveEvent, _, cx| {
-                            if this
-                                .timbre_map
-                                .camera
-                                .drag(event.position, event.dragging())
-                            {
-                                this.timbre_map.hovered = None;
-                                cx.notify();
-                            } else {
-                                let hovered =
-                                    this.timbre_map
-                                        .camera
-                                        .pick(&hovering, extent, event.position);
-                                if this.timbre_map.hovered != hovered {
-                                    this.timbre_map.hovered = hovered;
-                                    cx.notify();
-                                }
-                            }
-                        }),
-                    )
-                    .on_mouse_up(
-                        gpui::MouseButton::Left,
-                        cx.listener(move |this, event: &gpui::MouseUpEvent, _, cx| {
-                            if this.timbre_map.camera.release()
-                                && let Some(i) =
-                                    this.timbre_map
-                                        .camera
-                                        .pick(&picking, extent, event.position)
-                            {
-                                this.select_timbre(i, cx);
-                                cx.notify();
-                            }
-                        }),
-                    )
-                    .on_mouse_up_out(
-                        gpui::MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            this.timbre_map.camera.release();
-                        }),
-                    )
-                    .child(plot)
-                    .child(
-                        gpui::canvas(
-                            move |rect, _, _| {
-                                bounds.set(rect);
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .size_full(),
-                    );
+                    .child(plot);
                 if let Some(index) = self.timbre_map.hovered.filter(|i| *i < map.sounds.len()) {
                     well = well.tooltip(crate::ui::tooltip::keyed_tip(
                         format!(
@@ -877,6 +896,16 @@ impl AurisApp {
                 for summary in map.cluster_summaries() {
                     let cluster = summary.id;
                     let name = self.timbre_cluster_name(cluster);
+                    let by_ai = self.timbre_cluster_named_by_ai(cluster);
+                    let tip = if by_ai {
+                        format!(
+                            "{name} · {}\n{}",
+                            self.t(Key::TimbreMapNamedByAi),
+                            summary.examples.join(" · ")
+                        )
+                    } else {
+                        format!("{name}\n{}", summary.examples.join(" · "))
+                    };
                     legend = legend.child(
                         div()
                             .id(SharedString::from(format!("timbre-cluster-{cluster}")))
@@ -884,11 +913,7 @@ impl AurisApp {
                             .items_center()
                             .gap(spacing.xs)
                             .max_w(gpui::rems(15.))
-                            .tooltip(super::tooltip::keyed_tip(
-                                format!("{name}\n{}", summary.examples.join(" · ")),
-                                "",
-                                &self.theme,
-                            ))
+                            .tooltip(super::tooltip::keyed_tip(tip, "", &self.theme))
                             .child(
                                 atelier::Icon::new(atelier::IconSource::svg(
                                     super::icons::sound_icon_path(
@@ -896,11 +921,12 @@ impl AurisApp {
                                     ),
                                 ))
                                 .size(window.rem_size())
-                                .color(cluster_color(cluster, &self.theme)),
+                                .color(self.theme.atelier.categorical(cluster)),
                             )
+                            .child(div().min_w_0().truncate().child(cluster_label(name, by_ai)))
                             .child(
-                                div().min_w_0().truncate().child(
-                                    Label::new(format!("{name} · {}", summary.sound_count))
+                                div().flex_none().child(
+                                    Label::new(format!("· {}", summary.sound_count))
                                         .size(TextSize::XSmall)
                                         .color(TextColor::Muted),
                                 ),
@@ -1087,7 +1113,7 @@ impl AurisApp {
                                         &map.sounds[i].name,
                                     ),
                                 )))
-                                .icon_color(cluster_color(map.clusters()[i], &self.theme))
+                                .icon_color(self.theme.atelier.categorical(map.clusters()[i]))
                                 .description(self.timbre_cluster_name(map.clusters()[i]))
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.select_timbre(i, cx);
@@ -1166,8 +1192,6 @@ impl AurisApp {
         Some(
             div()
                 .id("timbre-map")
-                .key_context("AurisVisualizationControls")
-                .on_action(|_: &super::widgets::ClaimVisualizationActivation, _, _| {})
                 .size_full()
                 .flex()
                 .flex_col()
@@ -1225,7 +1249,6 @@ impl AurisApp {
 mod tests {
     use super::*;
     use crate::harness::{click, open, paint};
-    use crate::theme::{SCHEMES, Theme};
     use gpui::{Entity, TestAppContext, VisualTestContext};
 
     #[gpui::test]
@@ -1333,18 +1356,49 @@ mod tests {
     }
 
     #[test]
-    fn cluster_colours_follow_every_theme_group_palette() {
-        for scheme in SCHEMES {
-            let theme = Theme::from_scheme(scheme);
-            for cluster in 0..8 {
-                assert_eq!(
-                    cluster_color(cluster, &theme),
-                    theme.group_color(cluster as f32 * 0.618_034),
-                    "{} cluster {cluster}",
-                    scheme.name
-                );
-            }
-        }
+    fn plot_pick_series_map_includes_highlight_series() {
+        let series = vec![vec![4, 7], vec![2, 2], vec![9]];
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 0,
+                    index: 1
+                })
+            ),
+            Some(7)
+        );
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 1,
+                    index: 0
+                })
+            ),
+            Some(2)
+        );
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 2,
+                    index: 0
+                })
+            ),
+            Some(9)
+        );
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 3,
+                    index: 0
+                })
+            ),
+            None
+        );
+        assert_eq!(pick_source_index(&series, None), None);
     }
 
     #[gpui::test]
@@ -1463,32 +1517,50 @@ mod tests {
             let annotation = this
                 .library_timbre_cluster(&sound.instrument_id, sound.preset)
                 .unwrap();
-            assert_eq!(annotation.0, cluster_color(cluster, &this.theme));
-            assert!(!annotation.1.is_empty());
+            assert_eq!(annotation.color, this.theme.atelier.categorical(cluster));
+            assert!(!annotation.name.is_empty());
+            assert!(!annotation.by_ai);
             assert!(this.library_timbre_cluster("unmeasured", None).is_none());
             (this.project().clone(), index)
         });
         paint(&app, cx);
         // GPUI's debug selector API requires a static string, including for dynamic rows.
         let mut utility = map_window(&app, cx);
-        // Picking rotates the display only; it must never author instrument changes.
-        let (picked, at) = app.read_with(&utility, |this, _| {
-            let map = this.timbre_map.map.as_ref().unwrap();
-            let (positions, extent) = plot_data(map.positions());
-            let camera = &this.timbre_map.camera;
-            camera
-                .projected(&positions, extent)
+        // Pick a known projected point through Plot3d's native release handler, then verify that
+        // orbiting the map keeps the selection and does not author document changes.
+        let (positions, extent, clusters, azimuth, elevation) =
+            app.read_with(&utility, |this, _| {
+                let map = this.timbre_map.map.as_ref().unwrap();
+                let (positions, extent) = plot_data(map.positions());
+                (
+                    positions,
+                    extent,
+                    map.clusters().to_vec(),
+                    this.timbre_map.camera.azimuth,
+                    this.timbre_map.camera.elevation,
+                )
+            });
+        let mut native_plot = Plot3d::new()
+            .x_range(-extent, extent)
+            .y_range(-extent, extent)
+            .z_range(-extent, extent)
+            .view(azimuth, elevation);
+        let mut cluster_ids = clusters.clone();
+        cluster_ids.sort_unstable();
+        cluster_ids.dedup();
+        for cluster in cluster_ids {
+            let points = clusters
                 .iter()
                 .enumerate()
-                .find_map(|(i, (at, _))| {
-                    (camera.pick(&positions, extent, *at) == Some(i)).then_some((i, *at))
-                })
-                .unwrap()
-        });
-        utility.simulate_click(at, gpui::Modifiers::none());
+                .filter_map(|(i, value)| (*value == cluster).then_some(positions[i]))
+                .collect();
+            native_plot = native_plot.scatter(points, None);
+        }
+        let plot_bounds = utility.debug_bounds("timbre-plot").unwrap();
+        let point = native_plot.project(plot_bounds, positions[index]).0;
+        crate::harness::click_at(&mut utility, point, gpui::Modifiers::none());
         app.read_with(&utility, |this, _| {
-            assert_eq!(this.timbre_map.selected, Some(picked));
-            assert_eq!(this.project(), &before);
+            assert_eq!(this.timbre_map.selected, Some(index));
         });
         let center = utility.debug_bounds("timbre-plot").unwrap().center();
         crate::harness::drag(
@@ -1497,7 +1569,7 @@ mod tests {
             center + gpui::point(gpui::px(50.), gpui::px(20.)),
         );
         app.read_with(&utility, |this, _| {
-            assert_eq!(this.timbre_map.selected, Some(picked));
+            assert_eq!(this.timbre_map.selected, Some(index));
             assert_eq!(this.timbre_map.camera.preset, None);
             assert_eq!(this.project(), &before);
         });
@@ -1602,12 +1674,11 @@ mod tests {
             let cluster = map.clusters()[index];
             let generation = this.timbre_map.naming_generation;
             assert!(this.timbre_map.finish_naming(generation, Ok(names)));
-            assert_eq!(
-                this.library_timbre_cluster(&sound.instrument_id, sound.preset)
-                    .unwrap()
-                    .1,
-                format!("Named cluster {cluster}")
-            );
+            let tag = this
+                .library_timbre_cluster(&sound.instrument_id, sound.preset)
+                .unwrap();
+            assert_eq!(tag.name, format!("Named cluster {cluster}"));
+            assert!(tag.by_ai, "an AI name carries the agent's mark");
             assert_eq!(this.project(), &before);
         });
         paint(&app, &mut utility);
