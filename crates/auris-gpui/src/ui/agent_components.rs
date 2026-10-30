@@ -4,7 +4,7 @@
 //! the same two voices. Keeping those voices in one adapter makes the Atelier design language
 //! visible in both places and prevents a new entry point from inventing a third chat treatment.
 
-use atelier::agent::{AssistantMessage, ChatNotice, ThinkingIndicator, UserMessage};
+use atelier::agent::{AssistantMessage, ChatNotice, UserMessage};
 use gpui::prelude::*;
 use gpui::{AnyElement, ElementId, IntoElement, ParentElement, SharedString, div};
 
@@ -187,13 +187,25 @@ pub(crate) fn status_notice(text: impl Into<SharedString>) -> AnyElement {
     ChatNotice::status(text).into_any_element()
 }
 
-/// Draws an active agent phase with the shared avatar and reduced-motion-aware indicator.
-pub(crate) fn thinking_indicator(id: &'static str, label: impl Into<SharedString>) -> AnyElement {
+/// Draws an active phase with an accent-coloured, reduced-motion-aware indicator.
+pub(crate) fn thinking_indicator(
+    id: &'static str,
+    label: impl Into<SharedString>,
+    theme: &Theme,
+) -> AnyElement {
     div()
         .id(id)
         .debug_selector(move || id.into())
+        .flex()
+        .items_center()
+        .gap(theme.atelier.spacing.sm)
         .min_w_0()
-        .child(ThinkingIndicator::new(label))
+        .child(atelier::Spinner::new(id).color(theme.atelier.colors.accent))
+        .child(
+            atelier::Label::new(label)
+                .size(atelier::TextSize::Small)
+                .color(atelier::TextColor::Muted),
+        )
         .into_any_element()
 }
 

@@ -110,6 +110,13 @@ impl AurisApp {
             )
         });
         let queue = self.workshop_queue_view(cx);
+        let inline_previews: Vec<_> = attachments
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                self.inline_attachment(path, format!("song-inline-draft-{index}"), window, cx)
+            })
+            .collect();
         let mut body = crate::ui::agent_components::composer_frame(
             "song-workshop-composer",
             &theme,
@@ -186,6 +193,7 @@ impl AurisApp {
                     )
             }),
         ))
+        .children(inline_previews)
         .when(self.music_references().midi_draft.is_some(), |body| {
             body.child(self.midi_editor(window.viewport_size().height * 0.3, cx))
         })
