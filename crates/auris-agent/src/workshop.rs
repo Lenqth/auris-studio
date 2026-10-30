@@ -52,7 +52,7 @@ pub enum Command {
     Retry(u64, Box<AgentPreferences>),
     /// Continue an unfinished candidate from its checkpoint with a fresh recovery budget.
     Recover(u64, Box<AgentPreferences>),
-    /// Load auditions for an older comparison without retaining every historical WAV.
+    /// Load a comparison's auditions alongside previously loaded rounds.
     View(usize),
     /// Stop one candidate, or all work when absent.
     Stop(Option<u64>),
@@ -991,21 +991,6 @@ impl Owner {
             }
             Command::View(index) => {
                 if let Some(round) = self.snapshot.document.rounds.get(index) {
-                    let ids: Vec<_> = round
-                        .candidates
-                        .iter()
-                        .filter(|c| c.ready)
-                        .map(|c| c.id)
-                        .collect();
-                    self.snapshot.candidates.retain(|id, _| {
-                        ids.contains(id) || Some(*id) == self.snapshot.document.selected
-                    });
-                    self.snapshot.previews.retain(|id, _| {
-                        self.jobs.contains_key(id) || round.candidates.iter().any(|c| c.id == *id)
-                    });
-                    self.snapshot.preview_errors.retain(|id, _| {
-                        self.jobs.contains_key(id) || round.candidates.iter().any(|c| c.id == *id)
-                    });
                     for candidate in &round.candidates {
                         if candidate.ready && !self.snapshot.candidates.contains_key(&candidate.id)
                         {
@@ -1588,6 +1573,43 @@ fn execute(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn loading_another_round_keeps_earlier_auditions_and_errors() {
+        use super::*;
+        let directory = tempfile::tempdir().unwrap();
+        let (sender, _) = mpsc::channel();
+        let mut owner = Owner::new(
+            Store::new(directory.path().into()),
+            Settings::default(),
+            sender,
+        );
+        for id in [1, 2] {
+            owner.snapshot.document.rounds.push(Round {
+                after_message: 0,
+                candidates: vec![Candidate { id, ..assignment() }],
+            });
+            owner.snapshot.previews.insert(
+                id,
+                Preview {
+                    revision: 1,
+                    audio: Arc::new(auris_session::prelude::AudioBuffer::stereo(100, 100.0)),
+                    timeline: Default::default(),
+                },
+            );
+        }
+        owner
+            .snapshot
+            .preview_errors
+            .insert(1, "Earlier diagnostic".into());
+        owner.command(Command::View(0));
+        owner.command(Command::View(1));
+        assert_eq!(owner.snapshot.previews.len(), 2);
+        assert_eq!(
+            owner.snapshot.preview_errors.get(&1).map(String::as_str),
+            Some("Earlier diagnostic")
+        );
+    }
+
     #[test]
     fn closing_immediately_after_feedback_keeps_the_rating_and_scoped_draft() {
         use super::*;

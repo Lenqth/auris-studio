@@ -128,6 +128,7 @@ strings! {
     WorkshopMotif { en: "Motif, scene or words to include", ja: "モチーフ・情景・入れたい言葉" }
     WorkshopGenerateLyrics { en: "Generate lyrics", ja: "歌詞を生成" }
     WorkshopLyrics { en: "Lyrics (editable)", ja: "歌詞（編集できます）" }
+    WorkshopCandidateLyrics { en: "Lyrics", ja: "歌詞" }
     WorkshopWritingLyrics { en: "Writing lyrics…", ja: "歌詞を生成中…" }
     WorkshopSourceHint { en: "Choose only the parts you want to specify. Automatic parts use the arrangement’s built-in instruments.", ja: "指定したいパートだけ音源を選びます。「お任せ」のパートは曲に合う内蔵音源を使います。" }
     WorkshopMelody { en: "Melody", ja: "メロディ" }
