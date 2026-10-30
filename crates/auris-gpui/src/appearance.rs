@@ -154,6 +154,9 @@ impl CustomScheme {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Appearance {
+    /// Menu category identifiers pinned in the editor title bar on Windows and Linux.
+    /// Empty hides every shortcut while retaining the full application menu.
+    pub titlebar_menus: Vec<String>,
     /// Id of the chosen colour scheme.
     pub scheme: String,
     /// An installed font family, or the platform interface font when unset.
@@ -169,6 +172,7 @@ pub struct Appearance {
 impl Default for Appearance {
     fn default() -> Self {
         Self {
+            titlebar_menus: ["file", "edit", "view"].map(str::to_owned).to_vec(),
             scheme: DEFAULT_SCHEME.to_string(),
             font_family: None,
             animate_mixer_signals: true,
@@ -245,6 +249,13 @@ impl Appearance {
 
     /// Repairs individual invalid preferences while retaining every unrelated valid choice.
     pub fn normalised(mut self) -> Self {
+        let mut pinned = std::collections::HashSet::new();
+        self.titlebar_menus.retain(|id| {
+            crate::menu::MenuCategory::ALL
+                .iter()
+                .any(|category| category.id() == id)
+                && pinned.insert(id.clone())
+        });
         let mut ids = std::collections::BTreeSet::new();
         let mut names: std::collections::BTreeSet<String> = crate::theme::SCHEMES
             .iter()
@@ -288,6 +299,23 @@ mod tests {
         let empty: Appearance = serde_json::from_str("{}").unwrap();
         assert_eq!(empty, Appearance::default());
         assert_eq!(empty.theme().scheme, DEFAULT_SCHEME);
+    }
+
+    #[test]
+    fn titlebar_menu_preferences_keep_empty_choices_and_ignore_unknown_categories() {
+        let old: Appearance = serde_json::from_str(r#"{"scheme":"daylight"}"#).unwrap();
+        assert_eq!(old.titlebar_menus, ["file", "edit", "view"]);
+        let empty: Appearance = serde_json::from_str(r#"{"titlebar_menus":[]}"#).unwrap();
+        assert!(empty.normalised().titlebar_menus.is_empty());
+        let stored: Appearance =
+            serde_json::from_str(r#"{"titlebar_menus":["view","future-category","view","track"]}"#)
+                .unwrap();
+        let normal = stored.normalised();
+        assert_eq!(normal.titlebar_menus, ["view", "track"]);
+        assert_eq!(
+            serde_json::from_str::<Appearance>(&serde_json::to_string(&normal).unwrap()).unwrap(),
+            normal
+        );
     }
 
     #[test]
@@ -356,6 +384,7 @@ mod tests {
         let mut custom = custom();
         custom.accent = 0x66_ddee;
         let appearance = Appearance {
+            titlebar_menus: Appearance::default().titlebar_menus,
             scheme: custom.id.clone(),
             font_family: Some("Example UI".to_owned()),
             custom_schemes: vec![custom],
@@ -490,6 +519,7 @@ mod tests {
         invalid.name = "Invalid".to_owned();
         invalid.base = 0.5;
         let appearance = Appearance {
+            titlebar_menus: Appearance::default().titlebar_menus,
             scheme: invalid.id.clone(),
             font_family: Some("  Example UI  ".to_owned()),
             custom_schemes: vec![invalid, valid.clone()],

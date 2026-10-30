@@ -2081,6 +2081,10 @@ new のオプション
     ReasoningReset { en: "Reset reasoning effort and fast mode", ja: "思考量と高速モードを標準に戻す" }
     ReasoningUnavailable { en: "This model does not offer the saved effort level.", ja: "このモデルは保存された思考量に対応していません。" }
     BackToStart { en: "Back to start", ja: "起動画面に戻る" }
+    TitlebarMenusHeading { en: "Title bar menus", ja: "タイトルバーのメニュー" }
+    TitlebarMenusNote { en: "Choose which categories appear beside Undo and Redo. Other categories and menus that do not fit remain in the application menu.", ja: "Undo・Redoの隣に常時表示するカテゴリを選びます。非表示のカテゴリや、幅に収まらないメニューはアプリメニューから使えます。" }
+    TitlebarMenusNative { en: "macOS uses the system menu bar for all categories.", ja: "macOSでは、すべてのカテゴリを標準メニューバーで利用できます。" }
+    TitlebarMenusReset { en: "Restore default menus", ja: "初期表示に戻す" }
     ResumeProject { en: "Resume editing", ja: "編集を再開" }
     AgentEffortDefault { en: "Model default", ja: "モデルの既定値" }
     AgentEffortNone { en: "Off", ja: "オフ" }

@@ -469,7 +469,7 @@ impl AurisApp {
             beats => Some((beats.to_string(), None)),
         };
 
-        let mut editing = vec![self.render_history_buttons(cx).into_any_element()];
+        let mut editing = Vec::new();
         for item in self.settings.toolbar.visible_in(1) {
             editing.push(match item {
                 ToolbarItem::Grid => (div()

@@ -2360,8 +2360,20 @@ impl AurisApp {
             }
             "left" | "right" => {
                 let delta = if event.keystroke.key == "left" { -1 } else { 1 };
-                let index = menu_bar::stepped_section(sections.len(), open.index, delta);
-                self.set_menu_bar(Some(menu_bar::OpenMenu::at(index)));
+                let pinned = self.titlebar_menu_layout(window);
+                let index = if open.from_titlebar && !pinned.is_empty() {
+                    let position = pinned
+                        .iter()
+                        .position(|(index, _, _)| *index == open.index)
+                        .unwrap_or(0);
+                    pinned[menu_bar::stepped_section(pinned.len(), position, delta)].0
+                } else {
+                    menu_bar::stepped_section(sections.len(), open.index, delta)
+                };
+                self.set_menu_bar(Some(menu_bar::OpenMenu {
+                    from_titlebar: open.from_titlebar,
+                    ..menu_bar::OpenMenu::at(index)
+                }));
             }
             "down" | "up" | "home" | "end" => {
                 let key = event.keystroke.key.as_str();
@@ -2431,6 +2443,7 @@ impl AurisApp {
         }
         self.menu = None;
         let next = match self.menu_bar {
+            Some(open) if open.from_titlebar => Some(menu_bar::OpenMenu::at(open.index)),
             Some(_) => None,
             None => Some(menu_bar::OpenMenu::at(0)),
         };

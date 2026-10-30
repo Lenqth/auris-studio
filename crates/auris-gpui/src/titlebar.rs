@@ -155,8 +155,8 @@ pub fn controls_width(window: &Window) -> Pixels {
 
 /// What goes in a title bar laid out the way Atelier's `TitleBar` lays it out.
 ///
-/// The title is the only text in the bar. Status, paths and counts belong in the page or status
-/// bar, so a title cannot be squeezed by a second label at narrow widths.
+/// The title identifies the current object; optional navigation and menu controls occupy the
+/// leading region. Status, paths and counts belong in the page or status bar.
 pub struct Parts {
     id: &'static str,
     title: SharedString,

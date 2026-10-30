@@ -113,13 +113,14 @@ mod tests {
     }
 
     #[gpui::test]
-    fn undo_and_redo_live_with_timeline_editing_controls(cx: &mut gpui::TestAppContext) {
+    fn undo_and_redo_live_in_the_titlebar_and_keep_their_edit_history(
+        cx: &mut gpui::TestAppContext,
+    ) {
         let (app, cx, _, clip) = crate::harness::with_a_clip(cx);
         let undo = cx.debug_bounds("editing-undo").unwrap();
         let redo = cx.debug_bounds("editing-redo").unwrap();
-        let title = cx.debug_bounds("project-title").unwrap();
         assert!(undo.right() <= redo.left());
-        assert!(undo.top() >= title.bottom());
+        assert!(undo.top() >= px(0.0) && undo.bottom() <= crate::titlebar::HEIGHT);
         crate::harness::click("editing-undo", cx);
         app.read_with(cx, |this, _| {
             assert!(this.session.midi_clip(clip).is_none())

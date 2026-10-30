@@ -17,6 +17,10 @@ use crate::app::AurisApp;
 use crate::menu::{MenuRow, MenuSection, model};
 use crate::theme::Metrics;
 
+/// Last painted title-button bounds, used to anchor its menu without guessing text widths.
+pub(crate) type MenuTitleBounds =
+    std::rc::Rc<std::cell::RefCell<std::collections::HashMap<usize, gpui::Bounds<Pixels>>>>;
+
 /// Height of one row in an open menu.
 const ROW_HEIGHT: Pixels = px(22.0);
 
@@ -44,6 +48,8 @@ const CHECK_WIDTH: Pixels = px(10.0);
 /// Which menu-bar menu is open, and how it came to be.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct OpenMenu {
+    /// Opened from a pinned title button rather than the full application menu.
+    pub from_titlebar: bool,
     /// Index into [`crate::menu::model`].
     pub index: usize,
     /// `true` when a click opened it, `false` when the pointer slid onto it with another
@@ -60,6 +66,7 @@ impl OpenMenu {
     /// The menu at `index`, opened by a click, with nothing highlighted yet.
     pub fn at(index: usize) -> Self {
         Self {
+            from_titlebar: false,
             index,
             clicked: true,
             highlighted: None,
@@ -74,6 +81,7 @@ impl OpenMenu {
 pub fn after_hover(open: Option<OpenMenu>, index: usize) -> Option<OpenMenu> {
     match open {
         Some(open) if open.index != index => Some(OpenMenu {
+            from_titlebar: open.from_titlebar,
             index,
             clicked: false,
             highlighted: None,
@@ -206,6 +214,32 @@ impl AurisApp {
             cx,
         );
 
+        if open.from_titlebar
+            && let Some(bounds) = self.menu_title_bounds.borrow().get(&open.index).copied()
+        {
+            return Some(
+                deferred(
+                    gpui::anchored()
+                        .anchor(gpui::Corner::TopLeft)
+                        .position(gpui::point(bounds.left(), crate::titlebar::HEIGHT))
+                        .snap_to_window_with_margin(theme.atelier.spacing.sm)
+                        .child(
+                            div()
+                                .debug_selector(|| "titlebar-menu-panel".into())
+                                .track_focus(&self.menu_focus)
+                                .rounded(Metrics::RADIUS_MD)
+                                .border_1()
+                                .border_color(theme.border)
+                                .bg(theme.surface_raised)
+                                .shadow_lg()
+                                .occlude()
+                                .child(commands),
+                        ),
+                )
+                .into_any_element(),
+            );
+        }
+
         Some(
             deferred(
                 div()
@@ -228,7 +262,12 @@ impl AurisApp {
                             div()
                                 .on_mouse_move(cx.listener(
                                     move |this, _: &MouseMoveEvent, _, cx| {
-                                        let next = after_hover(this.menu_bar, index);
+                                        let next = after_hover(this.menu_bar, index).map(|menu| {
+                                            OpenMenu {
+                                                from_titlebar: false,
+                                                ..menu
+                                            }
+                                        });
                                         if next != this.menu_bar {
                                             this.set_menu_bar(next);
                                             cx.notify();
@@ -445,6 +484,7 @@ mod tests {
 
     fn slid(index: usize) -> Option<OpenMenu> {
         Some(OpenMenu {
+            from_titlebar: false,
             index,
             clicked: false,
             highlighted: None,
@@ -577,6 +617,7 @@ mod tests {
     fn the_pointer_takes_the_highlight_off_the_row_the_keyboard_had() {
         // The two are the same highlight, and the pointer has just said it is somewhere else.
         let walked = Some(OpenMenu {
+            from_titlebar: false,
             index: 1,
             clicked: true,
             highlighted: Some(4),

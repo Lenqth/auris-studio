@@ -1,12 +1,12 @@
-//! Compact window chrome; editing and playback live in the control bar below.
+//! Compact project navigation, history and menus; playback lives in the control bar below.
 
 use auris_i18n::Key;
-use gpui::{Context, IntoElement, Window, div, prelude::*};
+use gpui::{AnyElement, Context, IntoElement, Pixels, Window, div, prelude::*, px};
 
 use crate::app::AurisApp;
 use crate::titlebar;
 use crate::ui::icons::Icon;
-use crate::ui::widgets::{icon_button, icon_button_enabled};
+use crate::ui::widgets::icon_button;
 
 impl AurisApp {
     /// Draws project identity, the application menu and native window controls.
@@ -42,7 +42,9 @@ impl AurisApp {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.show_editor_start(window, cx)
                             })),
-                    ),
+                    )
+                    .child(self.render_history_buttons(cx))
+                    .children(self.render_titlebar_menus(window, cx)),
             ),
             controls,
         )
@@ -58,7 +60,7 @@ impl AurisApp {
                 icon_button(
                     "application-menu",
                     Icon::Menu,
-                    self.menu_bar.is_some(),
+                    self.menu_bar.is_some_and(|menu| !menu.from_titlebar),
                     self.theme.accent,
                     &self.theme,
                     cx.listener(|_, _, window, cx| {
@@ -72,31 +74,136 @@ impl AurisApp {
 }
 
 impl AurisApp {
-    /// Undo and Redo beside the timeline editing controls.
+    /// Measured menu shortcuts that fit beside navigation, title and native window controls.
+    /// Remaining categories stay available in the application menu.
+    pub(crate) fn titlebar_menu_layout(
+        &self,
+        window: &Window,
+    ) -> Vec<(usize, gpui::SharedString, Pixels)> {
+        if !Self::wants_menu_bar() {
+            return Vec::new();
+        }
+        let spacing = self.theme.atelier.spacing;
+        let reserved = titlebar::controls_width(window)
+            + spacing.md * 2.0
+            + self.theme.atelier.density.control_sm * 4.0
+            + spacing.sm * 2.0
+            + spacing.xxl * 4.0;
+        let mut available = (window.viewport_size().width - reserved).max(px(0.0));
+        let mut visible = Vec::new();
+        for (index, section) in self.menu_model().into_iter().enumerate() {
+            if !section.category.is_some_and(|category| {
+                self.appearance
+                    .titlebar_menus
+                    .iter()
+                    .any(|id| id == category.id())
+            }) {
+                continue;
+            }
+            let width = super::paint::measure_label(
+                window,
+                section.name.clone(),
+                self.theme.atelier.typography.size_sm,
+            ) + spacing.sm * 2.0;
+            if width + spacing.xs > available {
+                break;
+            }
+            available -= width + spacing.xs;
+            visible.push((index, section.name, width));
+        }
+        visible
+    }
+
+    fn render_titlebar_menus(&self, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let layout = self.titlebar_menu_layout(window);
+        self.menu_title_bounds
+            .borrow_mut()
+            .retain(|index, _| layout.iter().any(|(shown, _, _)| index == shown));
+        layout
+            .into_iter()
+            .map(|(index, label, width)| {
+                let bounds = self.menu_title_bounds.clone();
+                let open = self
+                    .menu_bar
+                    .is_some_and(|menu| menu.from_titlebar && menu.index == index);
+                div()
+                    .relative()
+                    .w(width)
+                    .flex_shrink_0()
+                    .on_mouse_move(cx.listener(move |this, _: &gpui::MouseMoveEvent, _, cx| {
+                        if let Some(menu) = this.menu_bar
+                            && (menu.index != index || !menu.from_titlebar)
+                        {
+                            this.set_menu_bar(Some(super::menu_bar::OpenMenu {
+                                index,
+                                from_titlebar: true,
+                                clicked: false,
+                                highlighted: None,
+                            }));
+                            cx.notify();
+                        }
+                    }))
+                    .child(
+                        atelier::Button::new(("titlebar-menu", index), label)
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .radius(self.theme.atelier.shape.radius_sm)
+                            .full_width()
+                            .selected(open)
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                let close = this.menu_bar.is_some_and(|menu| {
+                                    menu.index == index && menu.from_titlebar && menu.clicked
+                                });
+                                this.menu = None;
+                                if !close && this.menu_focus_return.is_none() {
+                                    this.menu_focus_return = window.focused(cx);
+                                }
+                                this.set_menu_bar((!close).then_some(super::menu_bar::OpenMenu {
+                                    from_titlebar: true,
+                                    ..super::menu_bar::OpenMenu::at(index)
+                                }));
+                                if !close {
+                                    window.focus(&this.menu_focus);
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        gpui::canvas(
+                            move |painted, _, _| {
+                                bounds.borrow_mut().insert(index, painted);
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
+                    )
+                    .into_any_element()
+            })
+            .collect()
+    }
+
+    /// Undo and Redo in the title bar, beside project navigation.
     pub(crate) fn render_history_buttons(
         &self,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let theme = &self.theme;
         let step = |id: &'static str, glyph: Icon, enabled: bool, label, command| {
-            icon_button_enabled(
-                id,
-                glyph,
-                false,
-                enabled,
-                theme.accent,
-                theme,
-                cx.listener(move |this, _, _, cx| {
+            let shortcut = self.keystroke_for(command);
+            atelier::Button::icon_only(id, glyph.source())
+                .ghost()
+                .size(atelier::ControlSize::Small)
+                .disabled(!enabled)
+                .tooltip(format!("{} · {shortcut}", self.t(label)))
+                .on_click(cx.listener(move |this, _, _, cx| {
                     if glyph == Icon::Undo {
                         this.undo();
                     } else {
                         this.redo();
                     }
                     cx.notify();
-                }),
-            )
-            .size(theme.atelier.density.control_sm)
-            .tooltip(self.tip(label, command))
+                }))
         };
         div()
             .debug_selector(|| "editing-history".into())
@@ -183,6 +290,8 @@ mod tests {
             // Native title bars keep the title centred until side controls need the room; once
             // they do, Atelier shifts it away rather than letting it overlap a control.
             assert!(title.left() >= px(0.0) && title.right() <= px(width));
+            let history = cx.debug_bounds("editing-history").unwrap();
+            assert!(history.top() >= px(0.0) && history.bottom() <= crate::titlebar::HEIGHT);
             let transport = cx.debug_bounds("transport-buttons").unwrap();
             assert!(transport.top() >= crate::titlebar::HEIGHT);
             let panels = cx.debug_bounds("panel-switch-5").unwrap();
@@ -200,6 +309,85 @@ mod tests {
                 assert_eq!(this.panels.is_open(Panel::Mixer), !open)
             });
             paint(&app, cx);
+        }
+    }
+
+    #[gpui::test]
+    fn pinned_menu_categories_open_locally_and_keyboard_navigation_stays_with_them(
+        cx: &mut TestAppContext,
+    ) {
+        if !crate::app::AurisApp::wants_menu_bar() {
+            return;
+        }
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.appearance.titlebar_menus = crate::appearance::Appearance::default().titlebar_menus
+        });
+        resize(&app, cx, size(px(1360.), px(700.)));
+        for index in [0, 1, 4] {
+            let selector: &'static str =
+                Box::leak(format!("titlebar-menu-{index}").into_boxed_str());
+            let button = cx.debug_bounds(selector).unwrap();
+            assert!(button.bottom() <= crate::titlebar::HEIGHT);
+        }
+        click("titlebar-menu-0", cx);
+        paint(&app, cx);
+        let popup = cx.debug_bounds("titlebar-menu-panel").unwrap();
+        assert!(popup.top() >= crate::titlebar::HEIGHT);
+        assert!(
+            (popup.left() - cx.debug_bounds("titlebar-menu-0").unwrap().left()).abs() <= px(1.)
+        );
+        for index in [1, 4, 0] {
+            cx.simulate_keystrokes("right");
+            paint(&app, cx);
+            app.read_with(cx, |this, _| {
+                let menu = this.menu_bar.unwrap();
+                assert_eq!(menu.index, index);
+                assert!(menu.from_titlebar);
+            });
+        }
+        let return_focus = app.read_with(cx, |this, _| this.menu_focus_return.clone().unwrap());
+        cx.simulate_keystrokes("escape");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.menu_bar.is_none()));
+        cx.update(|window, _| assert!(return_focus.is_focused(window)));
+        click("titlebar-menu-4", cx);
+        cx.simulate_keystrokes("down enter");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.palette.is_some()));
+    }
+
+    #[gpui::test]
+    fn all_pinned_categories_yield_to_the_title_and_keep_the_full_menu_accessible(
+        cx: &mut TestAppContext,
+    ) {
+        if !crate::app::AurisApp::wants_menu_bar() {
+            return;
+        }
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.appearance.titlebar_menus = crate::menu::MenuCategory::ALL
+                .iter()
+                .map(|category| category.id().to_owned())
+                .collect()
+        });
+        for width in [1360., 640., 480.] {
+            resize(&app, cx, size(px(width), px(700.)));
+            let shown = cx.update(|window, cx| {
+                app.read_with(cx, |this, _| this.titlebar_menu_layout(window))
+            });
+            let title = cx.debug_bounds("project-title").unwrap();
+            for (index, _, _) in shown {
+                let selector: &'static str =
+                    Box::leak(format!("titlebar-menu-{index}").into_boxed_str());
+                let button = cx.debug_bounds(selector).unwrap();
+                assert!(button.right() <= title.left());
+            }
+            assert!(cx.debug_bounds("editing-redo").unwrap().right() <= title.left());
+            click("application-menu", cx);
+            paint(&app, cx);
+            assert!(cx.debug_bounds("application-menu-panel").is_some());
+            cx.simulate_keystrokes("escape");
         }
     }
 

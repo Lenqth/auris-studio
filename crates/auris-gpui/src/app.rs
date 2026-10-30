@@ -1563,6 +1563,8 @@ pub struct AurisApp {
     pub(crate) menu_focus_return: Option<gpui::FocusHandle>,
     /// Which menu-bar menu is open, on the platforms that draw their own bar.
     pub(crate) menu_bar: Option<OpenMenu>,
+    /// Painted bounds of pinned menu categories in the current project title bar.
+    pub(crate) menu_title_bounds: crate::ui::menu_bar::MenuTitleBounds,
     /// The open rename sheet, if any.
     pub(crate) prompt: Option<Prompt>,
     /// Background release check, verified download, or an update awaiting application.
@@ -2048,6 +2050,7 @@ impl AurisApp {
             menu: None,
             menu_focus_return: None,
             menu_bar: None,
+            menu_title_bounds: Default::default(),
             prompt: None,
             update_phase: crate::ui::updates::UpdatePhase::Idle,
             update_generation: 0,
@@ -3117,6 +3120,9 @@ impl AurisApp {
         appearance: Appearance,
         cx: &mut App,
     ) -> std::io::Result<()> {
+        if self.appearance.titlebar_menus != appearance.titlebar_menus {
+            self.close_menu_bar();
+        }
         self.appearance = appearance.normalised();
         self.theme = self.appearance.theme();
         self.theme.install(cx);

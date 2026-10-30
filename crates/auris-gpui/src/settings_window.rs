@@ -34,6 +34,7 @@ mod agent;
 mod appearance_editor;
 #[cfg(test)]
 mod appearance_tests;
+mod chrome;
 mod dropdown;
 mod personalization;
 mod search;
@@ -722,6 +723,9 @@ impl SettingsWindow {
             })
             .when(self.matches_section(Section::Toolbar), |view| {
                 view.child(self.render_toolbar_settings(cx))
+            })
+            .when(self.matches_section(Section::Titlebar), |view| {
+                view.child(self.render_titlebar_settings(cx))
             })
             .into_any_element()
     }
