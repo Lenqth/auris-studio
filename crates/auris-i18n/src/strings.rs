@@ -40,6 +40,38 @@ macro_rules! strings {
 }
 
 strings! {
+    IssueReport { en: "Report a problem…", ja: "問題を報告…" }
+    IssueDraft { en: "Issue draft", ja: "Issueの下書き" }
+    IssueProposalPrivacy { en: "Review the agent's proposal before including it. It may reflect private conversation details; nothing below has been added to the draft yet.", ja: "エージェントの提案には会話の個人情報が含まれる可能性があります。下書きに含めてよいか確認してください。以下の内容はまだ下書きに追加していません。" }
+    IssueProposalAllow { en: "Allow this proposal in the draft", ja: "この提案を下書きに含めることを許可" }
+    IssueTitle { en: "Title", ja: "タイトル" }
+    IssueDescription { en: "Steps, expected behavior and actual behavior", ja: "操作手順・期待した動作・実際の動作" }
+    IssueTemplate { en: "Steps to reproduce:\n\nExpected behavior:\n\nActual behavior:\n", ja: "再現手順：\n\n期待した動作：\n\n実際の動作：\n" }
+    IssuePrivacy { en: "Supporting context is excluded by default. Review and edit each excerpt locally, then explicitly allow it for this draft only. It may contain private information; automatic redaction is incomplete. No project files or audio are attached.", ja: "補助情報は初期状態では含めません。各内容をこの端末で確認・編集し、今回の下書きに含めてよいものだけ許可してください。個人情報を含む可能性があり、自動の伏せ字処理では取り切れません。プロジェクトや音声ファイルは添付しません。" }
+    IssueLogs { en: "Application logs (current launch)", ja: "使用ログ（今回の起動中）" }
+    IssuePrompts { en: "User prompts (current chat and selected song conversation)", ja: "入力したプロンプト（現在のチャットと選択中の作曲会話）" }
+    IssuePreferences { en: "Learned music preferences (recent choices)", ja: "学習した曲の好み（最近の選択履歴）" }
+    IssueReviewContext { en: "Review…", ja: "内容を確認…" }
+    IssueAllowContext { en: "Allow this excerpt in the draft", ja: "この内容を下書きに含めることを許可" }
+    IssueExcludeContext { en: "Exclude", ja: "含めない" }
+    IssueIncluded { en: "Included for this draft", ja: "今回の下書きに含める" }
+    IssueExcluded { en: "Excluded", ja: "含めない" }
+    IssueLoading { en: "Reading local context…", ja: "端末内の情報を読み込み中…" }
+    IssuePreview { en: "Review draft", ja: "下書きを確認" }
+    IssueCopy { en: "Copy draft", ja: "下書きをコピー" }
+    IssueCopied { en: "Draft copied", ja: "下書きをコピーしました" }
+    IssueGithub { en: "Copy and open GitHub…", ja: "コピーしてGitHubを開く…" }
+    IssueGithubHelp { en: "GitHub opens without your draft in the URL. Paste the copied body, review it and submit there. Issues may be public.", ja: "下書きをURLに含めずGitHubを開きます。コピーした本文を貼り付け、確認してから投稿してください。Issueは公開される場合があります。" }
+    IssueInvestigate { en: "Ask AI to investigate…", ja: "AIに調査を依頼…" }
+    IssueAiConsent { en: "Send the full draft shown below, including only the excerpts you allowed, to the configured AI provider? The provider may be remote. AI assesses this evidence without accessing files or changing your song; it cannot confirm a root cause or reproduction.", ja: "下に表示した下書き全体を、許可した補助情報とともに設定済みのAIへ送信しますか？ 送信先は外部サービスの場合があります。AIはこの情報から原因候補や確認手順を調べます。ファイルの閲覧や曲の変更は行わず、原因の確定や再現確認はできません。" }
+    IssueAiSend { en: "Allow and send this draft to AI", ja: "この下書きのAIへの送信を許可" }
+    IssueAiWorking { en: "AI is assessing the reviewed draft…", ja: "AIが確認済みの下書きを調査中…" }
+    IssueAiUnavailable { en: "Configure an agent in Settings to use AI diagnosis.", ja: "AI調査を使うには設定でエージェントを構成してください。" }
+    IssueAiRemove { en: "Remove AI assessment", ja: "AIの調査結果を除外" }
+    IssueAiStopped { en: "AI assessment stopped", ja: "AI調査を中止しました" }
+    IssueNoContext { en: "No recorded context is available in this scope.", ja: "この範囲には記録された情報がありません。" }
+    IssueInvitation { en: "A limitation or possible defect was found. You can prepare an Issue draft and choose what context to include.", ja: "機能の制約または不具合の可能性があります。補助情報を含めるか選んで、Issueの下書きを作れます。" }
+    IssueOpenSuggestion { en: "Prepare Issue draft…", ja: "Issueの下書きを作成…" }
     WorkshopTitle { en: "Create with AI…", ja: "AIで曲を作る…" }
     WorkshopChatHint { en: "Describe the music you want. Ask for one to three candidates, request more ideas, or keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。候補は1〜3案で指定でき、追加の案を頼んだり、気に入った曲を育てたりできます。" }
     WorkshopMessage { en: "Message", ja: "メッセージ" }

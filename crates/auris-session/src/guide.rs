@@ -1,4 +1,26 @@
 //! How Auris Studio fits together.
+//!
+//! # Issue drafts and disclosure consent
+//!
+//! [`crate::issue_report::Draft`] is ephemeral and excludes application logs, user prompts and
+//! musical preference evidence until the person approves each exact local excerpt. Consent
+//! is scoped to one draft, never persisted in settings, and cannot be granted by a model or
+//! permission-bypass mode. Editing or removing a private excerpt revokes its approval and
+//! invalidates any derived AI assessment. The desktop snapshots this launch's bounded logs,
+//! the current chat/selected song conversation, and recent preference evidence; it does not
+//! attach project files or audio. Local redaction is best-effort, so review remains necessary.
+//!
+//! `suggest_issue_report` returns only an optional invitation, after distinguishing application
+//! limitations from missing agent tools, configuration, denied permissions and transient errors.
+//! The desktop opens it only on a human action. Optional AI diagnosis separately asks to send the
+//! displayed draft to the configured provider, with no tools, saved instructions or history.
+//! It examines supplied evidence and cannot establish reproduction or source-level root cause.
+//! Clipboard and browser actions use the same consent-filtered body. GitHub opens without a body
+//! in its URL; the person pastes, reviews and publishes there.
+//! Model-authored title/explanation proposals also require local review before entering the draft.
+//!
+//! # Runtime tools
+//!
 //! Saved-project MCP registers and dispatches through the toolbox execution registry.
 //! Runtime discovery and help use the same enabled tool set as execution.
 //! Built-in backends share documentation search, discovery, help and capability tools.

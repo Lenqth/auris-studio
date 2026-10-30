@@ -22,6 +22,7 @@ mod auxiliary_window;
 #[cfg(test)]
 mod harness;
 mod i18n;
+mod issue_report_window;
 mod keymap;
 mod logbook;
 mod menu;

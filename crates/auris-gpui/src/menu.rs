@@ -696,6 +696,11 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         name: t(Key::GroupHelp),
         rows: vec![
             command(
+                t(Key::IssueReport),
+                actions::ReportProblem,
+                "help.report_problem",
+            ),
+            command(
                 t(Key::CmdCheckForUpdates),
                 actions::CheckForUpdates,
                 "help.check_updates",
@@ -955,6 +960,7 @@ mod tests {
         assert_eq!(
             labels,
             [
+                Key::IssueReport.get(Language::English),
                 Key::CmdCheckForUpdates.get(Language::English),
                 Key::CmdAbout.get(Language::English),
             ]

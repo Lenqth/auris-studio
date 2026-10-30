@@ -53,6 +53,7 @@ pub mod conversation_attachments;
 pub mod conversations;
 pub mod execution_trace;
 mod export_inspection;
+pub mod issue_report;
 pub mod live_agent;
 pub mod midi_reference;
 pub mod music_reference;

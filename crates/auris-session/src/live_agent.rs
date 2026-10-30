@@ -55,6 +55,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Offer an optional local Issue draft after verifying a missing feature or suspected defect. Check tool_help/capabilities first; distinguish application limitations from missing agent tools, configuration, denied permissions and transient errors. Explain workarounds and uncertainty. Never quote or summarize private prompts, logs or learned preferences in this suggestion. The desktop shows an invitation; only the human can open it and authorize each private context category. Does not publish, send context to AI, or grant consent.
+    SuggestIssueReport {
+        /// Generic title and evidence-based limitation, without private conversation excerpts.
+        suggestion: crate::issue_report::Suggestion,
+    },
     /// Opt in to bounded transition evidence, read its cursor or stop collection. Starting requires explicit user consent via the host permission gate. No audio or document edits.
     ExecutionTrace {
         /// Collection control or cursor read.
@@ -548,6 +553,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::SuggestIssueReport { .. }
             | Self::ExecutionTrace { .. }
             | Self::PhraseVariation { .. }
             | Self::SuggestHarmony { .. }
@@ -667,6 +673,10 @@ impl Session {
             );
         }
         match command {
+            Command::SuggestIssueReport { suggestion } => {
+                suggestion.validate()?;
+                Ok(serde_json::json!({"suggestion":suggestion,"published":false,"private_context_included":false,"next":"The desktop offers a report invitation. The human must open the draft and explicitly approve each private context category. No permission to disclose or publish has been granted."}).to_string())
+            }
             Command::ExecutionTrace { operation } => self.execution_trace(operation),
             Command::PhraseVariation {
                 expected_revision,

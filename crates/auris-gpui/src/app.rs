@@ -1693,6 +1693,8 @@ pub struct AurisApp {
     pub(crate) pointer: PointerGestures,
     /// The settings window, while it is open.
     pub(crate) settings_window: Option<WindowHandle<SettingsWindow>>,
+    pub(crate) issue_report_window:
+        Option<WindowHandle<crate::issue_report_window::IssueReportWindow>>,
     /// The rhythm editor; invalidated when the document is replaced.
     pub(crate) rhythm_window: Option<WindowHandle<crate::ui::rhythm_grid::RhythmWindow>>,
     /// The external singing-backend setup window, while it is open.
@@ -2085,6 +2087,7 @@ impl AurisApp {
             pointer: input.pointer,
             keymap,
             settings_window: None,
+            issue_report_window: None,
             rhythm_window: None,
             clicked_key: None,
             _repaint: repaint,
