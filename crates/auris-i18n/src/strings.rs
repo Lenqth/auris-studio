@@ -317,6 +317,7 @@ strings! {
     TimbreMapReady { en: "Scan the library to explore its sounds", ja: "ライブラリを解析すると音色を探索できます" }
     TimbreMapNameWithAi { en: "Name and classify with AI", ja: "AIで名前とアイコンを付ける" }
     TimbreMapNaming { en: "Naming and classifying…", ja: "名前とアイコンを考えています…" }
+    TimbreMapNamedByAi { en: "Named by AI", ja: "AIが付けた名前" }
     TimbreMapNamingHint { en: "Send representative sound names, family counts and cluster sizes to the configured agent. No audio is sent.", ja: "代表音色の名前・楽器分類の集計・音色数を設定済みエージェントに送ります。音声は送信しません。" }
     TimbreMapEditIcon { en: "Correct sound category…", ja: "音色の分類を修正…" }
     TimbreMapAutoIcon { en: "Use automatic category", ja: "自動分類に戻す" }
@@ -650,6 +651,8 @@ strings! {
     }
     OutputDevice { en: "Output Device", ja: "出力デバイス" }
     AudioHost { en: "Audio Driver", ja: "オーディオドライバー" }
+    AudioDevicesGroup { en: "Devices", ja: "デバイス" }
+    AudioPlaybackGroup { en: "Playback", ja: "再生" }
     FirstAsioDevice { en: "First Available Driver", ja: "最初に見つかったドライバー" }
     FirstAsioDeviceDetail { en: "Uses the first available ASIO driver", ja: "最初に利用できるASIOドライバーを使用します" }
     AsioInputNote { en: "Input and output use the same ASIO driver.", ja: "入力と出力に同じASIOドライバーを使用します。" }
@@ -879,6 +882,7 @@ strings! {
     PluginActions { en: "Plugin actions", ja: "プラグインの操作" }
     PluginBypassed { en: "Bypassed", ja: "バイパス中" }
     CmdSave { en: "Save", ja: "保存" }
+    DocumentUnsaved { en: "Unsaved changes", ja: "未保存の変更" }
     CmdSaveAs { en: "Save As", ja: "名前を付けて保存" }
     CmdImportAudio { en: "Import Audio", ja: "オーディオを読み込む" }
     CmdImportSoundFont { en: "Import SoundFont", ja: "サウンドフォントを読み込む" }
@@ -1969,6 +1973,7 @@ new のオプション
     AgentNotConfigured { en: "Name a model to talk to.", ja: "話しかけるモデルを設定してください。" }
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }
+    AgentRevert { en: "Revert", ja: "元に戻す" }
     TimelineScrollHelp { en: "Drag the bar or use Shift+wheel to scroll horizontally", ja: "バーをドラッグ、またはShift＋ホイールで横スクロール" }
     AgentToolFailureLimit { en: "Repeated tool failure limit", ja: "同じツール呼び出しの失敗上限" }
     AgentToolFailureLimitHelp { en: "Failure allowance for the same tool and arguments. Bounds API/Antigravity loops and Claude Code recovery after tool errors. Success resets that call's count. Applies from the next conversation; other CLI runtimes manage their own limits.", ja: "同じツール・引数での失敗上限です。API／Antigravityの実行ループと、Claude Codeがツールエラー後に終了した際の自動継続に使います。成功すると該当する回数をリセットします。次の会話から適用され、他のCLIは独自の制限を使用します。" }

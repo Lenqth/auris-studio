@@ -79,6 +79,17 @@ impl AurisApp {
                     .when(self.status_failed, |this| this.text_color(theme.danger))
                     .child(status),
             )
+            .when(self.session.is_dirty(), |bar| {
+                bar.child(
+                    div()
+                        .id("document-save-state")
+                        .flex_shrink_0()
+                        .max_w(px(140.0))
+                        .truncate()
+                        .child(self.t(Key::DocumentUnsaved))
+                        .tooltip(self.tip(Key::DocumentUnsaved, "")),
+                )
+            })
             .children(self.soundfont_download.as_ref().map(|download| {
                 div()
                     .id("soundfont-download")

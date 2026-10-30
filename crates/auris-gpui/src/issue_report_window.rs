@@ -77,7 +77,8 @@ impl AurisApp {
             environment,
         );
         let prompts = self.issue_prompt_snapshot();
-        let prefs = self.agent_chat.preferences();
+        // The chat panel's editable fields are initialized lazily when it opens.
+        let prefs = self.settings.agent.clone();
         let theme = self.theme.clone();
         let language = self.language();
         let project = self
@@ -353,9 +354,12 @@ impl IssueReportWindow {
             )
             .on_scroll_wheel(
                 cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                    this.viewports[index]
-                        .borrow_mut()
-                        .scroll_by(event.delta.pixel_delta(px(20.0)).y);
+                    this.viewports[index].borrow_mut().scroll_by(
+                        event
+                            .delta
+                            .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
+                            .y,
+                    );
                     cx.stop_propagation();
                     cx.notify();
                 }),
@@ -541,7 +545,7 @@ impl Render for IssueReportWindow {
         self.active = self.foci.iter().position(|f| f.is_focused(window));
         self.sync_draft();
         let theme = self.theme.clone();
-        let titlebar = titlebar::composed(
+        let titlebar = titlebar::bar(
             window,
             &theme,
             titlebar::Parts::new("issue-title", self.t(Key::IssueDraft)),
@@ -832,6 +836,25 @@ impl Render for IssueReportWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext, WindowHandle, point};
+
+    #[gpui::test]
+    fn report_uses_configured_agent_before_the_chat_panel_is_opened(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| {
+            this.settings.agent.backend = "rig".into();
+            this.settings.agent.model = "report-fixture".into();
+            assert!(this.settings.agent.is_configured());
+            assert!(!this.agent_chat.preferences().is_configured());
+            this.open_issue_report(None, cx);
+        });
+        let handle = app.read_with(cx, |this, _| this.issue_report_window.unwrap());
+        handle
+            .read_with(cx, |this, _| {
+                assert_eq!(this.prefs.model, "report-fixture");
+                assert!(auris_agent::input_suggestion::supported(&this.prefs));
+            })
+            .unwrap();
+    }
 
     fn reveal_and_click(
         selector: &'static str,

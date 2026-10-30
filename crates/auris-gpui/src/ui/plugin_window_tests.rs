@@ -45,6 +45,20 @@ fn instrument_action_reuses_the_parameter_window_and_menu_supports_keyboard(
     });
     paint(&app, cx);
     assert!(app.read_with(cx, |this, _| this.menu.is_some()));
+    // Enter on the open menu closes it. Its release must not press the restored trigger.
+    cx.simulate_keystrokes("enter");
+    paint(&app, cx);
+    cx.simulate_event(gpui::KeyUpEvent {
+        keystroke: gpui::Keystroke::parse("enter").unwrap(),
+    });
+    paint(&app, cx);
+    assert!(app.read_with(cx, |this, _| this.menu.is_none()));
+    cx.simulate_keystrokes("enter");
+    cx.simulate_event(gpui::KeyUpEvent {
+        keystroke: gpui::Keystroke::parse("enter").unwrap(),
+    });
+    paint(&app, cx);
+    assert!(app.read_with(cx, |this, _| this.menu.is_some()));
     choose(
         &app,
         cx,
@@ -52,6 +66,35 @@ fn instrument_action_reuses_the_parameter_window_and_menu_supports_keyboard(
     );
     paint(&app, cx);
     assert!(app.read_with(cx, |this, _| this.plugin_window.is_none()));
+}
+
+#[gpui::test]
+fn closing_a_menu_preserves_an_explicit_move_to_another_pane(cx: &mut TestAppContext) {
+    let (app, cx, track, _) = with_a_clip(cx);
+    app.update(cx, |this, _| {
+        this.select_track(track);
+        this.panels.show(crate::dock::Panel::Inspector);
+    });
+    paint(&app, cx);
+    click("inst-menu", cx);
+    paint(&app, cx);
+    assert!(app.read_with(cx, |this, _| this.menu.is_some()));
+
+    // Menu commands can deliberately send the keyboard to an editor. Teardown must preserve
+    // that destination instead of sending it back to the menu's trigger.
+    cx.update(|window, cx| {
+        app.update(cx, |this, cx| {
+            this.close_menu();
+            this.focus_pane(crate::app::Pane::Arrangement, window);
+            cx.notify();
+        });
+    });
+    paint(&app, cx);
+    cx.update(|window, cx| {
+        app.read_with(cx, |this, cx| {
+            assert!(this.pane_focused(crate::app::Pane::Arrangement, window, cx));
+        });
+    });
 }
 
 #[gpui::test]

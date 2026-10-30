@@ -93,7 +93,7 @@ pub(crate) struct NavigateAgentModel {
 /// The selector context wins before window actions such as Down-to-select-the-next-track while
 /// the model control owns focus. Tab deliberately remains unbound so normal focus traversal can
 /// continue after dismissing the menu.
-pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
+pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 9] {
     [
         gpui::KeyBinding::new(
             "secondary-r",
@@ -103,16 +103,6 @@ pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
         gpui::KeyBinding::new(
             "escape",
             NavigateAgentModel { key: "escape" },
-            Some("AurisAgentDropdown"),
-        ),
-        gpui::KeyBinding::new(
-            "enter",
-            crate::ui::widgets::ClaimDisclosureActivation,
-            Some("AurisAgentDropdown"),
-        ),
-        gpui::KeyBinding::new(
-            "space",
-            crate::ui::widgets::ClaimDisclosureActivation,
             Some("AurisAgentDropdown"),
         ),
         gpui::KeyBinding::new(
@@ -4882,7 +4872,9 @@ impl AurisApp {
                 .absolute()
                 .bottom_full()
                 .left_0()
-                .w_full()
+                // At least the trigger's width, and wider when a choice needs it: the trigger is
+                // a quarter of a narrow composer, which cut "Auto review" off mid-word.
+                .min_w_full()
                 .pb_1()
                 .child(list),
         )
@@ -4931,8 +4923,7 @@ impl AurisApp {
         .bg(theme.surface_raised)
         .border_color(gpui::transparent_black())
         .track_focus(&focus)
-        .key_context("AurisAgentDropdown")
-        .on_action(|_: &crate::ui::widgets::ClaimDisclosureActivation, _, _| {})
+        .key_context("AurisAgentDropdown AtelierControl")
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _: &MouseDownEvent, window, cx| {
@@ -5083,10 +5074,24 @@ impl AurisApp {
                     div()
                         .id("agent-bypass-warning")
                         .debug_selector(|| "agent-bypass-warning".to_owned())
+                        .flex()
+                        .items_center()
+                        .gap(theme.atelier.spacing.xs)
                         .px_1p5()
                         .text_xs()
                         .text_color(theme.warning)
-                        .child(format!("⚠ {}", self.t(Key::AgentBypassWarning))),
+                        // The tone's mark, so the frame's colour is never the only sign.
+                        .child(
+                            atelier::Icon::new(atelier::IconName::Alert)
+                                .size(px(14.0))
+                                .color(theme.warning),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(self.t(Key::AgentBypassWarning).to_owned()),
+                        ),
                 )
             })
             .when_some(blocker, |this, blocker| {
@@ -5105,6 +5110,12 @@ impl AurisApp {
                         .px_1p5()
                         .text_xs()
                         .text_color(theme.warning)
+                        // A mark with the colour, so the state is not told by colour alone.
+                        .child(
+                            atelier::Icon::new(atelier::IconName::Alert)
+                                .size(px(14.0))
+                                .color(theme.warning),
+                        )
                         .child(div().flex_1().min_w(px(80.0)).child(self.t(message)))
                         .child(button(
                             "agent-send-blocked-action",
@@ -5133,10 +5144,18 @@ impl AurisApp {
                 |this, error| {
                     this.child(
                         div()
+                            .flex()
+                            .items_center()
+                            .gap(theme.atelier.spacing.xs)
                             .px_1p5()
                             .text_xs()
                             .text_color(theme.danger)
-                            .child(error),
+                            .child(
+                                atelier::Icon::new(atelier::IconName::Alert)
+                                    .size(px(14.0))
+                                    .color(theme.danger),
+                            )
+                            .child(div().flex_1().min_w_0().child(error)),
                     )
                 },
             )
@@ -6055,7 +6074,7 @@ mod tests {
         let answer = "A gentle piano melody";
         let detail = "{\n  \"tempo\": 120\n}";
         // An answer rises into place as it arrives; this is about selecting it once it has.
-        cx.update(|_, cx| cx.global_mut::<atelier::Theme>().motion.enabled = false);
+        cx.update(|_, cx| atelier::motion::reduce_motion(cx));
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();

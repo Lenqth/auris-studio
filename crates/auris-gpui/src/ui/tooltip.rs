@@ -11,61 +11,9 @@
 //! wrong for anybody who has been in the settings window; asking the keymap at the moment of
 //! hovering is the only telling that stays true.
 //!
-//! # Why this is a view rather than an element
-//!
-//! gpui builds a tooltip from a callback returning an [`AnyView`], and calls it when the pointer
-//! has rested. The view is built outside the tree that styles everything else, so it inherits no
-//! font, no size and no colour and has to name all three. It reads the application-global theme
-//! on every render because there is no ancestor to ask, and because gpui keeps an already-open
-//! tooltip view across repaints.
+use gpui::{AnyView, App, SharedString, Window};
 
-use gpui::{AnyView, App, Context, IntoElement, Render, SharedString, Window, div, prelude::*};
-
-use crate::theme::{Metrics, Theme};
-
-/// A control's name, over the keystroke that also runs it.
-pub struct Tooltip {
-    /// What the control is called.
-    label: SharedString,
-    /// The keystroke, written the way this platform writes it, or empty for a command with no
-    /// key. Empty is common and is not a hole: most of what wears a tooltip here has no keystroke
-    /// and never needed one.
-    keystroke: SharedString,
-}
-
-impl Render for Tooltip {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<Theme>();
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .px_2()
-            .py_1()
-            .rounded(Metrics::RADIUS_MD)
-            .bg(theme.surface_raised)
-            .border_1()
-            .border_color(theme.border)
-            .shadow_lg()
-            .font(theme.font.clone())
-            .text_xs()
-            .text_color(theme.text)
-            .child(self.label.clone())
-            .when(!self.keystroke.is_empty(), |this| {
-                this.child(
-                    div()
-                        .px_1()
-                        .rounded(Metrics::RADIUS_SM)
-                        .bg(theme.surface_sunken)
-                        // Dimmer than the name, because the name is the answer and the keystroke
-                        // is the footnote — and a chip in full-strength text reads as a second
-                        // label rather than as a key.
-                        .text_color(theme.text_muted)
-                        .child(self.keystroke.clone()),
-                )
-            })
-    }
-}
+use crate::theme::Theme;
 
 impl crate::app::AurisApp {
     /// A tooltip naming a control, carrying whatever key currently runs it.
@@ -95,11 +43,9 @@ pub fn keyed_tip(
 ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
     let label = label.into();
     let keystroke = keystroke.into();
-    move |_window, cx| {
-        let tooltip = Tooltip {
-            label: label.clone(),
-            keystroke: keystroke.clone(),
-        };
-        cx.new(|_| tooltip).into()
+    move |window, cx| {
+        atelier::Tooltip::new(label.clone())
+            .shortcut(keystroke.clone())
+            .build(window, cx)
     }
 }

@@ -41,9 +41,9 @@ pub fn ui_font_for(family: Option<&str>) -> Font {
         "DejaVu Sans"
     };
     let fallbacks: &[&str] = if cfg!(target_os = "macos") {
-        &["Hiragino Sans", "Apple SD Gothic Neo"]
+        &["Hiragino Sans", "Apple SD Gothic Neo", "Apple Color Emoji"]
     } else if cfg!(target_os = "windows") {
-        &["Segoe UI", "Yu Gothic UI", "Meiryo"]
+        &["Segoe UI", "Yu Gothic UI", "Meiryo", "Segoe UI Emoji"]
     } else {
         &["Noto Sans CJK JP", "DejaVu Sans"]
     };
@@ -979,12 +979,9 @@ impl Theme {
             markdown.colors.primary = self.accent;
             markdown.colors.primary_foreground = self.text_on_accent;
             markdown.colors.ring = self.selection;
+            markdown.colors.selection = self.atelier.colors.selection;
         }
-        if cx.has_global::<atelier::Theme>() {
-            self.atelier.clone().install(cx);
-        } else {
-            atelier::init(cx, self.atelier.clone());
-        }
+        atelier::init(cx, self.atelier.clone());
     }
 
     fn apply_glass_surfaces(&mut self) {
@@ -1046,6 +1043,7 @@ impl Theme {
         colors.on_user_bubble = self.text_on_accent;
         colors.accent_wash = Self::translucent(self.accent, 0.14);
         colors.selected = Self::translucent(self.accent, 0.20);
+        colors.selection = Self::translucent(self.accent, 0.30);
         colors.focus_ring = self.selection;
         colors.success = self.playing;
         colors.warning = self.warning;
@@ -2080,9 +2078,9 @@ mod tests {
     #[test]
     fn fallback_families_belong_to_the_current_platform() {
         let expected: &[&str] = if cfg!(target_os = "macos") {
-            &["Hiragino Sans", "Apple SD Gothic Neo"]
+            &["Hiragino Sans", "Apple SD Gothic Neo", "Apple Color Emoji"]
         } else if cfg!(target_os = "windows") {
-            &["Segoe UI", "Yu Gothic UI", "Meiryo"]
+            &["Segoe UI", "Yu Gothic UI", "Meiryo", "Segoe UI Emoji"]
         } else {
             &["Noto Sans CJK JP", "DejaVu Sans"]
         };

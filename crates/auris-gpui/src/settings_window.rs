@@ -6,7 +6,7 @@
 
 use atelier::{
     Button, ControlSize, Edge, FormField, FormGroup, IconName, ListItem, SectionHeader, Sidebar,
-    Switch,
+    StatusBar, Switch,
 };
 use auris_i18n::{Key, Language, messages};
 use auris_session::prelude::*;
@@ -27,7 +27,7 @@ use crate::titlebar;
 use crate::ui::icons::Icon;
 use crate::ui::palette;
 use crate::ui::text_field::{HasTextField, KeyEffect, TextField};
-use crate::ui::widgets::{ButtonStyle, button, chain_button, divider};
+use crate::ui::widgets::{ButtonStyle, button, chain_button};
 use crate::voice_setup_window::VoiceSetupTab;
 
 mod agent;
@@ -300,7 +300,7 @@ impl SettingsWindow {
             cx,
         );
         FormField::new(self.t(label))
-            .child(div().flex_1().min_w_0().child(control))
+            .child(control)
             .into_any_element()
     }
 
@@ -537,13 +537,13 @@ impl SettingsWindow {
                       label: Key,
                       note: Key,
                       on: bool,
-                      toggle: fn(&mut Self, &mut Context<Self>)| {
+                      apply: fn(&mut Self, bool, &mut Context<Self>)| {
             FormField::new(self.t(label))
                 .description(self.t(note))
                 .beside()
                 .child(
                     Switch::new(id, on)
-                        .on_click(cx.listener(move |this, _, _, cx| toggle(this, cx))),
+                        .on_change(cx.listener(move |this, on: &bool, _, cx| apply(this, *on, cx))),
                 )
         };
         let autosave = switch(
@@ -551,21 +551,21 @@ impl SettingsWindow {
             Key::Autosave,
             Key::AutosaveNote,
             self.autosave,
-            |this, cx| this.apply_autosave(!this.autosave, cx),
+            |this, on, cx| this.apply_autosave(on, cx),
         );
         let auto_update = switch(
             "auto-update",
             Key::AutoUpdate,
             Key::AutoUpdateNote,
             self.auto_update,
-            |this, cx| this.apply_auto_update(!this.auto_update, cx),
+            |this, on, cx| this.apply_auto_update(on, cx),
         );
         let snap = switch(
             "snap-note-lengths",
             Key::SnapNoteLengths,
             Key::SnapNoteLengthsNote,
             self.snap_note_lengths,
-            |this, cx| this.apply_snap_note_lengths(!this.snap_note_lengths, cx),
+            |this, on, cx| this.apply_snap_note_lengths(on, cx),
         );
         let installed_dictionary = auris_session::library::installed_dictionary();
         let dictionary = FormField::new(self.t(Key::JapaneseDictionaryHeading))
@@ -676,7 +676,7 @@ impl SettingsWindow {
                             group.child(
                                 FormField::new(self.t(Key::LanguageHeading))
                                     .description(self.t(Key::LanguageNote))
-                                    .child(div().flex_1().min_w_0().child(language_control)),
+                                    .child(language_control),
                             )
                         })
                         .when(self.matches_section(Section::Autosave), |group| {
@@ -707,12 +707,12 @@ impl SettingsWindow {
                         .child(
                             FormField::new(self.t(Key::SingerComputeHeading))
                                 .description(self.t(Key::SingerComputeNote))
-                                .child(div().flex_1().min_w_0().child(acceleration_control)),
+                                .child(acceleration_control),
                         )
                         .child(
                             FormField::new(self.t(Key::BrowserVoices))
                                 .description(self.t(Key::VoiceFoldersNote))
-                                .child(div().flex_1().min_w_0().child(voice_paths)),
+                                .child(voice_paths),
                         )
                         .child(voice_setup),
                 )
@@ -920,35 +920,11 @@ impl SettingsWindow {
         let audio = self.audio.clone();
         let live = self.live.clone();
         let export = self.export;
-        let mut rows: Vec<AnyElement> = Vec::new();
 
+        let mut devices = FormGroup::new(self.t(Key::AudioDevicesGroup));
+        let mut any_device = false;
         if self.matches_section(Section::Host) {
-            rows.push(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(section_title(self.t(Key::AudioHost), &theme))
-                    .child(button(
-                        "refresh-audio-devices",
-                        self.t(Key::RefreshAudioDevices),
-                        ButtonStyle::Ghost,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.hosts = Session::audio_hosts();
-                            if let Ok(devices) = this.app.read_with(cx, |app, _| AudioDevices {
-                                output: app.session.output_devices(),
-                                input: app.session.input_devices(),
-                            }) {
-                                this.devices = devices;
-                            }
-                            cx.notify();
-                        }),
-                    ))
-                    .into_any_element(),
-            );
+            any_device = true;
             let mut hosts = vec![(
                 None,
                 self.t(Key::SystemDefaultDevice).to_owned(),
@@ -968,7 +944,7 @@ impl SettingsWindow {
                     self.t(Key::SettingUnavailable).to_owned(),
                 ));
             }
-            rows.push(self.dropdown(
+            let host = self.dropdown(
                 "audio-host",
                 hosts,
                 &audio.host,
@@ -987,32 +963,48 @@ impl SettingsWindow {
                     }
                 },
                 cx,
-            ));
+            );
+            devices = devices.child(
+                FormField::new(self.t(Key::AudioHost)).child(host).child(
+                    Button::new("refresh-audio-devices", self.t(Key::RefreshAudioDevices))
+                        .ghost()
+                        .size(ControlSize::Small)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.hosts = Session::audio_hosts();
+                            if let Ok(devices) = this.app.read_with(cx, |app, _| AudioDevices {
+                                output: app.session.output_devices(),
+                                input: app.session.input_devices(),
+                            }) {
+                                this.devices = devices;
+                            }
+                            cx.notify();
+                        })),
+                ),
+            );
         }
         if self.matches_section(Section::Output) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::OutputDevice), &theme));
-            rows.push(self.device_dropdown(DeviceSlot::Output, cx));
+            any_device = true;
+            devices = devices.child(
+                FormField::new(self.t(Key::OutputDevice))
+                    .child(self.device_dropdown(DeviceSlot::Output, cx)),
+            );
         }
         if self.matches_section(Section::Input) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::InputDevice), &theme));
-            if audio.uses_asio() {
-                rows.push(note(self.t(Key::AsioInputNote), &theme));
+            any_device = true;
+            // With ASIO the input is not a choice of its own: the field says why instead.
+            devices = devices.child(if audio.uses_asio() {
+                FormField::new(self.t(Key::InputDevice)).description(self.t(Key::AsioInputNote))
             } else {
-                rows.push(self.device_dropdown(DeviceSlot::Input, cx));
-                rows.push(note(self.t(Key::InputDeviceNote), &theme));
-            }
+                FormField::new(self.t(Key::InputDevice))
+                    .description(self.t(Key::InputDeviceNote))
+                    .child(self.device_dropdown(DeviceSlot::Input, cx))
+            });
         }
+
+        let mut playback = FormGroup::new(self.t(Key::AudioPlaybackGroup));
+        let mut any_playback = false;
         if self.matches_section(Section::Rate) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::SampleRate), &theme));
+            any_playback = true;
             let rates = self.rate_choices();
             let mut rate_choices = vec![(
                 None,
@@ -1035,7 +1027,7 @@ impl SettingsWindow {
                     self.t(Key::SettingUnavailable).to_owned(),
                 ));
             }
-            rows.push(self.dropdown(
+            let rate = self.dropdown(
                 "sample-rate",
                 rate_choices,
                 &audio.sample_rate,
@@ -1049,13 +1041,11 @@ impl SettingsWindow {
                     );
                 },
                 cx,
-            ));
+            );
+            playback = playback.child(FormField::new(self.t(Key::SampleRate)).child(rate));
         }
         if self.matches_section(Section::Buffer) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::BufferSize), &theme));
+            any_playback = true;
             let mut block_sizes = AudioPreferences::BLOCK_CHOICES.to_vec();
             if !block_sizes.contains(&audio.block_frames) {
                 block_sizes.push(audio.block_frames);
@@ -1072,7 +1062,7 @@ impl SettingsWindow {
                     )
                 })
                 .collect();
-            rows.push(self.dropdown(
+            let block = self.dropdown(
                 "block",
                 blocks,
                 &audio.block_frames,
@@ -1086,8 +1076,7 @@ impl SettingsWindow {
                     );
                 },
                 cx,
-            ));
-            rows.push(note(self.t(Key::RequestedBufferNote), &theme));
+            );
             let actual = live
                 .as_ref()
                 .and_then(|status| {
@@ -1100,15 +1089,18 @@ impl SettingsWindow {
                     ))
                 })
                 .unwrap_or_else(|| self.t(Key::ActualBufferUnknown).to_owned());
-            rows.push(note(&actual, &theme));
+            playback = playback.child(
+                FormField::new(self.t(Key::BufferSize))
+                    .description(self.t(Key::RequestedBufferNote))
+                    .note(actual)
+                    .child(block),
+            );
         }
-        if self.matches_section(Section::Export) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            // Export preferences describe the file, independently of the output device's settings.
 
-            rows.push(section_title(self.t(Key::ExportFormat), &theme));
+        // Export preferences describe the file, independently of the output device's settings.
+        let mut file = FormGroup::new(self.t(Key::Export));
+        let any_export = self.matches_section(Section::Export);
+        if any_export {
             let formats = [
                 AudioExportFormat::Wav,
                 AudioExportFormat::Flac,
@@ -1125,7 +1117,7 @@ impl SettingsWindow {
                 )
             })
             .collect();
-            rows.push(self.dropdown(
+            let format = self.dropdown(
                 "export-format",
                 formats,
                 &export.format,
@@ -1147,10 +1139,10 @@ impl SettingsWindow {
                     this.apply_export(export, cx);
                 },
                 cx,
-            ));
+            );
+            file = file.child(FormField::new(self.t(Key::ExportFormat)).child(format));
 
             if !matches!(export.format, AudioExportFormat::Mp3) {
-                rows.push(section_title(self.t(Key::ExportBitDepth), &theme));
                 let depth_choices: &[WavBitDepth] = match export.format {
                     AudioExportFormat::Wav => {
                         &[WavBitDepth::Int16, WavBitDepth::Int24, WavBitDepth::Float32]
@@ -1171,7 +1163,7 @@ impl SettingsWindow {
                         )
                     })
                     .collect();
-                rows.push(self.dropdown(
+                let depth = self.dropdown(
                     "depth",
                     depths,
                     &export.bit_depth,
@@ -1185,9 +1177,9 @@ impl SettingsWindow {
                         );
                     },
                     cx,
-                ));
+                );
+                file = file.child(FormField::new(self.t(Key::ExportBitDepth)).child(depth));
             }
-            rows.push(section_title(self.t(Key::ExportRate), &theme));
             let mut export_rates = vec![(None, self.t(Key::ProjectRate).to_owned(), String::new())];
             let rate_choices: &[u32] = if matches!(export.format, AudioExportFormat::Mp3) {
                 &ExportPreferences::MP3_RATE_CHOICES
@@ -1211,7 +1203,7 @@ impl SettingsWindow {
                     String::new(),
                 ));
             }
-            rows.push(self.dropdown(
+            let export_rate = self.dropdown(
                 "export-rate",
                 export_rates,
                 &export.sample_rate,
@@ -1225,9 +1217,9 @@ impl SettingsWindow {
                     );
                 },
                 cx,
-            ));
+            );
+            file = file.child(FormField::new(self.t(Key::ExportRate)).child(export_rate));
             if matches!(export.format, AudioExportFormat::Mp3) {
-                rows.push(section_title(self.t(Key::ExportBitrate), &theme));
                 let bitrates = [
                     Mp3Bitrate::Kbps128,
                     Mp3Bitrate::Kbps192,
@@ -1237,7 +1229,7 @@ impl SettingsWindow {
                 .into_iter()
                 .map(|bitrate| (bitrate, format!("{} kbps", bitrate.kbps()), String::new()))
                 .collect();
-                rows.push(self.dropdown(
+                let bitrate = self.dropdown(
                     "export-bitrate",
                     bitrates,
                     &export.mp3_bitrate,
@@ -1251,86 +1243,67 @@ impl SettingsWindow {
                         );
                     },
                     cx,
-                ));
+                );
+                file = file.child(FormField::new(self.t(Key::ExportBitrate)).child(bitrate));
             } else {
-                rows.push(section_title(self.t(Key::ExportDither), &theme));
+                // A yes-or-no that applies at once: a switch beside its label. Where dither
+                // cannot apply (float) it stays off and out of reach rather than lying.
                 let dithers = export.dither_applies();
-                let on = export.dither && dithers;
-                if dithers {
-                    rows.push(
-                        div()
-                            .flex()
-                            .gap_1()
-                            .child(button(
-                                "export-dither",
-                                self.t(if on { Key::ValueOn } else { Key::ValueOff }),
-                                ButtonStyle::Normal,
-                                on,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
+                file = file.child(
+                    FormField::new(self.t(Key::ExportDither))
+                        .description(self.t(Key::ExportDitherNote))
+                        .beside()
+                        .child(
+                            Switch::new("export-dither", export.dither && dithers)
+                                .disabled(!dithers)
+                                .on_change(cx.listener(|this, on: &bool, _, cx| {
                                     this.apply_export(
                                         ExportPreferences {
-                                            dither: !this.export.dither,
+                                            dither: *on,
                                             ..this.export
                                         },
                                         cx,
                                     );
-                                }),
-                            ))
-                            .into_any_element(),
-                    );
-                } else {
-                    rows.push(
-                        div()
-                            .id("export-dither-disabled")
-                            .text_xs()
-                            .text_color(theme.text_faint)
-                            .child(self.t(Key::ValueOff))
-                            .into_any_element(),
-                    );
-                }
-                rows.push(note(self.t(Key::ExportDitherNote), &theme));
+                                })),
+                        ),
+                );
             }
         }
-        if !self.searching()
-            && let Some(status) = live
-        {
-            rows.push(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(theme.text_muted)
-                    .child({
-                        let suffix = if status.running {
-                            String::new()
-                        } else {
-                            messages::silent_suffix(self.language)
-                        };
-                        messages::running_device(
-                            self.language,
-                            &status.device,
-                            status.sample_rate,
-                            status.channels,
-                            &suffix,
-                        )
-                    })
-                    .children(
-                        status
-                            .gpu
-                            .map(|gpu| div().child(messages::gpu_in_use(self.language, &gpu))),
+        let status = (!self.searching()).then_some(live).flatten().map(|status| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(theme.atelier.spacing.xxs)
+                .text_size(theme.atelier.typography.size_sm)
+                .text_color(theme.text_muted)
+                .child({
+                    let suffix = if status.running {
+                        String::new()
+                    } else {
+                        messages::silent_suffix(self.language)
+                    };
+                    messages::running_device(
+                        self.language,
+                        &status.device,
+                        status.sample_rate,
+                        status.channels,
+                        &suffix,
                     )
-                    .into_any_element(),
-            );
-        }
+                })
+                .children(
+                    status
+                        .gpu
+                        .map(|gpu| div().child(messages::gpu_in_use(self.language, &gpu))),
+                )
+        });
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .children(rows)
+            .gap(theme.atelier.spacing.xl)
+            .when(any_device, |page| page.child(devices))
+            .when(any_playback, |page| page.child(playback))
+            .when(any_export, |page| page.child(file))
+            .children(status)
             .into_any_element()
     }
 
@@ -1998,7 +1971,7 @@ impl Render for SettingsWindow {
         }
 
         let theme = self.theme.clone();
-        let titlebar = titlebar::composed(
+        let titlebar = titlebar::bar(
             window,
             &theme,
             titlebar::Parts::new("settings-title", self.t(Key::Settings)),
@@ -2073,7 +2046,7 @@ impl Render for SettingsWindow {
                                             .flex()
                                             .flex_col()
                                             .w_full()
-                                            .max_w(px(760.0))
+                                            .max_w(theme.atelier.density.form_width)
                                             .children(page_header)
                                             .child(body),
                                     ),
@@ -2081,18 +2054,16 @@ impl Render for SettingsWindow {
                             .child(
                                 div()
                                     .id("settings-status")
-                                    .flex()
-                                    .items_center()
-                                    .min_h(Metrics::STATUS_HEIGHT)
-                                    .max_h(px(84.0))
+                                    .debug_selector(|| "settings-status".into())
                                     .flex_shrink_0()
-                                    .overflow_y_scroll()
-                                    .px(theme.atelier.spacing.xl)
                                     .border_t_1()
                                     .border_color(theme.border_subtle)
-                                    .text_size(theme.atelier.typography.size_sm)
-                                    .text_color(theme.text_muted)
-                                    .child(status),
+                                    .child(
+                                        div()
+                                            .h(theme.atelier.density.status_bar)
+                                            .px(theme.atelier.spacing.xl)
+                                            .child(StatusBar::new().message(status)),
+                                    ),
                             ),
                     ),
             )
@@ -2250,6 +2221,40 @@ mod tests {
                 this.status
             );
         });
+    }
+
+    #[gpui::test]
+    fn japanese_settings_keep_the_form_and_status_bar_inside_the_window(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        cx.run_until_parked();
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut gpui::VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(560.0), px(420.0)));
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, _, cx| {
+                this.sync_appearance(
+                    Appearance {
+                        scheme: "daylight".into(),
+                        ..Appearance::default()
+                    },
+                    Some(Language::Japanese),
+                );
+                cx.notify();
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let status = cx
+            .debug_bounds("settings-status")
+            .expect("settings status bar");
+        assert!(status.bottom() <= px(420.0));
+        assert!(status.left() >= px(0.0) && status.right() <= px(560.0));
+        let page = cx.debug_bounds("settings-page").expect("settings page");
+        assert!(page.left() >= px(0.0) && page.right() <= px(560.0));
     }
 
     #[test]
