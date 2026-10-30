@@ -32,6 +32,8 @@ Without an explicit selection, further requests use the latest successful round'
 when that round contains a single candidate. Failed revisions keep that baseline available,
 including after reopening the conversation. Multiple alternatives require a selection.
 Implicit continuation does not record a preference choice.
+After a single revision of the selected song completes, subsequent edits continue from
+that revision. Comparing alternatives keeps the current selection until you choose one.
 Selection appears in the chat immediately while the director prepares three to five
 numbered arrangement or improvement suggestions. Choose an option in the message box
 or describe another change. Suggestions alone do not launch another production batch.

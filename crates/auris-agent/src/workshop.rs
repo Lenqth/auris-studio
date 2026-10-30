@@ -17,6 +17,8 @@ use std::{
 };
 
 mod preview;
+#[cfg(test)]
+mod scenario_tests;
 
 /// An immutable audition of an unfinished candidate, separate from adoptable music.
 #[derive(Clone)]
@@ -622,6 +624,16 @@ impl Owner {
                             .remove(&id)
                             .is_none_or(|c| c.load(Ordering::Acquire));
                         self.snapshot.progress.remove(&id);
+                        // A single completed edit advances the selected song. Comparisons,
+                        // older recovery jobs and a selection changed during production do not.
+                        let advance_selection = !cancelled
+                            && result.is_ok()
+                            && self.snapshot.document.selected.is_some()
+                            && self.snapshot.document.rounds.last().is_some_and(|round| {
+                                matches!(round.candidates.as_slice(), [candidate]
+                                    if candidate.id == id
+                                        && candidate.parent == self.snapshot.document.selected)
+                            });
                         {
                             let result = if cancelled {
                                 Err("Composition stopped".into())
@@ -650,6 +662,9 @@ impl Owner {
                                     Err(e) => entry.error = Some(e),
                                 }
                             }
+                        }
+                        if advance_selection {
+                            self.snapshot.document.selected = Some(id);
                         }
                         self.publish(true);
                     }

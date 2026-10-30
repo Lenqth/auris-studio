@@ -76,6 +76,8 @@
 //! Without an explicit selection, the latest successful round supplies the baseline only when
 //! it contains a single candidate. Failed revisions retain that earlier baseline; comparisons
 //! require an explicit choice. This implicit continuation does not record a preference selection.
+//! A successful single-candidate edit of the selected song advances the baseline to that result.
+//! Comparisons, cancelled jobs and recovery of older rounds do not change the selection.
 //! Descendants open that candidate's saved score; selection never regenerates the music.
 //! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
 //! documents and audition assets. Each project can keep multiple named workshop conversations,
