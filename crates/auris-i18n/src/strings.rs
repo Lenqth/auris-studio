@@ -1467,6 +1467,7 @@ strings! {
     EditMoveTrack { en: "moving a track", ja: "トラックの並べ替え" }
     EditMoveMixerNodes { en: "moving mixer nodes", ja: "ミキサーノードの移動" }
     EditArrangeMixerNodes { en: "arranging mixer nodes", ja: "ミキサーノードの自動配置" }
+    EditRenameProject { en: "renaming the song", ja: "曲名の変更" }
     EditRenameTrack { en: "renaming a track", ja: "トラック名の変更" }
     EditMuteTrack { en: "muting a track", ja: "トラックのミュート" }
     EditSoloTrack { en: "soloing a track", ja: "トラックのソロ" }

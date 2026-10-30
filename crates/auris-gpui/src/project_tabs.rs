@@ -393,10 +393,9 @@ impl AurisApp {
         } else {
             self.opening_project
                 .as_deref()
-                .or(self.session.path())
                 .and_then(|path| path.file_stem())
                 .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| self.project().name.clone())
+                .unwrap_or_else(|| self.session.document_title())
         };
         if self.session.is_dirty() {
             format!("{label} •")

@@ -535,7 +535,7 @@ impl Default for SongSpec {
             sections.insert(name.to_string(), SectionSpec::named(name));
         }
         Self {
-            title: "Untitled".to_string(),
+            title: auris_core::Project::UNTITLED.to_string(),
             singer: None,
             singer_speaker: None,
             tempo: 120.0,

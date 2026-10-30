@@ -246,6 +246,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.edit_timeline",
     "edit_project.compose",
     "edit_project.add_track",
+    "edit_project.rename_project",
     "edit_project.rename_track",
     "edit_project.remove_track",
     "edit_project.set_instrument",

@@ -796,7 +796,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let name = self.project().name.clone();
+        let name = self.session.document_title();
         let language = self.language();
         // Through the window rather than the app, so the continuation gets a `Window` back: the
         // follow-up may be "and now close it", which there is no other way to do from here.
@@ -2611,7 +2611,7 @@ impl AurisApp {
             .project()
             .track(track)
             .map(|track| track.name.clone())
-            .unwrap_or_else(|| self.project().name.clone());
+            .unwrap_or_else(|| self.session.document_title());
         let language = self.language();
         let view = cx.entity().downgrade();
         window
@@ -2686,7 +2686,7 @@ impl AurisApp {
 
     /// Prompts for a destination and writes the document out as a MIDI file.
     pub(crate) fn export_midi(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name = self.project().name.clone();
+        let name = self.session.document_title();
         let language = self.language();
         let view = cx.entity().downgrade();
         window
@@ -3515,7 +3515,7 @@ impl AurisApp {
             Key::CmdExportWav
         };
         self.choosing_export = true;
-        let name = self.project().name.clone();
+        let name = self.session.document_title();
         let extension = export.format.extension();
         let suggested = if cycle {
             format!("{name} (cycle).{extension}")
