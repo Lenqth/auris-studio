@@ -6,7 +6,7 @@ use gpui::{Context, IntoElement, Window, div, prelude::*};
 use crate::app::AurisApp;
 use crate::titlebar;
 use crate::ui::icons::Icon;
-use crate::ui::widgets::{ButtonStyle, button, icon_button_enabled};
+use crate::ui::widgets::{icon_button, icon_button_enabled};
 
 impl AurisApp {
     /// Draws project identity, the application menu and native window controls.
@@ -41,10 +41,9 @@ impl AurisApp {
     ) -> impl IntoElement + use<> {
         div().when(Self::wants_menu_bar(), |slot| {
             slot.child(
-                button(
+                icon_button(
                     "application-menu",
-                    self.t(Key::CmdOpenMenuBar),
-                    ButtonStyle::Ghost,
+                    Icon::Menu,
                     self.menu_bar.is_some(),
                     self.theme.accent,
                     &self.theme,
