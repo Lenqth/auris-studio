@@ -1019,6 +1019,10 @@ mod tests {
             assert_eq!(app.project(), &before);
         });
         utility.update(|window, cx| window.focus(&app.read(cx).focus));
+        // Windows and Linux expose the application-menu trigger before the model controls.
+        if crate::app::AurisApp::wants_menu_bar() {
+            utility.simulate_keystrokes("tab");
+        }
         utility.simulate_keystrokes("tab tab tab tab");
         utility.update(|_, cx| assert!(atelier::focus_visible(cx)));
         let gain = app.read_with(&utility, |app, _| app.physical_view.gain);

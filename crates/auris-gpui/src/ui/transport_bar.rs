@@ -31,6 +31,15 @@ pub(crate) const GRID_CHOICES: [(&str, i64); 7] = [
     (GRID_OFF_LABEL, 1),
 ];
 
+/// Secondary controls move below playback before the main controls would crowd each other.
+pub(crate) fn transport_height(width: Pixels) -> Pixels {
+    if width < px(1100.0) {
+        Metrics::TRANSPORT_HEIGHT + Metrics::TRANSPORT_AUX_HEIGHT
+    } else {
+        Metrics::TRANSPORT_HEIGHT
+    }
+}
+
 /// Marks the entry whose label is translated rather than notation. See [`AurisApp::grid_label`].
 const GRID_OFF_LABEL: &str = "";
 
@@ -264,7 +273,7 @@ pub fn parse_position(text: &str, signatures: &SignatureMap) -> Option<Ticks> {
 }
 
 impl AurisApp {
-    /// Playback controls embedded in the window title bar.
+    /// Playback controls beside their position and tempo readouts.
     pub(crate) fn render_transport_buttons(
         &self,
         cx: &mut gpui::Context<Self>,
@@ -392,7 +401,13 @@ impl AurisApp {
             };
             items.push(control);
         }
-        div().flex().gap_1().children(items)
+        div()
+            .debug_selector(|| "transport-buttons".into())
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap_1()
+            .children(items)
     }
 
     /// Renders the transport readouts, timeline controls and meters.
@@ -454,7 +469,7 @@ impl AurisApp {
             beats => Some((beats.to_string(), None)),
         };
 
-        let mut editing = Vec::new();
+        let mut editing = vec![self.render_history_buttons(cx).into_any_element()];
         for item in self.settings.toolbar.visible_in(1) {
             editing.push(match item {
                 ToolbarItem::Grid => (div()
@@ -607,63 +622,90 @@ impl AurisApp {
                 _ => continue,
             });
         }
-        div()
+        let editing = div()
+            .flex()
+            .id("transport-edit-controls")
+            .debug_selector(|| "transport-edit-controls".into())
+            .flex_1()
+            .min_w_0()
+            .overflow_x_scroll()
+            .child(
+                div()
+                    .flex()
+                    .flex_shrink_0()
+                    .whitespace_nowrap()
+                    .items_center()
+                    .gap_2()
+                    .children(editing),
+            );
+        let primary = div()
+            .debug_selector(|| "transport-primary".into())
             .flex()
             .items_center()
-            .h(Metrics::TRANSPORT_HEIGHT)
-            .px_3()
-            // Transport is a single chrome band; its sunken LCD fields provide the only
-            // elevation and keep the timeline below visually primary.
+            .flex_shrink_0()
+            .gap_3()
+            .child(self.render_transport_buttons(cx))
+            .child(div().flex().items_center().gap_1().children(readouts));
+        let meters = div()
+            .flex()
+            .id("transport-meters")
+            .debug_selector(|| "transport-meters".into())
+            .flex_1()
+            .min_w_0()
+            .overflow_x_scroll()
+            .child(
+                div()
+                    .flex()
+                    .flex_shrink_0()
+                    .min_w_full()
+                    .items_center()
+                    .justify_end()
+                    .gap_3()
+                    .children(meters),
+            );
+        let bar = div()
+            .debug_selector(|| "transport-bar".into())
+            .flex()
+            .flex_shrink_0()
+            .h(transport_height(window.viewport_size().width))
             .bg(theme.surface)
             .border_b_1()
-            .border_color(theme.border_subtle)
-            .child(
-                div()
-                    .flex()
-                    .id("transport-edit-controls")
-                    .debug_selector(|| "transport-edit-controls".into())
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_x_scroll()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_shrink_0()
-                            .whitespace_nowrap()
-                            .items_center()
-                            .gap_2()
-                            .children(editing),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .flex_shrink_0()
-                    .gap_1()
-                    .children(readouts),
-            )
-            .child(
-                div()
-                    .flex()
-                    .id("transport-meters")
-                    .debug_selector(|| "transport-meters".into())
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_x_scroll()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_shrink_0()
-                            .min_w_full()
-                            .items_center()
-                            .justify_end()
-                            .gap_3()
-                            .children(meters),
-                    ),
-            )
+            .border_color(theme.border_subtle);
+        if transport_height(window.viewport_size().width) > Metrics::TRANSPORT_HEIGHT {
+            bar.flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .flex_shrink_0()
+                        .h(Metrics::TRANSPORT_HEIGHT)
+                        .px_3()
+                        .child(primary),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .px_3()
+                        .flex_1()
+                        .min_h_0()
+                        .child(editing)
+                        .child(meters),
+                )
+                .into_any_element()
+        } else {
+            bar.items_center()
+                .gap_3()
+                .px_3()
+                .h(Metrics::TRANSPORT_HEIGHT)
+                .child(editing)
+                .child(primary)
+                .child(meters)
+                .into_any_element()
+        }
     }
-
     /// One field of the transport's readout: a faint caption over a value, in a sunken box.
     ///
     /// Logic's LCD is a row of these, and the point of sharing the chrome is that they read as a
@@ -1140,7 +1182,7 @@ mod tests {
         use crate::harness::{open, resize};
         use gpui::size;
         let (app, cx) = open(cx);
-        let original_transport_width = cx.debug_bounds("titlebar-transport").unwrap().size.width;
+        let original_transport_width = cx.debug_bounds("transport-buttons").unwrap().size.width;
         let record_slot =
             cx.debug_bounds("punch").unwrap().left() - cx.debug_bounds("record").unwrap().left();
         let position_left = cx.debug_bounds("position").unwrap().left();
@@ -1173,7 +1215,7 @@ mod tests {
             // GPUI retains old debug selectors across frames; measure the current layout
             // rather than treating a cached selector as evidence that a removed control exists.
             assert_eq!(
-                cx.debug_bounds("titlebar-transport").unwrap().size.width,
+                cx.debug_bounds("transport-buttons").unwrap().size.width,
                 original_transport_width - record_slot
             );
             let signature = cx.debug_bounds("signature").unwrap();
@@ -1184,11 +1226,12 @@ mod tests {
                 tempo.right() - position.left(),
                 original_readout_width - chord_slot
             );
-            assert_eq!((position.left() + tempo.right()) / 2., px(width / 2.0));
+            let primary = cx.debug_bounds("transport-primary").unwrap();
+            assert_eq!((primary.left() + primary.right()) / 2., px(width / 2.0));
             let editing = cx.debug_bounds("transport-edit-controls").unwrap();
             let meters = cx.debug_bounds("transport-meters").unwrap();
-            assert!(position.left() >= editing.right());
-            assert!(tempo.right() <= meters.left());
+            assert!(position.left() >= editing.right() || editing.top() >= position.bottom());
+            assert!(tempo.right() <= meters.left() || meters.top() >= tempo.bottom());
         }
     }
 
@@ -1209,8 +1252,8 @@ mod tests {
             let editing = cx.debug_bounds("transport-edit-controls").unwrap();
             let position = cx.debug_bounds("position").unwrap();
             let meters = cx.debug_bounds("transport-meters").unwrap();
-            assert!(editing.right() <= position.left());
-            assert!(position.right() <= meters.left());
+            assert!(editing.right() <= position.left() || editing.top() >= position.bottom());
+            assert!(position.right() <= meters.left() || meters.top() >= position.bottom());
             let master = cx.debug_bounds("clear-clipping").unwrap();
             assert!(master.left() >= meters.left() && master.right() <= meters.right());
 

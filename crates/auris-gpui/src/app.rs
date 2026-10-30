@@ -1526,6 +1526,7 @@ pub struct AurisApp {
     pub(crate) last_pane: Pane,
     /// Window height as of the last frame, used only as a fallback before the first paint.
     pub(crate) viewport_height: Pixels,
+    pub(crate) transport_height: Pixels,
     /// Width of the arrangement body as of the last frame.
     pub(crate) arrangement_width: Pixels,
     /// Rectangles the canvases were painted into last frame.
@@ -2032,6 +2033,7 @@ impl AurisApp {
             panes: PaneFocus::new(cx),
             last_pane: Pane::Arrangement,
             viewport_height: px(900.0),
+            transport_height: Metrics::TRANSPORT_HEIGHT,
             arrangement_width: px(900.0),
             canvas: CanvasBounds::default(),
             mixer_scroll: gpui::ScrollHandle::new(),
@@ -3401,19 +3403,9 @@ impl AurisApp {
         self.remember_layout();
     }
 
-    /// Fixed rows stacked above and below the central row: the transport, the status bar, and —
-    /// everywhere the application draws its own menu bar — that row too.
-    ///
-    /// One answer for both `resize_dock` and `drawn_dock_sizes`, because they have to subtract
-    /// the same chrome the layout actually stacks: the menu bar was once left out of both, and
-    /// on Windows a bottom dock dragged to its limit overflowed the window by exactly the 26
-    /// pixels the two forgot — a mistake macOS, where development happens, never showed.
-    pub(crate) fn chrome_height() -> Pixels {
-        let menu = match Self::wants_menu_bar() {
-            true => crate::ui::menu_bar::HEIGHT,
-            false => gpui::px(0.0),
-        };
-        crate::titlebar::HEIGHT + Metrics::TRANSPORT_HEIGHT + Metrics::STATUS_HEIGHT + menu
+    /// Chrome reserved around the docks, including responsive transport controls.
+    pub(crate) fn chrome_height(&self) -> Pixels {
+        crate::titlebar::HEIGHT + self.transport_height + Metrics::STATUS_HEIGHT
     }
 
     /// Applies a dock resize drag.
@@ -3424,7 +3416,7 @@ impl AurisApp {
         let available = match dock {
             Dock::Bottom => {
                 self.viewport_height
-                    - Self::chrome_height()
+                    - self.chrome_height()
                     - self.project_tabs_height()
                     - PanelLayout::MIN_ARRANGEMENT
             }
@@ -3484,7 +3476,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT
+                    self.chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT
                         + self.panels.lanes.header_height(),
                 )
             },
@@ -3498,7 +3490,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT,
+                    self.chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT,
                 )
             },
             |bounds| bounds.origin,

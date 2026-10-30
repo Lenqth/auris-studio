@@ -341,7 +341,8 @@ impl Render for AuxiliaryWindow {
             let chrome = titlebar::bar(
                 window,
                 &theme,
-                titlebar::Parts::new("utility-title", title),
+                titlebar::Parts::new("utility-title", title)
+                    .leading(app.render_application_menu_button(cx)),
                 titlebar::controls(
                     window,
                     &theme,
@@ -396,7 +397,6 @@ impl Render for AuxiliaryWindow {
                 .font(theme.font.clone())
                 .text_sm()
                 .child(chrome)
-                .children(menu_bar)
                 .child(
                     div()
                         .flex_1()
@@ -406,6 +406,7 @@ impl Render for AuxiliaryWindow {
                         .child(content),
                 )
                 .children(overlays)
+                .children(menu_bar)
                 .children(titlebar::resize_handles(window))
                 .into_any_element()
         });

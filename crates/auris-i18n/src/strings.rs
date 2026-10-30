@@ -742,7 +742,7 @@ strings! {
     CmdSetSignature { en: "Time Signature…", ja: "拍子…" }
     CmdCycleGrid { en: "Next Grid Division", ja: "次のグリッド分割" }
     CmdGoToPosition { en: "Go to Position…", ja: "位置へ移動…" }
-    CmdOpenMenuBar { en: "Open Menu Bar", ja: "メニューバーを開く" }
+    CmdOpenMenuBar { en: "Application menu", ja: "アプリメニュー" }
     CmdFocusNextPane { en: "Focus Next Panel", ja: "次のパネルにフォーカス" }
     CmdFocusPreviousPane { en: "Focus Previous Panel", ja: "前のパネルにフォーカス" }
     // Where a key binding reaches. Shown beside the commands that are not reachable everywhere.
