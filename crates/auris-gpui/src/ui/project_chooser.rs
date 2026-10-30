@@ -408,45 +408,106 @@ impl AurisApp {
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
         let ai_selected = chooser.ai;
         let card = |id: &'static str, ai: bool| {
-            let card = OptionCard::new(
-                id,
-                if ai {
-                    IconName::Sparkles
-                } else {
-                    IconName::Music
-                },
-                self.t(if ai {
-                    Key::WorkshopTitle
-                } else {
-                    Key::ChooseEmpty
-                }),
-            )
-            .description(self.t(if ai {
-                Key::ChooseAiHelp
+            let selected = ai == ai_selected;
+            let on_click = cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                if this.opening_project.is_some() {
+                    return;
+                }
+                if let Some(chooser) = &mut this.project_chooser {
+                    chooser.ai = ai;
+                }
+                if event.click_count() == 2 {
+                    this.choose_project(window, cx);
+                }
+                cx.notify();
+            });
+            let card = if ai {
+                // Only the welcome entry keeps the brand pink; conversation surfaces stay quiet.
+                let colour = atelier::ensure_contrast(
+                    theme.atelier.colors.agent_gradient[1],
+                    theme.surface,
+                    4.5,
+                );
+                div()
+                    .id(id)
+                    .debug_selector(move || id.into())
+                    .tab_index(0)
+                    .key_context(atelier::CONTROL_CONTEXT)
+                    .flex()
+                    .flex_col()
+                    .gap(theme.atelier.spacing.md)
+                    .p(theme.atelier.spacing.lg)
+                    .rounded(theme.atelier.shape.radius_lg)
+                    .bg(theme.atelier.colors.elevated)
+                    .border_1()
+                    .border_color(if selected { theme.accent } else { theme.border })
+                    .focus(|style| {
+                        style
+                            .border_color(theme.accent)
+                            .shadow(theme.atelier.focus_ring())
+                    })
+                    .when(selected, |card| {
+                        card.shadow(vec![gpui::BoxShadow {
+                            color: theme.atelier.colors.focus_ring.opacity(0.35),
+                            offset: point(px(0.), px(0.)),
+                            blur_radius: px(1.),
+                            spread_radius: px(3.),
+                        }])
+                    })
+                    .when(!selected, |card| {
+                        card.hover(|style| style.bg(theme.surface_hover))
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(56.))
+                            .rounded(
+                                atelier::Theme::concentric(
+                                    theme.atelier.shape.radius_lg,
+                                    theme.atelier.spacing.lg,
+                                )
+                                .max(theme.atelier.shape.radius_md),
+                            )
+                            .bg(colour.opacity(0.10))
+                            .child(
+                                atelier::Icon::new(IconName::Sparkles)
+                                    .size(px(28.))
+                                    .color(colour),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(theme.atelier.spacing.xs)
+                            .child(
+                                Label::new(self.t(Key::WorkshopTitle))
+                                    .size(TextSize::Large)
+                                    .heading_weight(),
+                            )
+                            .child(
+                                Label::new(self.t(Key::ChooseAiHelp))
+                                    .size(TextSize::Small)
+                                    .color(TextColor::Muted),
+                            ),
+                    )
+                    .on_click(on_click)
+                    .into_any_element()
             } else {
-                Key::ChooseEmptyHelp
-            }))
-            .selected(ai == ai_selected)
-            .on_click(cx.listener(
-                move |this, event: &gpui::ClickEvent, window, cx| {
-                    if this.opening_project.is_some() {
-                        return;
-                    }
-                    if let Some(chooser) = &mut this.project_chooser {
-                        chooser.ai = ai;
-                    }
-                    if event.click_count() == 2 {
-                        this.choose_project(window, cx);
-                    }
-                    cx.notify();
-                },
-            ));
+                OptionCard::new(id, IconName::Music, self.t(Key::ChooseEmpty))
+                    .description(self.t(Key::ChooseEmptyHelp))
+                    .selected(selected)
+                    .on_click(on_click)
+                    .into_any_element()
+            };
             div()
                 .debug_selector(move || id.into())
                 .flex_1()
-                .min_w(px(220.0))
-                .max_w(px(340.0))
-                .child(if ai { card.agent() } else { card })
+                .min_w(px(220.))
+                .max_w(px(340.))
+                .child(card)
         };
         div()
             .flex()
