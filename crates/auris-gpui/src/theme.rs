@@ -1190,6 +1190,11 @@ impl Theme {
         colors.meter = [self.meter_low, self.meter_mid, self.meter_high];
         colors.agent = atelier::ensure_contrast(colors.agent, self.surface, 4.5);
         colors.agent_wash = Self::translucent(colors.agent, 0.10);
+        // No bezel. Atelier lifts a secondary `Button` with a top-lit gradient and a drop shadow
+        // whenever this is visible, and the Glass direction leaves it visible, so those buttons
+        // stood out from the hairlined `widgets::button` beside them. Liquid Glass controls sit
+        // flat in the glass they belong to; a shadow is for layers that float above it.
+        colors.highlight = gpui::transparent_white();
         if self.atelier.material == atelier::Material::Opaque {
             colors.chrome = self.surface_raised;
             colors.overlay = self.surface_raised;
@@ -1523,6 +1528,14 @@ impl Metrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_scheme_bezels_its_buttons() {
+        for scheme in SCHEMES {
+            let theme = Theme::from_scheme(scheme);
+            assert_eq!(theme.atelier.colors.highlight.a, 0.0, "{}", scheme.id);
+        }
+    }
 
     #[test]
     fn glass_presets_share_upstream_surfaces_and_preserve_document_palettes() {
