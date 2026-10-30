@@ -7,6 +7,35 @@ a migration path. The version number is the promise, and `0` is the promise that
 The release workflow reads the section whose heading matches the tag, so the headings are the
 format rather than a convention: `## <version> — <date>`.
 
+## 0.16.0 — 2026-10-30
+
+### Editor and project windows
+
+* **Use a compact title bar with Undo/Redo, configurable menu shortcuts and dock switches.**
+  Keep playback controls and readouts together, with the native menu retained on macOS.
+* Move between the start screen and editor in the same window. Closing the last project tab
+  returns to the start screen; a single project keeps its tab bar hidden.
+* Share reasoning-effort and fast-mode controls between the Agent panel and AI song workshop.
+  Keep generated songs and musical attachments inline with quieter copy and activity controls.
+
+### Sound search and singing voices
+
+* **Search sounds using supported Japanese and English impressions and onomatopoeia.**
+  Inspect the interpreted terms and switch the timbre map from similarity coordinates to
+  brightness, attack speed and sustain. The same character search is available to agent tools.
+* Show saved VOICEVOX speakers as individual library voices, and guide users through starting
+  the Engine and recovering a failed connection.
+
+### Appearance and startup
+
+* Switch the glass effect independently of the color theme, choose additional theme presets,
+  and import VS Code JSON/JSONC palettes as editable custom themes.
+* Show available updates, download progress, retry and restart actions on the start screen.
+* Confirm deletion or reset of saved song-personalization preferences.
+
+Projects continue to use format 32. Minimum platform requirements are unchanged from v0.15.1.
+
+
 ## 0.15.1 — 2026-10-30
 
 ### Agent limits
