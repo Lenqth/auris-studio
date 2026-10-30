@@ -16,9 +16,13 @@ adopts that sound as one undoable edit; browsing and audition do not change the 
 Adopting a built-in sound restores its default patch and clears its instrument automation,
 including when the selected track already uses that instrument. Mixer settings remain in place.
 
-Audition uses the selected playable track, or the first playable track. Its mute, fader, inserts
-and routing apply, so choose an unmuted dry track for comparisons. Previews are matched to a
-common RMS target with a peak ceiling; closing the map stops the last preview.
+Clicking a point or a list entry plays C4, even in an empty project. The **Preview notes · C4–C5**
+keyboard plays the selected sound at each chromatic pitch; Tab and Space also operate the keys.
+**Play C4** repeats the reference and **Stop preview** cancels playback or pending preparation.
+Audition goes directly to the audio output, independently of track and master mixer settings,
+and stops song playback without moving the playhead.
+Previews are matched to a common RMS target with a peak ceiling. Changing sounds, rescanning,
+closing the map or replacing the document cancels the previous preview.
 
 ## Cluster names, icons and library colors
 
@@ -73,9 +77,50 @@ it sends those synthetic names and counts to the configured backend.
 
 ## Measurement and coordinates
 
+### Sound character and impression search
+
+Switch **Similarity / Sound character** to display either PCA or fixed-scale brightness,
+attack speed and held sustain. Character coordinates run from -1 (dark, slow, decaying) to
++1 (bright, immediate, sustained); adding a library does not renormalize existing character
+coordinates. Cluster colors and full-feature nearest neighbors keep their original meaning.
+
+Use **Search…** to focus the map's Japanese IME-compatible field. Search sound names or supported
+Japanese/English impressions, including `ふんわり`, `ポコポコ`, `キラキラ`, `ザラザラ`, `soft`,
+`plucky`, `bright`, `dark`, `short`, and `sustained`. The interpreted terms are shown explicitly;
+other prose is not interpreted. Up to fifty ranked results remain available in the list and the
+first eight are highlighted on the map without moving its points. Enter leaves the query in
+place; Clear restores the full list. Browsing does not edit the project.
+
+The same search is available to Agent/MCP composition through `search_instruments`:
+
+```json
+{"request":{"mode":"character","query":"ふんわり","targets":{"release":0.1},"limit":5}}
+```
+
+Optional `name` requires name/tag words, `source` and `library` restrict candidates, and `id`
+retains acoustic resemblance to a previously returned sound. Explicit targets override dictionary
+interpretations. Each target is optional and in 0..1: brightness, attack speed (1 immediate),
+sustain (1 sustained), release (1 at least the captured tail), and noise (1 noise-like).
+For arbitrary prose, negation or comparisons, the agent translates the request to explicit
+targets and omits `query`. It reads the resulting targets, continues other work while indexing,
+and retries the same request without refresh. Returned exact IDs work with existing sound
+selection and Undo. Agents should render candidates in their intended musical phrase before
+adopting them and preserve existing sound choices unless asked to change them.
+
+Descriptors average the same six triggers used for similarity. Brightness uses log body centroid
+between 100 Hz and 8 kHz; noise uses mean regional spectral flatness. A 10 ms power envelope
+measures time to 90% peak RMS and held sustain. Release measures the last captured window above
+-40 dB relative to the held peak; `release_censored` marks a lower bound when the tail remains
+audible at capture end. The current 600 ms hold and 400 ms tail limit measurement of slow pads
+and long releases. Impression mappings are acoustic hypotheses, not listening judgments;
+distance is relative mismatch, not probability. Rhythm-dependent impressions such as `ポコポコ`
+also depend on how the instrument is played.
+
 Every source uses fresh instances for six matched triggers: MIDI 48, 60 and 72 at velocities
 0.45 and 0.85, a 600 ms hold, and 400 ms after note-off. The middle-C, higher-velocity recording
-is the preview. A source silent under any reference condition is omitted and counted explicitly.
+is the cached C4 preview. Other keyboard pitches render fresh instances of the exact instrument
+and SoundFont preset at the same velocity and duration. A source silent under any reference
+condition is omitted and counted explicitly.
 Analysis always measures the raw instrument output before the project mixer.
 
 Each trigger contributes 93 deterministic DSP features:
@@ -110,7 +155,7 @@ squared error fell from 59,514 to 53,206 (10.6%). Mean silhouette fell from 0.10
 finer groups have overlapping boundaries, so the result demonstrates browsing granularity and
 lower internal error, not improved global separation or listening quality.
 
-The map displays three principal components in an Atelier `Plot3d` scatter plot, with the fraction
+In Similarity mode the map displays three principal components in an Atelier `Plot3d` scatter plot, with the fraction
 of standardized variance retained. Drag to rotate, use the rotation buttons from the keyboard,
 or choose 3D, Top, Front or Side. A cross marks the selected sound. The sound lists remain
 available for coincident or hidden points, and the group legend identifies the point colors.

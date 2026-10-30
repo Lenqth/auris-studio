@@ -6,6 +6,10 @@ use gpui::{AssetSource, Hsla, IntoElement, SharedString, div, prelude::*, svg};
 
 const MARKS: &[(&str, &[u8])] = &[
     (
+        "icons/menu.svg",
+        include_bytes!("../../assets/icons/menu.svg"),
+    ),
+    (
         "icons/sound-sound.svg",
         include_bytes!("../../assets/icons/sound-sound.svg"),
     ),
@@ -60,14 +64,6 @@ const MARKS: &[(&str, &[u8])] = &[
     (
         "icons/sound-pluck.svg",
         include_bytes!("../../assets/icons/sound-pluck.svg"),
-    ),
-    (
-        "icons/auris-punch.svg",
-        include_bytes!("../../assets/icons/auris-punch.svg"),
-    ),
-    (
-        "icons/auris-notes.svg",
-        include_bytes!("../../assets/icons/auris-notes.svg"),
     ),
     (
         "icons/caption-minimize.svg",
@@ -210,25 +206,6 @@ mod tests {
                     .any(|pixel| pixel[3] > 0),
                 "{path} is empty"
             );
-        }
-    }
-
-    #[test]
-    fn extension_icon_inventory_is_complete_and_unique() {
-        let paths: Vec<_> = MARKS
-            .iter()
-            .map(|(path, _)| *path)
-            .filter(|path| path.starts_with("icons/auris-"))
-            .collect();
-        assert_eq!(paths.len(), 2);
-        assert_eq!(
-            paths.iter().collect::<std::collections::HashSet<_>>().len(),
-            paths.len()
-        );
-        for path in paths {
-            let bytes = ProviderAssets.load(path).unwrap().unwrap();
-            assert!(bytes.starts_with(b"<svg"), "{path} is not an SVG asset");
-            assert!(bytes.windows(10).any(|window| window == b"width=\"24\""));
         }
     }
 

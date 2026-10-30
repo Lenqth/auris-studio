@@ -67,6 +67,67 @@ impl Drop for Scratch {
     }
 }
 
+#[gpui::test]
+fn saved_voicevox_speakers_are_separate_library_choices(cx: &mut TestAppContext) {
+    let scratch = Scratch::new();
+    let path = scratch.voice("library.voicevox.json", "http://127.0.0.1:50021");
+    let mut file: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    file["styles"] = serde_json::json!([
+        {"name":"Singer A / Normal","query_style_id":6000,"decode_style_id":3001},
+        {"name":"Singer B / Soft","query_style_id":6000,"decode_style_id":3002}
+    ]);
+    std::fs::write(&path, serde_json::to_vec(&file).unwrap()).unwrap();
+    let (app, cx, track, _) = with_a_singer_clip(cx);
+    app.update(cx, |this, cx| {
+        this.settings.voice_paths.push(scratch.root.clone());
+        this.voices = None;
+        let choices = this.voice_list();
+        assert!(
+            choices
+                .iter()
+                .any(|(_, entry_path, speaker)| entry_path == &path
+                    && speaker.as_deref() == Some("Singer A / Normal"))
+        );
+        assert!(
+            choices
+                .iter()
+                .any(|(_, entry_path, speaker)| entry_path == &path
+                    && speaker.as_deref() == Some("Singer B / Soft"))
+        );
+        this.apply_singer_voice_selection(track, path.clone(), Some("Singer B / Soft".into()), cx);
+    });
+    cx.run_until_parked();
+    app.read_with(cx, |this, _| {
+        assert_eq!(
+            this.session
+                .singer_voice(track)
+                .unwrap()
+                .unwrap()
+                .speaker
+                .as_deref(),
+            Some("Singer B / Soft")
+        );
+    });
+    app.update(cx, |this, cx| {
+        this.apply_singer_voice_selection(
+            track,
+            path.clone(),
+            Some("Singer A / Normal".into()),
+            cx,
+        );
+        assert_eq!(
+            this.session
+                .singer_voice(track)
+                .unwrap()
+                .unwrap()
+                .speaker
+                .as_deref(),
+            Some("Singer A / Normal")
+        );
+    });
+}
+
 struct Engine {
     url: String,
     stop: Arc<AtomicBool>,
@@ -185,65 +246,6 @@ fn arm_request(app: &mut AurisApp, track: TrackId) -> (VoicevoxConnection, u64, 
     menu.async_request = Some(request);
     app.open_menu(menu);
     (connection, request, app.sung_preview_generation)
-}
-
-#[gpui::test]
-fn the_song_sheet_fetches_and_keeps_the_selected_engine_speaker(cx: &mut TestAppContext) {
-    let scratch = Scratch::new();
-    let mut engine = Engine::singers();
-    let path = scratch.voice("song.voicevox.json", &engine.url);
-    let (app, cx) = crate::harness::open(cx);
-    let before = app.read_with(cx, |this, _| this.project().clone());
-    app.update(cx, |this, cx| {
-        this.open_song_sheet();
-        this.run_menu_command(
-            MenuCommand::SongSinger(Some(path.to_string_lossy().into_owned())),
-            cx,
-        );
-    });
-    paint(&app, cx);
-    click("song-speaker", cx);
-    cx.run_until_parked();
-    engine.finish();
-    let command = app.read_with(cx, |this, _| {
-        this.menu.as_ref().unwrap().entries.iter().find_map(|entry| match entry {
-            MenuEntry::Item(item) if matches!(&item.command, MenuCommand::SongVoicevoxSpeaker { choice, .. } if choice.decode_style_id == 3003) => Some(item.command.clone()),
-            _ => None,
-        }).expect("the Engine's second singing style is offered")
-    });
-    paint(&app, cx);
-    choose(&app, cx, &command);
-    app.update(cx, |this, cx| {
-        let spec = crate::ui::compose_sheet::song_spec(this.song_sheet.as_ref().unwrap());
-        assert_eq!(
-            spec.singer_speaker.as_deref(),
-            Some("ずんだもん / ノーマル")
-        );
-        let restored = SongSpec::parse(&spec.to_toml()).unwrap();
-        assert_eq!(
-            crate::ui::compose_sheet::song_dials(&restored).singer_speaker,
-            spec.singer_speaker
-        );
-        assert_eq!(
-            this.project(),
-            &before,
-            "choosing a voice does not edit the project"
-        );
-        assert_eq!(
-            this.session
-                .voicevox_connection_at(&path, spec.singer_speaker.as_deref())
-                .unwrap()
-                .decode_style_id,
-            3003
-        );
-        this.run_menu_command(MenuCommand::SongSinger(None), cx);
-        assert!(this.song_sheet.as_ref().unwrap().singer_speaker.is_none());
-        this.run_menu_command(command.clone(), cx);
-        assert!(
-            this.song_sheet.as_ref().unwrap().singer_speaker.is_none(),
-            "an old menu cannot apply to another voice"
-        );
-    });
 }
 
 #[gpui::test]
@@ -481,7 +483,8 @@ fn a_failed_catalogue_preserves_the_saved_speaker_and_offers_refresh(cx: &mut Te
         assert!(entries.iter().any(|entry| matches!(entry, MenuEntry::Item(item)
             if item.checked && item.label.as_ref() == "Singer / normal")));
         assert!(entries.iter().any(|entry| matches!(entry, MenuEntry::Item(item)
-            if !item.enabled && item.label.as_ref() == "Engine offline")));
+            if !item.enabled && item.label.contains("Engine offline")
+                && (item.label.contains("起動") || item.label.contains("running")))));
         assert!(entries.iter().any(|entry| matches!(entry, MenuEntry::Item(item)
             if item.enabled && matches!(item.command, MenuCommand::RefreshVoicevoxSpeakers { .. }))));
         assert_eq!(this.session.revision(), revision);

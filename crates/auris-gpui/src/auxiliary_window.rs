@@ -151,9 +151,6 @@ fn open_surface(app: WeakEntity<AurisApp>, surface: Surface, cx: &mut App) {
             window.on_window_should_close(cx, move |window, cx| {
                 closing_app
                     .update(cx, |app, cx| {
-                        if app.compose_progress.is_some() {
-                            return false;
-                        }
                         app.end_drag(window, cx);
                         app.session.release_typed_notes();
                         surface.close(app);
@@ -238,11 +235,7 @@ impl AurisApp {
 
     pub(crate) fn claim_event_window(&mut self, window: &Window) {
         let id = window.window_handle().window_id();
-        if self.event_window != Some(id)
-            && self.prompt.is_none()
-            && self.palette.is_none()
-            && self.song_sheet.is_none()
-        {
+        if self.event_window != Some(id) && self.prompt.is_none() && self.palette.is_none() {
             self.close_menu();
             self.close_menu_bar();
             self.event_window = Some(id);
@@ -345,17 +338,15 @@ impl Render for AuxiliaryWindow {
             let theme = app.theme.clone();
             let title = surface.title(app);
             window.set_window_title(&title);
-            let chrome = titlebar::composed(
+            let chrome = titlebar::bar(
                 window,
                 &theme,
-                titlebar::Parts::new("utility-title", title),
+                titlebar::Parts::new("utility-title", title)
+                    .leading(app.render_application_menu_button(cx)),
                 titlebar::controls(
                     window,
                     &theme,
                     cx.listener(move |app, _, window, cx| {
-                        if app.compose_progress.is_some() {
-                            return;
-                        }
                         app.end_drag(window, cx);
                         surface.close(app);
                         window.remove_window();
@@ -406,7 +397,6 @@ impl Render for AuxiliaryWindow {
                 .font(theme.font.clone())
                 .text_sm()
                 .child(chrome)
-                .children(menu_bar)
                 .child(
                     div()
                         .flex_1()
@@ -416,6 +406,7 @@ impl Render for AuxiliaryWindow {
                         .child(content),
                 )
                 .children(overlays)
+                .children(menu_bar)
                 .children(titlebar::resize_handles(window))
                 .into_any_element()
         });

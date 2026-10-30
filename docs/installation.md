@@ -8,8 +8,9 @@ and portable archives. Desktop releases contain the application, the `auris` CLI
 contain the CLI and dictionary. Built-in physical instruments do not require a separate sound
 library.
 
-Installer-backed desktop apps check for updates shortly after launch and every six hours while
-open. When a newer release has an installer for the current platform, Auris Studio downloads it
+Desktop apps check for updates shortly after launch and every six hours while open. The start
+screen shows available releases, download progress and a restart action when an update is ready.
+When a newer release has an installer for the current installed app, Auris Studio downloads it
 in the background and checks its size and SHA-256 digest against the release metadata. Choose
 **Restart and Update** when prompted, or leave the downloaded update ready for the next normal
 quit. The update helper applies it after Auris Studio exits. Turn background updates off under

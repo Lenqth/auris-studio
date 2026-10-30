@@ -47,6 +47,37 @@ mod tool_surface_eval;
 #[cfg(test)]
 mod transcription_eval;
 
+#[cfg(test)]
+mod issue_reporting_tests {
+    use super::*;
+
+    #[gpui::test]
+    fn issue_tool_offers_an_invitation_without_opening_or_publishing_a_report(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let revision = app.read_with(cx, |this, _| this.session.revision());
+        app.update(cx, |this, cx| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.bound_project = this.session.path().map(Path::to_path_buf);
+            this.agent_chat.policy.mode = auris_session::agent_policy::Mode::ReadOnly;
+            let result = this.agent_edit(serde_json::json!({"action":"suggest_issue_report","suggestion":{
+                "title":"Unsupported operation", "explanation":"The capability check found a missing agent operation; the UI may support it."
+            }})).unwrap();
+            assert!(result.contains("\"published\":false"));
+            assert!(this.issue_report_window.is_none());
+            assert_eq!(this.session.revision(), revision);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        crate::harness::click("agent-issue-draft", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.issue_report_window.is_some());
+            assert_eq!(this.session.revision(), revision);
+        });
+    }
+}
+
 /// Maximum transcript rows retained in the panel.
 const CHAT_CAPACITY: usize = 500;
 
@@ -62,8 +93,13 @@ pub(crate) struct NavigateAgentModel {
 /// The selector context wins before window actions such as Down-to-select-the-next-track while
 /// the model control owns focus. Tab deliberately remains unbound so normal focus traversal can
 /// continue after dismissing the menu.
-pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
+pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 10] {
     [
+        gpui::KeyBinding::new(
+            "escape",
+            super::reasoning_picker::DismissReasoningPicker,
+            Some("AurisReasoningPicker"),
+        ),
         gpui::KeyBinding::new(
             "secondary-r",
             NavigateAgentModel { key: "refresh" },
@@ -72,16 +108,6 @@ pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 11] {
         gpui::KeyBinding::new(
             "escape",
             NavigateAgentModel { key: "escape" },
-            Some("AurisAgentDropdown"),
-        ),
-        gpui::KeyBinding::new(
-            "enter",
-            crate::ui::widgets::ClaimDisclosureActivation,
-            Some("AurisAgentDropdown"),
-        ),
-        gpui::KeyBinding::new(
-            "space",
-            crate::ui::widgets::ClaimDisclosureActivation,
             Some("AurisAgentDropdown"),
         ),
         gpui::KeyBinding::new(
@@ -1063,6 +1089,7 @@ impl AgentLink {
 
 /// Everything the agent panel is, apart from its pixels.
 pub(crate) struct AgentChat {
+    issue_suggestion: Option<auris_session::issue_report::Suggestion>,
     conversations: conversations::Conversations,
     controls: controls::Controls,
     policy: auris_session::agent_policy::Policy,
@@ -1071,6 +1098,7 @@ pub(crate) struct AgentChat {
     pub(crate) context_tokens: u32,
     pub(crate) output_tokens: u32,
     max_tool_failures: Option<u8>,
+    max_tool_calls: Option<u32>,
     /// Legacy Ollama thinking override.
     pub(crate) thinking: Option<bool>,
     /// Provider-native reasoning effort.
@@ -1158,6 +1186,9 @@ pub(crate) struct AgentChat {
     pub(crate) focused: Option<AgentField>,
     /// Restore approval shortcuts once when a hidden panel is deliberately shown again.
     pub(crate) restore_pending_focus: bool,
+    /// Enter parked the keyboard on Stop while the composer was locked behind a send that had to
+    /// wait; hand it back to the composer once the send leaves, unless it has moved since.
+    return_to_composer: bool,
     /// Whether the settings section is showing.
     pub(crate) configuring: bool,
     /// Whether the settings fields have been seeded from the saved preferences.
@@ -1198,12 +1229,14 @@ impl Default for AgentChat {
     fn default() -> Self {
         Self {
             conversations: Default::default(),
+            issue_suggestion: None,
             controls: controls::Controls::default(),
             policy: Default::default(),
             auto_compact_percent: None,
             context_tokens: 32768,
             output_tokens: 4096,
             max_tool_failures: None,
+            max_tool_calls: None,
             thinking: None,
             effort: ReasoningEffort::Default,
             fast_mode: false,
@@ -1253,6 +1286,7 @@ impl Default for AgentChat {
             interrupting: false,
             focused: None,
             restore_pending_focus: false,
+            return_to_composer: false,
             configuring: false,
             preferences_loaded: false,
             busy: false,
@@ -1407,6 +1441,7 @@ impl AgentChat {
         self.context_tokens = prefs.context_tokens.unwrap_or(32768);
         self.output_tokens = prefs.output_tokens.unwrap_or(4096);
         self.max_tool_failures = prefs.max_tool_failures;
+        self.max_tool_calls = prefs.max_tool_calls;
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
         self.fast_mode = prefs.fast_mode;
@@ -1456,6 +1491,7 @@ impl AgentChat {
             context_tokens: Some(self.context_tokens),
             output_tokens: Some(self.output_tokens),
             max_tool_failures: self.max_tool_failures,
+            max_tool_calls: self.max_tool_calls,
             thinking: self.thinking,
             effort: self.effort,
             fast_mode: self.fast_mode,
@@ -2149,6 +2185,7 @@ impl AurisApp {
 
     /// Starts fresh model history and rebinds the next child to the current document.
     pub(crate) fn agent_reset_conversation(&mut self) {
+        self.agent_chat.issue_suggestion = None;
         self.attachment_preview = None;
         let _ = self.flush_conversation_storage();
         self.agent_chat.conversations = Default::default();
@@ -2543,12 +2580,83 @@ impl AurisApp {
             );
         }
         self.check_agent_edit(&command)?;
-        serde_json::from_value::<auris_session::live_agent::Command>(command)
-            .map_err(|error| error.to_string())
-            .and_then(|command| {
-                self.session
-                    .agent_command_with_plugin_paths(command, &self.settings.plugin_paths)
+        let command = serde_json::from_value::<auris_session::live_agent::Command>(command)
+            .map_err(|error| error.to_string())?;
+        let suggestion =
+            if let auris_session::live_agent::Command::SuggestIssueReport { suggestion } = &command
+            {
+                Some(suggestion.clone())
+            } else {
+                None
+            };
+        let result = self
+            .session
+            .agent_command_with_plugin_paths(command, &self.settings.plugin_paths)?;
+        if let Some(suggestion) = suggestion {
+            self.agent_chat.issue_suggestion = Some(suggestion);
+        }
+        Ok(result)
+    }
+
+    /// Capture only bounded user-authored text locally; the report still starts with no consent.
+    pub(crate) fn issue_prompt_snapshot(&self) -> String {
+        let mut prompts = self
+            .agent_chat
+            .entries
+            .iter()
+            .rev()
+            .filter_map(|entry| {
+                if let ChatEntry::You { text, .. } = entry {
+                    Some(auris_session::issue_report::bounded(text, 1500))
+                } else {
+                    None
+                }
             })
+            .take(12)
+            .collect::<Vec<_>>();
+        prompts.reverse();
+        let mut text = prompts.join("\n\nUser request:\n");
+        if !self.settings.agent.system_prompt.trim().is_empty() {
+            text.push_str("\n\nCustom agent instructions:\n");
+            text.push_str(&auris_session::issue_report::bounded(
+                &self.settings.agent.system_prompt,
+                3000,
+            ));
+        }
+        auris_session::issue_report::bounded(&text, 6000)
+    }
+
+    fn issue_invitation(&self, cx: &mut gpui::Context<Self>) -> Option<AnyElement> {
+        let suggestion = self.agent_chat.issue_suggestion.as_ref()?;
+        let theme = &self.theme;
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_2()
+                .min_w_0()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(theme.text_muted)
+                        .child(self.t(Key::IssueInvitation)),
+                )
+                .child(div().text_sm().child(suggestion.title.clone()))
+                .child(button(
+                    "agent-issue-draft",
+                    self.t(Key::IssueOpenSuggestion),
+                    ButtonStyle::Normal,
+                    false,
+                    theme.accent,
+                    theme,
+                    cx.listener(|this, _, _, cx| {
+                        let suggestion = this.agent_chat.issue_suggestion.clone();
+                        this.open_issue_report(suggestion, cx);
+                    }),
+                ))
+                .into_any_element(),
+        )
     }
 
     fn start_agent_inspection(&mut self, command: &serde_json::Value) -> Result<(), String> {
@@ -3159,6 +3267,7 @@ impl AurisApp {
     ) -> Result<(), E> {
         let changed = self.persist_agent_preferences_with(preferences.clone(), save)?;
         self.agent_chat.load_preferences(&preferences);
+        self.sync_workshop_tool_call_limit();
         if changed {
             self.restart_agent_after_preferences_change();
         }
@@ -3302,6 +3411,11 @@ impl AurisApp {
                 ("enter", AgentField::Chat) => {
                     if event.keystroke.modifiers.shift {
                         self.agent_chat.input.insert("\n");
+                    } else if event.keystroke.modifiers.secondary()
+                        && (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
+                    {
+                        // The queue's "Send now", from the keyboard: interrupt and go first.
+                        self.submit_agent_message_now(cx);
                     } else {
                         self.agent_submit(window, cx);
                     }
@@ -3339,6 +3453,7 @@ impl AurisApp {
             self.agent_chat.focused = None;
             if let Some(focus) = self.agent_chat.stop_focus.as_ref() {
                 window.focus(focus);
+                self.agent_chat.return_to_composer = true;
             }
         }
     }
@@ -3405,6 +3520,18 @@ impl AurisApp {
             // Several controls express "return to the composer" without receiving a Window.
             // Move that logical request onto the real input target on the following frame.
             window.focus(&input_focus);
+        } else if !composer_locked
+            && self.agent_chat.return_to_composer
+            && stop_focus.is_focused(window)
+        {
+            // The send that locked the composer has gone, by whichever road — history read,
+            // attachments saved, an error. Nothing else would bring the keyboard back from
+            // Stop, and the next message would be typed into the window's bindings instead.
+            self.focus_agent_field(AgentField::Chat);
+            window.focus(&input_focus);
+        }
+        if !composer_locked {
+            self.agent_chat.return_to_composer = false;
         }
         // Arrival while hidden cannot keep the input handle focused: `reconcile_focus` correctly
         // releases every hidden field. Showing the panel is the explicit return, so restore its
@@ -3534,11 +3661,6 @@ impl AurisApp {
                             .border_color(theme.border)
                             .text_xs()
                             .text_color(theme.text_muted)
-                            .child(
-                                atelier::Icon::new(atelier::IconName::Sparkles)
-                                    .size(theme.atelier.typography.size_lg)
-                                    .color(theme.atelier.colors.agent),
-                            )
                             .child(
                                 div()
                                     .flex_1()
@@ -3702,6 +3824,7 @@ impl AurisApp {
                 )))
             })
             .child(self.agent_approval_view(cx))
+            .children(self.issue_invitation(cx))
             .when(
                 operation_busy || self.agent_chat.tokens_in > 0 || self.agent_chat.tokens_out > 0,
                 |this| this.child(self.agent_status_row(&theme)),
@@ -3983,7 +4106,10 @@ impl AurisApp {
                 let mark = tool_mark(*ok, line);
                 (theme.text_muted, format!("{mark} {name}  {line}"))
             }
-            ChatEntry::Error(message) => (theme.danger, message.clone()),
+            ChatEntry::Error(message) => (
+                theme.danger,
+                crate::i18n::agent_error_text(message, self.language(), false),
+            ),
             ChatEntry::Note(key) => (note_colour(*key, theme), self.t(*key).to_string()),
         };
         let details = match entry {
@@ -4067,11 +4193,27 @@ impl AurisApp {
                 }),
             )
             .into_any_element(),
-            ChatEntry::Error(message) => agent_components::error_notice(message),
+            ChatEntry::Error(_) => agent_components::error_notice(text.clone()),
             ChatEntry::Status(_) | ChatEntry::Note(_) => {
                 agent_components::status_notice(text.clone())
             }
             _ => div().child(text).into_any_element(),
+        };
+        let body = if let ChatEntry::Tool { name, .. } = entry {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .min_w_0()
+                .child(icon(
+                    super::icons::tool_icon(name),
+                    theme.atelier.typography.size_sm,
+                    colour,
+                ))
+                .child(div().flex_1().min_w_0().child(body))
+                .into_any_element()
+        } else {
+            body
         };
         div()
             .id(("agent-line", index))
@@ -4352,9 +4494,9 @@ impl AurisApp {
         true
     }
 
-    /// Two quiet selectors sharing the model/effort lane of the composer.
+    /// Model and shared reasoning controls below the composer.
     fn agent_model_picker(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
-        let theme = self.theme.clone();
+        use crate::ui::reasoning_picker::{Change, Handle, Options, ReasoningPicker};
         let enabled = !self.agent_operation_busy();
         let configured = !self.agent_chat.chosen_model.is_empty();
         let focus = self
@@ -4374,22 +4516,70 @@ impl AurisApp {
         } else {
             self.t(Key::AgentChooseModel).to_owned()
         };
-        let efforts = self.agent_chat.effort_choices();
-        let effort_names = efforts
-            .iter()
-            .map(|effort| self.t(controls::effort_key(*effort)).to_owned())
-            .collect::<Vec<_>>();
-        let effort = self.agent_chat.effort;
-        let effort_label = self
-            .t(match effort {
-                ReasoningEffort::Default => Key::AgentEffortDefaultShort,
-                ReasoningEffort::Minimal => Key::AgentEffortMinimalShort,
-                ReasoningEffort::Medium => Key::AgentEffortMediumShort,
-                ReasoningEffort::Xhigh => Key::AgentEffortXhighShort,
-                ReasoningEffort::Max => Key::AgentEffortMaxShort,
-                _ => controls::effort_key(effort),
-            })
-            .to_owned();
+        let options = Options {
+            id: "agent-effort-menu",
+            theme: self.theme.clone(),
+            language: self.language(),
+            model: current.clone(),
+            choices: self.agent_chat.effort_choices(),
+            effort: self.agent_chat.effort,
+            fast: self.agent_chat.fast_mode,
+            supports_fast: self.agent_chat.preferences().supports_fast_mode(),
+            enabled,
+        };
+        let picker = if let Some(handle) = &self.agent_chat.controls.reasoning_picker {
+            handle.view.update(cx, |picker, _| picker.options = options);
+            handle.view.clone()
+        } else {
+            let focus = self
+                .agent_chat
+                .controls
+                .effort_focus
+                .get_or_insert_with(|| cx.focus_handle().tab_index(0).tab_stop(true))
+                .clone();
+            let view = cx.new(|cx| ReasoningPicker::new(options, focus, cx));
+            let subscription = cx.subscribe(&view, |this, _, change: &Change, cx| {
+                if this.agent_operation_busy() {
+                    return;
+                }
+                this.agent_chat.focused = None;
+                match change {
+                    Change::Opened => {}
+                    Change::Effort(effort) => this.agent_effort(*effort),
+                    Change::Fast => {
+                        if let Err(error) = this.agent_fast_mode_with(this.settings_saver()) {
+                            this.agent_chat
+                                .push_entry(ChatEntry::Error(error.to_string()));
+                        }
+                    }
+                    Change::Reset => {
+                        let previous = (
+                            this.agent_chat.effort,
+                            this.agent_chat.thinking,
+                            this.agent_chat.fast_mode,
+                        );
+                        this.agent_chat.effort = ReasoningEffort::Default;
+                        this.agent_chat.thinking = None;
+                        this.agent_chat.fast_mode = false;
+                        if let Err(error) = this.agent_write_through_with(this.settings_saver()) {
+                            (
+                                this.agent_chat.effort,
+                                this.agent_chat.thinking,
+                                this.agent_chat.fast_mode,
+                            ) = previous;
+                            this.agent_chat
+                                .push_entry(ChatEntry::Error(error.to_string()));
+                        }
+                    }
+                }
+                cx.notify();
+            });
+            self.agent_chat.controls.reasoning_picker = Some(Handle {
+                view: view.clone(),
+                _subscription: subscription,
+            });
+            view
+        };
         div()
             .flex()
             .items_center()
@@ -4404,94 +4594,15 @@ impl AurisApp {
                 focus,
                 cx,
             )))
-            .child(
-                div()
-                    .w(px(56.0))
-                    .min_w_0()
-                    .flex_shrink_0()
-                    .child(self.dropdown(
-                        "agent-effort-menu",
-                        effort_label,
-                        self.agent_chat.controls.effort_menu,
-                        &theme,
-                        |this, _| {
-                            if !this.agent_operation_busy() {
-                                this.agent_chat.controls.effort_menu =
-                                    !this.agent_chat.controls.effort_menu;
-                                this.agent_chat.controls.mode_menu = false;
-                                this.agent_chat.model_menu = false;
-                            }
-                        },
-                        cx,
-                    )),
-            )
-            .when(self.agent_chat.preferences().supports_fast_mode(), |row| {
-                row.child(
-                    // A latching icon, like the transport's: lit when fast mode is on, with its
-                    // name and its cost in the tooltip.
-                    button_enabled(
-                        "agent-fast-mode",
-                        "",
-                        ButtonStyle::Ghost,
-                        ButtonState::available(self.agent_chat.fast_mode, enabled),
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.agent_fast_mode();
-                            cx.notify();
-                        }),
-                    )
-                    .w(theme.atelier.density.control_sm)
-                    .px_0()
-                    .child(icon(
-                        Icon::Bolt,
-                        theme.atelier.typography.size_md,
-                        if self.agent_chat.fast_mode {
-                            theme.text_on_accent
-                        } else {
-                            theme.text_muted
-                        },
-                    ))
-                    .tooltip(crate::ui::tooltip::keyed_tip(
-                        format!(
-                            "{} — {}",
-                            self.t(Key::AgentFastMode),
-                            self.t(Key::AgentFastModeHelp)
-                        ),
-                        "",
-                        &theme,
-                    )),
-                )
-            })
-            .when(self.agent_chat.model_menu && enabled, |this| {
+            .child(picker)
+            .when(self.agent_chat.model_menu && enabled, |row| {
                 let names = self
                     .agent_chat
                     .models
                     .iter()
                     .map(ModelOption::label)
                     .collect::<Vec<_>>();
-                this.child(self.model_option_rows(&names, &theme, cx))
-            })
-            .when(self.agent_chat.controls.effort_menu, |this| {
-                this.child(
-                    self.option_rows(
-                        "agent-effort-option",
-                        &effort_names,
-                        efforts
-                            .iter()
-                            .position(|choice| *choice == effort)
-                            .unwrap_or(0),
-                        &theme,
-                        |this, index, _| {
-                            if let Some(effort) =
-                                this.agent_chat.effort_choices().get(index).copied()
-                            {
-                                this.agent_effort(effort);
-                            }
-                        },
-                        cx,
-                    ),
-                )
+                row.child(self.model_option_rows(&names, &self.theme.clone(), cx))
             })
             .into_any_element()
     }
@@ -4760,7 +4871,9 @@ impl AurisApp {
                 .absolute()
                 .bottom_full()
                 .left_0()
-                .w_full()
+                // At least the trigger's width, and wider when a choice needs it: the trigger is
+                // a quarter of a narrow composer, which cut "Auto review" off mid-word.
+                .min_w_full()
                 .pb_1()
                 .child(list),
         )
@@ -4809,8 +4922,7 @@ impl AurisApp {
         .bg(theme.surface_raised)
         .border_color(gpui::transparent_black())
         .track_focus(&focus)
-        .key_context("AurisAgentDropdown")
-        .on_action(|_: &crate::ui::widgets::ClaimDisclosureActivation, _, _| {})
+        .key_context("AurisAgentDropdown AtelierControl")
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _: &MouseDownEvent, window, cx| {
@@ -4961,10 +5073,24 @@ impl AurisApp {
                     div()
                         .id("agent-bypass-warning")
                         .debug_selector(|| "agent-bypass-warning".to_owned())
+                        .flex()
+                        .items_center()
+                        .gap(theme.atelier.spacing.xs)
                         .px_1p5()
                         .text_xs()
                         .text_color(theme.warning)
-                        .child(format!("⚠ {}", self.t(Key::AgentBypassWarning))),
+                        // The tone's mark, so the frame's colour is never the only sign.
+                        .child(
+                            atelier::Icon::new(atelier::IconName::Alert)
+                                .size(px(14.0))
+                                .color(theme.warning),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(self.t(Key::AgentBypassWarning).to_owned()),
+                        ),
                 )
             })
             .when_some(blocker, |this, blocker| {
@@ -4983,6 +5109,12 @@ impl AurisApp {
                         .px_1p5()
                         .text_xs()
                         .text_color(theme.warning)
+                        // A mark with the colour, so the state is not told by colour alone.
+                        .child(
+                            atelier::Icon::new(atelier::IconName::Alert)
+                                .size(px(14.0))
+                                .color(theme.warning),
+                        )
                         .child(div().flex_1().min_w(px(80.0)).child(self.t(message)))
                         .child(button(
                             "agent-send-blocked-action",
@@ -5011,10 +5143,18 @@ impl AurisApp {
                 |this, error| {
                     this.child(
                         div()
+                            .flex()
+                            .items_center()
+                            .gap(theme.atelier.spacing.xs)
                             .px_1p5()
                             .text_xs()
                             .text_color(theme.danger)
-                            .child(error),
+                            .child(
+                                atelier::Icon::new(atelier::IconName::Alert)
+                                    .size(px(14.0))
+                                    .color(theme.danger),
+                            )
+                            .child(div().flex_1().min_w_0().child(error)),
                     )
                 },
             )
@@ -5220,13 +5360,12 @@ impl AurisApp {
                         .items_center()
                         .gap_1()
                         .px_1p5()
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(self.t(Key::AgentQueueHint)),
-                        )
+                        .child(div().flex_1().text_xs().text_color(theme.text_muted).child(
+                            self.t(Key::AgentQueueHint).replace(
+                                "{interrupt}",
+                                &crate::actions::menu_keystroke("secondary-enter"),
+                            ),
+                        ))
                         .child(
                             button_enabled(
                                 "agent-send-now",
@@ -5670,6 +5809,7 @@ mod tests {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
+            this.settings.agent = Default::default();
             this.agent_chat
                 .load_preferences(&this.settings.agent.clone());
             this.agent_chat.models_loaded = true;
@@ -5932,7 +6072,7 @@ mod tests {
         let answer = "A gentle piano melody";
         let detail = "{\n  \"tempo\": 120\n}";
         // An answer rises into place as it arrives; this is about selecting it once it has.
-        cx.update(|_, cx| cx.global_mut::<atelier::Theme>().motion.enabled = false);
+        cx.update(|_, cx| atelier::motion::reduce_motion(cx));
         app.update(cx, |this, _| {
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent.model = "test-model".into();
@@ -6607,6 +6747,104 @@ mod tests {
                 pending.selection_context,
                 this.agent_selection_context().to_string()
             );
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[gpui::test]
+    fn secondary_enter_interrupts_the_running_turn_with_the_composer_message(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent.model = "offline-fixture".into();
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.busy = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("later");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("urgent");
+        cx.simulate_keystrokes("secondary-enter");
+        app.read_with(cx, |this, _| {
+            let queued = this
+                .agent_chat
+                .queued
+                .iter()
+                .map(|message| message.text.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(queued, ["urgent", "later"]);
+            assert!(!this.agent_chat.busy, "the running turn was stopped");
+            assert!(!this.agent_chat.queue_paused);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn the_keyboard_returns_to_the_composer_once_a_waiting_send_leaves(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let root =
+            std::env::temp_dir().join(format!("auris-agent-send-refocus-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let sender = app.update(cx, |this, _| {
+            this.session.save_as(&root.join("Refocus.auris")).unwrap();
+            this.settings.agent.model = "offline-fixture".into();
+            this.panels.show(crate::dock::Panel::Agent);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let token = this.agent_document_token();
+            this.agent_chat.history_load = Some(PendingHistoryLoad { token, receiver });
+            sender
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("first");
+        cx.simulate_keystrokes("enter");
+        crate::harness::paint(&app, cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(this.agent_chat.pending_send.is_some());
+                assert_eq!(this.agent_chat.focused, None);
+                assert!(
+                    this.agent_chat
+                        .stop_focus
+                        .as_ref()
+                        .is_some_and(|focus| focus.is_focused(window))
+                );
+            });
+        });
+
+        // The saved transcript cannot be read, which unlocks the composer with its draft intact
+        // for another try. What is typed next belongs in it rather than in the window's
+        // bindings, where `i` would toggle the inspector and the letters would vanish.
+        app.update(cx, |this, cx| {
+            sender.send(Err("disk unavailable".into())).unwrap();
+            this.poll_agent_history_load(cx);
+            assert!(this.agent_chat.pending_send.is_none());
+        });
+        crate::harness::paint(&app, cx);
+        let inspector = app.read_with(cx, |this, _| {
+            this.panels.is_open(crate::dock::Panel::Inspector)
+        });
+        cx.simulate_input(" again with this");
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert_eq!(this.agent_chat.focused, Some(AgentField::Chat));
+                assert!(
+                    this.agent_chat
+                        .input_focus()
+                        .is_some_and(|focus| focus.is_focused(window))
+                );
+                assert_eq!(this.agent_chat.input.content(), "first again with this");
+                assert_eq!(
+                    this.panels.is_open(crate::dock::Panel::Inspector),
+                    inspector
+                );
+            });
         });
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -7671,8 +7909,29 @@ mod tests {
         cx.simulate_keystrokes("escape");
         crate::harness::click("agent-effort-menu", cx);
         crate::harness::paint(&app, cx);
-        let menu = cx.debug_bounds("agent-effort-option-popup").unwrap();
+        let menu = cx.debug_bounds("agent-effort-menu-popup").unwrap();
         assert!(menu.bottom() <= effort.top());
+        cx.simulate_keystrokes("end");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let selected = *this.agent_chat.effort_choices().last().unwrap();
+            assert_eq!(this.agent_chat.effort, selected);
+            assert_eq!(this.settings.agent.effort, selected);
+        });
+        cx.simulate_keystrokes("escape");
+        crate::harness::paint(&app, cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(
+                    this.agent_chat
+                        .controls
+                        .effort_focus
+                        .as_ref()
+                        .unwrap()
+                        .is_focused(window)
+                );
+            })
+        });
     }
 
     #[gpui::test]
@@ -7698,14 +7957,18 @@ mod tests {
                 this.agent_chat
                     .load_preferences(&this.settings.agent.clone());
                 this.agent_chat.models_loaded = true;
-                this.agent_chat.busy = true;
+                this.agent_chat.busy = false;
                 assert!(this.agent_chat.preferences().fast_mode);
                 assert_eq!(this.agent_chat.preferences().effort, ReasoningEffort::High);
             });
             crate::harness::paint(&app, cx);
-            assert_eq!(cx.debug_bounds("agent-fast-mode").is_some(), supported);
+            crate::harness::click("agent-effort-menu", cx);
+            crate::harness::paint(&app, cx);
+            assert_eq!(cx.debug_bounds("reasoning-fast-mode").is_some(), supported);
+            app.update(cx, |this, _| this.agent_chat.busy = true);
+            crate::harness::paint(&app, cx);
             if supported {
-                crate::harness::click("agent-fast-mode", cx);
+                crate::harness::click("reasoning-fast-mode", cx);
                 app.read_with(cx, |this, _| assert!(this.agent_chat.fast_mode));
             }
         }
@@ -7731,6 +7994,34 @@ mod tests {
             assert!(this.agent_chat.fast_mode);
             assert!(this.settings.agent.fast_mode);
         });
+    }
+
+    #[gpui::test]
+    fn reasoning_popover_stays_inside_the_window_from_a_narrow_left_dock(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels
+                .move_to(crate::dock::Panel::Agent, crate::dock::Dock::Left);
+            this.panels.set_size(crate::dock::Dock::Left, px(180.0));
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        // The leading dock intentionally folds below the sidebar breakpoint.
+        crate::harness::resize(&app, cx, gpui::size(px(1280.), px(600.)));
+        let panel = cx.debug_bounds("agent-panel").unwrap();
+        let trigger = cx.debug_bounds("agent-effort-menu").unwrap();
+        assert!(
+            trigger.left() >= panel.left() && trigger.right() <= panel.right(),
+            "{trigger:?} outside {panel:?}"
+        );
+        crate::harness::click("agent-effort-menu", cx);
+        crate::harness::paint(&app, cx);
+        let popup = cx.debug_bounds("agent-effort-menu-popup").unwrap();
+        assert!(popup.left() >= px(0.));
+        assert!(popup.right() <= px(1280.));
+        assert!(popup.bottom() <= cx.debug_bounds("agent-effort-menu").unwrap().top());
     }
 
     #[gpui::test]

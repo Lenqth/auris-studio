@@ -21,8 +21,8 @@ use auris_i18n::{Key, Language, messages};
 use auris_session::prelude::*;
 use auris_session::{RecoverySnapshot, Session, SessionOptions, WindowPlacement};
 use gpui::{
-    App, AppContext, Bounds, Context, FocusHandle, Focusable, Pixels, Point, ScrollHandle, Task,
-    Window, WindowBounds, WindowHandle, WindowOptions, point, px, size,
+    App, AppContext, Bounds, Context, FocusHandle, Focusable, Pixels, Point, Task, Window,
+    WindowBounds, WindowHandle, WindowOptions, point, px, size,
 };
 
 use crate::actions;
@@ -254,90 +254,7 @@ impl PaneFocus {
     }
 }
 
-/// Focus targets owned by the modal controls drawn over the main window.
-///
-/// Keeping these handles in the view makes the focus ring stable across repaints and lets the
-/// modal key handlers walk only their own controls instead of escaping into the obscured panes.
-struct ModalScrollTarget {
-    focus: FocusHandle,
-    bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
-}
-
-struct ModalScrollFocus {
-    scroll: ScrollHandle,
-    targets: RefCell<Vec<ModalScrollTarget>>,
-}
-
-impl ModalScrollFocus {
-    fn new() -> Self {
-        Self {
-            scroll: ScrollHandle::new(),
-            targets: RefCell::new(Vec::new()),
-        }
-    }
-
-    fn target(
-        &self,
-        index: usize,
-        cx: &mut App,
-    ) -> (FocusHandle, Rc<Cell<Option<Bounds<Pixels>>>>) {
-        let mut targets = self.targets.borrow_mut();
-        while targets.len() <= index {
-            targets.push(ModalScrollTarget {
-                focus: cx.focus_handle().tab_stop(false),
-                bounds: Rc::new(Cell::new(None)),
-            });
-        }
-        let target = &targets[index];
-        (target.focus.clone(), target.bounds.clone())
-    }
-
-    fn reveal_focused(&self, window: &mut Window, cx: &mut App) {
-        let bounds = self
-            .targets
-            .borrow()
-            .iter()
-            .find(|target| target.focus.contains_focused(window, cx))
-            .and_then(|target| target.bounds.get());
-        let Some(bounds) = bounds else {
-            return;
-        };
-        let viewport = self.scroll.bounds();
-        let offset = self.scroll.offset();
-        let margin = px(4.0);
-        let dy = if bounds.bottom() > viewport.bottom() - margin
-            || bounds.size.height > viewport.size.height - margin * 2.0
-        {
-            viewport.bottom() - margin - bounds.bottom()
-        } else if bounds.top() < viewport.top() + margin {
-            viewport.top() + margin - bounds.top()
-        } else {
-            px(0.0)
-        };
-        if dy != px(0.0) {
-            self.scroll.set_offset(point(
-                offset.x,
-                (offset.y + dy).clamp(-self.scroll.max_offset().height, px(0.0)),
-            ));
-        }
-    }
-
-    fn reset(&self) {
-        self.scroll.set_offset(point(px(0.0), px(0.0)));
-        for target in self.targets.borrow().iter() {
-            target.bounds.set(None);
-        }
-    }
-
-    #[cfg(test)]
-    fn focused_index(&self, window: &Window, cx: &App) -> Option<usize> {
-        self.targets
-            .borrow()
-            .iter()
-            .position(|target| target.focus.contains_focused(window, cx))
-    }
-}
-
+/// Stable keyboard focus targets for prompts and export overlays.
 pub(crate) struct ModalFocus {
     prompt_cancel: FocusHandle,
     prompt_deny: FocusHandle,
@@ -345,9 +262,6 @@ pub(crate) struct ModalFocus {
     export_options: Vec<FocusHandle>,
     export_cancel: FocusHandle,
     export_confirm: FocusHandle,
-    song_sheet: FocusHandle,
-    song_sheet_last: FocusHandle,
-    song_sheet_scroll: ModalScrollFocus,
 }
 
 impl ModalFocus {
@@ -355,7 +269,6 @@ impl ModalFocus {
 
     fn new(cx: &mut App) -> Self {
         let stop = |cx: &mut App| cx.focus_handle().tab_stop(true);
-        let group = |cx: &mut App| cx.focus_handle().tab_index(0).tab_stop(false);
         Self {
             prompt_cancel: stop(cx),
             prompt_deny: stop(cx),
@@ -363,9 +276,6 @@ impl ModalFocus {
             export_options: (0..Self::EXPORT_OPTION_COUNT).map(|_| stop(cx)).collect(),
             export_cancel: stop(cx),
             export_confirm: stop(cx),
-            song_sheet: group(cx),
-            song_sheet_last: stop(cx),
-            song_sheet_scroll: ModalScrollFocus::new(),
         }
     }
 
@@ -393,39 +303,6 @@ impl ModalFocus {
         &self.export_confirm
     }
 
-    pub(crate) fn song_sheet(&self) -> &FocusHandle {
-        &self.song_sheet
-    }
-
-    pub(crate) fn song_sheet_last(&self) -> &FocusHandle {
-        &self.song_sheet_last
-    }
-
-    pub(crate) fn song_sheet_scroll(&self) -> &ScrollHandle {
-        &self.song_sheet_scroll.scroll
-    }
-
-    pub(crate) fn song_sheet_reveal_target(
-        &self,
-        index: usize,
-        cx: &mut App,
-    ) -> (FocusHandle, Rc<Cell<Option<Bounds<Pixels>>>>) {
-        self.song_sheet_scroll.target(index, cx)
-    }
-
-    pub(crate) fn reveal_song_sheet_focus(&self, window: &mut Window, cx: &mut App) {
-        self.song_sheet_scroll.reveal_focused(window, cx);
-    }
-
-    pub(crate) fn reset_song_sheet_scroll(&self) {
-        self.song_sheet_scroll.reset();
-    }
-
-    #[cfg(test)]
-    pub(crate) fn song_sheet_reveal_index(&self, window: &Window, cx: &App) -> Option<usize> {
-        self.song_sheet_scroll.focused_index(window, cx)
-    }
-
     pub(crate) fn prompt_contains_focused(&self, window: &Window) -> bool {
         self.prompt_cancel.is_focused(window)
             || self.prompt_deny.is_focused(window)
@@ -440,14 +317,8 @@ impl ModalFocus {
             || self.export_confirm.is_focused(window)
     }
 
-    pub(crate) fn song_sheet_contains_focused(&self, window: &Window, cx: &App) -> bool {
-        self.song_sheet.contains_focused(window, cx)
-    }
-
-    fn contains_focused(&self, window: &Window, cx: &App) -> bool {
-        self.prompt_contains_focused(window)
-            || self.export_contains_focused(window)
-            || self.song_sheet_contains_focused(window, cx)
+    fn contains_focused(&self, window: &Window, _cx: &App) -> bool {
+        self.prompt_contains_focused(window) || self.export_contains_focused(window)
     }
 }
 
@@ -784,25 +655,6 @@ pub enum Drag {
         /// pointer.
         grab_offset: Ticks,
     },
-    /// Turning one of the song sheet's dials.
-    ///
-    /// Separate from every other dial drag because nothing is being edited: the sheet is not the
-    /// document, so this writes no undo step and rebuilds no graph.
-    SongPad {
-        /// Whether the pad controls harmony and rhythm rather than brightness and energy.
-        detail: bool,
-        /// Musical area used to normalize both pointer coordinates.
-        bounds: gpui::Bounds<Pixels>,
-    },
-    /// Turning a song field.
-    SongDial {
-        /// Which dial, and which part it belongs to when it belongs to one.
-        target: crate::ui::compose_sheet::DialTarget,
-        /// Where the bar was when the drag began, from 0 to 1.
-        start_fraction: f32,
-        /// Pointer x when the drag began.
-        start_x: Pixels,
-    },
     /// Turning one of a generated clip's dials.
     ///
     /// Separate from [`Drag::Param`] because a recipe is not a plugin parameter: there is no
@@ -987,10 +839,7 @@ impl Drag {
             Drag::PerformDial { clip, .. } | Drag::VolumeContourPoint { clip, .. } => {
                 Some(Edit::SetClipTransforms(*clip))
             }
-            // A dial on the song sheet turns nothing in the document: the sheet is a question
-            // about a song that has not been written yet, and nothing it does belongs on the
             // undo stack until Write is pressed.
-            Drag::SongDial { .. } | Drag::SongPad { .. } => None,
             Drag::Tempo { at, .. } => Some(Edit::ChangeTempo(*at)),
             // Selecting is not an edit; it changes what a later edit will act on.
             Drag::RubberBand { .. } => None,
@@ -1519,8 +1368,10 @@ pub(crate) struct DiskWatchTaskState {
     pub(crate) cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
-/// One project window, its session and its editing state.
+/// One project tab, its session and its editing state.
 pub struct AurisApp {
+    pub(crate) project_tabs: Option<gpui::WeakEntity<crate::project_tabs::ProjectTabs>>,
+    pub(crate) tab_bar_height: Pixels,
     pub(crate) pending_audition: Option<crate::project_windows::AuditionRequest>,
     pub(crate) opening_project: Option<std::path::PathBuf>,
     pub(crate) project_chooser: Option<crate::ui::project_chooser::ProjectChooser>,
@@ -1529,6 +1380,7 @@ pub struct AurisApp {
     pub(crate) welcome_transition: Option<crate::ui::project_chooser::WelcomeTransition>,
     pub(crate) song_workshop: Option<crate::ui::song_workshop::SongWorkshop>,
     pub(crate) attachment_preview: Option<crate::ui::attachment_preview::AttachmentPreview>,
+    pub(crate) inline_attachments: Vec<crate::ui::attachment_preview::AttachmentPreview>,
     pub(crate) project_window: Option<gpui::WindowId>,
     /// The document, the engine and every command that touches them.
     pub(crate) session: Session,
@@ -1645,35 +1497,6 @@ pub struct AurisApp {
     pub(crate) timbre_map: crate::ui::timbre_map::TimbreMapState,
     /// Invalidates results started before a voice or its connection settings changed.
     pub(crate) sung_preview_generation: u64,
-    /// The song sheet's dials while it is open, and nothing when it is not.
-    ///
-    /// State of the sheet rather than of the document: nothing here has been written until Write
-    /// is pressed, which is what lets a whole song be set up and then thrown away.
-    pub(crate) song_sheet: Option<crate::ui::compose_sheet::SongDials>,
-    pub(crate) song_preview: crate::ui::compose_sheet::preview::SongPreviewState,
-    pub(crate) audio_player_drag: Option<crate::ui::audio_player::PlayerDrag>,
-    /// Modal progress while a song is written, prepared and balanced.
-    pub(crate) compose_progress: Option<crate::ui::compose_progress::ComposeProgressState>,
-    /// Independent composition-search settings, worker control, and exact retained result.
-    pub(crate) composition_search: crate::ui::song_search::CompositionSearchState,
-    /// The library browser currently choosing a song part's source.
-    pub(crate) song_library: Option<crate::ui::library::SongLibrary>,
-    /// Fonts browsed while composing, without adding assets to the current document.
-    pub(crate) song_library_fonts: Vec<crate::ui::library::SongLibraryFont>,
-    /// Whether the song sheet shows its individual technical controls.
-    pub(crate) song_advanced: bool,
-    /// The lyrics box on that sheet holding the keyboard, when one does.
-    ///
-    /// Also sheet state: it edits `song_sheet`'s sections in place, keystroke by keystroke,
-    /// and putting the keyboard down commits nothing because nothing is left uncommitted.
-    pub(crate) lyrics_edit: Option<crate::ui::compose_sheet::LyricsEdit>,
-    /// A newly focused lyrics editor to reveal after its expanded bounds are measured.
-    pub(crate) song_lyrics_reveal: Option<String>,
-    /// The progressions this installation has been taught, beside the ones it shipped with.
-    ///
-    /// Loaded once and held, because every chart picker lists it and reading a file per frame to
-    /// draw a menu would be absurd. Written the moment one is kept.
-    pub(crate) progressions: auris_session::progressions::ProgressionBook,
     /// Drum maps remembered per sound source and copied into each project that uses them.
     pub(crate) drum_maps: auris_session::DrumMapBook,
     /// Installation-wide saved sounds offered by the library.
@@ -1687,6 +1510,13 @@ pub struct AurisApp {
     pub(crate) note_selection_preview: Option<auris_session::NoteSelectionPreview>,
     /// Keyboard focus target, so the action bindings reach this view.
     pub(crate) focus: FocusHandle,
+    /// Focus target owned by the contextual-menu overlay while it is open.
+    ///
+    /// Keeping this separate from the document root lets a menu command move focus to another
+    /// pane without the overlay teardown mistaking that intentional move for a lost menu focus.
+    pub(crate) menu_focus: FocusHandle,
+    /// A menu's activation release, which must not press the control that regains focus.
+    pub(crate) menu_activation: Option<(gpui::WindowId, String)>,
     /// Window whose transport consumed Space, so its release cannot also click a button.
     pub(crate) transport_space_window: Option<gpui::WindowId>,
     /// Stable, focus-trapped keyboard targets for the controls in modal overlays.
@@ -1697,6 +1527,7 @@ pub struct AurisApp {
     pub(crate) last_pane: Pane,
     /// Window height as of the last frame, used only as a fallback before the first paint.
     pub(crate) viewport_height: Pixels,
+    pub(crate) transport_height: Pixels,
     /// Width of the arrangement body as of the last frame.
     pub(crate) arrangement_width: Pixels,
     /// Rectangles the canvases were painted into last frame.
@@ -1729,8 +1560,12 @@ pub struct AurisApp {
     pub(crate) menu_bar_scroll: gpui::ScrollHandle,
     /// The open right-click menu, if any.
     pub(crate) menu: Option<ContextMenu>,
+    /// Trigger focus restored after a contextual menu releases the keyboard.
+    pub(crate) menu_focus_return: Option<gpui::FocusHandle>,
     /// Which menu-bar menu is open, on the platforms that draw their own bar.
     pub(crate) menu_bar: Option<OpenMenu>,
+    /// Painted bounds of pinned menu categories in the current project title bar.
+    pub(crate) menu_title_bounds: crate::ui::menu_bar::MenuTitleBounds,
     /// The open rename sheet, if any.
     pub(crate) prompt: Option<Prompt>,
     /// Background release check, verified download, or an update awaiting application.
@@ -1781,7 +1616,7 @@ pub struct AurisApp {
     pub(crate) plugin_discovery_error: Option<String>,
     /// The singer voices found on this machine, scanned once and kept — the
     /// [`Self::clap_files`] arrangement, cleared when a voice folder is added or forgotten.
-    pub(crate) voices: Option<Vec<(String, std::path::PathBuf)>>,
+    pub(crate) voices: Option<Vec<(String, std::path::PathBuf, Option<String>)>>,
     /// Bounded metadata returned after an opened `.clap` file is inspected in a child process.
     /// Empty results are cached too, so a broken plugin is not retried on every repaint.
     pub(crate) clap_contents:
@@ -1870,6 +1705,8 @@ pub struct AurisApp {
     pub(crate) pointer: PointerGestures,
     /// The settings window, while it is open.
     pub(crate) settings_window: Option<WindowHandle<SettingsWindow>>,
+    pub(crate) issue_report_window:
+        Option<WindowHandle<crate::issue_report_window::IssueReportWindow>>,
     /// The rhythm editor; invalidated when the document is replaced.
     pub(crate) rhythm_window: Option<WindowHandle<crate::ui::rhythm_grid::RhythmWindow>>,
     /// The external singing-backend setup window, while it is open.
@@ -1954,7 +1791,6 @@ impl Drop for AurisApp {
         self.drum_analysis.reset();
         self.music_analysis.cancel();
         self.timbre_map.cancel();
-        self.composition_search.dismiss();
         self.session.stop_output_preview();
     }
 }
@@ -2074,7 +1910,6 @@ impl AurisApp {
                                 this.language,
                             ));
                         }
-                        this.poll_song_search();
                         // Here rather than while drawing, and here rather than in `poll`: the
                         // input peak is destroyed by being read, so it has to be read exactly
                         // once, on a tick of a known length, by the one thing that shows it.
@@ -2087,17 +1922,13 @@ impl AurisApp {
                         // to disk. A success says nothing: it is a private recovery snapshot, and
                         // announcing one every half minute would drown out useful status. A
                         // failure is worth the interruption.
-                        if this.compose_progress.is_none() {
-                            this.poll_autosave_task(cx);
-                            // Composing adopts the score and its measured faders as one edit.
-                            // Other document writers wait until both halves have finished.
-                            this.watch_disk(cx);
-                            this.drain_agent(cx);
-                            this.poll_auto_sing(cx);
-                            this.poll_drum_analysis(cx);
-                            this.poll_sung_preview(cx);
-                            this.reconcile_chord_preview();
-                        }
+
+                        this.poll_autosave_task(cx);
+                        this.watch_disk(cx);
+                        this.drain_agent(cx);
+                        this.poll_auto_sing(cx);
+                        this.poll_drum_analysis(cx);
+                        this.poll_sung_preview(cx);
                         // Also here rather than in a command, because a monitor breaking up
                         // happens *between* commands: without this the only evidence is a noise
                         // the person playing is left to interpret.
@@ -2138,7 +1969,10 @@ impl AurisApp {
             welcome_transition: None,
             song_workshop: None,
             attachment_preview: None,
+            inline_attachments: Vec::new(),
             project_window: None,
+            project_tabs: None,
+            tab_bar_height: px(0.0),
             session,
             theme,
             appearance,
@@ -2190,28 +2024,20 @@ impl AurisApp {
             sung_preview_generation: 0,
             sung_geometry: std::collections::HashMap::new(),
             sung_geometry_revision: 0,
-            song_sheet: None,
-            song_preview: Default::default(),
-            audio_player_drag: None,
-            compose_progress: None,
-            composition_search: Default::default(),
-            song_library: None,
-            song_library_fonts: Vec::new(),
-            song_advanced: false,
-            lyrics_edit: None,
-            song_lyrics_reveal: None,
-            progressions: auris_session::progressions::ProgressionBook::load(),
             drum_maps: auris_session::DrumMapBook::load(),
             sounds,
             sound_library_error,
             auditioning: None,
             note_selection_preview: None,
             focus: cx.focus_handle(),
+            menu_focus: cx.focus_handle(),
+            menu_activation: None,
             transport_space_window: None,
             modal_focus: ModalFocus::new(cx),
             panes: PaneFocus::new(cx),
             last_pane: Pane::Arrangement,
             viewport_height: px(900.0),
+            transport_height: Metrics::TRANSPORT_HEIGHT,
             arrangement_width: px(900.0),
             canvas: CanvasBounds::default(),
             mixer_scroll: gpui::ScrollHandle::new(),
@@ -2224,7 +2050,9 @@ impl AurisApp {
             log_scroll: gpui::ScrollHandle::new(),
             menu_bar_scroll: gpui::ScrollHandle::new(),
             menu: None,
+            menu_focus_return: None,
             menu_bar: None,
+            menu_title_bounds: Default::default(),
             prompt: None,
             update_phase: crate::ui::updates::UpdatePhase::Idle,
             update_generation: 0,
@@ -2276,6 +2104,7 @@ impl AurisApp {
             pointer: input.pointer,
             keymap,
             settings_window: None,
+            issue_report_window: None,
             rhythm_window: None,
             clicked_key: None,
             _repaint: repaint,
@@ -2317,15 +2146,11 @@ impl AurisApp {
     /// it. Each overlay handles Escape itself, since the binding that used to close them is one of
     /// the ones now out of reach.
     pub(crate) fn keys_are_claimed(&self) -> bool {
-        self.compose_progress.is_some()
-            || self.export_dialog.is_some()
+        self.export_dialog.is_some()
             || self.export.is_some()
             || self.taking_text_input()
             || self.menu.is_some()
             || self.menu_bar.is_some()
-            // The song sheet is a form, and every letter typed into one of its fields has to
-            // reach the field rather than the binding that letter would otherwise fire.
-            || self.song_sheet.is_some()
     }
 
     /// Whether text is being typed into something in this window.
@@ -2343,9 +2168,8 @@ impl AurisApp {
     pub(crate) fn taking_text_input(&self) -> bool {
         self.prompt.is_some()
             || self.palette.is_some()
-            || self.lyrics_edit.is_some()
-            || self.song_library.is_some()
             || self.library_search_focused
+            || (self.timbre_map.open && self.timbre_map.search_focused)
             || self.agent_chat.typing()
     }
 
@@ -2455,14 +2279,6 @@ impl AurisApp {
     /// Reconciled here rather than at each of the dozen places a sheet opens, most of which have
     /// no window to hand — and this way it is right again after any path that misses.
     pub(crate) fn reconcile_focus(&mut self, window: &mut Window, cx: &App) {
-        // A busy modal owns the root even when there was no editable sheet underneath it.
-        // Keeping focus here also removes pane action handlers from native menu dispatch.
-        if self.compose_progress.is_some() {
-            if !self.focus.is_focused(window) {
-                window.focus(&self.focus);
-            }
-            return;
-        }
         if self.export.is_some() {
             // The progress/result sheet has exactly one action. Move focus off the export
             // dialog's former Confirm button so Cancel/Close is reachable immediately.
@@ -2487,17 +2303,18 @@ impl AurisApp {
             }
             return;
         }
-        if self.song_sheet.is_some()
-            && self.lyrics_edit.is_none()
-            && self.prompt.is_none()
-            && self.palette.is_none()
-            && self.song_library.is_none()
+        if self
+            .prompt
+            .as_ref()
+            .and_then(crate::ui::prompt::Prompt::feedback_focus_handles)
+            .is_some_and(|foci| {
+                foci.iter().any(|focus| focus.is_focused(window))
+                    || self.modal_focus.prompt_contains_focused(window)
+            })
         {
-            if !self.modal_focus.song_sheet_contains_focused(window, cx) {
-                window.focus(self.modal_focus.song_sheet());
-            }
             return;
         }
+
         // A dock switch can hide a field without clicking another pane. Hidden fields must not
         // keep taking input, and a hidden pane is no longer a place to restore the keyboard to.
         if !self.panels.is_open(Panel::Library) {
@@ -3195,14 +3012,17 @@ impl AurisApp {
         self.status_failed = true;
     }
 
+    /// The document name shown in the application title bar.
+    ///
+    /// Window chrome owns the product name and save marker separately; keeping this value
+    /// document-only lets Atelier centre the title without duplicating application branding.
+    pub(crate) fn document_title(&self) -> String {
+        self.session.document_title()
+    }
+
     /// Window title, marking unsaved changes the way every editor does.
     pub(crate) fn window_title(&self) -> String {
-        let name = self
-            .session
-            .path()
-            .and_then(|path| path.file_stem())
-            .map(|stem| stem.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.project().name.clone());
+        let name = self.document_title();
         if self.session.is_dirty() {
             format!("{name} • Auris Studio")
         } else {
@@ -3239,6 +3059,7 @@ impl AurisApp {
     pub(crate) fn apply_language(&mut self, preference: Option<Language>, cx: &mut App) {
         self.settings.language = preference;
         self.language = self.settings.language();
+        crate::install_component_language(self.language, cx);
         if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
@@ -3301,6 +3122,9 @@ impl AurisApp {
         appearance: Appearance,
         cx: &mut App,
     ) -> std::io::Result<()> {
+        if self.appearance.titlebar_menus != appearance.titlebar_menus {
+            self.close_menu_bar();
+        }
         self.appearance = appearance.normalised();
         self.theme = self.appearance.theme();
         self.theme.install(cx);
@@ -3587,19 +3411,9 @@ impl AurisApp {
         self.remember_layout();
     }
 
-    /// Fixed rows stacked above and below the central row: the transport, the status bar, and —
-    /// everywhere the application draws its own menu bar — that row too.
-    ///
-    /// One answer for both `resize_dock` and `drawn_dock_sizes`, because they have to subtract
-    /// the same chrome the layout actually stacks: the menu bar was once left out of both, and
-    /// on Windows a bottom dock dragged to its limit overflowed the window by exactly the 26
-    /// pixels the two forgot — a mistake macOS, where development happens, never showed.
-    pub(crate) fn chrome_height() -> Pixels {
-        let menu = match Self::wants_menu_bar() {
-            true => crate::ui::menu_bar::HEIGHT,
-            false => gpui::px(0.0),
-        };
-        crate::titlebar::HEIGHT + Metrics::TRANSPORT_HEIGHT + Metrics::STATUS_HEIGHT + menu
+    /// Chrome reserved around the docks, including responsive transport controls.
+    pub(crate) fn chrome_height(&self) -> Pixels {
+        crate::titlebar::HEIGHT + self.transport_height + Metrics::STATUS_HEIGHT
     }
 
     /// Applies a dock resize drag.
@@ -3609,7 +3423,10 @@ impl AurisApp {
         // hit tests are measuring the same thing.
         let available = match dock {
             Dock::Bottom => {
-                self.viewport_height - Self::chrome_height() - PanelLayout::MIN_ARRANGEMENT
+                self.viewport_height
+                    - self.chrome_height()
+                    - self.project_tabs_height()
+                    - PanelLayout::MIN_ARRANGEMENT
             }
             Dock::Left | Dock::Right => {
                 start_size + self.arrangement_width - PanelLayout::MIN_ARRANGEMENT_WIDTH
@@ -3667,7 +3484,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() - Metrics::STATUS_HEIGHT
+                    self.chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT
                         + self.panels.lanes.header_height(),
                 )
             },
@@ -3681,7 +3498,7 @@ impl AurisApp {
             || {
                 point(
                     self.left_dock_offset() + self.panels.header_width,
-                    Self::chrome_height() - Metrics::STATUS_HEIGHT,
+                    self.chrome_height() + self.project_tabs_height() - Metrics::STATUS_HEIGHT,
                 )
             },
             |bounds| bounds.origin,

@@ -1,38 +1,97 @@
 //! Library timbre exploration with a background session job and explicit adoption.
 
-use crate::{app::AurisApp, theme::Theme};
-use atelier::plot::Plot3d;
+use crate::app::AurisApp;
+use atelier::plot::{Plot3d, PlotPoint};
 use atelier::{
     Button, ButtonVariant, Card, ControlSize, EmptyState, IconName, Label, ListItem, ProgressBar,
     SectionHeader, Segment, SegmentedControl, StatusBar, TextColor, TextSize,
 };
 use auris_agent::timbre_names::{ClusterName, TimbreNamer};
 use auris_i18n::Key;
-use auris_session::{SoundIcon, TimbreMap, TimbreMapControl, TimbreSound, prelude::*};
+use auris_session::{
+    SoundIcon, TimbreMap, TimbreMapControl, TimbreSound, TimbreTargets, prelude::*,
+};
 use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
 #[path = "timbre_plot.rs"]
 mod plot;
-use plot::{TimbreCamera, plot_data};
+use plot::{TimbreView, plot_data};
+
+/// A library row's note of the timbre cluster its sound belongs to.
+pub(crate) struct TimbreClusterTag {
+    /// The cluster's colour, the same in the map, its legend and the library.
+    pub color: gpui::Hsla,
+    /// The cluster's name.
+    pub name: String,
+    /// Whether "Name with AI" wrote the name, so it carries the agent's mark.
+    pub by_ai: bool,
+}
+
+/// A cluster's name in small muted text. The agent's mark follows it when the agent wrote it,
+/// so an AI name reads as one wherever it appears: legend, list or library. The rows that show
+/// it carry their own tooltip, which says who named it, so the label takes none of its own.
+pub(crate) fn cluster_label(name: impl Into<SharedString>, by_ai: bool) -> AnyElement {
+    let name = name.into();
+    if by_ai {
+        atelier::agent::AgentLabel::new(name)
+            .size(TextSize::XSmall)
+            .color(TextColor::Muted)
+            .into_any_element()
+    } else {
+        Label::new(name)
+            .size(TextSize::XSmall)
+            .color(TextColor::Muted)
+            .into_any_element()
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct TimbreMapState {
     pub(crate) open: bool,
-    camera: TimbreCamera,
+    camera: TimbreView,
     hovered: Option<usize>,
     list_nearest: bool,
+    character_axes: bool,
+    pub(crate) search: super::text_field::TextField,
+    pub(crate) search_focused: bool,
     pub(crate) map: Option<Arc<TimbreMap>>,
     pub(crate) control: Option<TimbreMapControl>,
     generation: u64,
     total: usize,
     selected: Option<usize>,
-    preview_track: Option<TrackId>,
+    preview: TimbrePreview,
     error: Option<String>,
     names: Vec<ClusterName>,
     namer: Option<TimbreNamer>,
     naming_generation: u64,
     naming_error: Option<String>,
     editing_icon: bool,
+}
+
+#[derive(Default)]
+struct TimbrePreview {
+    serial: u64,
+    control: Option<TimbreMapControl>,
+    status: Option<auris_session::OutputPreviewStatus>,
+    pitch: Option<u8>,
+}
+
+impl TimbrePreview {
+    fn stop(&mut self) {
+        self.serial = self.serial.wrapping_add(1);
+        if let Some(control) = self.control.take() {
+            control.cancel();
+        }
+        if let Some(status) = self.status.take() {
+            status.stop();
+        }
+    }
+}
+
+impl Drop for TimbrePreview {
+    fn drop(&mut self) {
+        self.stop();
+    }
 }
 
 impl TimbreMapState {
@@ -42,9 +101,12 @@ impl TimbreMapState {
         self.names.clear();
         self.naming_error = None;
         self.editing_icon = false;
+        self.search = Default::default();
+        self.search_focused = false;
     }
 
     pub(crate) fn cancel(&mut self) {
+        self.preview.stop();
         if let Some(control) = self.control.take() {
             control.cancel();
         }
@@ -70,8 +132,9 @@ impl TimbreMapState {
     }
 }
 
-fn cluster_color(cluster: usize, theme: &Theme) -> gpui::Hsla {
-    theme.group_color(cluster as f32 * 0.618_034)
+fn pick_source_index(series: &[Vec<usize>], point: Option<PlotPoint>) -> Option<usize> {
+    let point = point?;
+    series.get(point.series)?.get(point.index).copied()
 }
 
 fn sound_icon_label(icon: SoundIcon) -> Key {
@@ -94,6 +157,118 @@ fn sound_icon_label(icon: SoundIcon) -> Key {
 }
 
 impl AurisApp {
+    fn render_timbre_search(&self, cx: &mut Context<Self>) -> AnyElement {
+        let state = &self.timbre_map;
+        let theme = self.theme.clone();
+        let field = div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .child(if state.search_focused {
+                super::prompt::editable_text(
+                    state.search.content().to_owned().into(),
+                    state.search.selection(),
+                    state.search.marked(),
+                    self.focus.clone(),
+                    cx.entity(),
+                    theme.clone(),
+                )
+                .into_any_element()
+            } else {
+                super::prompt::field_text(state.search.content().to_owned(), theme.text)
+                    .into_any_element()
+            })
+            .when(state.search.content().is_empty(), |field| {
+                field.child(
+                    super::prompt::field_text(
+                        self.t(Key::TimbreSearchPlaceholder),
+                        theme.text_muted,
+                    )
+                    .absolute()
+                    .inset_0(),
+                )
+            });
+        div()
+            .flex()
+            .items_center()
+            .gap(theme.atelier.spacing.xs)
+            .child(
+                Button::new("timbre-search-focus", self.t(Key::TimbreSearch))
+                    .ghost()
+                    .size(ControlSize::Small)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.agent_chat.focused = None;
+                        this.library_search_focused = false;
+                        this.timbre_map.search_focused = true;
+                        window.focus(&this.focus);
+                        cx.notify();
+                    })),
+            )
+            .child(
+                div()
+                    .id("timbre-search-field")
+                    .debug_selector(|| "timbre-search-field".into())
+                    .flex()
+                    .flex_1()
+                    .min_w_0()
+                    .h_6()
+                    .rounded(theme.atelier.shape.radius_sm)
+                    .bg(theme.atelier.colors.sunken)
+                    .border_1()
+                    .border_color(if state.search_focused {
+                        theme.atelier.colors.accent
+                    } else {
+                        theme.border_subtle
+                    })
+                    .cursor_text()
+                    .child(field)
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, window, cx| {
+                            this.agent_chat.focused = None;
+                            this.library_search_focused = false;
+                            this.timbre_map.search_focused = true;
+                            window.focus(&this.focus);
+                            cx.notify();
+                        }),
+                    ),
+            )
+            .when(!state.search.content().is_empty(), |row| {
+                row.child(
+                    Button::new("timbre-search-clear", self.t(Key::TimbreSearchClear))
+                        .ghost()
+                        .size(ControlSize::Small)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.timbre_map.search = Default::default();
+                            this.timbre_map.search_focused = false;
+                            cx.notify();
+                        })),
+                )
+            })
+            .into_any_element()
+    }
+
+    pub(crate) fn timbre_search_key(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let key = event.keystroke.key.as_str();
+        if self.timbre_map.search.marked().is_none() && matches!(key, "escape" | "enter" | "tab") {
+            self.timbre_map.search_focused = false;
+            cx.notify();
+            return key != "tab";
+        }
+        self.timbre_map.search.apply_key_with_clipboard(
+            key,
+            event.keystroke.modifiers.shift,
+            event.keystroke.modifiers.secondary(),
+            false,
+            cx,
+        ) != super::text_field::KeyEffect::Ignored
+    }
+
     /// Manual corrections win over name hints, then cluster suggestions fill unknown families.
     pub(crate) fn library_sound_icon(
         &self,
@@ -267,21 +442,28 @@ impl AurisApp {
             .unwrap_or_default()
     }
 
+    /// Whether the cluster's name is one "Name with AI" wrote, which is drawn with the agent's
+    /// mark wherever it appears. The fallback, a representative sound's name, is nobody's.
+    fn timbre_cluster_named_by_ai(&self, cluster: usize) -> bool {
+        self.timbre_map.names.iter().any(|name| name.id == cluster)
+    }
+
     /// Cluster annotation for an exact measured library choice, shared by tree and search rows.
     pub(crate) fn library_timbre_cluster(
         &self,
         instrument_id: &str,
         preset: Option<PresetRef>,
-    ) -> Option<(gpui::Hsla, String)> {
+    ) -> Option<TimbreClusterTag> {
         let cluster = self
             .timbre_map
             .map
             .as_ref()?
             .cluster_for(instrument_id, preset)?;
-        Some((
-            cluster_color(cluster, &self.theme),
-            self.timbre_cluster_name(cluster),
-        ))
+        Some(TimbreClusterTag {
+            color: self.theme.atelier.categorical(cluster),
+            name: self.timbre_cluster_name(cluster),
+            by_ai: self.timbre_cluster_named_by_ai(cluster),
+        })
     }
 
     fn name_timbre_clusters(&mut self, cx: &mut Context<Self>) {
@@ -342,14 +524,13 @@ impl AurisApp {
     }
 
     pub(crate) fn close_timbre_map(&mut self) {
+        self.timbre_map.search_focused = false;
         self.timbre_map.cancel();
         self.timbre_map.open = false;
-        if let Some(track) = self.timbre_map.preview_track.take() {
-            self.session.stop_singer_preview(track);
-        }
     }
 
     pub(crate) fn scan_timbre_map(&mut self, cx: &mut Context<Self>) {
+        self.timbre_map.search_focused = false;
         self.timbre_map.cancel();
         self.timbre_map.selected = None;
         self.timbre_map.editing_icon = false;
@@ -357,9 +538,7 @@ impl AurisApp {
         self.timbre_map.error = None;
         self.timbre_map.names.clear();
         self.timbre_map.naming_error = None;
-        if let Some(track) = self.timbre_map.preview_track.take() {
-            self.session.stop_singer_preview(track);
-        }
+        self.timbre_map.preview.pitch = None;
         self.timbre_map.map = None;
         let job = match self.session.timbre_map_job() {
             Ok(job) => job,
@@ -413,7 +592,8 @@ impl AurisApp {
         .detach();
     }
 
-    fn select_timbre(&mut self, index: usize) {
+    fn select_timbre(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.timbre_map.search_focused = false;
         let Some(map) = self.timbre_map.map.clone() else {
             return;
         };
@@ -423,17 +603,150 @@ impl AurisApp {
         self.timbre_map.selected = Some(index);
         self.timbre_map.editing_icon = false;
         self.timbre_map.error = None;
-        if let Some(track) = self.timbre_map.preview_track.take() {
-            self.session.stop_singer_preview(track);
+        self.preview_timbre_note(60, cx);
+    }
+
+    fn preview_timbre_note(&mut self, pitch: u8, cx: &mut Context<Self>) {
+        self.timbre_map.preview.stop();
+        if !self.acquire_audio(cx) {
+            return;
         }
-        if let Some(track) = self.session.audition_track(self.selected_track) {
-            match self.session.preview_timbre(&map, index, track) {
-                Ok(()) => self.timbre_map.preview_track = Some(track),
-                Err(e) => self.timbre_map.error = Some(e.to_string()),
+        let Some((map, index)) = self.timbre_map.map.as_ref().zip(self.timbre_map.selected) else {
+            return;
+        };
+        let job = match self.session.timbre_preview_job(map, index, pitch) {
+            Ok(job) => job,
+            Err(error) => {
+                self.timbre_map.error = Some(error.to_string());
+                return;
             }
-        } else {
-            self.timbre_map.error = Some(self.t(Key::LibraryNeedsInstrumentTrack).into());
-        }
+        };
+        let control = TimbreMapControl::default();
+        self.timbre_map.preview.control = Some(control.clone());
+        self.timbre_map.preview.pitch = Some(pitch);
+        self.timbre_map.error = None;
+        let serial = self.timbre_map.preview.serial;
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { job.run(&control) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if this.timbre_map.preview.serial != serial || !this.timbre_map.open {
+                    return;
+                }
+                this.timbre_map.preview.control = None;
+                if this.session.audio_suspended() {
+                    cx.notify();
+                    return;
+                }
+                match result.and_then(|audio| {
+                    if this.session.is_recording() {
+                        return Err(auris_session::SessionError::RecordingInProgress);
+                    }
+                    this.session.play_output_preview(audio)
+                }) {
+                    Ok(status) => this.timbre_map.preview.status = Some(status),
+                    Err(error) => this.timbre_map.error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn render_timbre_keyboard(&self, cx: &mut Context<Self>) -> AnyElement {
+        let spacing = self.theme.atelier.spacing;
+        let enabled = self.timbre_map.selected.is_some();
+        let note = |pitch, label: &'static str, cx: &mut Context<Self>| {
+            Button::new(SharedString::from(format!("timbre-key-{pitch}")), label)
+                .size(ControlSize::Small)
+                .full_width()
+                .selected(self.timbre_map.preview.pitch == Some(pitch))
+                .disabled(!enabled)
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.preview_timbre_note(pitch, cx);
+                    cx.notify();
+                }))
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(spacing.sm)
+            .flex_shrink_0()
+            .child(Label::new(self.t(Key::TimbreMapKeyboard)).size(TextSize::Small))
+            .child(
+                div()
+                    .relative()
+                    .h(ControlSize::Small.height(&self.theme.atelier))
+                    .children(
+                        [
+                            (61, "C♯", 1.),
+                            (63, "D♯", 2.),
+                            (66, "F♯", 4.),
+                            (68, "G♯", 5.),
+                            (70, "A♯", 6.),
+                        ]
+                        .into_iter()
+                        .map(|(pitch, label, seam)| {
+                            div()
+                                .absolute()
+                                .left(gpui::relative((seam - 0.4) / 8.))
+                                .w(gpui::relative(0.8 / 8.))
+                                .child(note(pitch, label, cx))
+                        }),
+                    ),
+            )
+            .child(
+                div().flex().gap(spacing.xxs).children(
+                    [
+                        (60, "C4"),
+                        (62, "D"),
+                        (64, "E"),
+                        (65, "F"),
+                        (67, "G"),
+                        (69, "A"),
+                        (71, "B"),
+                        (72, "C5"),
+                    ]
+                    .into_iter()
+                    .map(|(pitch, label)| div().flex_1().min_w_0().child(note(pitch, label, cx))),
+                ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(spacing.sm)
+                    .child(
+                        Button::new("timbre-replay", self.t(Key::TimbreMapReplay))
+                            .size(ControlSize::Small)
+                            .disabled(!enabled)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.preview_timbre_note(60, cx);
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("timbre-stop", self.t(Key::TimbreMapStop))
+                            .size(ControlSize::Small)
+                            .ghost()
+                            .disabled(!enabled)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.timbre_map.preview.stop();
+                                cx.notify();
+                            })),
+                    )
+                    .when(self.timbre_map.preview.control.is_some(), |row| {
+                        row.child(
+                            Label::new(self.t(Key::TimbreMapPreparing))
+                                .size(TextSize::XSmall)
+                                .color(TextColor::Muted),
+                        )
+                    }),
+            )
+            .into_any_element()
     }
 
     fn attach_timbre_to_chat(&mut self) {
@@ -486,6 +799,7 @@ impl AurisApp {
         if !self.timbre_map.open {
             return None;
         }
+        let search_field = self.render_timbre_search(cx);
         let theme = &self.theme.atelier;
         let spacing = theme.spacing;
         let busy = self.timbre_map.control.is_some();
@@ -530,14 +844,76 @@ impl AurisApp {
                     self.t(Key::TimbreMapEmpty),
                 ));
             } else {
-                let (positions, extent) = plot_data(map.positions());
+                let character_positions = self
+                    .timbre_map
+                    .character_axes
+                    .then(|| map.character_positions());
+                let (positions, extent) = plot_data(
+                    character_positions
+                        .as_deref()
+                        .unwrap_or_else(|| map.positions()),
+                );
+                let query = self.timbre_map.search.content().trim();
+                let interpretation = (!query.is_empty())
+                    .then(|| TimbreTargets::interpret(query, &TimbreTargets::default()));
+                let search_results: Option<Vec<(usize, f64)>> =
+                    interpretation.as_ref().map(|result| match result {
+                        Ok((targets, _)) => map.search_character(targets),
+                        Err(error) if error.starts_with("No supported impression") => map
+                            .sounds
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, sound)| {
+                                query
+                                    .to_lowercase()
+                                    .split_whitespace()
+                                    .all(|word| sound.name.to_lowercase().contains(word))
+                            })
+                            .map(|(i, _)| (i, 0.))
+                            .collect(),
+                        Err(_) => Vec::new(),
+                    });
+                let search_message = match &interpretation {
+                    Some(Ok((_, words))) => format!(
+                        "{}: {}",
+                        self.t(Key::TimbreSearchInterpreted),
+                        words.join(" · ")
+                    ),
+                    Some(Err(error)) if !error.starts_with("No supported impression") => {
+                        self.t(Key::TimbreSearchUnsupported).to_owned()
+                    }
+                    _ => self.t(Key::TimbreSearchHint).to_owned(),
+                };
                 let neighbors = self
                     .timbre_map
                     .selected
                     .map(|i| map.nearest(i, 8))
                     .unwrap_or_default();
+                let cluster_ids: Vec<usize> = {
+                    let mut ids = map.clusters().to_vec();
+                    ids.sort_unstable();
+                    ids.dedup();
+                    ids
+                };
                 let mut plot = Plot3d::new()
-                    .labels("PC1", "PC2", "PC3")
+                    .id("timbre-plot-content")
+                    .labels(
+                        self.t(if self.timbre_map.character_axes {
+                            Key::TimbreAxisBrightness
+                        } else {
+                            Key::TimbreAxisPc1
+                        }),
+                        self.t(if self.timbre_map.character_axes {
+                            Key::TimbreAxisAttack
+                        } else {
+                            Key::TimbreAxisPc2
+                        }),
+                        self.t(if self.timbre_map.character_axes {
+                            Key::TimbreAxisSustain
+                        } else {
+                            Key::TimbreAxisPc3
+                        }),
+                    )
                     .x_range(-extent, extent)
                     .y_range(-extent, extent)
                     .z_range(-extent, extent)
@@ -545,16 +921,28 @@ impl AurisApp {
                         self.timbre_map.camera.azimuth,
                         self.timbre_map.camera.elevation,
                     );
-                for batch in
-                    self.timbre_map
-                        .camera
-                        .scatter_batches(map.clusters(), &positions, extent)
-                {
-                    let cluster = map.clusters()[batch[0]];
-                    let points = batch.into_iter().map(|i| positions[i]).collect();
-                    plot = plot.scatter(points, Some(cluster_color(cluster, &self.theme)));
+                // Plot3d numbers every scatter and curve call as a series. Keep the source
+                // indices alongside those calls so picking a highlight cannot be mistaken for
+                // an out-of-range cluster series.
+                let mut pick_sources: Vec<Vec<usize>> = Vec::new();
+                for cluster in cluster_ids.iter().copied() {
+                    let source_indices: Vec<usize> = map
+                        .clusters()
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, value)| (*value == cluster).then_some(i))
+                        .collect();
+                    let points = source_indices.iter().map(|i| positions[*i]).collect();
+                    plot = plot.scatter(points, Some(self.theme.atelier.categorical(cluster)));
+                    pick_sources.push(source_indices);
                 }
                 // Small three-axis crosses identify the selected source without relying on hue.
+                if let Some(results) = &search_results {
+                    for (i, _) in results.iter().take(8) {
+                        plot = plot.scatter(vec![positions[*i]], Some(theme.colors.accent));
+                        pick_sources.push(vec![*i]);
+                    }
+                }
                 if let Some(index) = self.timbre_map.selected {
                     for axis in 0..3 {
                         let mut a = positions[index];
@@ -562,14 +950,45 @@ impl AurisApp {
                         a[axis] -= extent * 0.035;
                         b[axis] += extent * 0.035;
                         plot = plot.curve(vec![a, b], Some(theme.colors.text));
+                        pick_sources.push(vec![index, index]);
                     }
                     for (i, _) in &neighbors {
                         plot = plot.scatter(vec![positions[*i]], Some(theme.colors.accent));
+                        pick_sources.push(vec![*i]);
                     }
                 }
-                let bounds = self.timbre_map.camera.bounds.clone();
-                let picking = positions.clone();
-                let hovering = positions;
+                let map_entity = cx.entity().downgrade();
+                let pick_sources = std::sync::Arc::new(pick_sources);
+                let pick_sounds = map.sounds.len();
+                plot = plot
+                    .on_pick(move |hit: &Option<PlotPoint>, _, app| {
+                        let Some(entity) = map_entity.upgrade() else {
+                            return;
+                        };
+                        let index =
+                            pick_source_index(&pick_sources, *hit).filter(|i| *i < pick_sounds);
+                        entity.update(app, |this, cx| {
+                            this.timbre_map.hovered = index;
+                            if let Some(index) = index {
+                                this.select_timbre(index, cx);
+                            }
+                            cx.notify();
+                        });
+                    })
+                    .on_orbit({
+                        let map_entity = cx.entity().downgrade();
+                        move |angles, _, app| {
+                            let Some(entity) = map_entity.upgrade() else {
+                                return;
+                            };
+                            entity.update(app, |this, cx| {
+                                this.timbre_map.camera.azimuth = angles.0;
+                                this.timbre_map.camera.elevation = angles.1;
+                                this.timbre_map.camera.preset = None;
+                                cx.notify();
+                            });
+                        }
+                    });
                 let mut well = div()
                     .id("timbre-plot")
                     .debug_selector(|| "timbre-plot".into())
@@ -580,68 +999,7 @@ impl AurisApp {
                     .rounded(theme.shape.radius_sm)
                     .bg(theme.colors.sunken)
                     .overflow_hidden()
-                    .cursor_grab()
-                    .on_mouse_down(
-                        gpui::MouseButton::Left,
-                        cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                            this.timbre_map.camera.press(event.position);
-                            cx.stop_propagation();
-                        }),
-                    )
-                    .on_mouse_move(
-                        cx.listener(move |this, event: &gpui::MouseMoveEvent, _, cx| {
-                            if this
-                                .timbre_map
-                                .camera
-                                .drag(event.position, event.dragging())
-                            {
-                                this.timbre_map.hovered = None;
-                                cx.notify();
-                            } else {
-                                let hovered =
-                                    this.timbre_map
-                                        .camera
-                                        .pick(&hovering, extent, event.position);
-                                if this.timbre_map.hovered != hovered {
-                                    this.timbre_map.hovered = hovered;
-                                    cx.notify();
-                                }
-                            }
-                        }),
-                    )
-                    .on_mouse_up(
-                        gpui::MouseButton::Left,
-                        cx.listener(move |this, event: &gpui::MouseUpEvent, _, cx| {
-                            if this.timbre_map.camera.release()
-                                && let Some(i) =
-                                    this.timbre_map
-                                        .camera
-                                        .pick(&picking, extent, event.position)
-                            {
-                                this.select_timbre(i);
-                                cx.notify();
-                            }
-                        }),
-                    )
-                    .on_mouse_up_out(
-                        gpui::MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            this.timbre_map.camera.release();
-                        }),
-                    )
-                    .child(plot)
-                    .child(
-                        gpui::canvas(
-                            move |rect, _, _| {
-                                bounds.set(rect);
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .size_full(),
-                    );
+                    .child(plot);
                 if let Some(index) = self.timbre_map.hovered.filter(|i| *i < map.sounds.len()) {
                     well = well.tooltip(crate::ui::tooltip::keyed_tip(
                         format!(
@@ -654,6 +1012,19 @@ impl AurisApp {
                     ));
                 }
                 let camera = &self.timbre_map.camera;
+                let axes = SegmentedControl::new(
+                    "timbre-axes",
+                    [
+                        Segment::label(self.t(Key::TimbreAxesSimilarity)),
+                        Segment::label(self.t(Key::TimbreAxesCharacter)),
+                    ],
+                    usize::from(self.timbre_map.character_axes),
+                )
+                .size(ControlSize::Small)
+                .on_select(cx.listener(|this, i: &usize, _, cx| {
+                    this.timbre_map.character_axes = *i == 1;
+                    cx.notify();
+                }));
                 let views = SegmentedControl::new(
                     "timbre-views",
                     [
@@ -722,6 +1093,16 @@ impl AurisApp {
                 for summary in map.cluster_summaries() {
                     let cluster = summary.id;
                     let name = self.timbre_cluster_name(cluster);
+                    let by_ai = self.timbre_cluster_named_by_ai(cluster);
+                    let tip = if by_ai {
+                        format!(
+                            "{name} · {}\n{}",
+                            self.t(Key::TimbreMapNamedByAi),
+                            summary.examples.join(" · ")
+                        )
+                    } else {
+                        format!("{name}\n{}", summary.examples.join(" · "))
+                    };
                     legend = legend.child(
                         div()
                             .id(SharedString::from(format!("timbre-cluster-{cluster}")))
@@ -729,11 +1110,7 @@ impl AurisApp {
                             .items_center()
                             .gap(spacing.xs)
                             .max_w(gpui::rems(15.))
-                            .tooltip(super::tooltip::keyed_tip(
-                                format!("{name}\n{}", summary.examples.join(" · ")),
-                                "",
-                                &self.theme,
-                            ))
+                            .tooltip(super::tooltip::keyed_tip(tip, "", &self.theme))
                             .child(
                                 atelier::Icon::new(atelier::IconSource::svg(
                                     super::icons::sound_icon_path(
@@ -741,11 +1118,12 @@ impl AurisApp {
                                     ),
                                 ))
                                 .size(window.rem_size())
-                                .color(cluster_color(cluster, &self.theme)),
+                                .color(self.theme.atelier.categorical(cluster)),
                             )
+                            .child(div().min_w_0().truncate().child(cluster_label(name, by_ai)))
                             .child(
-                                div().min_w_0().truncate().child(
-                                    Label::new(format!("{name} · {}", summary.sound_count))
+                                div().flex_none().child(
+                                    Label::new(format!("· {}", summary.sound_count))
                                         .size(TextSize::XSmall)
                                         .color(TextColor::Muted),
                                 ),
@@ -822,6 +1200,7 @@ impl AurisApp {
                             .flex_wrap()
                             .items_center()
                             .gap(spacing.sm)
+                            .child(axes)
                             .child(views)
                             .child(turns)
                             .child(
@@ -836,16 +1215,26 @@ impl AurisApp {
                     )
                     .child(well)
                     .child(
-                        Label::new(self.t(Key::TimbreMapGeometry))
-                            .size(TextSize::XSmall)
-                            .color(TextColor::Muted),
+                        Label::new(self.t(if self.timbre_map.character_axes {
+                            Key::TimbreCharacterGeometry
+                        } else {
+                            Key::TimbreMapGeometry
+                        }))
+                        .size(TextSize::XSmall)
+                        .color(TextColor::Muted),
                     );
                 let selected = self.timbre_map.selected.and_then(|i| map.sounds.get(i));
                 let target = self
                     .selected_track
                     .filter(|id| self.session.audition_track(Some(*id)) == Some(*id));
                 let list_nearest = self.timbre_map.list_nearest;
-                let entries: Vec<_> = if list_nearest {
+                let entries: Vec<_> = if let Some(results) = &search_results {
+                    results
+                        .iter()
+                        .take(50)
+                        .map(|(i, distance)| (*i, Some(*distance)))
+                        .collect()
+                } else if list_nearest {
                     neighbors
                         .iter()
                         .map(|(i, distance)| (*i, Some(*distance)))
@@ -860,6 +1249,8 @@ impl AurisApp {
                 };
                 let narrow = window.viewport_size().width < window.rem_size() * 48.;
                 let inspector = div()
+                    .id("timbre-inspector")
+                    .debug_selector(|| "timbre-inspector".into())
                     .flex()
                     .flex_col()
                     .gap(spacing.md)
@@ -869,25 +1260,44 @@ impl AurisApp {
                     })
                     .max_w_full()
                     .min_w_0()
-                    .min_h(gpui::rems(18.))
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(search_field)
+                    .child(
+                        Label::new(search_message)
+                            .size(TextSize::XSmall)
+                            .color(TextColor::Muted),
+                    )
+                    .when(
+                        search_results.as_ref().is_some_and(Vec::is_empty),
+                        |column| {
+                            column.child(
+                                Label::new(self.t(Key::TimbreSearchEmpty)).size(TextSize::Small),
+                            )
+                        },
+                    )
                     .child(SectionHeader::new(selected.map_or_else(
                         || self.t(Key::TimbreMapSelect).to_owned(),
                         |s| s.name.clone(),
                     )))
                     .children(
-                        self.session
-                            .audition_track(self.selected_track)
-                            .and_then(|id| self.project().track(id))
-                            .map(|track| {
+                        self.timbre_map
+                            .selected
+                            .and_then(|i| map.characters().get(i))
+                            .map(|c| {
                                 Label::new(format!(
-                                    "{}: {}",
-                                    self.t(Key::TimbreMapAudition),
-                                    track.name
+                                    "{} {}{:.0}% · {} {:.0}%",
+                                    self.t(Key::TimbreAxisRelease),
+                                    if c.release_censored { "≥" } else { "" },
+                                    c.release * 100.,
+                                    self.t(Key::TimbreAxisNoise),
+                                    c.noise * 100.
                                 ))
-                                .size(TextSize::Small)
+                                .size(TextSize::XSmall)
                                 .color(TextColor::Muted)
                             }),
                     )
+                    .child(self.render_timbre_keyboard(cx))
                     .child(
                         Button::new("timbre-use", self.t(Key::TimbreMapUse))
                             .primary()
@@ -945,10 +1355,23 @@ impl AurisApp {
                                         &map.sounds[i].name,
                                     ),
                                 )))
-                                .icon_color(cluster_color(map.clusters()[i], &self.theme))
-                                .description(self.timbre_cluster_name(map.clusters()[i]))
+                                .icon_color(self.theme.atelier.categorical(map.clusters()[i]))
+                                .description(if search_results.is_some() {
+                                    let c = map.characters()[i];
+                                    format!(
+                                        "{} {:.0}% · {} {:.0}% · {} {:.0}%",
+                                        self.t(Key::TimbreAxisBrightness),
+                                        c.brightness * 100.,
+                                        self.t(Key::TimbreAxisAttack),
+                                        c.attack * 100.,
+                                        self.t(Key::TimbreAxisSustain),
+                                        c.sustain * 100.
+                                    )
+                                } else {
+                                    self.timbre_cluster_name(map.clusters()[i])
+                                })
                                 .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.select_timbre(i);
+                                    this.select_timbre(i, cx);
                                     cx.notify();
                                 }));
                                 if let Some(distance) = distance {
@@ -1024,8 +1447,6 @@ impl AurisApp {
         Some(
             div()
                 .id("timbre-map")
-                .key_context("AurisVisualizationControls")
-                .on_action(|_: &super::widgets::ClaimVisualizationActivation, _, _| {})
                 .size_full()
                 .flex()
                 .flex_col()
@@ -1083,8 +1504,57 @@ impl AurisApp {
 mod tests {
     use super::*;
     use crate::harness::{click, open, paint};
-    use crate::theme::{SCHEMES, Theme};
     use gpui::{Entity, TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn impression_search_accepts_japanese_without_editing_the_song(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let before = app.update(cx, |this, _| {
+            this.timbre_map.map = Some(Arc::new(
+                this.session
+                    .timbre_map_job()
+                    .unwrap()
+                    .run(&TimbreMapControl::default())
+                    .unwrap(),
+            ));
+            this.timbre_map.open = true;
+            this.project().clone()
+        });
+        paint(&app, cx);
+        let mut utility = map_window(&app, cx);
+        click("timbre-search-focus", &mut utility);
+        utility.simulate_input("ふんわり");
+        app.read_with(&utility, |this, _| {
+            assert_eq!(this.timbre_map.search.content(), "ふんわり");
+            assert!(this.taking_text_input());
+            assert_eq!(this.project(), &before);
+        });
+        utility.simulate_keystrokes("enter");
+        app.update(&mut utility, |this, cx| {
+            assert!(!this.timbre_map.search_focused);
+            let map = this.timbre_map.map.as_ref().unwrap();
+            let (targets, _) = TimbreTargets::interpret(
+                this.timbre_map.search.content(),
+                &TimbreTargets::default(),
+            )
+            .unwrap();
+            let results = map.search_character(&targets);
+            assert_eq!(results.len(), map.sounds.len());
+            assert!(results.windows(2).all(|v| v[0].1 <= v[1].1));
+            let positions = map.character_positions();
+            this.timbre_map.character_axes = true;
+            assert_eq!(positions.len(), map.sounds.len());
+            assert!(positions.iter().flatten().all(|v| (-1. ..=1.).contains(v)));
+            cx.notify();
+        });
+        paint(&app, &mut utility);
+        assert!(utility.debug_bounds("timbre-plot").is_some());
+        click("timbre-search-clear", &mut utility);
+        app.read_with(&utility, |this, _| {
+            assert!(this.timbre_map.search.content().is_empty());
+            assert_eq!(this.project(), &before);
+        });
+    }
 
     #[gpui::test]
     fn manual_categories_survive_ai_and_rescans_and_can_be_reset(cx: &mut TestAppContext) {
@@ -1160,6 +1630,17 @@ mod tests {
             assert_eq!(this.project(), &before);
         });
         paint(&app, &mut utility);
+        let inspector = utility.debug_bounds("timbre-inspector").unwrap();
+        utility.simulate_event(gpui::ScrollWheelEvent {
+            position: gpui::point(
+                inspector.right() - gpui::px(4.),
+                inspector.top() + gpui::px(4.),
+            ),
+            delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.), gpui::px(-500.))),
+            ..Default::default()
+        });
+        paint(&app, &mut utility);
+        assert!(inspector.contains(&utility.debug_bounds("timbre-icon-auto").unwrap().center()));
         click("timbre-icon-auto", &mut utility);
         app.update(&mut utility, |this, _| {
             let key = this
@@ -1191,18 +1672,109 @@ mod tests {
     }
 
     #[test]
-    fn cluster_colours_follow_every_theme_group_palette() {
-        for scheme in SCHEMES {
-            let theme = Theme::from_scheme(scheme);
-            for cluster in 0..8 {
-                assert_eq!(
-                    cluster_color(cluster, &theme),
-                    theme.group_color(cluster as f32 * 0.618_034),
-                    "{} cluster {cluster}",
-                    scheme.name
-                );
+    fn plot_pick_series_map_includes_highlight_series() {
+        let series = vec![vec![4, 7], vec![2, 2], vec![9]];
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 0,
+                    index: 1
+                })
+            ),
+            Some(7)
+        );
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 1,
+                    index: 0
+                })
+            ),
+            Some(2)
+        );
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 2,
+                    index: 0
+                })
+            ),
+            Some(9)
+        );
+        assert_eq!(
+            pick_source_index(
+                &series,
+                Some(PlotPoint {
+                    series: 3,
+                    index: 0
+                })
+            ),
+            None
+        );
+        assert_eq!(pick_source_index(&series, None), None);
+    }
+
+    #[gpui::test]
+    fn map_previews_and_chromatic_keys_work_without_a_track(cx: &mut TestAppContext) {
+        let (app, cx) = open(cx);
+        let before = app.update(cx, |this, _| {
+            let tracks: Vec<_> = this.project().tracks.iter().map(|track| track.id).collect();
+            for track in tracks {
+                this.session.remove_track(track).unwrap();
             }
+            this.selected_track = None;
+            this.session.forget_history();
+            assert!(this.project().tracks.is_empty());
+            this.timbre_map.map = Some(Arc::new(
+                this.session
+                    .timbre_map_job()
+                    .unwrap()
+                    .run(&TimbreMapControl::default())
+                    .unwrap(),
+            ));
+            this.timbre_map.open = true;
+            this.project().clone()
+        });
+        paint(&app, cx);
+        let mut utility = map_window(&app, cx);
+        click("timbre-all-0", &mut utility);
+        utility.run_until_parked();
+        app.read_with(&utility, |this, _| {
+            assert_eq!(this.timbre_map.preview.pitch, Some(60));
+            assert!(this.timbre_map.preview.status.is_some());
+            assert!(this.timbre_map.error.is_none());
+        });
+        for pitch in 60..=72 {
+            paint(&app, &mut utility);
+            click(
+                Box::leak(format!("timbre-key-{pitch}").into_boxed_str()),
+                &mut utility,
+            );
+            utility.run_until_parked();
+            app.read_with(&utility, |this, _| {
+                assert_eq!(this.timbre_map.preview.pitch, Some(pitch));
+                assert!(this.timbre_map.preview.status.is_some());
+                assert!(this.timbre_map.error.is_none());
+                assert_eq!(this.project(), &before);
+            });
         }
+        click("timbre-stop", &mut utility);
+        app.read_with(&utility, |this, _| {
+            assert!(this.timbre_map.preview.status.is_none())
+        });
+        app.update(&mut utility, |this, cx| {
+            this.preview_timbre_note(61, cx);
+            this.close_timbre_map();
+        });
+        utility.run_until_parked();
+        app.read_with(&utility, |this, _| {
+            assert!(this.timbre_map.preview.status.is_none());
+            assert!(this.timbre_map.preview.control.is_none());
+            assert_eq!(this.project(), &before);
+        });
     }
 
     #[gpui::test]
@@ -1261,32 +1833,50 @@ mod tests {
             let annotation = this
                 .library_timbre_cluster(&sound.instrument_id, sound.preset)
                 .unwrap();
-            assert_eq!(annotation.0, cluster_color(cluster, &this.theme));
-            assert!(!annotation.1.is_empty());
+            assert_eq!(annotation.color, this.theme.atelier.categorical(cluster));
+            assert!(!annotation.name.is_empty());
+            assert!(!annotation.by_ai);
             assert!(this.library_timbre_cluster("unmeasured", None).is_none());
             (this.project().clone(), index)
         });
         paint(&app, cx);
         // GPUI's debug selector API requires a static string, including for dynamic rows.
         let mut utility = map_window(&app, cx);
-        // Picking rotates the display only; it must never author instrument changes.
-        let (picked, at) = app.read_with(&utility, |this, _| {
-            let map = this.timbre_map.map.as_ref().unwrap();
-            let (positions, extent) = plot_data(map.positions());
-            let camera = &this.timbre_map.camera;
-            camera
-                .projected(&positions, extent)
+        // Pick a known projected point through Plot3d's native release handler, then verify that
+        // orbiting the map keeps the selection and does not author document changes.
+        let (positions, extent, clusters, azimuth, elevation) =
+            app.read_with(&utility, |this, _| {
+                let map = this.timbre_map.map.as_ref().unwrap();
+                let (positions, extent) = plot_data(map.positions());
+                (
+                    positions,
+                    extent,
+                    map.clusters().to_vec(),
+                    this.timbre_map.camera.azimuth,
+                    this.timbre_map.camera.elevation,
+                )
+            });
+        let mut native_plot = Plot3d::new()
+            .x_range(-extent, extent)
+            .y_range(-extent, extent)
+            .z_range(-extent, extent)
+            .view(azimuth, elevation);
+        let mut cluster_ids = clusters.clone();
+        cluster_ids.sort_unstable();
+        cluster_ids.dedup();
+        for cluster in cluster_ids {
+            let points = clusters
                 .iter()
                 .enumerate()
-                .find_map(|(i, (at, _))| {
-                    (camera.pick(&positions, extent, *at) == Some(i)).then_some((i, *at))
-                })
-                .unwrap()
-        });
-        utility.simulate_click(at, gpui::Modifiers::none());
+                .filter_map(|(i, value)| (*value == cluster).then_some(positions[i]))
+                .collect();
+            native_plot = native_plot.scatter(points, None);
+        }
+        let plot_bounds = utility.debug_bounds("timbre-plot").unwrap();
+        let point = native_plot.project(plot_bounds, positions[index]).0;
+        crate::harness::click_at(&mut utility, point, gpui::Modifiers::none());
         app.read_with(&utility, |this, _| {
-            assert_eq!(this.timbre_map.selected, Some(picked));
-            assert_eq!(this.project(), &before);
+            assert_eq!(this.timbre_map.selected, Some(index));
         });
         let center = utility.debug_bounds("timbre-plot").unwrap().center();
         crate::harness::drag(
@@ -1295,7 +1885,7 @@ mod tests {
             center + gpui::point(gpui::px(50.), gpui::px(20.)),
         );
         app.read_with(&utility, |this, _| {
-            assert_eq!(this.timbre_map.selected, Some(picked));
+            assert_eq!(this.timbre_map.selected, Some(index));
             assert_eq!(this.timbre_map.camera.preset, None);
             assert_eq!(this.project(), &before);
         });
@@ -1318,11 +1908,14 @@ mod tests {
             paint(&app, &mut utility);
             let azimuth = app.read_with(&utility, |this, _| this.timbre_map.camera.azimuth);
             utility.update(|window, cx| window.focus(&app.read(cx).focus));
-            // AI naming when enabled, Rescan, Close, four standard views, then left and right.
+            if crate::app::AurisApp::wants_menu_bar() {
+                utility.simulate_keystrokes("tab");
+            }
+            // AI naming when enabled, Rescan, Close, two axis modes, four views, left and right.
             utility.simulate_keystrokes(if configured {
-                "tab tab tab tab tab tab tab tab tab"
+                "tab tab tab tab tab tab tab tab tab tab tab"
             } else {
-                "tab tab tab tab tab tab tab tab"
+                "tab tab tab tab tab tab tab tab tab tab"
             });
             utility.simulate_keystrokes("space");
             utility.simulate_event(gpui::KeyUpEvent {
@@ -1400,12 +1993,11 @@ mod tests {
             let cluster = map.clusters()[index];
             let generation = this.timbre_map.naming_generation;
             assert!(this.timbre_map.finish_naming(generation, Ok(names)));
-            assert_eq!(
-                this.library_timbre_cluster(&sound.instrument_id, sound.preset)
-                    .unwrap()
-                    .1,
-                format!("Named cluster {cluster}")
-            );
+            let tag = this
+                .library_timbre_cluster(&sound.instrument_id, sound.preset)
+                .unwrap();
+            assert_eq!(tag.name, format!("Named cluster {cluster}"));
+            assert!(tag.by_ai, "an AI name carries the agent's mark");
             assert_eq!(this.project(), &before);
         });
         paint(&app, &mut utility);

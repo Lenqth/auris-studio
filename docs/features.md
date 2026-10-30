@@ -124,7 +124,7 @@ every note you tried to pick up.
 The wheel over the arrangement moves down the tracks; ⇧ turns it sideways along the song, and
 **Ctrl or ⌥** zooms the time axis about the pointer, so the bar being looked at stays where it is.
 
-**No bar takes the wheel.** A fader, a plugin parameter, a dial on the song sheet — every one of
+**No bar takes the wheel.** A fader, a plugin parameter, a clip dial — every one of
 them is swept with the pointer and none of them answers a scroll. They all sit inside panels that
 scroll, and rolling down a column of tracks used to change the level of whichever fader the pointer
 crossed on the way: silently, with no drag to remember having started, and nothing on screen saying
@@ -400,23 +400,10 @@ hear and what the model is told stay one story.
 
 ### Lyrics in a composed song
 
-**Compose → Compose a Song…** accepts lyrics for each section. In the detailed song sheet,
-each section has a multi-line lyrics box alongside the form. Each mora becomes one note,
-and the melody follows the section's harmony and the lyric's spoken pitch accent when the Japanese
-dictionary is available.
-
-An `.asong` specification says the same thing as `lyrics = "..."` on a `[section]`. Click a
-box and it is a real editor in place: Return breaks a phrase, Tab walks to the next
-section, a click lands the caret on the character under it, and every keystroke is already
-on the song sheet — Escape merely puts the keyboard down, because nothing is left
-uncommitted. The margin measures the words as they are typed: each line shows the notes it
-would sing (one per mora), and the box's heading tallies the bars the sung rhythm needs
-against the bars the section has, turning red once the words would outrun it — computed by
-the same reading and the same rhythm Write uses, so the numbers cannot drift from what
-happens. Writing the piece then adds a Vocal track beside the band, one clip per
-playing of each lyrical section, the melody searched over that section's own harmony; a
-chorus sings the same words on every playing, which is what makes it the same chorus. Leave
-a section's box empty and it is instrumental, exactly as before.
+An `.asong` specification accepts `lyrics = "..."` on each section. Each mora becomes
+one note, and the melody follows the section harmony and spoken pitch accent when the
+Japanese dictionary is available. Composition creates a vocal track with one clip for
+each playing of a lyrical section. Empty lyrics leave a section instrumental.
 
 A composed vocal also arrives **ornamented, by rule**: the first note of each phrase scoops
 in, any note held past half a second carries a vibrato that waits out the front of the note
@@ -1180,6 +1167,17 @@ with fallback fonts retained for Japanese and other scripts. Create a theme from
 palette, give it a name, and enter its accent colour as `#RRGGBB`. The preview leaves the applied
 theme alone until **Save and apply**. Saved custom themes can be selected and edited here.
 
+**Glass effect** is enabled by default and can be switched off independently of the colour
+theme. The choice is saved and applies to every application window. Presets include Solarized
+Dark/Light, Iceberg, Dracula, Nord, Monokai, Rosé Pine, Cobalt and Catppuccin Mocha/Latte.
+**Import theme…** reads VS Code JSON/JSONC themes and their local `include` files, adding a
+custom theme without replacing existing presets. It maps the editor background, accent and
+terminal palette to Auris; surface shades and text contrast follow Auris's readability rules.
+Imported themes can be edited through the same theme editor.
+To export the current VS Code palette, run **Developer: Generate Color Theme from Current
+Settings** in its Command Palette and save the generated JSON, as described in the
+[VS Code theme guide](https://code.visualstudio.com/api/extension-guides/color-theme#create-a-new-color-theme).
+
 Every preset has its own eight track, clip and library palette colours, which the editor
 copies when creating a theme. Changing the base updates inherited colours and keeps colours
 already edited in the draft. Enter `#RRGGBB` for a
@@ -1432,7 +1430,9 @@ project. `inspect_project` reads the current arrangement. The model chooses the 
 parts and writes them through flat track, clip and note tools. `edit_notes` applies bounded atomic patches/replacements using exact ticks and a
 revision from `read_notes`; `edit_timeline` and `set_loop` control tempo/meter and looping.
 Changes appear before the model's final reply. Existing music is preserved unless its
-removal is explicitly requested. Save the project normally when ready.
+removal is explicitly requested. A new song in an untitled document is named with
+`rename_project`, so Save As and the exports offer that title instead of "Untitled". Save the
+project normally when ready.
 
 The panel can attach audio, stop a running turn and start a new conversation. Send with Enter or the Send button. Answers use selectable Markdown blocks with compact headings and indented lists; Copy Markdown copies the complete answer. Opening another
 document rebinds the agent. In saved projects, successful

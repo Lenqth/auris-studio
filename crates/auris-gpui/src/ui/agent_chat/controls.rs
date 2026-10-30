@@ -28,6 +28,7 @@ pub(super) struct Controls {
     pub(super) effort_menu: bool,
     pub(super) mode_focus: Option<gpui::FocusHandle>,
     pub(super) effort_focus: Option<gpui::FocusHandle>,
+    pub(super) reasoning_picker: Option<crate::ui::reasoning_picker::Handle>,
     pub(super) slash: chat_commands::Completions,
 }
 
@@ -116,7 +117,7 @@ pub(crate) fn effort_key(effort: ReasoningEffort) -> Key {
     }
 }
 
-pub(super) fn effort_choices(openai: bool) -> &'static [ReasoningEffort] {
+pub(crate) fn effort_choices(openai: bool) -> &'static [ReasoningEffort] {
     if openai {
         &[
             ReasoningEffort::Default,
@@ -289,15 +290,6 @@ impl AurisApp {
             self.agent_chat
                 .push_entry(ChatEntry::Error(error.to_string()));
         }
-        self.focus_agent_field(AgentField::Chat);
-    }
-
-    pub(super) fn agent_fast_mode(&mut self) {
-        if let Err(error) = self.agent_fast_mode_with(|settings| settings.save()) {
-            self.agent_chat
-                .push_entry(ChatEntry::Error(error.to_string()));
-        }
-        self.focus_agent_field(AgentField::Chat);
     }
 
     pub(super) fn agent_fast_mode_with<E>(

@@ -11,6 +11,7 @@ enum Content {
     Text(String),
     Image(Arc<gpui::RenderImage>),
     Audio(Arc<auris_session::prelude::AudioBuffer>),
+    Midi(auris_session::midi_reference::MidiReference),
 }
 
 pub(crate) struct AttachmentPreview {
@@ -30,9 +31,7 @@ fn load(path: &std::path::Path, rate: f64) -> Result<Content, String> {
     match kind {
         auris_agent::AttachmentKind::Midi => {
             let score = auris_session::midi_reference::MidiReference::read(path)?;
-            Ok(Content::Text(
-                serde_json::to_string_pretty(&score).map_err(|e| e.to_string())?,
-            ))
+            Ok(Content::Midi(score))
         }
         auris_agent::AttachmentKind::Text => {
             let bytes = read_bounded(path, 256 * 1024)?;
@@ -88,7 +87,185 @@ fn read_bounded(path: &std::path::Path, limit: u64) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn midi_preview(
+    score: &auris_session::midi_reference::MidiReference,
+    theme: &crate::theme::Theme,
+) -> gpui::AnyElement {
+    let notes = || score.tracks.iter().flat_map(|track| &track.notes);
+    let low = notes()
+        .map(|note| note.pitch)
+        .min()
+        .unwrap_or(60)
+        .saturating_sub(1);
+    let high = notes()
+        .map(|note| note.pitch)
+        .max()
+        .unwrap_or(72)
+        .saturating_add(1);
+    let rows = f32::from(high) - f32::from(low) + 1.0;
+    let duration = notes()
+        .map(|note| note.start.0.saturating_add(note.length.0))
+        .max()
+        .unwrap_or(1)
+        .max(1) as f32;
+    div()
+        .relative()
+        .w_full()
+        .h(gpui::px(120.0))
+        .overflow_hidden()
+        .rounded(theme.atelier.shape.radius_md)
+        .bg(theme.atelier.colors.elevated)
+        .children(score.tracks.iter().enumerate().flat_map(|(index, track)| {
+            track.notes.iter().map(move |note| {
+                div()
+                    .absolute()
+                    .left(gpui::relative(note.start.0 as f32 / duration))
+                    .top(gpui::relative(f32::from(high - note.pitch) / rows))
+                    .w(gpui::relative(note.length.0 as f32 / duration))
+                    .h(gpui::relative(1.0 / rows))
+                    .bg(theme.atelier.categorical(index))
+            })
+        }))
+        .into_any_element()
+}
+
 impl AurisApp {
+    /// Load inline references once, off the UI thread, without opening a preview pane.
+    pub(crate) fn load_inline_attachments(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        for path in paths {
+            if self
+                .inline_attachments
+                .iter()
+                .any(|preview| preview.path == path)
+            {
+                continue;
+            }
+            let index = self.inline_attachments.len();
+            self.inline_attachments.push(AttachmentPreview {
+                serial: 0,
+                workshop: false,
+                path: path.clone(),
+                content: None,
+                error: None,
+                player: PlayerState::default(),
+            });
+            let rate = self.session.sample_rate();
+            cx.spawn(async move |this, cx| {
+                let result = cx
+                    .background_executor()
+                    .spawn(async move { load(&path, rate) })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    let preview = &mut this.inline_attachments[index];
+                    match result {
+                        Ok(content) => preview.content = Some(content),
+                        Err(error) => preview.error = Some(error),
+                    }
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+    }
+
+    /// Embed a reference directly beside its message or draft attachment controls.
+    pub(crate) fn inline_attachment(
+        &self,
+        path: &std::path::Path,
+        id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let Some((index, preview)) = self
+            .inline_attachments
+            .iter()
+            .enumerate()
+            .find(|(_, preview)| preview.path == path)
+        else {
+            return div().into_any_element();
+        };
+        let content = match &preview.content {
+            Some(Content::Image(image)) => div()
+                .debug_selector({
+                    let id = id.clone();
+                    move || format!("{id}-image")
+                })
+                .w_full()
+                .child(
+                    gpui::img(Arc::clone(image))
+                        .w_full()
+                        .h(gpui::px(240.0))
+                        .object_fit(gpui::ObjectFit::Contain),
+                )
+                .into_any_element(),
+            Some(Content::Text(text)) => div()
+                .id(gpui::SharedString::from(format!("{id}-text")))
+                .max_h(gpui::px(240.0))
+                .overflow_y_scroll()
+                .child(agent_components::selectable_text(
+                    gpui::SharedString::from(format!("{id}-content")),
+                    text.clone(),
+                    window,
+                    cx,
+                ))
+                .into_any_element(),
+            Some(Content::Audio(audio)) => self.render_audio_player(
+                PlayerTarget::InlineAttachment(index),
+                audio.duration_seconds(),
+                true,
+                false,
+                Some(format!("{id}-player")),
+                cx,
+            ),
+            Some(Content::Midi(score)) => midi_preview(score, &self.theme),
+            None => preview.error.as_ref().map_or_else(
+                || {
+                    div()
+                        .child(self.t(Key::AttachmentLoading))
+                        .into_any_element()
+                },
+                |error| agent_components::error_notice(error.clone()),
+            ),
+        };
+        div()
+            .id(gpui::SharedString::from(id.clone()))
+            .debug_selector(move || id.clone())
+            .w_full()
+            .min_w_0()
+            .flex_shrink_0()
+            .text_color(self.theme.text)
+            .child(content)
+            .children(
+                preview
+                    .error
+                    .as_ref()
+                    .filter(|_| preview.content.is_some())
+                    .map(|error| agent_components::error_notice(error.clone())),
+            )
+            .into_any_element()
+    }
+
+    /// Play an embedded audio reference through its own transport state.
+    pub(crate) fn play_inline_attachment(&mut self, index: usize, cx: &mut Context<Self>) {
+        if !self.acquire_audio(cx) {
+            return;
+        }
+        let Some(preview) = self.inline_attachments.get_mut(index) else {
+            return;
+        };
+        let Some(Content::Audio(audio)) = &preview.content else {
+            return;
+        };
+        match self.session.play_output_preview_with(
+            Arc::clone(audio),
+            preview.player.options(audio.duration_seconds()),
+        ) {
+            Ok(status) => preview.player.start(status),
+            Err(error) => preview.error = Some(error.to_string()),
+        }
+        cx.notify();
+    }
+
     pub(crate) fn pick_conversation_files(&mut self, workshop: bool, cx: &mut Context<Self>) {
         let document = self
             .session
@@ -244,8 +421,10 @@ impl AurisApp {
                     audio.duration_seconds(),
                     true,
                     false,
+                    None,
                     cx,
                 ),
+                Some(Content::Midi(score)) => midi_preview(score, theme),
                 None => div()
                     .child(if preview.error.is_some() {
                         ""
@@ -266,12 +445,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn previews_text_images_and_audio_without_editing_a_project() {
+    fn previews_text_images_midi_and_audio_without_editing_a_project() {
         let folder = tempfile::tempdir().unwrap();
         let text = folder.path().join("lyrics.md");
         std::fs::write(&text, "# Lyrics\n\n  夜の雨").unwrap();
         assert!(
             matches!(load(&text, 48000.0).unwrap(), Content::Text(text) if text == "# Lyrics\n\n  夜の雨")
+        );
+        let midi = folder.path().join("melody.auris-midi");
+        let score = auris_session::midi_reference::MidiReference::new(
+            "Melody".into(),
+            Default::default(),
+            Default::default(),
+        );
+        std::fs::write(&midi, score.encode().unwrap()).unwrap();
+        assert!(
+            matches!(load(&midi, 48000.0).unwrap(), Content::Midi(reference) if reference == score)
         );
         for (extension, format) in [
             ("png", image::ImageFormat::Png),

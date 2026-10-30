@@ -269,9 +269,8 @@ pub struct Project {
     /// The specification a composed document was written from, if it was composed.
     ///
     /// Text rather than a typed field, because the type lives in a crate this one may not name and
-    /// because that text is already the canonical way of writing a song specification down. It is
-    /// what lets the song sheet refill itself after a save and a reload — otherwise a piece could
-    /// be composed, saved, reopened, and there would be no way back to the dials that made it.
+    /// because that text is the canonical representation of a song specification. It retains
+    /// the composition request across saving and reopening.
     pub song_spec: Option<String>,
     /// Original creative request and chosen direction, retained as reference for later edits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -293,7 +292,7 @@ fn default_grid() -> Ticks {
 
 impl Default for Project {
     fn default() -> Self {
-        Self::new("Untitled", 48_000.0)
+        Self::new(Self::UNTITLED, 48_000.0)
     }
 }
 
@@ -304,6 +303,9 @@ impl Project {
     /// Version 30 adds eleventh chord qualities to stored harmony.
     /// Version 29 adds ordered, named manual drum lanes beside generation-role assignments.
     pub const FORMAT_VERSION: u32 = 32;
+
+    /// The name a document carries until somebody — a person or the agent — gives it one.
+    pub const UNTITLED: &'static str = "Untitled";
 
     /// An empty project.
     ///

@@ -161,6 +161,8 @@ impl Render for AurisApp {
         // Pointer coordinates arrive in window space, and the resize handlers need to know how
         // tall the window is to bound the bottom panel; record it once per frame.
         self.viewport_height = window.viewport_size().height;
+        self.transport_height =
+            super::transport_bar::transport_height(window.viewport_size().width);
         // Where the window is, kept for next time. Read rather than written: the file is put
         // out once, on the way out.
         self.remember_window(window);
@@ -205,6 +207,7 @@ impl Render for AurisApp {
         self.main_was_active = window.is_window_active();
         let theme = self.theme.clone();
         let title_bar = self.render_title_bar(window, cx);
+        let project_tabs = self.render_project_tabs(window, cx);
         let menu_bar = self.render_menu_bar(window, cx);
         let transport = self.render_transport(window, cx);
         let arrangement = self.render_track_workspace(window, cx);
@@ -254,7 +257,7 @@ impl Render for AurisApp {
             .font(theme.font.clone())
             .text_size(theme.atelier.typography.size_md)
             .child(title_bar)
-            .children(menu_bar)
+            .children(project_tabs)
             .child(transport)
             .child(
                 div()
@@ -289,19 +292,15 @@ impl Render for AurisApp {
             .child(status)
             .child(drop_ring)
             .children(overlays)
+            .children(menu_bar)
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
 }
 
 impl AurisApp {
-    fn modal_blocks_document_actions(&self) -> bool {
-        self.compose_progress.is_some()
-            || self.export_dialog.is_some()
-            || self.export.is_some()
-            || self.prompt.is_some()
-            || self.song_sheet.is_some()
-            || self.song_library.is_some()
+    pub(crate) fn modal_blocks_document_actions(&self) -> bool {
+        self.export_dialog.is_some() || self.export.is_some() || self.prompt.is_some()
     }
 
     /// Transient editors stay in the window that opened them.
@@ -316,11 +315,19 @@ impl AurisApp {
         {
             return Vec::new();
         }
+        // A menu owns Enter/Space while open; they must not activate its focused trigger.
+        let menu_open = self.menu.is_some() || self.menu_bar.is_some();
+        if menu_open && self.menu_focus_return.is_none() {
+            self.menu_focus_return = Some(window.focused(cx).unwrap_or_else(|| self.focus.clone()));
+            window.focus(&self.menu_focus);
+        } else if !menu_open
+            && let Some(trigger) = self.menu_focus_return.take()
+            && self.menu_focus.contains_focused(window, cx)
+        {
+            window.focus(&trigger);
+        }
         let export_overlay = self.render_export_overlay(cx);
         let export_dialog = self.render_export_dialog(cx);
-        let song_sheet = self.render_song_sheet(window, cx);
-        let song_library = self.render_song_library_overlay(window, cx);
-        let compose_progress = self.render_compose_progress(window);
         let prompt = self.render_prompt(cx);
         let palette = self.render_palette(cx);
         let menu = self.render_context_menu(window, cx);
@@ -332,7 +339,7 @@ impl AurisApp {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .top(crate::titlebar::HEIGHT + menu_bar::HEIGHT)
+                    .top(crate::titlebar::HEIGHT)
                     .occlude()
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -351,12 +358,7 @@ impl AurisApp {
         if let Some(element) = export_dialog {
             overlays.push(element);
         }
-        if let Some(element) = song_sheet {
-            overlays.push(element.into_any_element());
-        }
-        if let Some(element) = song_library {
-            overlays.push(element.into_any_element());
-        }
+
         if let Some(element) = prompt {
             overlays.push(element.into_any_element());
         }
@@ -366,9 +368,7 @@ impl AurisApp {
         if let Some(element) = menu {
             overlays.push(element.into_any_element());
         }
-        if let Some(element) = compose_progress {
-            overlays.push(element.into_any_element());
-        }
+
         overlays
     }
 
@@ -389,6 +389,18 @@ impl AurisApp {
                     }
                 },
             ))
+            .on_action(Self::window_listener(
+                cx,
+                |this, _: &actions::NextProjectTab, _, cx| this.cycle_project_tab(true, cx),
+            ))
+            .on_action(Self::window_listener(
+                cx,
+                |this, _: &actions::PreviousProjectTab, _, cx| this.cycle_project_tab(false, cx),
+            ))
+            .on_action(Self::window_listener(
+                cx,
+                |this, _: &actions::CloseProjectTab, _, cx| this.close_project_tab(cx),
+            ))
             .when(modal_blocks_document_actions, |this| {
                 // Consume Quit here so it cannot fall through to the application fallback.
                 this.on_action(|_: &actions::Quit, _, _| {})
@@ -408,8 +420,6 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_new_project))
                     .on_action(Self::window_listener(cx, Self::on_open_project))
                     .on_action(Self::window_listener(cx, Self::on_quit))
-                    .on_action(Self::window_listener(cx, Self::on_compose_song))
-                    .on_action(Self::window_listener(cx, Self::on_compose_from_spec))
                     .on_action(Self::window_listener(cx, Self::on_accompany_melody))
                     .on_action(Self::window_listener(cx, Self::on_balance_levels))
                     .on_action(Self::window_listener(cx, Self::on_save_project))
@@ -493,6 +503,12 @@ impl AurisApp {
                         },
                     ))
                     .on_action(Self::window_listener(cx, Self::on_toggle_log))
+                    .on_action(Self::window_listener(
+                        cx,
+                        |this, _: &actions::ReportProblem, _, cx| {
+                            this.open_issue_report(None, cx);
+                        },
+                    ))
                     .on_action(Self::window_listener(cx, Self::on_toggle_agent))
                     .on_action(Self::window_listener(cx, Self::on_toggle_structure_lane))
                     .on_action(Self::window_listener(cx, Self::on_toggle_harmony_lane))
@@ -658,6 +674,13 @@ impl AurisApp {
             .on_mouse_up_out(gpui::MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_key_down(Self::window_listener(cx, Self::on_key_down))
             .capture_key_up(cx.listener(|this, event: &gpui::KeyUpEvent, window, cx| {
+                if this.menu_activation.as_ref().is_some_and(|(id, key)| {
+                    *id == window.window_handle().window_id() && *key == event.keystroke.key
+                }) {
+                    this.menu_activation = None;
+                    // Menu teardown can restore a button before this release arrives.
+                    cx.stop_propagation();
+                }
                 if event.keystroke.key == "space"
                     && this.transport_space_window.take()
                         == Some(window.window_handle().window_id())
@@ -753,12 +776,27 @@ impl AurisApp {
             Some(_) => self.panels.size(dock),
             None => px(0.0),
         };
+        // Atelier's density thresholds are the responsive contract for desktop panes. Below the
+        // sidebar threshold, navigation folds away while the selected work surface stays reachable.
+        let collapse_sidebar = viewport.width <= self.theme.atelier.density.sidebar_width;
+        // Keep the selected trailing work surface reachable. `side_widths` clamps it against the
+        // arrangement minimum after the leading navigation dock has folded away.
         // The headers sit in the same column as the lanes, so they are part of what has to be
         // kept — the minimum is a width for the *lanes*, which is what `resize_dock` compares a
         // dragged splitter against.
+        // The header column is part of the arrangement's usable width even after the leading
+        // navigation dock folds. Keeping it here prevents the timeline lanes from collapsing to
+        // zero while a trailing work panel remains available on a narrow window.
         let keep = PanelLayout::MIN_ARRANGEMENT_WIDTH + self.panels.header_width;
         let (left, right) = PanelLayout::side_widths(
-            (asked(Dock::Left), asked(Dock::Right)),
+            (
+                if collapse_sidebar {
+                    px(0.0)
+                } else {
+                    asked(Dock::Left)
+                },
+                asked(Dock::Right),
+            ),
             viewport.width,
             keep,
         );
@@ -768,9 +806,8 @@ impl AurisApp {
             bottom: PanelLayout::bottom_height(
                 asked(Dock::Bottom),
                 viewport.height,
-                // The same chrome `resize_dock` clamps against — menu bar included, where one
-                // is drawn — or the drawn dock and the dragged limit disagree by a row.
-                Self::chrome_height(),
+                // Keep the dock's drawn size and drag limit on the same responsive chrome.
+                self.chrome_height() + self.project_tabs_height(),
             ),
         }
     }
@@ -1400,10 +1437,6 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.compose_progress.is_some() {
-            cx.stop_propagation();
-            return;
-        }
         if self.panels.is_open(Panel::Agent)
             && !self.panels.is_detached(Panel::Agent)
             && self
@@ -1437,12 +1470,6 @@ impl AurisApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.move_audio_player(event, cx) {
-            return;
-        }
-        if self.compose_progress.is_some() {
-            return;
-        }
         // A key of the drawn keyboard held by a pointer that is no longer pressing anything is a
         // key whose release never arrived: letting go over another application, or off the edge of
         // the screen, is a mouse-up the platform hands to somebody else. Checked before the drag,
@@ -1960,20 +1987,6 @@ impl AurisApp {
             } => {
                 self.drag_volume_contour_point(clip, index, bounds, event.position);
             }
-            Drag::SongDial {
-                target,
-                start_fraction,
-                start_x,
-            } => {
-                let delta = crate::ui::widgets::fine_scaled(
-                    f32::from(event.position.x - start_x),
-                    event.modifiers,
-                );
-                self.drag_song_dial(target, start_fraction, delta);
-            }
-            Drag::SongPad { detail, bounds } => {
-                self.drag_song_pad(detail, bounds, event.position);
-            }
             Drag::TimeZoom {
                 start_fraction,
                 start_x,
@@ -2035,7 +2048,6 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.audio_player_drag = None;
         let reordered = match &self.drag {
             Some(Drag::DrumLaneReorder { track, .. }) => Some(*track),
             _ => None,
@@ -2094,7 +2106,7 @@ impl AurisApp {
                 _ => {}
             }
             true
-        } else if self.compose_progress.is_some() || self.typing_key(event, cx) {
+        } else if self.typing_key(event, cx) {
             true
         } else if self.menu.is_some() {
             self.menu_key(event, window, cx)
@@ -2104,29 +2116,8 @@ impl AurisApp {
             self.palette_key(event, window, cx)
         } else if self.prompt.is_some() {
             self.prompt_key(event, window, cx)
-        } else if self.song_library.is_some() {
-            self.song_library_key(event, cx)
-        } else if self.song_sheet.is_some() {
-            self.reconcile_section_lyrics();
-            if self.lyrics_edit.is_some() {
-                self.lyrics_key(event, cx)
-            } else {
-                match event.keystroke.key.as_str() {
-                    "escape" => self.close_song_sheet(),
-                    "tab" => {
-                        Self::cycle_modal_focus(
-                            self.modal_focus.song_sheet(),
-                            self.modal_focus.song_sheet_last(),
-                            event.keystroke.modifiers.shift,
-                            window,
-                            cx,
-                        );
-                        self.modal_focus.reveal_song_sheet_focus(window, cx);
-                    }
-                    _ => {}
-                }
-                true
-            }
+        } else if self.timbre_map.open && self.timbre_map.search_focused {
+            self.timbre_search_key(event, cx)
         } else if self.library_search_focused {
             self.library_search_key(event, cx)
         } else {
@@ -2135,35 +2126,6 @@ impl AurisApp {
         if handled {
             cx.stop_propagation();
             cx.notify();
-        }
-    }
-
-    /// Moves Tab only through one modal's tab group, wrapping at both ends.
-    fn cycle_modal_focus(
-        group: &gpui::FocusHandle,
-        last: &gpui::FocusHandle,
-        backwards: bool,
-        window: &mut Window,
-        cx: &gpui::App,
-    ) {
-        if backwards {
-            if group.is_focused(window) || !group.contains_focused(window, cx) {
-                window.focus(last);
-                return;
-            }
-            window.focus_prev();
-            if !group.contains_focused(window, cx) {
-                window.focus(last);
-            }
-        } else {
-            if !group.contains_focused(window, cx) {
-                window.focus(group);
-            }
-            window.focus_next();
-            if !group.contains_focused(window, cx) {
-                window.focus(group);
-                window.focus_next();
-            }
         }
     }
 
@@ -2398,8 +2360,20 @@ impl AurisApp {
             }
             "left" | "right" => {
                 let delta = if event.keystroke.key == "left" { -1 } else { 1 };
-                let index = menu_bar::stepped_section(sections.len(), open.index, delta);
-                self.set_menu_bar(Some(menu_bar::OpenMenu::at(index)));
+                let pinned = self.titlebar_menu_layout(window);
+                let index = if open.from_titlebar && !pinned.is_empty() {
+                    let position = pinned
+                        .iter()
+                        .position(|(index, _, _)| *index == open.index)
+                        .unwrap_or(0);
+                    pinned[menu_bar::stepped_section(pinned.len(), position, delta)].0
+                } else {
+                    menu_bar::stepped_section(sections.len(), open.index, delta)
+                };
+                self.set_menu_bar(Some(menu_bar::OpenMenu {
+                    from_titlebar: open.from_titlebar,
+                    ..menu_bar::OpenMenu::at(index)
+                }));
             }
             "down" | "up" | "home" | "end" => {
                 let key = event.keystroke.key.as_str();
@@ -2469,6 +2443,7 @@ impl AurisApp {
         }
         self.menu = None;
         let next = match self.menu_bar {
+            Some(open) if open.from_titlebar => Some(menu_bar::OpenMenu::at(open.index)),
             Some(_) => None,
             None => Some(menu_bar::OpenMenu::at(0)),
         };
@@ -2484,12 +2459,20 @@ impl AurisApp {
     pub(crate) fn menu_key(
         &mut self,
         event: &gpui::KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         let Some(menu) = self.menu.as_mut() else {
             return false;
         };
+        if !event.keystroke.modifiers.modified()
+            && matches!(event.keystroke.key.as_str(), "enter" | "space")
+        {
+            self.menu_activation = Some((
+                window.window_handle().window_id(),
+                event.keystroke.key.clone(),
+            ));
+        }
         match event.keystroke.key.as_str() {
             // Handled here rather than left to the Escape *binding*, which no longer fires: an
             // open menu takes every binding out of reach so that walking it with the arrow keys
@@ -2672,7 +2655,7 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         if crate::project_windows::installed(cx) {
-            crate::project_windows::open(None, cx);
+            crate::project_windows::open_in(None, self.project_window, cx);
         } else {
             self.new_project_asking();
         }
@@ -2690,9 +2673,7 @@ impl AurisApp {
             return;
         }
         crate::termination::activate(window, cx);
-        if self.compose_progress.is_some() {
-            return;
-        }
+
         // Handled here rather than on the application, because `App::quit` does not run the
         // window's close guard and a document with unsaved changes has to get its say.
         if self.confirm_discard(crate::ui::prompt::PendingAction::Quit) {
@@ -2709,25 +2690,6 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         self.open_project(window, cx);
-    }
-
-    fn on_compose_song(
-        &mut self,
-        _: &actions::ComposeSong,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_song_sheet();
-        cx.notify();
-    }
-
-    fn on_compose_from_spec(
-        &mut self,
-        _: &actions::ComposeFromSpec,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.compose_from_spec(window, cx);
     }
 
     fn on_save_project(
@@ -3748,7 +3710,7 @@ mod window_tests {
     }
 
     #[gpui::test]
-    fn transport_shortcuts_do_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
+    fn focused_loop_owns_space_and_enter_before_transport(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         let transport_commands = std::rc::Rc::new(std::cell::Cell::new(0));
         let observed = transport_commands.clone();
@@ -3766,24 +3728,36 @@ mod window_tests {
         click("loop", cx);
         paint(&app, cx);
         assert!(app.read_with(cx, |this, _| this.project().loop_enabled));
-        // A real key gesture includes the release: GPUI's implicit button activation runs there.
-        for key in ["space", "space"] {
+        // A focused native control owns activation. The transport action observer must not also
+        // receive the same gesture, even though the default transport bindings use these keys.
+        for (key, enabled) in [("space", false), ("enter", true)] {
             cx.simulate_keystrokes(key);
             cx.simulate_event(gpui::KeyUpEvent {
                 keystroke: gpui::Keystroke::parse(key).unwrap(),
             });
             paint(&app, cx);
-            assert!(
+            assert_eq!(
                 app.read_with(cx, |this, _| this.project().loop_enabled),
-                "{key} must not click the Loop button again"
+                enabled
             );
         }
-        // No audio thread acknowledges transport state in this harness; observe its commands.
-        assert_eq!(transport_commands.get(), 2);
+        assert_eq!(transport_commands.get(), 0);
+
+        // Returning focus to the application canvas restores the transport shortcut path.
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| this.focus.focus(window));
+        });
+        cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
+        assert_eq!(transport_commands.get(), 1);
     }
 
     #[gpui::test]
-    fn unbound_transport_keys_still_activate_the_focused_button(cx: &mut TestAppContext) {
+    fn focused_loop_keeps_space_and_enter_when_transport_bindings_are_removed(
+        cx: &mut TestAppContext,
+    ) {
         let (app, cx) = open(cx);
         cx.update(|_, cx| {
             let mut keymap = crate::keymap::Keymap::default();
@@ -3807,7 +3781,7 @@ mod window_tests {
     }
 
     #[gpui::test]
-    fn remapped_transport_space_does_not_reactivate_the_clicked_button(cx: &mut TestAppContext) {
+    fn focused_loop_precedes_remapped_transport_space(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         cx.update(|_, cx| {
             let mut keymap = crate::keymap::Keymap::default();
@@ -3822,7 +3796,7 @@ mod window_tests {
             keystroke: gpui::Keystroke::parse("space").unwrap(),
         });
         paint(&app, cx);
-        assert!(app.read_with(cx, |this, _| this.project().loop_enabled));
+        assert!(!app.read_with(cx, |this, _| this.project().loop_enabled));
     }
 
     #[gpui::test]
@@ -3904,6 +3878,9 @@ mod window_tests {
         });
 
         cx.simulate_keystrokes("tab tab enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert_eq!(
@@ -3921,6 +3898,9 @@ mod window_tests {
             });
         });
         cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
         paint(&app, cx);
         cx.update(|window, cx| {
             app.read_with(cx, |this, cx| {
@@ -3960,61 +3940,6 @@ mod window_tests {
                 Some(AudioExportTarget::Stems)
             );
         });
-    }
-
-    #[gpui::test]
-    fn composition_sheet_traps_tab_and_closes_with_escape(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        resize(&app, cx, size(px(640.0), px(480.0)));
-
-        cx.dispatch_action(actions::ComposeSong);
-        app.update(cx, |this, _| {
-            this.language = auris_i18n::Language::Japanese;
-            this.song_advanced = true;
-        });
-        paint(&app, cx);
-        cx.update(|window, cx| {
-            app.read_with(cx, |this, _| {
-                assert!(this.modal_focus.song_sheet().is_focused(window));
-            });
-        });
-        cx.simulate_keystrokes("tab tab shift-tab");
-        cx.update(|window, cx| {
-            app.read_with(cx, |this, cx| {
-                assert!(this.modal_focus.song_sheet_contains_focused(window, cx));
-            });
-        });
-        let mut song_target = None;
-        for _ in 0..96 {
-            cx.simulate_keystrokes("tab");
-            paint(&app, cx);
-            let target = cx.update(|window, cx| {
-                app.read_with(cx, |this, cx| {
-                    (
-                        this.modal_focus.song_sheet_reveal_index(window, cx),
-                        this.modal_focus.song_sheet_scroll().offset().y,
-                    )
-                })
-            });
-            if target.0.is_some() && target.1 < px(-80.0) {
-                song_target = target.0;
-                break;
-            }
-        }
-        let song_target = song_target.expect("Tab reaches a song control below the viewport");
-        let song_selector: &'static str =
-            Box::leak(format!("song-focus-region-{song_target}").into_boxed_str());
-        let song_bounds = cx
-            .debug_bounds(song_selector)
-            .expect("focused song row is drawn");
-        let song_viewport = cx.debug_bounds("song-sheet-body").unwrap();
-        assert!(
-            song_bounds.top() >= song_viewport.top()
-                && song_bounds.bottom() <= song_viewport.bottom(),
-            "Tab reveals song row {song_target}: {song_bounds:?} in {song_viewport:?}"
-        );
-        cx.simulate_keystrokes("escape");
-        app.read_with(cx, |this, _| assert!(this.song_sheet.is_none()));
     }
 
     #[gpui::test]
@@ -4068,6 +3993,9 @@ mod window_tests {
             assert!(!this.export.as_ref().unwrap().cancelling());
         });
         cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         app.read_with(cx, |this, _| {
             assert!(
                 this.export.as_ref().unwrap().cancelling(),
@@ -4080,6 +4008,9 @@ mod window_tests {
         });
         paint(&app, cx);
         cx.simulate_keystrokes("shift-tab space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
         app.read_with(cx, |this, _| {
             assert!(
                 this.export.is_none(),

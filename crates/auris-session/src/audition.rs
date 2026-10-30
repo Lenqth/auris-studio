@@ -15,9 +15,35 @@ pub struct AuditionSection {
     pub end_seconds: f64,
 }
 
+/// One performed note on the immutable audition's clock.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuditionNote {
+    /// MIDI pitch, shared by every track in the overlaid score.
+    pub pitch: u8,
+    /// Inclusive start in seconds.
+    pub start_seconds: f64,
+    /// Exclusive end in seconds.
+    pub end_seconds: f64,
+}
+
+/// A track's score and identity captured alongside the rendered audio.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuditionTrack {
+    /// Stable project track identity.
+    pub id: u64,
+    /// Authored track name.
+    pub name: String,
+    /// Packed project color, interpreted by the frontend's theme.
+    pub color: u32,
+    /// Performed notes, including clip repetitions and transformations.
+    pub notes: Vec<AuditionNote>,
+}
+
 /// Bounded waveform and score structure for one immutable audio buffer.
 #[derive(Clone, Debug, Default)]
 pub struct AuditionTimeline {
+    /// All note-bearing tracks from the same score revision as this audio.
+    pub tracks: Vec<AuditionTrack>,
     /// Linear absolute sample peaks, combined across channels without phase cancellation.
     pub peaks: Vec<f32>,
     /// Named score sections in timeline order; gaps and effect tails remain unnamed.
@@ -54,6 +80,7 @@ impl AuditionTimeline {
             })
             .collect();
         Self {
+            tracks: Vec::new(),
             peaks,
             sections,
             duration_seconds,
@@ -62,7 +89,64 @@ impl AuditionTimeline {
 
     pub(crate) fn from_project(project: &Project, audio: &AudioBuffer) -> Self {
         Self::from_audio(audio, sections_for_project(project))
+            .with_tracks(tracks_for_project(project))
     }
+
+    /// Attach a captured score, clipping note spans to the exact audio buffer.
+    pub fn with_tracks(mut self, mut tracks: Vec<AuditionTrack>) -> Self {
+        for track in &mut tracks {
+            track.notes.retain_mut(|note| {
+                if !note.start_seconds.is_finite()
+                    || !note.end_seconds.is_finite()
+                    || note.pitch > 127
+                {
+                    return false;
+                }
+                note.start_seconds = note.start_seconds.clamp(0.0, self.duration_seconds);
+                note.end_seconds = note.end_seconds.clamp(0.0, self.duration_seconds);
+                note.end_seconds > note.start_seconds
+            });
+        }
+        tracks.retain(|track| !track.notes.is_empty());
+        self.tracks = tracks;
+        self
+    }
+}
+
+fn tracks_for_project(project: &Project) -> Vec<AuditionTrack> {
+    project
+        .tracks
+        .iter()
+        .filter_map(|track| {
+            let clips = track.kind.note_clips()?;
+            let notes = clips
+                .iter()
+                .flat_map(|clip| {
+                    clip.sounding_notes_with_meter(
+                        project.tempo_map.bpm_at(clip.start),
+                        project.signatures.clone(),
+                    )
+                    .map(move |note| AuditionNote {
+                        pitch: note.pitch,
+                        start_seconds: project
+                            .tempo_map
+                            .ticks_to_seconds(clip.start + note.start)
+                            .0,
+                        end_seconds: project
+                            .tempo_map
+                            .ticks_to_seconds(clip.start + note.start + note.length)
+                            .0,
+                    })
+                })
+                .collect::<Vec<_>>();
+            (!notes.is_empty()).then(|| AuditionTrack {
+                id: track.id.0,
+                name: track.name.clone(),
+                color: track.color.0,
+                notes,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn sections_for_project(project: &Project) -> Vec<AuditionSection> {
@@ -80,6 +164,10 @@ pub(crate) fn sections_for_project(project: &Project) -> Vec<AuditionSection> {
 }
 
 impl crate::Session {
+    /// Capture all piano-roll tracks before starting an asynchronous audition render.
+    pub fn audition_tracks(&self) -> Vec<AuditionTrack> {
+        tracks_for_project(self.project())
+    }
     /// Capture score section times before starting an asynchronous audition render.
     pub fn audition_sections(&self) -> Vec<AuditionSection> {
         sections_for_project(self.project())
@@ -89,6 +177,60 @@ impl crate::Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn all_track_notes_share_the_render_clock_across_tempo_changes_and_clip_loops() {
+        use auris_core::Note;
+        let mut session = crate::Session::new(crate::SessionOptions::headless()).unwrap();
+        let lead = session.add_default_instrument_track("Lead").unwrap();
+        let bass = session.add_default_instrument_track("Bass").unwrap();
+        let beat = Ticks::QUARTER;
+        session.set_tempo_at(Ticks::ZERO, 120.0);
+        session.set_tempo_point(beat * 4, 60.0);
+        let clip = session
+            .add_midi_clip(lead, "Loop", beat * 2, beat * 2)
+            .unwrap();
+        session
+            .replace_notes(clip, vec![Note::new(72, Ticks::ZERO, beat * 2)])
+            .unwrap();
+        session.set_clip_loop(clip, beat * 4).unwrap();
+        let bass_clip = session
+            .add_midi_clip(bass, "Bass", beat * 4, beat * 2)
+            .unwrap();
+        session
+            .replace_notes(bass_clip, vec![Note::new(36, Ticks::ZERO, beat)])
+            .unwrap();
+        let audio = AudioBuffer::stereo(500, 100.0);
+        let timeline = AuditionTimeline::from_project(session.project(), &audio);
+        assert_eq!(
+            timeline
+                .tracks
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Lead", "Bass"]
+        );
+        let notes = &timeline.tracks[0].notes;
+        assert_eq!((notes[0].start_seconds, notes[0].end_seconds), (1.0, 2.0));
+        assert_eq!((notes[1].start_seconds, notes[1].end_seconds), (2.0, 4.0));
+        assert_eq!(
+            (
+                timeline.tracks[1].notes[0].start_seconds,
+                timeline.tracks[1].notes[0].end_seconds
+            ),
+            (2.0, 3.0)
+        );
+        assert_eq!(
+            timeline.tracks[0].color,
+            session.project().tracks[0].color.0
+        );
+        assert_eq!(
+            timeline.tracks[1].color,
+            session.project().tracks[1].color.0
+        );
+        let shortened =
+            AuditionTimeline::from_project(session.project(), &AudioBuffer::stereo(300, 100.0));
+        assert_eq!(shortened.tracks[0].notes[1].end_seconds, 3.0);
+    }
 
     #[test]
     fn waveform_keeps_transients_and_stereo_peaks_at_their_time() {

@@ -5,7 +5,7 @@ selected clip…** to copy the selected MIDI or singer clip, or **Attach MIDI…
 to open a `.mid`/`.midi` file. Dropped MIDI files appear among the attachments;
 activate the attachment to edit it.
 
-The same controls are available directly in **Create a song with AI**. Its
+The same controls are available directly in **AI workshop**. Its
 composer keeps separate references from the editor's agent panel. MIDI files
 can also be dropped onto that screen. Submit a message such as “use this melody”
 alongside the attachments; the director and every song candidate receive the

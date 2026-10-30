@@ -358,6 +358,9 @@ impl AgentHook for Guard {
         event: CompletionCallEvent<'_>,
     ) -> CompletionCallAction {
         self.mark(0);
+        if let Some(error) = self.bridge.as_ref().and_then(Bridge::tool_limit_error) {
+            return CompletionCallAction::Stop(error);
+        }
         if let Some(bridge) = &self.bridge {
             bridge.emit(serde_json::json!({"event":"phase", "phase":"prefill"}));
         }
@@ -463,6 +466,11 @@ impl AgentHook for Guard {
         event: &InvalidToolCallContext,
     ) -> Option<InvalidToolCallAction> {
         self.mark(0);
+        if let Some(bridge) = &self.bridge
+            && let Err(error) = bridge.reserve_tool_call()
+        {
+            return Some(InvalidToolCallAction::stop(error));
+        }
         let mut state = self.state.lock().unwrap();
         let attempts = state
             .invalid_calls

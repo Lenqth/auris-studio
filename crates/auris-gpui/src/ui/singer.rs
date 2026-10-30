@@ -214,10 +214,25 @@ impl AurisApp {
             .singer_voice_info(track)
             .ok()
             .flatten()
-            .map(|info| info.path);
-        for (name, path) in self.voice_list() {
-            let selected = current.as_ref() == Some(&path);
-            menu = menu.toggle(name, MenuCommand::SingerVoice { track, path }, selected);
+            .map(|info| (info.path, info.speaker));
+        for (name, path, speaker) in self.voice_list() {
+            let selected = current
+                .as_ref()
+                .is_some_and(|(current_path, current_speaker)| {
+                    current_path == &path
+                        && speaker
+                            .as_ref()
+                            .is_none_or(|speaker| current_speaker.as_ref() == Some(speaker))
+                });
+            menu = menu.toggle(
+                name,
+                MenuCommand::SingerVoice {
+                    track,
+                    path,
+                    speaker,
+                },
+                selected,
+            );
         }
         menu.separator().item(
             self.t(Key::CmdChooseVoice),
@@ -399,12 +414,13 @@ impl AurisApp {
                 menu
             }
             Err(error) => {
-                self.set_failed_status(error.clone());
+                let guidance = messages::voicevox_connection_failed(self.language(), &error);
+                self.set_failed_status(guidance.clone());
                 self.singer_speaker_menu(track, at)
                     .separator()
                     .item_greyed_unless(
                         false,
-                        error,
+                        guidance,
                         MenuCommand::RefreshVoicevoxSpeakers { track, at },
                     )
             }
@@ -441,6 +457,7 @@ impl AurisApp {
             .set_voicevox_speaker(track, &connection, &choice)
         {
             Ok(()) => {
+                self.voices = None;
                 self.select_track(track);
                 self.invalidate_sung_previews();
                 if let Ok(connection) = self.session.singer_voicevox_connection(track) {
@@ -497,7 +514,7 @@ mod tests {
             this.session
                 .set_singer_speaker(track, Some("Warm"))
                 .unwrap();
-            this.voices = Some(vec![("Test Voice".into(), path.clone())]);
+            this.voices = Some(vec![("Test Voice".into(), path.clone(), None)]);
             this.set_status("Unrelated status");
         });
         paint(&app, cx);
@@ -592,7 +609,7 @@ mod tests {
             this.panels = crate::dock::PanelLayout::default();
             let piano = this.session.add_default_instrument_track("Piano").unwrap();
             this.select_track(piano);
-            this.voices = Some(vec![("Test Voice".into(), path.clone())]);
+            this.voices = Some(vec![("Test Voice".into(), path.clone(), None)]);
             this.library_search = crate::ui::text_field::TextField::new("Test Voice");
         });
         paint(&app, cx);

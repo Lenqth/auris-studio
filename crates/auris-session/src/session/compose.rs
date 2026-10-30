@@ -193,7 +193,16 @@ impl Session {
             .ok_or_else(|| SessionError::UnknownPlugin("<any instrument>".into()))?
             .to_string();
 
-        let mut project = Project::new(&composition.title, self.project.sample_rate);
+        // A specification that names nothing leaves the document's own name standing: the
+        // placeholder is the composer's default, not a title anyone chose, and replacing a name
+        // the song was already given with it would bring back an "Untitled" save dialog.
+        let title = if composition.title.trim().is_empty() || composition.title == Project::UNTITLED
+        {
+            self.project.name.clone()
+        } else {
+            composition.title.clone()
+        };
+        let mut project = Project::new(title, self.project.sample_rate);
         // The composer's own map, handed over rather than flattened: a section may lift or drop
         // away from the song's tempo, and a piece that arrived as one number would play its
         // chorus at the tempo of its verse.
@@ -208,9 +217,7 @@ impl Session {
         // composed song comes out belonging to the same song.
         project.harmony = composition.harmony.clone();
         project.sections = composition.sections.clone();
-        // What it was asked for, kept with what it produced. A song sheet reopened after a save
-        // and a reload refills itself from this, and Another Take goes on working on a piece
-        // nobody has the original `.asong` for.
+        // Retain the specification alongside the generated score for subsequent commands.
         project.song_spec = Some(self.composed_spec_with_sources(&spec));
 
         let mut report = ComposeReport {
@@ -673,6 +680,28 @@ mod tests {
             session.midi_clip(clip).unwrap().transforms,
             original.transforms
         );
+    }
+
+    #[test]
+    fn a_specification_without_a_title_keeps_the_name_the_song_was_given() {
+        let mut session = session();
+        session.rename_project("Night Drive");
+        let spec = auris_compose::SongSpec::parse(
+            r#"
+                form = "verse"
+                chords = "@axis"
+                [section.verse]
+                bars = 4
+                "#,
+        )
+        .unwrap();
+        session.compose(&auris_compose::compose(&spec)).unwrap();
+        assert_eq!(session.project().name, "Night Drive");
+
+        // Saved, the file's name is what the window shows and the exports suggest.
+        let scratch = crate::session::fixtures::Scratch::new("titled-compose");
+        session.save_as(&scratch.join("Drive.auris")).unwrap();
+        assert_eq!(session.document_title(), "Drive");
     }
 
     #[test]

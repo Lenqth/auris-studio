@@ -254,11 +254,10 @@ impl AurisApp {
         let open = self.menu.as_ref().is_some_and(|menu| menu.entries.iter().any(|entry| {
             matches!(entry, MenuEntry::Item(item) if item.command == MenuCommand::PluginParameters(subject))
         }));
-        crate::ui::widgets::button_with_content(
+        crate::ui::widgets::icon_button(
             id,
-            crate::ui::icons::icon(Icon::More, px(12.), self.theme.text),
-            ButtonStyle::Ghost,
-            crate::ui::widgets::ButtonState::available(open, true),
+            Icon::More,
+            open,
             self.theme.accent_soft,
             &self.theme,
             Self::opens_menu(cx, move |this, at| match subject {
