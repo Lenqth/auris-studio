@@ -1270,7 +1270,7 @@ impl VoiceSetupWindow {
             }
             Err(error) => {
                 self.catalog = None;
-                self.status = error;
+                self.status = messages::voicevox_connection_failed(self.language, &error);
                 self.status_failed = true;
             }
         }
@@ -1720,7 +1720,7 @@ mod tests {
             );
             assert!(
                 this.voice_list()
-                    .contains(&("My LeapSinger".into(), path.clone()))
+                    .contains(&("My LeapSinger".into(), path.clone(), None))
             );
         });
         // The saved source snapshot allows a second edit without reopening the dialog.

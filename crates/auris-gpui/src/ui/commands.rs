@@ -1564,14 +1564,30 @@ impl AurisApp {
         path: PathBuf,
         cx: &mut Context<Self>,
     ) {
-        if self
+        self.apply_singer_voice_selection(track, path, None, cx);
+    }
+
+    pub(crate) fn apply_singer_voice_selection(
+        &mut self,
+        track: TrackId,
+        path: PathBuf,
+        speaker: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(current) = self
             .session
             .singer_voice_info(track)
             .ok()
             .flatten()
-            .is_some_and(|voice| voice.path == path)
+            .filter(|voice| voice.path == path)
         {
             self.select_track(track);
+            if let Some(speaker) = speaker
+                && current.speaker.as_deref() != Some(speaker.as_str())
+            {
+                self.set_singer_speaker_for(track, speaker);
+            }
+            cx.notify();
             return;
         }
         let label = self.t(Key::CmdChooseVoice).to_string();
@@ -1593,7 +1609,9 @@ impl AurisApp {
                 }
                 match loaded {
                     Ok(Some(result)) => match this.session.continue_singer_voice_load(result) {
-                        Some(voice) => this.finish_apply_singer_voice(track, &voice),
+                        Some(voice) => {
+                            this.finish_apply_singer_voice(track, &voice, speaker.as_deref())
+                        }
                         None => this.set_status(this.t(Key::BackgroundCommandChanged).to_string()),
                     },
                     Ok(None) => {
@@ -1611,8 +1629,12 @@ impl AurisApp {
         &mut self,
         track: TrackId,
         voice: &auris_session::SingerVoiceLoadResult,
+        speaker: Option<&str>,
     ) {
-        match self.session.set_singer_voice_from_load(track, voice) {
+        match self
+            .session
+            .set_singer_voice_selection_from_load(track, voice, speaker)
+        {
             Ok(()) => {
                 self.select_track(track);
                 self.invalidate_sung_previews();
@@ -1645,12 +1667,17 @@ impl AurisApp {
     ///
     /// The browser interface a voice shares with the instruments: one row, one click. Like the
     /// picker, this prepares the model on a cancellable worker before the short document edit.
-    pub(crate) fn set_track_voice(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+    pub(crate) fn set_track_voice(
+        &mut self,
+        path: PathBuf,
+        speaker: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(track) = self.singer_target() else {
             self.set_failed_status(self.t(Key::ErrorNoSingerTrack).to_string());
             return;
         };
-        self.apply_singer_voice(track, path, cx);
+        self.apply_singer_voice_selection(track, path, speaker, cx);
     }
 
     /// Drops cached and pending auditions when the voice behind them changes.

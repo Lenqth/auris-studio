@@ -1155,6 +1155,12 @@ messages! {
         ja: "VOICEVOX Engine {version} に接続できました"
     }
 
+    /// Recovery guidance when a VOICEVOX catalogue cannot be fetched.
+    fn voicevox_connection_failed(detail: &str) {
+        en: "VOICEVOX is unavailable. Check that VOICEVOX Engine is running, then try again. {detail}",
+        ja: "VOICEVOXを利用できません。VOICEVOXが起動していることを確認して、再試行してください。{detail}"
+    }
+
     /// Confirmation that a singing-backend configuration was written.
     fn voice_setup_saved(path: &str) {
         en: "Saved {path}",
