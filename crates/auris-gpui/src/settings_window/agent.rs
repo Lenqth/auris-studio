@@ -34,6 +34,7 @@ struct AgentDraft {
     context_tokens: Option<u32>,
     output_tokens: Option<u32>,
     max_tool_failures: Option<u8>,
+    max_tool_calls: Option<u32>,
     system_prompt: String,
 }
 
@@ -51,6 +52,7 @@ impl AgentSettings {
             context_tokens: self.prefs.context_tokens,
             output_tokens: self.prefs.output_tokens,
             max_tool_failures: self.prefs.max_tool_failures,
+            max_tool_calls: self.prefs.max_tool_calls,
             system_prompt: if prompt.trim().is_empty()
                 || prompt == auris_agent::default_system_prompt()
             {
@@ -72,6 +74,7 @@ impl AgentSettings {
         self.prefs.context_tokens = draft.context_tokens;
         self.prefs.output_tokens = draft.output_tokens;
         self.prefs.max_tool_failures = draft.max_tool_failures;
+        self.prefs.max_tool_calls = draft.max_tool_calls;
         self.prefs.system_prompt = draft.system_prompt.clone();
         for (field, value) in self.fields[..6].iter_mut().zip([
             draft.url,
@@ -117,6 +120,7 @@ impl AgentSettings {
             context_tokens: prefs.context_tokens,
             output_tokens: prefs.output_tokens,
             max_tool_failures: prefs.max_tool_failures,
+            max_tool_calls: prefs.max_tool_calls,
             system_prompt: if prompt.content() == auris_agent::default_system_prompt() {
                 String::new()
             } else {
@@ -1183,14 +1187,41 @@ mod tests {
         cx.simulate_keystrokes("down enter");
         handle
             .update(cx, |this, _, cx| {
+                assert_ne!(
+                    this.agent.draft(),
+                    this.agent.saved,
+                    "Changing only the limit must enable Apply"
+                );
                 this.apply_agent_with(cx, |settings| {
                     assert_eq!(settings.agent.tool_call_limit(), 2000);
                     Ok::<(), String>(())
                 });
+                assert_eq!(this.agent.draft(), this.agent.saved);
             })
             .unwrap();
         app.read_with(cx, |this, _| {
             assert_eq!(this.agent_chat.preferences().tool_call_limit(), 2000);
+        });
+    }
+
+    #[gpui::test]
+    fn tool_call_limit_draft_can_revert_without_changing_saved_preferences(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        handle
+            .update(cx, |this, _, cx| {
+                this.agent.prefs.max_tool_calls = Some(5000);
+                assert_ne!(this.agent.draft(), this.agent.saved);
+                this.revert_agent(cx);
+                assert_eq!(this.agent.prefs.max_tool_calls, None);
+                assert_eq!(this.agent.draft(), this.agent.saved);
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.max_tool_calls, None);
         });
     }
 
