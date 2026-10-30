@@ -3306,6 +3306,11 @@ impl AurisApp {
                 ("enter", AgentField::Chat) => {
                     if event.keystroke.modifiers.shift {
                         self.agent_chat.input.insert("\n");
+                    } else if event.keystroke.modifiers.secondary()
+                        && (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
+                    {
+                        // The queue's "Send now", from the keyboard: interrupt and go first.
+                        self.submit_agent_message_now(cx);
                     } else {
                         self.agent_submit(window, cx);
                     }
@@ -5253,13 +5258,12 @@ impl AurisApp {
                         .items_center()
                         .gap_1()
                         .px_1p5()
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(self.t(Key::AgentQueueHint)),
-                        )
+                        .child(div().flex_1().text_xs().text_color(theme.text_muted).child(
+                            self.t(Key::AgentQueueHint).replace(
+                                "{interrupt}",
+                                &crate::actions::menu_keystroke("secondary-enter"),
+                            ),
+                        ))
                         .child(
                             button_enabled(
                                 "agent-send-now",
@@ -6643,6 +6647,37 @@ mod tests {
             );
         });
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[gpui::test]
+    fn secondary_enter_interrupts_the_running_turn_with_the_composer_message(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent.model = "offline-fixture".into();
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.busy = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("later");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("urgent");
+        cx.simulate_keystrokes("secondary-enter");
+        app.read_with(cx, |this, _| {
+            let queued = this
+                .agent_chat
+                .queued
+                .iter()
+                .map(|message| message.text.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(queued, ["urgent", "later"]);
+            assert!(!this.agent_chat.busy, "the running turn was stopped");
+            assert!(!this.agent_chat.queue_paused);
+            assert!(this.agent_chat.input.content().is_empty());
+        });
     }
 
     #[gpui::test]

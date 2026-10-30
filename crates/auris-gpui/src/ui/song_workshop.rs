@@ -38,6 +38,7 @@ mod input;
 mod input_assist;
 #[path = "song_workshop/preview.rs"]
 mod preview;
+mod queue;
 mod threads;
 
 pub(crate) struct SongWorkshop {
@@ -68,6 +69,14 @@ pub(crate) struct SongWorkshop {
     preparing: Option<usize>,
     error: Option<String>,
     submitted: bool,
+    /// Messages written while the director or a composer was still at work, oldest first.
+    queued: std::collections::VecDeque<queue::QueuedBrief>,
+    /// Set by Stop and by a send the workshop refused, so the queue does not empty itself into
+    /// a conversation the user has just asked to be quiet.
+    queue_paused: bool,
+    /// The queued message the workshop has been handed and not yet acknowledged. Unlike a send
+    /// from the composer, the composer is not holding its text, so it stays editable meanwhile.
+    in_flight: Option<queue::QueuedBrief>,
     chord_prompt_open: bool,
     show_memory: bool,
     copied: Option<(&'static str, usize)>,
@@ -217,8 +226,12 @@ impl SongWorkshop {
     fn text_mut(&mut self, _: usize) -> &mut TextField {
         &mut self.brief
     }
+    /// Whether the composer's text is the message the workshop is still acknowledging.
+    fn brief_locked(&self) -> bool {
+        (self.submitted && self.in_flight.is_none()) || self.switching
+    }
     pub(crate) fn field(&self) -> Option<&TextField> {
-        if self.submitted || self.switching {
+        if self.brief_locked() {
             return None;
         }
         match self.active_field {
@@ -228,7 +241,7 @@ impl SongWorkshop {
         }
     }
     pub(crate) fn field_mut(&mut self) -> Option<&mut TextField> {
-        if self.submitted || self.switching {
+        if self.brief_locked() {
             return None;
         }
         match self.active_field {
@@ -354,6 +367,9 @@ impl AurisApp {
             preparing: None,
             error,
             submitted: false,
+            queued: Default::default(),
+            queue_paused: false,
+            in_flight: None,
             chord_prompt_open: false,
             show_memory: false,
             copied: None,
@@ -382,15 +398,26 @@ impl AurisApp {
         if self
             .song_workshop
             .as_ref()
-            .is_none_or(|s| s.busy() || s.references.midi_loading)
+            .is_none_or(|s| s.brief_locked() || s.references.midi_loading)
             || !self.commit_midi_draft()
         {
+            return;
+        }
+        if self
+            .song_workshop
+            .as_ref()
+            .is_some_and(|s| s.busy() || !s.queued.is_empty())
+        {
+            // Busy, or others are already waiting: this one waits its turn behind them.
+            self.enqueue_workshop_brief(false);
+            self.dispatch_queued_workshop_brief();
+            cx.notify();
             return;
         }
         let Some(s) = &mut self.song_workshop else {
             return;
         };
-        if s.busy() || s.brief.content().trim().is_empty() {
+        if s.brief.content().trim().is_empty() {
             return;
         }
         if !s.preferences.is_configured() {
@@ -518,6 +545,10 @@ impl AurisApp {
                 s.input_assist.edited();
                 s.view_round = None;
                 s.submitted = false;
+                // The queue was written to the conversation that has just been left.
+                s.queued.clear();
+                s.queue_paused = false;
+                s.in_flight = None;
                 s.brief = TextField::new(snapshot.document.draft.clone());
                 s.references = Default::default();
                 s.references.attachments = snapshot.document.draft_attachments.clone();
@@ -539,6 +570,7 @@ impl AurisApp {
             }
             s.error = snapshot.error.clone();
             if s.submitted
+                && s.in_flight.is_none()
                 && snapshot.document.messages.len()
                     > s.snapshot
                         .as_ref()
@@ -555,6 +587,15 @@ impl AurisApp {
                 || snapshot.error.is_some()
             {
                 s.submitted = false;
+                if snapshot.error.is_some()
+                    && let Some(message) = s.in_flight.take()
+                {
+                    // Refused rather than lost: back at the head of the line, and held there
+                    // until the user has seen why.
+                    s.queued.push_front(message);
+                    s.queue_paused = true;
+                }
+                s.in_flight = None;
             }
             s.snapshot = Some(snapshot);
             if follow_tail {
@@ -574,6 +615,9 @@ impl AurisApp {
             cx.notify();
         }
         if s.sync_idle_auditions() {
+            cx.notify();
+        }
+        if self.dispatch_queued_workshop_brief() {
             cx.notify();
         }
     }
@@ -2041,6 +2085,157 @@ mod tests {
                 error: None,
             });
         });
+    }
+
+    fn conversation_snapshot(messages: &[&str], planning: bool) -> Snapshot {
+        let document = auris_session::workshop::Document {
+            messages: messages
+                .iter()
+                .map(|text| auris_session::workshop::Message {
+                    attachments: Vec::new(),
+                    user: true,
+                    text: (*text).to_owned(),
+                    references: Vec::new(),
+                })
+                .collect(),
+            ..Default::default()
+        };
+        Snapshot {
+            threads: Vec::new(),
+            document,
+            candidates: Default::default(),
+            previews: Default::default(),
+            preview_errors: Default::default(),
+            progress: Default::default(),
+            planning,
+            preferences: Default::default(),
+            error: None,
+        }
+    }
+
+    fn sent_text(commands: &mpsc::Receiver<Command>) -> Option<String> {
+        match commands.try_recv() {
+            Ok(Command::Send(text, _, _)) => Some(text),
+            _ => None,
+        }
+    }
+
+    #[gpui::test]
+    fn workshop_messages_wait_their_turn_and_can_jump_the_queue(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        let (commands, snapshots) = app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            let (runtime, commands, snapshots) = Workshop::loopback();
+            s.runtime = Some(runtime);
+            s.preferences.model = "test".into();
+            // The director is still answering an earlier message.
+            s.snapshot = Some(conversation_snapshot(&[], true));
+            (commands, snapshots)
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-brief", cx);
+        cx.simulate_input("make it faster");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("and brighter");
+        cx.simulate_keystrokes("enter");
+        let queued = |app: &gpui::Entity<AurisApp>, cx: &mut gpui::VisualTestContext| {
+            app.read_with(cx, |this, _| {
+                let s = this.song_workshop.as_ref().unwrap();
+                s.queued.iter().map(|m| m.text.clone()).collect::<Vec<_>>()
+            })
+        };
+        assert_eq!(queued(&app, cx), ["make it faster", "and brighter"]);
+        app.read_with(cx, |this, _| {
+            assert!(
+                this.song_workshop
+                    .as_ref()
+                    .unwrap()
+                    .brief
+                    .content()
+                    .is_empty()
+            );
+        });
+        assert!(
+            commands.try_recv().is_err(),
+            "nothing reaches a busy workshop"
+        );
+
+        // Typed third, sent first: the secondary modifier stops the round in progress.
+        cx.simulate_input("actually, a ballad");
+        cx.simulate_keystrokes("secondary-enter");
+        assert!(matches!(commands.try_recv(), Ok(Command::Stop(None))));
+        assert_eq!(
+            queued(&app, cx),
+            ["actually, a ballad", "make it faster", "and brighter"]
+        );
+
+        // The work stops and the head of the line goes out by itself, while the composer stays
+        // free for the next thought.
+        snapshots.send(conversation_snapshot(&[], false)).unwrap();
+        app.update(cx, |this, cx| this.poll_song_workshop(cx));
+        assert_eq!(sent_text(&commands).as_deref(), Some("actually, a ballad"));
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("x");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.song_workshop.as_ref().unwrap().brief.content(), "x");
+        });
+
+        // Acknowledged and answered: the next one waits for that round, not merely the send.
+        snapshots
+            .send(conversation_snapshot(&["actually, a ballad"], true))
+            .unwrap();
+        app.update(cx, |this, cx| this.poll_song_workshop(cx));
+        assert!(commands.try_recv().is_err());
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.song_workshop.as_ref().unwrap().brief.content(), "x");
+        });
+        snapshots
+            .send(conversation_snapshot(&["actually, a ballad"], false))
+            .unwrap();
+        app.update(cx, |this, cx| this.poll_song_workshop(cx));
+        assert_eq!(sent_text(&commands).as_deref(), Some("make it faster"));
+        assert_eq!(queued(&app, cx), ["and brighter"]);
+    }
+
+    #[gpui::test]
+    fn stopping_the_workshop_holds_the_queue_until_resumed(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        let (commands, snapshots) = app.update(cx, |this, cx| {
+            let s = this.song_workshop.as_mut().unwrap();
+            let (runtime, commands, snapshots) = Workshop::loopback();
+            s.runtime = Some(runtime);
+            s.preferences.model = "test".into();
+            s.snapshot = Some(conversation_snapshot(&[], true));
+            s.brief = TextField::new("later");
+            this.start_song_workshop(cx);
+            (commands, snapshots)
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("song-cancel", cx);
+        assert!(matches!(commands.try_recv(), Ok(Command::Stop(None))));
+        snapshots.send(conversation_snapshot(&[], false)).unwrap();
+        app.update(cx, |this, cx| this.poll_song_workshop(cx));
+        assert!(
+            commands.try_recv().is_err(),
+            "Stop is not a cue for the next message"
+        );
+        crate::harness::paint(&app, cx);
+        crate::harness::click("workshop-queue-toggle", cx);
+        assert_eq!(sent_text(&commands).as_deref(), Some("later"));
     }
 
     #[gpui::test]
