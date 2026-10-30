@@ -238,6 +238,19 @@
 //! bounded handle eviction and process restart invalidate IDs; heavyweight catalog eviction does
 //! not redirect an issued handle. Neither discovery nor measurement edits the document.
 //!
+//! Character discovery shares [`crate::TimbreTargets`] between the map and `search_instruments`
+//! mode `character`. Matched reference notes also produce fixed-scale brightness, attack speed,
+//! held sustain, captured release and noise descriptors. These do not depend on catalogue PCA
+//! normalization. Local Japanese/English impression terms map to target hypotheses; explicit
+//! targets override them. Arbitrary prose and negation are translated by the calling agent into
+//! targets, not interpreted by the local dictionary. Responses expose targets, recognized terms,
+//! measured descriptors and relative mismatch, never a probability or listening judgment.
+//! Optional reference IDs blend full-feature resemblance with target distance; ordinary name,
+//! source and library constraints still apply. Character and similarity searches reuse one bounded
+//! background index. Isolated native plugins remain metadata-only. Release uses the captured
+//! 400 ms tail and explicitly marks censored lower bounds. Desktop browsing keeps PCA and semantic
+//! coordinates separate; searching changes the result order/highlights without moving points.
+//!
 //! The live agent queries the owning session for built-in instruments, loaded SoundFont
 //! presets and installed CLAP/VST3 instruments. The frontend supplies its configured plugin
 //! search folders. Discovery caches plugin descriptors and issues opaque, session-local

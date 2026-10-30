@@ -2114,6 +2114,8 @@ impl AurisApp {
             self.palette_key(event, window, cx)
         } else if self.prompt.is_some() {
             self.prompt_key(event, window, cx)
+        } else if self.timbre_map.open && self.timbre_map.search_focused {
+            self.timbre_search_key(event, cx)
         } else if self.library_search_focused {
             self.library_search_key(event, cx)
         } else {

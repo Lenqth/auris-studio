@@ -177,6 +177,7 @@ pub use session::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
 pub use session::{
     TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbrePreviewJob, TimbreSound,
 };
+mod sound_character;
 mod sound_icons;
 pub use session::{TrackConversion, TrackConversionJob};
 pub use settings::{
@@ -185,6 +186,7 @@ pub use settings::{
     WindowPlacement, config_dir,
 };
 pub use singer_portrait::{SingerPortraitError, SingerPortraitSource, load_singer_portrait};
+pub use sound_character::{TimbreCharacter, TimbreTargets};
 pub use sound_icons::SoundIcon;
 pub use transcription::{read_external_transcription_file, read_transcription_file};
 pub use transcription_draft::{
