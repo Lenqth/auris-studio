@@ -341,13 +341,16 @@ pub enum Command {
         /// Exact speaker name; omit for the voice's default. Unknown names are refused with available names.
         speaker: Option<String>,
     },
-    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Insufficient note slots are refused without editing; later unfilled notes keep their words. Returns filled count, available notes and full clip name; one transaction. Use read_notes to verify before sing.
+    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. Keep original kanji/kana spelling in text for display; supply optional kana reading separately for pronunciation, including without a dictionary. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Without reading, kana is split into moras and other text requires the installed Japanese dictionary. Insufficient note slots are refused without editing; later unfilled notes keep their words. Returns filled count, available notes and full clip name; one transaction. Use read_notes to verify before sing.
     WriteLyrics {
         /// Stable singer clip ID.
         clip: u64,
-        /// Nonempty phrase, e.g. さくらさいた.
+        /// Original nonempty written phrase, e.g. 桜咲いた. Never replace it with its reading.
         #[schemars(length(min = 1, max = 16384))]
         text: String,
+        /// Optional nonempty kana pronunciation, e.g. さくらさいた; leaves the written text intact.
+        #[schemars(length(min = 1, max = 16384))]
+        reading: Option<String>,
         /// Zero-based storage index from read_notes; notes from this position in time order receive lyrics.
         from: Option<usize>,
     },
@@ -836,9 +839,20 @@ impl Session {
                 clear_chords,
                 section.as_deref(),
             ),
-            Command::WriteLyrics { clip, text, from } => {
+            Command::WriteLyrics {
+                clip,
+                text,
+                reading,
+                from,
+            } => {
                 if text.trim().is_empty() || text.len() > 16384 {
                     return Err("text must contain lyrics within 16384 UTF-8 bytes".into());
+                }
+                if reading
+                    .as_ref()
+                    .is_some_and(|reading| reading.len() > 16384)
+                {
+                    return Err("reading must fit within 16384 UTF-8 bytes".into());
                 }
                 let (track, target) = self
                     .project()
@@ -869,7 +883,7 @@ impl Session {
                     .unwrap_or(0);
                 let indices = &indices[first..];
                 let filled = self
-                    .write_lyrics(ClipId(clip), indices, &text)
+                    .write_lyrics_with_reading(ClipId(clip), indices, &text, reading.as_deref())
                     .map_err(error)?;
                 Ok(
                     serde_json::json!({"filled":filled,"available":indices.len(),"clip_name":self.midi_clip(ClipId(clip)).map(|clip| &clip.name),"unsaved":true})

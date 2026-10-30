@@ -1667,6 +1667,11 @@ pub mod composition {
     //! Source offsets count Unicode scalars in the original lyric. Dictionary output does not
     //! establish character-to-mora alignment, so no such alignment is guessed.
     //!
+    //! [`Session::write_lyrics_with_reading`](crate::Session::write_lyrics_with_reading) accepts
+    //! written lyrics and an independent kana pronunciation, including without a dictionary.
+    //! The written spelling stays on the first note with `+` continuations; phonemes carry
+    //! pronunciation. Workshop cards read that written score rather than the kana reading.
+    //!
     //! Existing singer phrases are compared through explicit
     //! [`ClipComparison`](crate::lyric_harness::ClipComparison) relationships. Each selected span
     //! is a contiguous monophonic run with one established mora per note. Pitch, relative onset,

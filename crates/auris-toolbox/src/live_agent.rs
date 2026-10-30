@@ -627,7 +627,7 @@ mod tests {
             ),
             (
                 "write_lyrics",
-                serde_json::json!({"clip":2,"text":"さくら"}),
+                serde_json::json!({"clip":2,"text":"桜","reading":"さくら"}),
             ),
             ("sing", serde_json::json!({"track":1,"seed":42})),
         ] {

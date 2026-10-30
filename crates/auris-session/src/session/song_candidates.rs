@@ -1338,6 +1338,47 @@ mod tests {
     }
 
     #[test]
+    fn candidate_displays_written_lyrics_after_saving_explicit_pronunciation() {
+        use auris_core::{Note, time::Ticks};
+        let mut session = Session::new(SessionOptions::headless()).unwrap();
+        let track = session.add_singer_track("Lead");
+        let clip = session
+            .add_midi_clip(track, "Verse", Ticks::ZERO, Ticks(1920))
+            .unwrap();
+        for beat in 0..4 {
+            session
+                .add_note(clip, Note::new(60, Ticks(480 * beat), Ticks(480)))
+                .unwrap();
+        }
+        session
+            .agent_command(
+                serde_json::from_value(serde_json::json!({
+                    "action":"write_lyrics", "clip":clip.0, "text":"月の夜", "reading":"つきのよ"
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let saved = session
+            .save_as(&folder.path().join("Lyrics.auris"))
+            .unwrap();
+        let mut reopened = Session::new(SessionOptions::headless()).unwrap();
+        reopened.open(&saved.document).unwrap();
+        let candidate = SongCandidate {
+            idea: idea(),
+            project: reopened.project().clone(),
+            audio: Arc::new(AudioBuffer::stereo(1, 48_000.0)),
+            timeline: Default::default(),
+            _assets: None,
+        };
+        assert_eq!(candidate.lyrics(), "月の夜");
+        assert_eq!(
+            candidate.project.midi_clip(clip).unwrap().1.notes[0].phonemes,
+            ["ts", "ɯ"]
+        );
+    }
+
+    #[test]
     fn candidate_lyrics_preserve_sections_repeats_and_manual_vocal_text() {
         use auris_core::{Note, time::Ticks};
         let mut candidate = SongCandidate {
