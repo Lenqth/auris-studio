@@ -458,6 +458,12 @@ pub enum Command {
         /// One string: instrument, drum, singer, audio or bus. Never an array or instrument ID.
         kind: TrackKind,
     },
+    /// Give the song its title. The title names the project and is what Save As and exports suggest as the file name until the user saves. Name a new song once its character is clear; keep a title the user gave or chose unless asked to change it.
+    RenameProject {
+        /// The song title, 1-120 characters.
+        #[schemars(length(min = 1, max = 120))]
+        title: String,
+    },
     /// Rename a track using its stable numeric ID from inspect_project or add_track.
     RenameTrack {
         /// Stable track ID.
@@ -1052,6 +1058,14 @@ impl Session {
                 };
                 Ok(serde_json::json!({"track":id.0,"unsaved":true}).to_string())
             }
+            Command::RenameProject { title } => {
+                let title = title.trim();
+                if title.is_empty() || title.chars().count() > 120 {
+                    return Err("A song title needs 1-120 characters".into());
+                }
+                self.rename_project(title);
+                Ok(serde_json::json!({"title":title,"unsaved":true}).to_string())
+            }
             Command::RenameTrack { track, name } => {
                 if name.trim().is_empty() {
                     return Err("A track needs a name".into());
@@ -1431,6 +1445,33 @@ mod tests {
             session.project().loop_region,
             Some((Ticks::from_beats(8.0), Ticks::from_beats(24.0)))
         );
+    }
+
+    #[test]
+    fn the_agent_titles_the_song_and_the_title_becomes_the_suggested_file_name() {
+        let mut session = session();
+        assert_eq!(session.document_title(), Project::UNTITLED);
+        let before = session.project().clone();
+        for title in ["", "   ", &"x".repeat(121)] {
+            assert!(
+                session
+                    .agent_command(Command::RenameProject {
+                        title: title.into(),
+                    })
+                    .is_err()
+            );
+            assert_eq!(session.project(), &before);
+        }
+        session
+            .agent_command(Command::RenameProject {
+                title: "  夜明けのテーマ ".into(),
+            })
+            .unwrap();
+        assert_eq!(session.project().name, "夜明けのテーマ");
+        assert_eq!(session.document_title(), "夜明けのテーマ");
+        assert!(session.is_dirty());
+        session.undo();
+        assert_eq!(session.project().name, Project::UNTITLED);
     }
 
     #[test]

@@ -3009,11 +3009,7 @@ impl AurisApp {
     /// Window chrome owns the product name and save marker separately; keeping this value
     /// document-only lets Atelier centre the title without duplicating application branding.
     pub(crate) fn document_title(&self) -> String {
-        self.session
-            .path()
-            .and_then(|path| path.file_stem())
-            .map(|stem| stem.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.project().name.clone())
+        self.session.document_title()
     }
 
     /// Window title, marking unsaved changes the way every editor does.

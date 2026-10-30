@@ -292,7 +292,7 @@ fn default_grid() -> Ticks {
 
 impl Default for Project {
     fn default() -> Self {
-        Self::new("Untitled", 48_000.0)
+        Self::new(Self::UNTITLED, 48_000.0)
     }
 }
 
@@ -303,6 +303,9 @@ impl Project {
     /// Version 30 adds eleventh chord qualities to stored harmony.
     /// Version 29 adds ordered, named manual drum lanes beside generation-role assignments.
     pub const FORMAT_VERSION: u32 = 32;
+
+    /// The name a document carries until somebody — a person or the agent — gives it one.
+    pub const UNTITLED: &'static str = "Untitled";
 
     /// An empty project.
     ///
