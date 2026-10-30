@@ -1010,6 +1010,7 @@ impl AurisApp {
                     agent_components::thinking_indicator(
                         "song-planning-activity",
                         self.t(Key::WorkshopPlanning),
+                        &theme,
                     ),
                     &theme,
                 ));
@@ -1023,6 +1024,7 @@ impl AurisApp {
                 agent_components::thinking_indicator(
                     "song-loading-activity",
                     self.t(Key::WorkshopLoadingModels),
+                    &theme,
                 ),
                 &theme,
             ));
@@ -1286,13 +1288,11 @@ impl AurisApp {
             .p(spacing.lg)
             .rounded(theme.atelier.shape.radius_lg)
             .border_1()
-            // The agent's colour marks only work the agent is doing: a card being written. The
-            // song the person chose is their choice, and carries the accent.
             // Mixed into the card's own fill rather than laid over it, so the card stays opaque
             // over the metal beneath the transcript.
             .when(running, |card| {
-                card.bg(atelier::mix(colors.elevated, colors.agent, 0.12))
-                    .border_color(colors.agent.opacity(0.35))
+                card.bg(atelier::mix(colors.elevated, colors.accent, 0.12))
+                    .border_color(colors.accent.opacity(0.35))
             })
             .when(!running, |card| {
                 card.bg(colors.elevated).border_color(if selected {
@@ -1315,7 +1315,7 @@ impl AurisApp {
         if let Some(stage) = snapshot.progress.get(&id) {
             badges = badges.child(
                 Badge::new(self.t(Key::WorkshopGenerating))
-                    .tone(Tone::Agent)
+                    .tone(Tone::Accent)
                     .dot(),
             );
             card = card.child(badges).child(
@@ -1345,23 +1345,16 @@ impl AurisApp {
                 div()
                     .debug_selector(move || format!("song-candidate-activity-{index}"))
                     .flex()
-                    .flex_col()
+                    .items_center()
                     .gap(spacing.sm)
                     .p(spacing.md)
                     .rounded(theme.atelier.shape.radius_md)
                     .bg(colors.surface)
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(spacing.sm)
-                            .child(atelier::Spinner::new(("song-candidate-spinner", index)))
-                            .child(Label::new(label).size(TextSize::Small)),
+                        atelier::Spinner::new(("song-candidate-spinner", index))
+                            .color(colors.accent),
                     )
-                    .child(
-                        atelier::ProgressBar::indeterminate(("song-candidate-progress", index))
-                            .tone(Tone::Agent),
-                    ),
+                    .child(Label::new(label).size(TextSize::Small)),
             );
         } else {
             card = card.child(badges).child(
@@ -1440,7 +1433,7 @@ impl AurisApp {
                                 super::icons::tool_icon(name),
                                 theme.atelier.typography.size_sm,
                                 if usage.running() > 0 {
-                                    colors.agent
+                                    colors.accent
                                 } else {
                                     theme.text_muted
                                 },
