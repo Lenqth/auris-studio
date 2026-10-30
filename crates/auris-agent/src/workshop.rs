@@ -1422,6 +1422,7 @@ fn compose_attempt(
     let _ = sender.send(JobEvent::Progress(candidate.id, "planning".into()));
     worker.send(
         &json!({"say": json!({"assignment":candidate.direction.instructions,
+            "budget":budget_brief(prefs.tool_call_limit()),
             "recovery":candidate.error.as_ref().map(|error| json!({
                 "last_error":error,
                 "instruction":"Inspect the restored score and current resources. Continue only unfinished work; do not duplicate successful edits. Correct the cause of the last failure before completing."
@@ -1622,6 +1623,19 @@ fn compose_attempt(
     result
 }
 
+/// The tool allowance as the composer is told it with its assignment.
+///
+/// A composer that scripts its calls cannot feel them being spent, and one rewrote a song's
+/// harmony bar by bar after setting it section by section: the limit has to be known before the
+/// plan is made, together with the way of working that keeps well inside it. The tool host adds
+/// what is left to every result once it runs low.
+fn budget_brief(limit: usize) -> serde_json::Value {
+    json!({"tool_calls":limit,
+        "rule":"Every Auris tool call counts, reads included, and the candidate stops when the \
+            allowance runs out. Work in whole sections, not single bars or notes: one edit_harmony \
+            per section with its full chord string, one add_clip per track and section, one \
+            replace_notes or write_lyrics per clip. Do not redo work that already succeeded."})
+}
 fn audio_gate(cancel: &AtomicBool) -> Result<std::sync::MutexGuard<'static, ()>, String> {
     loop {
         if cancel.load(Ordering::Acquire) {
@@ -2494,7 +2508,7 @@ mod tests {
             json!({"track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}),
         );
         let answer = json!({"role":"assistant","content":"Finished"}).to_string();
-        let (url, _) = crate::tests::mock_server(vec![
+        let (url, seen) = crate::tests::mock_server(vec![
             crate::tests::completion(&reads, "tool_calls"),
             crate::tests::completion(&setup, "tool_calls"),
             crate::tests::completion(&phrase, "tool_calls"),
@@ -2546,6 +2560,11 @@ mod tests {
         assert_eq!(kind("render.end").next().unwrap()["ok"], true);
         assert_eq!(entries.last().unwrap()["kind"], "attempt.end");
         assert_eq!(entries.last().unwrap()["ok"], true);
+
+        // The composer was told its allowance before it planned.
+        let first = &seen.lock().unwrap()[0];
+        assert!(first.contains(r#"\"tool_calls\":1000"#), "{first}");
+        assert!(first.contains("Work in whole sections"));
     }
 
     #[test]
