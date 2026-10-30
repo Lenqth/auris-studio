@@ -2162,6 +2162,7 @@ impl AurisApp {
         self.prompt.is_some()
             || self.palette.is_some()
             || self.library_search_focused
+            || (self.timbre_map.open && self.timbre_map.search_focused)
             || self.agent_chat.typing()
     }
 

@@ -2324,6 +2324,14 @@ impl AurisApp {
         if self.menu.is_some() {
             return None;
         }
+        if self.timbre_map.open
+            && self.timbre_map.search_focused
+            && self.prompt.is_none()
+            && self.palette.is_none()
+            && self.menu_bar.is_none()
+        {
+            return Some(&mut self.timbre_map.search);
+        }
         // The chooser covers the whole window and nothing behind it is drawn. A sheet waiting
         // there — the recovery offer is opened at launch, before the chooser — must not take
         // the text typed into the workshop, or every letter vanishes while Backspace, which the
@@ -2368,6 +2376,14 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     fn readable_field(&self) -> Option<&TextField> {
         if self.menu.is_some() {
             return None;
+        }
+        if self.timbre_map.open
+            && self.timbre_map.search_focused
+            && self.prompt.is_none()
+            && self.palette.is_none()
+            && self.menu_bar.is_none()
+        {
+            return Some(&self.timbre_map.search);
         }
         // In step with `writable_field`.
         if self.project_chooser.is_some() {

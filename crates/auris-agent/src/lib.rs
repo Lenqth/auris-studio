@@ -1515,6 +1515,35 @@ mod tests {
                 .iter()
                 .any(|definition| definition.name == "search_instruments")
         );
+        let live = names
+            .iter()
+            .find(|tool| tool.name == "search_instruments")
+            .unwrap();
+        let saved = toolbox::tool_catalog()
+            .into_iter()
+            .find(|tool| tool.name == "search_instruments")
+            .unwrap();
+        for schema in [&live.parameters, &saved.parameters] {
+            let schema = schema.to_string();
+            for field in [
+                "character",
+                "brightness",
+                "attack",
+                "sustain",
+                "release",
+                "noise",
+            ] {
+                assert!(schema.contains(field), "Missing {field}");
+            }
+        }
+        let command = toolbox::live_agent::command("search_instruments", &serde_json::json!({"request":{"mode":"character","query":"ふんわり","targets":{"release":0.1},"limit":3}})).unwrap().unwrap();
+        assert!(matches!(
+            command,
+            auris_session::live_agent::Command::SearchInstruments {
+                request: auris_session::SoundSearch::Character { .. },
+                ..
+            }
+        ));
     }
 
     #[tokio::test]

@@ -418,9 +418,9 @@ pub enum Command {
         aspect: Option<crate::audio_review::assessment::ComparisonAspect>,
     },
 
-    /// Search instruments by text, acoustic reference, or bounded browsing. Copy returned sound IDs into set_instrument. Paging, filters and acoustic-index status are shared across backends.
+    /// Search instruments by text, acoustic reference, character/impression, or bounded browsing. Character mode accepts Japanese/English impressions and explicit 0..1 targets (brightness, attack speed, sustain, captured release, noise); translate arbitrary prose/negation into targets and omit query when necessary. Optional id retains resemblance to an existing sound; name restricts names/tags. Inspect returned targets, character and relative distance, then render a musical phrase before adopting. Copy returned sound IDs into set_instrument. Retry indexing results later without refreshing. Shared by desktop Agent and MCP.
     SearchInstruments {
-        /// Explicit text, similar or browse request.
+        /// Explicit text, similar, character or browse request.
         request: crate::SoundSearch,
         /// Rescan only on the first page; invalidates existing acoustic measurements.
         #[serde(default)]

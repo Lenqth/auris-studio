@@ -311,6 +311,24 @@ strings! {
     VisualizerCorrelationReset { en: "Reset correlation", ja: "相関をリセット" }
     VisualizerHint { en: "Vertical: mono · horizontal: opposite polarity. Auto gain changes the display only; recent traces fade behind the current one.", ja: "縦：モノラル · 横：逆位相。自動ゲインは表示だけを変更し、直近の軌跡は現在値の後ろに薄く残ります。" }
     TimbreMap { en: "Timbre Map", ja: "音色マップ" }
+    TimbreSearch { en: "Search…", ja: "検索…" }
+    TimbreSearchClear { en: "Clear", ja: "クリア" }
+    TimbreSearchPlaceholder { en: "Soft, plucky, or sound name", ja: "ふんわり、ポコポコ、音色名" }
+    TimbreSearchHint { en: "Names or supported impressions · lower distance is closer", ja: "音色名・対応する印象語で検索 · 距離は小さいほど一致" }
+    TimbreSearchInterpreted { en: "Interpreted terms only", ja: "解釈した語（その他の文章は対象外）" }
+    TimbreSearchUnsupported { en: "Use short impression terms, or ask the Agent to interpret the conditions", ja: "短い印象語で検索するか、条件の解釈をエージェントに依頼してください" }
+    TimbreSearchEmpty { en: "No matching sounds", ja: "一致する音色がありません" }
+    TimbreAxesSimilarity { en: "Similarity", ja: "類似度" }
+    TimbreAxesCharacter { en: "Sound character", ja: "音の特徴" }
+    TimbreAxisBrightness { en: "Brightness", ja: "明るさ" }
+    TimbreAxisAttack { en: "Attack speed", ja: "立ち上がりの速さ" }
+    TimbreAxisSustain { en: "Sustain", ja: "持続性" }
+    TimbreAxisRelease { en: "Captured release (400 ms)", ja: "測定した余韻（400 ms）" }
+    TimbreAxisNoise { en: "Noise", ja: "ノイズ感" }
+    TimbreAxisPc1 { en: "PC1", ja: "PC1" }
+    TimbreAxisPc2 { en: "PC2", ja: "PC2" }
+    TimbreAxisPc3 { en: "PC3", ja: "PC3" }
+    TimbreCharacterGeometry { en: "Fixed acoustic scales · dark → bright, slow → fast, decaying → sustained", ja: "固定尺度の音響指標 · 暗い→明るい、遅い→速い、減衰→持続" }
     TimbreMapHint { en: "Drag to rotate · click a point or choose a sound to audition", ja: "ドラッグで回転 · 点または一覧の音色を選んで試聴" }
     TimbreMapGeometry { en: "Color: acoustic group · axes: PC1–PC3 · similarity uses full features", ja: "色：音響クラスタ · 軸：PC1–PC3 · 類似音は元の特徴量で検索" }
     TimbreMapSelect { en: "Select a sound to audition and compare its neighbors", ja: "音色を選ぶと試聴し、似ている音色を確認できます" }
@@ -2430,6 +2448,9 @@ mod tests {
             Key::FormatMp3,
             // Dimensional notation is the same in both languages.
             Key::TimbreMapView3d,
+            Key::TimbreAxisPc1,
+            Key::TimbreAxisPc2,
+            Key::TimbreAxisPc3,
             // Product names, which the navigation column shows as names rather than as the
             // sentence 「…設定」 the old tab row needed.
             Key::VoiceSetupVoicevox,

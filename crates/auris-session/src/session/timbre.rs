@@ -2,10 +2,13 @@
 
 use super::Session;
 use crate::{Edit, SessionError};
+use crate::{TimbreCharacter, TimbreTargets};
 use auris_core::plugin::{NoteEvent, PluginState, PrepareContext, ProcessContext};
 use auris_core::project::PresetRef;
 use auris_core::{AudioBuffer, ParamTarget, PluginRegistry, TrackId};
-use auris_dsp::timbre::{TimbreProjection, project_timbres_refined, timbre_features};
+use auris_dsp::timbre::{
+    TimbreProjection, project_timbres_refined, timbre_character, timbre_features,
+};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -89,6 +92,7 @@ pub struct TimbreMap {
     /// Sources omitted because at least one reference trigger was silent.
     pub skipped: Vec<String>,
     projection: TimbreProjection,
+    characters: Vec<TimbreCharacter>,
     summaries: Vec<TimbreCluster>,
     previews: Vec<Arc<AudioBuffer>>,
     sample_rate: f64,
@@ -311,11 +315,13 @@ impl TimbreMapJob {
     pub fn run(self, control: &TimbreMapControl) -> Result<TimbreMap, SessionError> {
         let mut sounds = Vec::new();
         let mut rows = Vec::new();
+        let mut characters = Vec::new();
         let mut previews = Vec::new();
         let mut skipped = Vec::new();
         for (index, sound) in self.sounds.into_iter().enumerate() {
             control.check()?;
             let mut features = Vec::new();
+            let mut reference_characters = Vec::new();
             let mut preview = None;
             let mut silent = false;
             for pitch in [48, 60, 72] {
@@ -335,7 +341,10 @@ impl TimbreMapJob {
                         control,
                     )?;
                     match timbre_features(&audio, HOLD).map_err(failure)? {
-                        Some(values) => features.extend(values),
+                        Some(values) => {
+                            reference_characters.push(timbre_character(&audio, HOLD, &values));
+                            features.extend(values);
+                        }
                         None => silent = true,
                     }
                     if pitch == 60 && velocity == 0.85 {
@@ -349,6 +358,7 @@ impl TimbreMapJob {
             } else {
                 sounds.push(sound);
                 rows.push(features);
+                characters.push(TimbreCharacter::mean(&reference_characters));
                 previews.push(preview.expect("the reference conditions include middle C"));
             }
             control.completed.store(index + 1, Ordering::Relaxed);
@@ -361,6 +371,7 @@ impl TimbreMapJob {
             sounds,
             skipped,
             projection,
+            characters,
             summaries,
             previews,
             sample_rate: self.sample_rate,
@@ -370,6 +381,37 @@ impl TimbreMapJob {
 }
 
 impl TimbreMap {
+    /// Fixed-scale descriptors shared by map axes and impression search.
+    pub fn characters(&self) -> &[TimbreCharacter] {
+        &self.characters
+    }
+
+    /// Coordinates with stable meanings: brightness, attack speed and sustain.
+    pub fn character_positions(&self) -> Vec<[f64; 3]> {
+        self.characters
+            .iter()
+            .map(|c| {
+                [
+                    c.brightness * 2. - 1.,
+                    c.attack * 2. - 1.,
+                    c.sustain * 2. - 1.,
+                ]
+            })
+            .collect()
+    }
+
+    /// Rank measured sounds using shared interpreted targets; names can be filtered separately.
+    pub fn search_character(&self, targets: &TimbreTargets) -> Vec<(usize, f64)> {
+        let mut matches: Vec<_> = self
+            .characters
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (i, targets.distance(*c)))
+            .collect();
+        matches.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+        matches
+    }
+
     /// Populated clusters, with representatives and bounded examples for display or naming.
     pub fn cluster_summaries(&self) -> &[TimbreCluster] {
         &self.summaries
@@ -680,6 +722,7 @@ mod tests {
         assert_eq!(summaries[0].representative, sounds[1]);
         let map = TimbreMap {
             sounds,
+            characters: vec![],
             skipped: vec![],
             projection,
             summaries,
