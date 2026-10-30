@@ -126,10 +126,16 @@ wgpu = { version = "30.0", default-features = false, features = [
 
 [profile.dev]
 opt-level = 1
+# Keep source locations for backtraces without full type/local-variable information.
+debug = 1
+# Every worktree otherwise retains a large second set of compiler state. Unchanged compiled
+# dependencies are still reused; opt back in per command when edit latency matters (see
+# docs/build-performance.md).
+incremental = false
 
 # Audio DSP is unusable when compiled without optimisations, so build dependencies at full
-# speed even in debug builds. Keep line tables for dependency backtraces without their
-# full type/variable information; workspace crates retain full debugger information.
+# speed even in debug builds. Keep dependencies at limited debug information even when
+# workspace crates opt into full debugger information.
 [profile.dev.package."*"]
 opt-level = 3
 debug = 1
