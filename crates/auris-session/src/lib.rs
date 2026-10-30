@@ -121,7 +121,7 @@ pub use auris_engine::{OutputPreviewOptions, OutputPreviewStatus};
 pub use auris_io::IoError;
 pub use error::SessionError;
 mod audition;
-pub use audition::{AuditionSection, AuditionTimeline};
+pub use audition::{AuditionNote, AuditionSection, AuditionTimeline, AuditionTrack};
 pub use history::{Edit, History};
 pub use library::{
     DICTIONARY_DIR_VAR, DICTIONARY_FOLDER, GENERAL_MIDI, JAPANESE_DICTIONARY, LIBRARY_DIR_VAR,
@@ -173,7 +173,9 @@ pub use session::{
     SongCandidate, SongIdea, SongRequest, SongSinger, SongSinging, SongSourceChoice,
 };
 pub use session::{SoundFilter, SoundLibraryJob, SoundSearch, SoundSource};
-pub use session::{TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbreSound};
+pub use session::{
+    TimbreCluster, TimbreMap, TimbreMapControl, TimbreMapJob, TimbrePreviewJob, TimbreSound,
+};
 mod sound_icons;
 pub use session::{TrackConversion, TrackConversionJob};
 pub use settings::{

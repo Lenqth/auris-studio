@@ -1,5 +1,20 @@
 //! Exact candidate audition with stale-output protection.
 use super::*;
+
+/// New source data may replace an idle audition, never a playing or preparing one.
+pub(super) fn should_refresh_audition(
+    played: Option<&Arc<auris_session::prelude::AudioBuffer>>,
+    latest: Option<&Arc<auris_session::prelude::AudioBuffer>>,
+    playing: bool,
+    preparing: bool,
+) -> bool {
+    !playing
+        && !preparing
+        && played
+            .zip(latest)
+            .is_some_and(|(played, latest)| !Arc::ptr_eq(played, latest))
+}
+
 impl AurisApp {
     pub(crate) fn preview_song_candidate(&mut self, index: usize, cx: &mut Context<Self>) {
         if !self.acquire_audio(cx) {
@@ -53,5 +68,42 @@ impl AurisApp {
         })
         .detach();
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn newer_audio_refreshes_only_after_playback_and_preparation_are_idle() {
+        let played = Arc::new(auris_session::prelude::AudioBuffer::stereo(100, 100.0));
+        let same = Arc::clone(&played);
+        let newer = Arc::new(auris_session::prelude::AudioBuffer::stereo(200, 100.0));
+        assert!(!should_refresh_audition(
+            Some(&played),
+            Some(&newer),
+            true,
+            false
+        ));
+        assert!(!should_refresh_audition(
+            Some(&played),
+            Some(&newer),
+            false,
+            true
+        ));
+        assert!(should_refresh_audition(
+            Some(&played),
+            Some(&newer),
+            false,
+            false
+        ));
+        assert!(!should_refresh_audition(
+            Some(&played),
+            Some(&same),
+            false,
+            false
+        ));
+        assert!(!should_refresh_audition(None, Some(&newer), false, false));
+        assert!(!should_refresh_audition(Some(&played), None, false, false));
     }
 }

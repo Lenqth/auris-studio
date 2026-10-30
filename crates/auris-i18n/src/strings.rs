@@ -49,7 +49,6 @@ strings! {
     WorkshopContinue { en: "Continue with this song", ja: "この曲で続ける" }
     WorkshopSelected { en: "Current song", ja: "制作中の曲" }
     WorkshopOpenEditor { en: "Open editor", ja: "エディタで開く" }
-    WorkshopOpenEditorHint { en: "Continue with a song to open it", ja: "曲を選ぶと開けます" }
     WorkshopGenerating { en: "Generating", ja: "生成中" }
     WorkshopMemory { en: "Use my preferences", ja: "好みを記録・活用" }
     WorkshopMemoryView { en: "Selection history", ja: "選択履歴" }
@@ -324,7 +323,10 @@ strings! {
     TimbreMapUse { en: "Use on Selected Track", ja: "選択トラックに適用" }
     TimbreMapVariance { en: "Variance shown", ja: "3D空間に保持した情報量" }
     TimbreMapSkipped { en: "Silent references skipped", ja: "基準音が無音のため除外" }
-    TimbreMapAudition { en: "Audition through track (including its mixer settings)", ja: "試聴先トラック（ミキサー設定も反映）" }
+    TimbreMapKeyboard { en: "Preview notes · C4–C5", ja: "鍵盤で試聴 · C4〜C5" }
+    TimbreMapReplay { en: "Play C4", ja: "C4を再生" }
+    TimbreMapStop { en: "Stop preview", ja: "試聴を停止" }
+    TimbreMapPreparing { en: "Preparing sound", ja: "試聴を準備中" }
     TimbreMapEmpty { en: "No audible sounds. Load a SoundFont and rescan.", ja: "測定できる音色がありません。SoundFontを読み込んで再解析してください。" }
     // ------------------------------------------------------------------ transport bar
     ExportWav { en: "Export Audio", ja: "オーディオ書き出し" }
@@ -2033,6 +2035,27 @@ new のオプション
     AgentToolArguments { en: "Arguments", ja: "引数" }
     AgentToolResult { en: "Result", ja: "実行結果" }
     AgentToolGroup { en: "Tools ({count})", ja: "ツール実行（{count}件）" }
+    WorkshopToolCounts { en: "{total} tool calls · {succeeded} succeeded · {failed} failed · {running} running · {interrupted} interrupted", ja: "ツール計{total}件 · 成功{succeeded} · 失敗{failed} · 実行中{running} · 中断{interrupted}" }
+    WorkshopRateSong { en: "Rate song…", ja: "評価する…" }
+    WorkshopThreads { en: "Song conversations", ja: "制作の会話" }
+    WorkshopNewThread { en: "New conversation", ja: "新しい会話" }
+    WorkshopUntitledThread { en: "New song", ja: "新しい曲" }
+    WorkshopThreadActions { en: "Conversation actions", ja: "会話の操作" }
+    WorkshopRenameThread { en: "Rename conversation…", ja: "名前を変更…" }
+    WorkshopArchiveThread { en: "Archive", ja: "保管する" }
+    WorkshopRestoreThread { en: "Restore", ja: "戻す" }
+    WorkshopArchivedThreads { en: "Archived conversations", ja: "保管済みの会話" }
+    WorkshopThreadBusy { en: "Stop production before switching conversations", ja: "制作を停止すると会話を切り替えられます" }
+    WorkshopThreadNameInvalid { en: "Use 1 to 80 characters for the conversation name.", ja: "会話の名前は1〜80文字で入力してください。" }
+    WorkshopThreadUnavailable { en: "Could not update the conversation. Reopen the workshop and try again.", ja: "会話を更新できませんでした。制作画面を開き直して再度お試しください。" }
+    WorkshopEditFeedback { en: "Edit feedback…", ja: "評価を編集…" }
+    WorkshopFeedbackTitle { en: "Feedback for “{song}”", ja: "「{song}」の評価" }
+    WorkshopFeedbackRating { en: "Rating (1–5)", ja: "評価（5段階）" }
+    WorkshopFeedbackComment { en: "Impressions (optional)", ja: "感想（任意）" }
+    WorkshopFeedbackHint { en: "Up to 2,000 characters. Enter adds a line; secondary-Return sends.", ja: "2000文字まで。Enterで改行、secondary-Returnで送信" }
+    WorkshopFeedbackSend { en: "Send feedback", ja: "評価を送信" }
+    WorkshopFeedbackInvalid { en: "Choose 1–5 stars and keep impressions within 2,000 characters.", ja: "星を1〜5個で選び、感想は2000文字以内で入力してください。" }
+    WorkshopFeedbackUnavailable { en: "Could not send feedback. Reopen the song workshop and try again.", ja: "評価を送信できませんでした。制作画面を開き直して再度お試しください。" }
     AgentToolGroupRunning { en: "{count} running", ja: "{count}件実行中" }
     AgentToolGroupFailed { en: "{count} failed", ja: "{count}件失敗" }
     AgentSlashMode { en: "Change approval mode", ja: "承認モードを変更" }
@@ -2159,6 +2182,7 @@ new のオプション
     AgentSoundAttach { en: "Attach to conversation", ja: "会話に添付" }
     AgentMusicUnavailable { en: "Wait for the conversation to finish switching or sending, then attach again.", ja: "会話の切り替え・送信準備が終わってから、もう一度添付してください。" }
     AgentMidiNew { en: "Write melody…", ja: "メロディを書く…" }
+    AgentMusicReferences { en: "Music references", ja: "音楽の参照" }
     AgentMidiClip { en: "Attach selected clip…", ja: "選択クリップを添付…" }
     AgentMidiFile { en: "Attach MIDI…", ja: "MIDIを添付…" }
     AgentMidiMelody { en: "Melody", ja: "メロディ" }

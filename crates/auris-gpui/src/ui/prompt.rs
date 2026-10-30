@@ -31,6 +31,14 @@ use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled
 /// `F#m`, interpreting the latter in the key at that point on the timeline.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PromptTarget {
+    /// Rename a song conversation captured in the workshop's sidebar state.
+    WorkshopThreadName { workshop: u64 },
+    /// Explicit rating and comment for an exact workshop candidate and conversation instance.
+    WorkshopFeedback {
+        workshop: u64,
+        candidate: u64,
+        rating: u8,
+    },
     /// Name of the agent conversation captured when the prompt opened.
     AgentConversationName,
     /// Chord reference using the key and meter captured when the sheet opened.
@@ -152,6 +160,7 @@ fn empty_prompt_is_meaningful(target: PromptTarget) -> bool {
     matches!(
         target,
         PromptTarget::Lyric { .. }
+            | PromptTarget::WorkshopFeedback { .. }
             | PromptTarget::Phonemes { .. }
             | PromptTarget::Lyrics { .. }
             // Let the numeric field report its own valid range for an empty answer.
@@ -213,6 +222,8 @@ impl PromptTarget {
             | PromptTarget::DrumLaneNote { .. } => Notation::MidiNote,
             PromptTarget::Position => Notation::Position,
             PromptTarget::SaveSound(_)
+            | PromptTarget::WorkshopThreadName { .. }
+            | PromptTarget::WorkshopFeedback { .. }
             | PromptTarget::AgentConversationName
             | PromptTarget::RenameSound
             | PromptTarget::DuplicateSound
@@ -588,6 +599,7 @@ pub enum PromptBody {
 /// An open sheet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Prompt {
+    feedback_foci: Option<[gpui::FocusHandle; 5]>,
     /// Heading above the body.
     pub title: SharedString,
     /// What it is asking for.
@@ -614,6 +626,15 @@ pub struct Prompt {
 }
 
 impl Prompt {
+    /// Star controls that must retain keyboard focus while this sheet is open.
+    pub(crate) fn feedback_focus_handles(&self) -> Option<&[gpui::FocusHandle; 5]> {
+        self.feedback_foci.as_ref()
+    }
+    /// Give a feedback sheet stable keyboard destinations for its five star choices.
+    pub(crate) fn with_feedback_focus(mut self, cx: &mut Context<AurisApp>) -> Self {
+        self.feedback_foci = Some(std::array::from_fn(|_| cx.focus_handle().tab_stop(true)));
+        self
+    }
     /// A prompt editing `text`.
     pub fn new(
         title: impl Into<SharedString>,
@@ -621,6 +642,7 @@ impl Prompt {
         text: impl Into<String>,
     ) -> Self {
         Self {
+            feedback_foci: None,
             title: title.into(),
             body: PromptBody::Text {
                 target,
@@ -658,6 +680,7 @@ impl Prompt {
     /// A prompt asking a question rather than taking a name.
     pub fn ask(title: impl Into<SharedString>, question: Question) -> Self {
         Self {
+            feedback_foci: None,
             title: title.into(),
             body: PromptBody::Ask(question),
             error: None,
@@ -674,6 +697,7 @@ impl Prompt {
         lines: impl IntoIterator<Item = SharedString>,
     ) -> Self {
         Self {
+            feedback_foci: None,
             title: title.into(),
             body: PromptBody::Notice(lines.into_iter().collect()),
             error: None,
@@ -877,6 +901,44 @@ impl AurisApp {
             return;
         }
         let outcome = match target {
+            PromptTarget::WorkshopThreadName { workshop } => {
+                if text.is_empty() || text.chars().count() > 80 {
+                    self.reject_prompt(self.t(Key::WorkshopThreadNameInvalid));
+                    return;
+                }
+                if !self
+                    .song_workshop
+                    .as_ref()
+                    .is_some_and(|state| state.rename_thread(workshop, text))
+                {
+                    self.reject_prompt(self.t(Key::WorkshopThreadUnavailable));
+                    return;
+                }
+                Ok(())
+            }
+            PromptTarget::WorkshopFeedback {
+                workshop,
+                candidate,
+                rating,
+            } => {
+                let feedback = auris_session::workshop::Feedback {
+                    rating,
+                    comment: text,
+                };
+                if feedback.validate().is_err() {
+                    self.reject_prompt(self.t(Key::WorkshopFeedbackInvalid));
+                    return;
+                }
+                let sent = self
+                    .song_workshop
+                    .as_ref()
+                    .is_some_and(|state| state.send_feedback(workshop, candidate, feedback));
+                if !sent {
+                    self.reject_prompt(self.t(Key::WorkshopFeedbackUnavailable));
+                    return;
+                }
+                Ok(())
+            }
             PromptTarget::AgentChordReference { key, meter } => {
                 let result = auris_session::music_reference::chord_reference(&text, key, meter)
                     .and_then(|value| self.attach_agent_music_reference(&value, "chords"));
@@ -1461,6 +1523,75 @@ impl AurisApp {
         // Windows key, which opens the shell's own menu long before the application sees it.
         let command = event.keystroke.modifiers.secondary();
 
+        if let Some(foci) = self
+            .prompt
+            .as_ref()
+            .and_then(|prompt| prompt.feedback_foci.as_ref())
+        {
+            let mut handles = foci.to_vec();
+            handles.extend([
+                self.focus.clone(),
+                self.modal_focus.prompt_cancel().clone(),
+                self.modal_focus.prompt_confirm().clone(),
+            ]);
+            let focused = handles
+                .iter()
+                .position(|handle| handle.is_focused(window))
+                .unwrap_or(5);
+            let composing = self
+                .prompt
+                .as_ref()
+                .and_then(Prompt::field)
+                .is_some_and(|f| f.marked().is_some());
+            if !composing {
+                match event.keystroke.key.as_str() {
+                    "escape" => {
+                        self.cancel_prompt();
+                        return true;
+                    }
+                    "tab" => {
+                        let next = if shift {
+                            (focused + handles.len() - 1) % handles.len()
+                        } else {
+                            (focused + 1) % handles.len()
+                        };
+                        window.focus(&handles[next]);
+                        return true;
+                    }
+                    "enter" if command => {
+                        self.commit_prompt(window, cx);
+                        return true;
+                    }
+                    "enter" | "space" | " " if focused < 5 => {
+                        self.set_feedback_rating(focused as u8 + 1);
+                        return true;
+                    }
+                    "enter" | "space" | " " if focused > 5 => {
+                        self.activate_focused_prompt_button(window, cx);
+                        return true;
+                    }
+                    "enter" => {
+                        if let Some(field) = self.prompt.as_mut().and_then(Prompt::field_mut) {
+                            field.insert("\n");
+                        }
+                        return true;
+                    }
+                    "up" | "down" if focused == 5 => {
+                        if let Some(field) = self.prompt.as_mut().and_then(Prompt::field_mut) {
+                            if event.keystroke.key == "up" {
+                                field.move_up(shift);
+                            } else {
+                                field.move_down(shift);
+                            }
+                        }
+                        return true;
+                    }
+                    _ if focused != 5 => return true,
+                    _ => {}
+                }
+            }
+        }
+
         let button_prompt = self.prompt.as_ref().and_then(|prompt| match &prompt.body {
             PromptBody::Ask(question) => Some((
                 matches!(question, Question::Unsaved(_) | Question::Recovery(_)),
@@ -1601,14 +1732,20 @@ impl AurisApp {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(self.render_prompt_field(
-                        field.content().to_string().into(),
-                        field.selection(),
-                        field.marked(),
-                        focus,
-                        view,
-                        &theme,
-                    ))
+                    .children(self.render_feedback_rating(prompt, cx))
+                    .child(if matches!(target, PromptTarget::WorkshopFeedback { .. }) {
+                        self.render_feedback_comment(field, cx).into_any_element()
+                    } else {
+                        self.render_prompt_field(
+                            field.content().to_string().into(),
+                            field.selection(),
+                            field.marked(),
+                            focus,
+                            view,
+                            &theme,
+                        )
+                        .into_any_element()
+                    })
                     .children(prompt.error.as_ref().map(|error| {
                         div()
                             .id("prompt-error")
@@ -1634,6 +1771,10 @@ impl AurisApp {
                     // The default button names the edit the sheet will commit.
                     match target {
                         PromptTarget::SaveSound(_) => self.t(Key::CmdSave).into(),
+                        PromptTarget::WorkshopThreadName { .. } => self.t(Key::Rename).into(),
+                        PromptTarget::WorkshopFeedback { .. } => {
+                            self.t(Key::WorkshopFeedbackSend).into()
+                        }
                         PromptTarget::DuplicateSound => self.t(Key::DuplicateSoundConfirm).into(),
                         PromptTarget::DrumAssignment { .. }
                         | PromptTarget::NewDrumLane(_)
@@ -1776,6 +1917,116 @@ impl AurisApp {
                         .child(buttons),
                 ),
         )
+    }
+
+    /// Change the explicit star choice without altering the user's written impressions.
+    fn set_feedback_rating(&mut self, value: u8) {
+        let corrected = if let Some(prompt) = self.prompt.as_mut()
+            && let PromptBody::Text {
+                target: PromptTarget::WorkshopFeedback { rating, .. },
+                ..
+            } = &mut prompt.body
+        {
+            *rating = value;
+            prompt.error.take()
+        } else {
+            None
+        };
+        if let Some(error) = corrected
+            && self.status == error.as_ref()
+        {
+            self.set_status("");
+        }
+    }
+
+    fn render_feedback_rating(
+        &self,
+        prompt: &Prompt,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let PromptTarget::WorkshopFeedback { rating, .. } = prompt.target()? else {
+            return None;
+        };
+        let foci = prompt.feedback_foci.as_ref()?;
+        let mut choices = div().flex().gap_1();
+        for value in 1..=5u8 {
+            choices = choices.child(
+                button_enabled(
+                    ("feedback-star", usize::from(value)),
+                    format!("{value} {}", if value <= rating { "★" } else { "☆" }),
+                    ButtonStyle::Ghost,
+                    ButtonState::available(value == rating, true),
+                    self.theme.accent,
+                    &self.theme,
+                    cx.listener(move |this, _, _, cx| {
+                        this.set_feedback_rating(value);
+                        cx.notify();
+                    }),
+                )
+                .track_focus(&foci[usize::from(value - 1)]),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(self.t(Key::WorkshopFeedbackRating))
+                .child(choices)
+                .into_any_element(),
+        )
+    }
+
+    fn render_feedback_comment(
+        &self,
+        field: &TextField,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let theme = self.theme.clone();
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(self.t(Key::WorkshopFeedbackComment))
+            .child(
+                div()
+                    .id("feedback-comment")
+                    .debug_selector(|| "feedback-comment".into())
+                    .w_full()
+                    .h(gpui::rems(7.0))
+                    .rounded(theme.atelier.shape.radius_sm)
+                    .bg(theme.surface_sunken)
+                    .border_1()
+                    .border_color(theme.border)
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                            if let Some(field) = this.prompt.as_mut().and_then(Prompt::field_mut) {
+                                if let Some(offset) = crate::ui::text_area::wrapped_area_offset_at(
+                                    window,
+                                    field.content(),
+                                    event.position,
+                                ) {
+                                    field.place_caret(offset, event.modifiers.shift);
+                                } else {
+                                    field.caret_to_end();
+                                }
+                            }
+                            this.focus.focus(window);
+                            cx.notify();
+                        }),
+                    )
+                    .child(crate::ui::text_area::editable_wrapped_area(
+                        field.content().to_owned().into(),
+                        field.selection(),
+                        field.marked(),
+                        true,
+                        self.focus.clone(),
+                        cx.entity(),
+                        theme.clone(),
+                    )),
+            )
+            .child(self.render_prompt_hint(Key::WorkshopFeedbackHint, &theme))
     }
 
     /// The box the rename sheet types into.
@@ -1957,7 +2208,20 @@ impl AurisApp {
                     "prompt-ok",
                     confirm,
                     confirm_style,
-                    ButtonState::Enabled(Latch::Off),
+                    ButtonState::available(
+                        false,
+                        self.prompt.as_ref().is_none_or(|prompt| {
+                            !matches!(
+                                prompt.target(),
+                                Some(PromptTarget::WorkshopFeedback { rating: 0, .. })
+                            ) && (!matches!(
+                                prompt.target(),
+                                Some(PromptTarget::WorkshopFeedback { .. })
+                            ) || prompt
+                                .field()
+                                .is_none_or(|field| field.content().chars().count() <= 2000))
+                        }),
+                    ),
                     theme.accent,
                     &theme,
                     cx.listener(|this, _, window, cx| {
@@ -2065,7 +2329,7 @@ impl AurisApp {
         // the text typed into the workshop, or every letter vanishes while Backspace, which the
         // workshop handles as a key, still works.
         if self.project_chooser.is_some() {
-            if self.workshop_chord_prompt() {
+            if self.workshop_prompt_open() {
                 return self.prompt.as_mut()?.field_mut();
             }
 
@@ -2107,7 +2371,7 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         }
         // In step with `writable_field`.
         if self.project_chooser.is_some() {
-            if self.workshop_chord_prompt() {
+            if self.workshop_prompt_open() {
                 return self.prompt.as_ref()?.field();
             }
 
@@ -2424,6 +2688,12 @@ mod tests {
     /// is added to the returned list.
     fn every_target() -> Vec<PromptTarget> {
         let representatives = vec![
+            PromptTarget::WorkshopFeedback {
+                workshop: 1,
+                candidate: 1,
+                rating: 4,
+            },
+            PromptTarget::WorkshopThreadName { workshop: 1 },
             PromptTarget::DuplicateSound,
             PromptTarget::RenameSound,
             PromptTarget::SaveSound(TrackId(1)),
@@ -2470,6 +2740,8 @@ mod tests {
                 PromptTarget::SaveSound(_)
                 | PromptTarget::AgentConversationName
                 | PromptTarget::AgentChordReference { .. }
+                | PromptTarget::WorkshopFeedback { .. }
+                | PromptTarget::WorkshopThreadName { .. }
                 | PromptTarget::RenameSound
                 | PromptTarget::DuplicateSound
                 | PromptTarget::Track(_)
@@ -2993,7 +3265,14 @@ mod window_tests {
         cx.run_until_parked();
 
         app.read_with(cx, |this, _| {
-            assert_eq!(this.session.project().name, "Recovered song");
+            assert_eq!(
+                this.session.project().name,
+                "Recovered song",
+                "status={}, pending={}, prompt={:?}",
+                this.status,
+                this.background_command.is_some(),
+                this.prompt
+            );
             assert!(
                 this.session
                     .project()

@@ -16,9 +16,13 @@ adopts that sound as one undoable edit; browsing and audition do not change the 
 Adopting a built-in sound restores its default patch and clears its instrument automation,
 including when the selected track already uses that instrument. Mixer settings remain in place.
 
-Audition uses the selected playable track, or the first playable track. Its mute, fader, inserts
-and routing apply, so choose an unmuted dry track for comparisons. Previews are matched to a
-common RMS target with a peak ceiling; closing the map stops the last preview.
+Clicking a point or a list entry plays C4, even in an empty project. The **Preview notes · C4–C5**
+keyboard plays the selected sound at each chromatic pitch; Tab and Space also operate the keys.
+**Play C4** repeats the reference and **Stop preview** cancels playback or pending preparation.
+Audition goes directly to the audio output, independently of track and master mixer settings,
+and stops song playback without moving the playhead.
+Previews are matched to a common RMS target with a peak ceiling. Changing sounds, rescanning,
+closing the map or replacing the document cancels the previous preview.
 
 ## Cluster names, icons and library colors
 
@@ -75,7 +79,9 @@ it sends those synthetic names and counts to the configured backend.
 
 Every source uses fresh instances for six matched triggers: MIDI 48, 60 and 72 at velocities
 0.45 and 0.85, a 600 ms hold, and 400 ms after note-off. The middle-C, higher-velocity recording
-is the preview. A source silent under any reference condition is omitted and counted explicitly.
+is the cached C4 preview. Other keyboard pitches render fresh instances of the exact instrument
+and SoundFont preset at the same velocity and duration. A source silent under any reference
+condition is omitted and counted explicitly.
 Analysis always measures the raw instrument output before the project mixer.
 
 Each trigger contributes 93 deterministic DSP features:
