@@ -1093,6 +1093,7 @@ pub(crate) struct AgentChat {
     pub(crate) context_tokens: u32,
     pub(crate) output_tokens: u32,
     max_tool_failures: Option<u8>,
+    max_tool_calls: Option<u32>,
     /// Legacy Ollama thinking override.
     pub(crate) thinking: Option<bool>,
     /// Provider-native reasoning effort.
@@ -1230,6 +1231,7 @@ impl Default for AgentChat {
             context_tokens: 32768,
             output_tokens: 4096,
             max_tool_failures: None,
+            max_tool_calls: None,
             thinking: None,
             effort: ReasoningEffort::Default,
             fast_mode: false,
@@ -1434,6 +1436,7 @@ impl AgentChat {
         self.context_tokens = prefs.context_tokens.unwrap_or(32768);
         self.output_tokens = prefs.output_tokens.unwrap_or(4096);
         self.max_tool_failures = prefs.max_tool_failures;
+        self.max_tool_calls = prefs.max_tool_calls;
         self.thinking = prefs.thinking;
         self.effort = prefs.effort;
         self.fast_mode = prefs.fast_mode;
@@ -1483,6 +1486,7 @@ impl AgentChat {
             context_tokens: Some(self.context_tokens),
             output_tokens: Some(self.output_tokens),
             max_tool_failures: self.max_tool_failures,
+            max_tool_calls: self.max_tool_calls,
             thinking: self.thinking,
             effort: self.effort,
             fast_mode: self.fast_mode,
@@ -3258,6 +3262,7 @@ impl AurisApp {
     ) -> Result<(), E> {
         let changed = self.persist_agent_preferences_with(preferences.clone(), save)?;
         self.agent_chat.load_preferences(&preferences);
+        self.sync_workshop_tool_call_limit();
         if changed {
             self.restart_agent_after_preferences_change();
         }
@@ -4101,7 +4106,10 @@ impl AurisApp {
                 let mark = tool_mark(*ok, line);
                 (theme.text_muted, format!("{mark} {name}  {line}"))
             }
-            ChatEntry::Error(message) => (theme.danger, message.clone()),
+            ChatEntry::Error(message) => (
+                theme.danger,
+                crate::i18n::agent_error_text(message, self.language(), false),
+            ),
             ChatEntry::Note(key) => (note_colour(*key, theme), self.t(*key).to_string()),
         };
         let details = match entry {
@@ -4185,7 +4193,7 @@ impl AurisApp {
                 }),
             )
             .into_any_element(),
-            ChatEntry::Error(message) => agent_components::error_notice(message),
+            ChatEntry::Error(_) => agent_components::error_notice(text.clone()),
             ChatEntry::Status(_) | ChatEntry::Note(_) => {
                 agent_components::status_notice(text.clone())
             }

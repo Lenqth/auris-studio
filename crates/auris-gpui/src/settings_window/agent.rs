@@ -34,6 +34,7 @@ struct AgentDraft {
     context_tokens: Option<u32>,
     output_tokens: Option<u32>,
     max_tool_failures: Option<u8>,
+    max_tool_calls: Option<u32>,
     system_prompt: String,
 }
 
@@ -51,6 +52,7 @@ impl AgentSettings {
             context_tokens: self.prefs.context_tokens,
             output_tokens: self.prefs.output_tokens,
             max_tool_failures: self.prefs.max_tool_failures,
+            max_tool_calls: self.prefs.max_tool_calls,
             system_prompt: if prompt.trim().is_empty()
                 || prompt == auris_agent::default_system_prompt()
             {
@@ -72,6 +74,7 @@ impl AgentSettings {
         self.prefs.context_tokens = draft.context_tokens;
         self.prefs.output_tokens = draft.output_tokens;
         self.prefs.max_tool_failures = draft.max_tool_failures;
+        self.prefs.max_tool_calls = draft.max_tool_calls;
         self.prefs.system_prompt = draft.system_prompt.clone();
         for (field, value) in self.fields[..6].iter_mut().zip([
             draft.url,
@@ -117,6 +120,7 @@ impl AgentSettings {
             context_tokens: prefs.context_tokens,
             output_tokens: prefs.output_tokens,
             max_tool_failures: prefs.max_tool_failures,
+            max_tool_calls: prefs.max_tool_calls,
             system_prompt: if prompt.content() == auris_agent::default_system_prompt() {
                 String::new()
             } else {
@@ -372,6 +376,7 @@ impl SettingsWindow {
             prefs.context_tokens = draft.context_tokens;
             prefs.output_tokens = draft.output_tokens;
             prefs.max_tool_failures = draft.max_tool_failures;
+            prefs.max_tool_calls = draft.max_tool_calls;
             prefs.system_prompt = draft.system_prompt;
             app.agent_apply_preferences_with(prefs, save)?;
             cx.notify();
@@ -909,6 +914,31 @@ impl SettingsWindow {
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
+        let limit = self.agent.prefs.tool_call_limit();
+        let mut limits = vec![100, 250, 500, 1000, 2000, 5000, 10000];
+        limits.push(limit);
+        limits.sort_unstable();
+        limits.dedup();
+        rows.push(
+            FormField::new(self.t(Key::AgentToolCallLimit))
+                .description(self.t(Key::AgentToolCallLimitHelp))
+                .child(
+                    self.dropdown(
+                        "agent-tool-call-limit",
+                        limits
+                            .into_iter()
+                            .map(|n| (n, n.to_string(), String::new()))
+                            .collect(),
+                        &limit,
+                        |this, value, cx| {
+                            this.agent.prefs.max_tool_calls = Some(value as u32);
+                            cx.notify();
+                        },
+                        cx,
+                    ),
+                )
+                .into_any_element(),
+        );
         rows.push(
             FormField::new(self.t(Key::AgentToolFailureLimit))
                 .child(
@@ -1145,6 +1175,57 @@ mod tests {
     }
 
     #[gpui::test]
+    fn tool_call_limit_dropdown_saves_and_reaches_the_panel(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        click_visible_control("agent-tool-call-limit", cx);
+        cx.simulate_keystrokes("down enter");
+        handle
+            .update(cx, |this, _, cx| {
+                assert_ne!(
+                    this.agent.draft(),
+                    this.agent.saved,
+                    "Changing only the limit must enable Apply"
+                );
+                this.apply_agent_with(cx, |settings| {
+                    assert_eq!(settings.agent.tool_call_limit(), 2000);
+                    Ok::<(), String>(())
+                });
+                assert_eq!(this.agent.draft(), this.agent.saved);
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.preferences().tool_call_limit(), 2000);
+        });
+    }
+
+    #[gpui::test]
+    fn tool_call_limit_draft_can_revert_without_changing_saved_preferences(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        handle
+            .update(cx, |this, _, cx| {
+                this.agent.prefs.max_tool_calls = Some(5000);
+                assert_ne!(this.agent.draft(), this.agent.saved);
+                this.revert_agent(cx);
+                assert_eq!(this.agent.prefs.max_tool_calls, None);
+                assert_eq!(this.agent.draft(), this.agent.saved);
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.max_tool_calls, None);
+        });
+    }
+
+    #[gpui::test]
     fn provider_disclosure_keeps_unsaved_paths_when_closed(cx: &mut TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, cx| this.open_settings(cx));
@@ -1177,7 +1258,7 @@ mod tests {
     fn click_visible_control(selector: &'static str, cx: &mut VisualTestContext) {
         let body = cx.debug_bounds("settings-body").unwrap();
         let field = cx.debug_bounds(selector).unwrap();
-        // Adding a CLI connection can move the API fields below the initial viewport.
+        // Additional settings can move a control below the initial viewport.
         // Scroll as a user would before testing their pointer and caret behavior.
         if field.top() < body.top() || field.bottom() > body.bottom() {
             cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1255,6 +1336,7 @@ mod tests {
         cx.simulate_resize(gpui::size(px(1020.0), px(1600.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
+        click_visible_control("agent-system-prompt", cx);
         let bounds = cx.debug_bounds("agent-system-prompt").unwrap();
         let position = bounds.origin + gpui::point(px(12.0), px(12.0));
         cx.simulate_click(position, gpui::Modifiers::none());
@@ -1306,7 +1388,7 @@ mod tests {
         cx.simulate_resize(gpui::size(px(1020.0), px(1600.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
-        crate::harness::click("agent-system-prompt", cx);
+        click_visible_control("agent-system-prompt", cx);
         cx.simulate_keystrokes("secondary-a");
         cx.simulate_input("二番も作る。");
         cx.simulate_keystrokes("enter");

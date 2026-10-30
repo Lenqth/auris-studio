@@ -168,6 +168,8 @@ fn clear_history(path: &Path) -> Result<(), String> {
 #[derive(Clone)]
 pub(super) struct Bridge(Arc<Channels>);
 struct Channels {
+    tool_calls: std::sync::Mutex<crate::tool_calls::Budget>,
+    tool_limit_reached: tokio::sync::Notify,
     recovery_blocked: AtomicBool,
     production: std::sync::Mutex<production::State>,
     stopped: Arc<AtomicBool>,
@@ -238,6 +240,29 @@ impl Drop for VisualTurn {
 }
 
 impl Bridge {
+    pub(super) fn tool_limit_error(&self) -> Option<String> {
+        self.0.tool_calls.lock().ok()?.error()
+    }
+
+    pub(super) fn reserve_tool_call(&self) -> Result<(), String> {
+        let result = self
+            .0
+            .tool_calls
+            .lock()
+            .map_err(|_| "Tool call counter unavailable".to_string())?
+            .reserve();
+        if result.is_err() {
+            // Retain a permit even if the outer worker has not started polling yet.
+            self.0.tool_limit_reached.notify_one();
+        }
+        result
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_test_tool_call_limit(&self, limit: usize) {
+        *self.0.tool_calls.lock().unwrap() = crate::tool_calls::Budget::new(limit);
+    }
+
     pub(crate) fn block_tool_recovery(&self) {
         self.0.recovery_blocked.store(true, Ordering::Release);
     }
@@ -403,6 +428,9 @@ impl Bridge {
             .is_some_and(|wire| wire.get("say").is_some() || wire["compact"] == true);
         if starts_turn {
             self.0.recovery_blocked.store(false, Ordering::Release);
+            if let Ok(mut budget) = self.0.tool_calls.lock() {
+                budget.reset();
+            }
         }
         if starts_turn && let Ok(mut budget) = self.0.lyric_repairs.lock() {
             budget.reset();
@@ -499,6 +527,10 @@ impl Worker {
         let (events_out, events) = mpsc::channel();
         let stopped = Arc::new(AtomicBool::new(false));
         let bridge = Bridge(Arc::new(Channels {
+            tool_calls: std::sync::Mutex::new(crate::tool_calls::Budget::new(
+                prefs.tool_call_limit(),
+            )),
+            tool_limit_reached: Default::default(),
             recovery_blocked: AtomicBool::new(false),
             production: Default::default(),
             stopped: stopped.clone(),
@@ -522,13 +554,15 @@ impl Worker {
                         .enable_all()
                         .build()
                         .map_err(|error| error.to_string())?;
-                    let result = runtime.block_on(backend.run(
-                        &bridge,
-                        history_path,
-                        fresh,
-                        history,
-                        cancelled,
-                    ));
+                    let result = runtime.block_on(async {
+                        tokio::select! {
+                            biased;
+                            _ = bridge.0.tool_limit_reached.notified() => {
+                                Err(crate::tool_calls::limit_error(prefs.tool_call_limit()))
+                            }
+                            result = backend.run(&bridge, history_path, fresh, history, cancelled) => result,
+                        }
+                    });
                     // Read-only reference work already running on blocking threads may finish,
                     // but it has no session access and must not hold up cancellation.
                     runtime.shutdown_timeout(std::time::Duration::from_millis(100));
@@ -590,6 +624,8 @@ pub(crate) fn test_bridge() -> (
     let (events, receiver) = mpsc::channel();
     (
         Bridge(Arc::new(Channels {
+            tool_calls: Default::default(),
+            tool_limit_reached: Default::default(),
             recovery_blocked: AtomicBool::new(false),
             production: Default::default(),
             stopped: Arc::new(AtomicBool::new(false)),
@@ -721,6 +757,87 @@ pub fn list_models_background(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn worker_uses_configured_tool_call_limit_and_can_exceed_the_old_caps() {
+        use serde_json::json;
+        for (limit, calls, completes) in [
+            (None, 161, true),
+            (Some(100), 100, true),
+            (Some(100), 101, false),
+            (Some(250), 161, true),
+        ] {
+            let mut responses: Vec<_> = (0..calls)
+                .map(|id| {
+                    crate::tests::completion(
+                        &json!({"role":"assistant","tool_calls":[{
+                            "id":format!("call-{id}"),"type":"function","function":{
+                                "name":"capabilities","arguments":"{}"
+                            }
+                        }]})
+                        .to_string(),
+                        "tool_calls",
+                    )
+                })
+                .collect();
+            responses.push(crate::tests::completion(
+                r#"{"role":"assistant","content":"Finished"}"#,
+                "stop",
+            ));
+            let (url, seen) = crate::tests::mock_server(responses);
+            let prefs = auris_session::AgentPreferences {
+                provider: "openai".into(),
+                model: "mock".into(),
+                url,
+                max_tool_calls: limit,
+                ..Default::default()
+            };
+            let worker = Worker::spawn(prefs, None, true, None).unwrap();
+            worker.send(r#"{"say":"Inspect capabilities"}"#).unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let mut permissions = 0;
+            loop {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "worker did not finish"
+                );
+                let Ok(event) = worker.try_recv() else {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    continue;
+                };
+                match event["event"].as_str() {
+                    Some("permission") => {
+                        permissions += 1;
+                        worker
+                            .send(
+                                &json!({"event":"permission_result","id":event["id"],"ok":true})
+                                    .to_string(),
+                            )
+                            .unwrap();
+                    }
+                    Some("answer") => {
+                        assert!(completes);
+                        assert_eq!(event["text"], "Finished");
+                        assert_eq!(permissions, calls);
+                        break;
+                    }
+                    Some("error") => {
+                        assert!(!completes, "{event}");
+                        assert_eq!(
+                            crate::tool_calls::limit_from_error(event["message"].as_str().unwrap()),
+                            Some(100),
+                            "unexpected error after {permissions} calls: {event}"
+                        );
+                        assert_eq!(permissions, 100);
+                        break;
+                    }
+                    Some("edit") => panic!("reference calls must not edit the score"),
+                    _ => {}
+                }
+            }
+            assert_eq!(seen.lock().unwrap().len(), calls + usize::from(completes));
+        }
+    }
 
     #[test]
     fn pending_request_checkpoint_survives_cancellation_and_completion_replaces_it() {
@@ -1077,6 +1194,8 @@ mod tests {
         let (events, _) = mpsc::channel();
         let (_, incoming) = async_mpsc::unbounded_channel();
         let bridge = Bridge(Arc::new(Channels {
+            tool_calls: Default::default(),
+            tool_limit_reached: Default::default(),
             recovery_blocked: AtomicBool::new(false),
             production: Default::default(),
             stopped: Arc::new(AtomicBool::new(false)),

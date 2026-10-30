@@ -7,6 +7,24 @@
 
 use crate::Language;
 
+/// Explain an exhausted Auris tool allowance and the recovery action for this surface.
+pub fn agent_tool_call_limit(language: Language, limit: usize, workshop: bool) -> String {
+    match (language, workshop) {
+        (Language::English, false) => format!(
+            "Stopped after {limit} Auris tool calls. Completed edits remain in the project. Increase Tool calls per request in Settings > Agent, then send a new instruction to continue."
+        ),
+        (Language::English, true) => format!(
+            "Reached {limit} Auris tool calls while creating this candidate. Progress is saved. Increase Tool calls per request in Settings > Agent, then choose Resume recovery to continue."
+        ),
+        (Language::Japanese, false) => format!(
+            "Aurisのツール呼び出しが上限の{limit}回に達したため停止しました。完了した編集はプロジェクトに残っています。「設定 → エージェント」で呼び出し上限を増やし、新しい指示で続きを依頼できます。"
+        ),
+        (Language::Japanese, true) => format!(
+            "この曲案の作成中に、Aurisのツール呼び出しが上限の{limit}回に達しました。途中までの作業は保存されています。「設定 → エージェント」で呼び出し上限を増やし、「途中から復旧」で続けられます。"
+        ),
+    }
+}
+
 /// Play or release one test note in the physical instrument editor.
 pub fn physical_preview(language: Language, note: &str, playing: bool) -> String {
     match (language, playing) {

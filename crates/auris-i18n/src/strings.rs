@@ -1976,6 +1976,8 @@ new のオプション
     AgentApply { en: "Apply", ja: "適用" }
     AgentRevert { en: "Revert", ja: "元に戻す" }
     TimelineScrollHelp { en: "Drag the bar or use Shift+wheel to scroll horizontally", ja: "バーをドラッグ、またはShift＋ホイールで横スクロール" }
+    AgentToolCallLimit { en: "Tool calls per request", ja: "1回の依頼でのツール呼び出し上限" }
+    AgentToolCallLimitHelp { en: "Shared by the Agent panel and AI song creation. Counts all Auris tools, including reads, help and failed calls. Default: 1000. Applies to the next request or resumed candidate; native CLI tools have their own limits.", ja: "エージェントパネルと「AIで曲を作る」で共通です。読み取り・ヘルプ・失敗も含め、Aurisのツール呼び出しを数えます。既定値は1,000回。次の依頼または候補の復旧から適用されます。CLI独自のツールには別の制限があります。" }
     AgentToolFailureLimit { en: "Repeated tool failure limit", ja: "同じツール呼び出しの失敗上限" }
     AgentToolFailureLimitHelp { en: "Failure allowance for the same tool and arguments. Bounds API/Antigravity loops and Claude Code recovery after tool errors. Success resets that call's count. Applies from the next conversation; other CLI runtimes manage their own limits.", ja: "同じツール・引数での失敗上限です。API／Antigravityの実行ループと、Claude Codeがツールエラー後に終了した際の自動継続に使います。成功すると該当する回数をリセットします。次の会話から適用され、他のCLIは独自の制限を使用します。" }
     AgentSystemPrompt { en: "System prompt", ja: "システムプロンプト" }

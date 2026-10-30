@@ -81,6 +81,8 @@ impl Section {
                 Key::AgentKeyEnvLabel,
                 Key::AgentContextTokens,
                 Key::AgentOutputTokens,
+                Key::AgentToolCallLimit,
+                Key::AgentToolCallLimitHelp,
                 Key::AgentEffort,
             ],
             Self::Appearance => &[

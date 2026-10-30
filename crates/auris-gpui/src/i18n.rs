@@ -12,6 +12,16 @@ use auris_session::{CoreError, Edit, EngineError, IoError, PluginFormat, Session
 
 use crate::app::AurisApp;
 
+/// Localize stable worker diagnostics at display time, including restored candidates.
+pub(crate) fn agent_error_text(error: &str, language: Language, workshop: bool) -> String {
+    let limit = auris_agent::tool_calls::limit_from_error(error)
+        .or_else(|| (workshop && error == "Candidate exceeded its tool budget").then_some(160));
+    limit.map_or_else(
+        || error.to_owned(),
+        |limit| messages::agent_tool_call_limit(language, limit, workshop),
+    )
+}
+
 impl AurisApp {
     /// The language the interface is currently in.
     pub(crate) fn language(&self) -> Language {
@@ -805,6 +815,35 @@ mod tests {
                 PluginFormat::from_plugin_id("auris.fx.reverb")
             ),
             "Reverb"
+        );
+    }
+
+    #[test]
+    fn tool_call_limit_errors_are_localized_at_display_time_in_both_surfaces() {
+        for (error, limit) in [
+            ("Auris tool call limit reached (2000).", 2000),
+            ("Candidate exceeded its tool budget", 160),
+        ] {
+            let text = agent_error_text(error, Language::Japanese, true);
+            assert!(text.contains(&limit.to_string()));
+            assert!(text.contains("途中から復旧"));
+            assert!(!text.contains("budget"));
+        }
+        let panel = agent_error_text(
+            "Auris tool call limit reached (500).",
+            Language::Japanese,
+            false,
+        );
+        assert!(panel.contains("新しい指示"));
+        let english = agent_error_text(
+            "Auris tool call limit reached (500).",
+            Language::English,
+            false,
+        );
+        assert!(english.contains("500") && english.contains("Settings > Agent"));
+        assert_eq!(
+            agent_error_text("Unrelated transport failure", Language::Japanese, false),
+            "Unrelated transport failure"
         );
     }
 

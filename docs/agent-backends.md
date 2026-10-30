@@ -20,7 +20,22 @@ to the model; Codex's advertised reasoning levels determine its choices. Permiss
 rules open from the approval-mode menu on the left. The circular send control
 becomes Stop during a turn.
 
-Settings > Agent includes **Repeated tool failure limit**, from 1 to 20 (default 5).
+Settings > Agent includes **Tool calls per request**, shared with AI song creation.
+The default is 1000; choices range from 100 to 10000. Reads, reference/help tools,
+and failed calls reaching the Auris tool host all count. The next call beyond the
+allowance is refused before execution and the worker stops. Completed panel edits
+remain in the document; candidate progress remains checkpointed. Increase the limit
+and send a new panel instruction or choose **Resume recovery** on the candidate.
+Reaching this limit does not trigger automatic candidate recovery. Changes apply
+to the next request, retried candidate, or explicit recovery, including an already
+open workshop. Each parallel candidate has its own allowance. Native CLI shell/file
+tools and provider-side limits remain managed by their respective runtimes.
+
+The API model-turn allowance follows the tool allowance with room for a final
+response and the shared limit check, so single-tool responses can use the full
+configured allowance.
+
+Settings > Agent also includes **Repeated tool failure limit**, from 1 to 20 (default 5).
 The Auris API and Antigravity loops count failures by tool name and normalized arguments
 within one user turn. A successful call resets that signature's count; corrected arguments
 have a separate budget. After the configured number of failures, another identical call
