@@ -31,6 +31,14 @@ use crate::ui::widgets::{ButtonState, ButtonStyle, Latch, button, button_enabled
 /// `F#m`, interpreting the latter in the key at that point on the timeline.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PromptTarget {
+    /// Rename a song conversation captured in the workshop's sidebar state.
+    WorkshopThreadName { workshop: u64 },
+    /// Explicit rating and comment for an exact workshop candidate and conversation instance.
+    WorkshopFeedback {
+        workshop: u64,
+        candidate: u64,
+        rating: u8,
+    },
     /// Name of the agent conversation captured when the prompt opened.
     AgentConversationName,
     /// Chord reference using the key and meter captured when the sheet opened.
@@ -145,33 +153,6 @@ pub enum PromptTarget {
     ClipSourceTempo(ClipId),
     /// Where the playhead sits, as bar, beat and hundredth.
     Position,
-    /// The song sheet's title, which its project is named after.
-    ///
-    /// These song targets edit the *sheet* and not the document: nothing they set has been written until
-    /// Write is pressed, which is why none of them records an undo step.
-    SongTitle,
-    /// The key the song sheet is set to.
-    SongKey,
-    /// The song sheet's tempo, in beats per minute.
-    SongTempo,
-    /// The meter the song sheet is set to, as `11/8`.
-    ///
-    /// The menu on the row covers the meters nearly everybody wants; this field is the way to
-    /// the rest, exactly as the transport's signature field has one.
-    SongMeter,
-    /// The seed the song sheet is set to.
-    SongSeed,
-    /// The name of the part at this position in the song sheet's roster.
-    SongPartName(usize),
-    /// A section BPM, or empty to follow the song.
-    SongSectionTempo(usize),
-    /// The chords the section at this position in the song sheet plays, written out.
-    SongSectionChart(usize),
-    /// The name to keep the chart of the section at this position under.
-    ///
-    /// The one prompt here that reaches past the sheet: it writes to the progression book, which
-    /// outlives the song being written.
-    KeepProgression(usize),
 }
 
 /// Whether an empty field carries a target-specific meaning instead of being a missing name.
@@ -179,13 +160,13 @@ fn empty_prompt_is_meaningful(target: PromptTarget) -> bool {
     matches!(
         target,
         PromptTarget::Lyric { .. }
+            | PromptTarget::WorkshopFeedback { .. }
             | PromptTarget::Phonemes { .. }
             | PromptTarget::Lyrics { .. }
             // Let the numeric field report its own valid range for an empty answer.
             | PromptTarget::DrumAssignment { .. }
             // Empty restores the lane's derived role or MIDI name.
             | PromptTarget::DrumLaneName { .. }
-            | PromptTarget::SongSectionTempo(_)
             // An unknown source tempo is a valid state and clearing the field is the way back.
             | PromptTarget::ClipSourceTempo(_)
     )
@@ -193,13 +174,7 @@ fn empty_prompt_is_meaningful(target: PromptTarget) -> bool {
 
 /// What a field is written in, as opposed to where it is being written.
 ///
-/// The distinction the sheet turns on. A key typed into the harmony lane and a key typed into the
-/// song sheet are one question asked in two places: the same rules, the same parser, the same
-/// refusal — and for a while the timeline's had a completion list under it and the sheet's had
-/// nothing, because the list was chosen by the *target* rather than by what the target takes.
-///
-/// Naming the notation is what stops the third place that asks for a key having to remember to
-/// ask the same way.
+/// Shared notation gives every field consistent parsing, hints and completions.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Notation {
     /// A key, `F# minor` or `D dorian`.
@@ -231,17 +206,14 @@ impl PromptTarget {
     /// nothing to refuse.
     pub fn notation(self) -> Option<Notation> {
         Some(match self {
-            PromptTarget::Key(_) | PromptTarget::SongKey => Notation::Key,
+            PromptTarget::Key(_) => Notation::Key,
             PromptTarget::Chord(_) => Notation::Chord,
-            PromptTarget::SongSectionChart(_) | PromptTarget::AgentChordReference { .. } => Notation::Progression,
+            PromptTarget::AgentChordReference { .. } => Notation::Progression,
             PromptTarget::Section(_) => Notation::Section,
             PromptTarget::Signature(_)
-            | PromptTarget::SignatureFrom(_)
-            | PromptTarget::SongMeter => Notation::Signature,
-            PromptTarget::Seed(_) | PromptTarget::SongSeed => Notation::Seed,
-            PromptTarget::SongTempo
-            | PromptTarget::SongSectionTempo(_)
-            | PromptTarget::Tempo(_)
+            | PromptTarget::SignatureFrom(_) => Notation::Signature,
+            PromptTarget::Seed(_) => Notation::Seed,
+            PromptTarget::Tempo(_)
             | PromptTarget::TempoFrom(_)
             | PromptTarget::ClipSourceTempo(_) => Notation::Tempo,
             PromptTarget::ClipGain(_) => Notation::Gain,
@@ -250,15 +222,14 @@ impl PromptTarget {
             | PromptTarget::DrumLaneNote { .. } => Notation::MidiNote,
             PromptTarget::Position => Notation::Position,
             PromptTarget::SaveSound(_)
+            | PromptTarget::WorkshopThreadName { .. }
+            | PromptTarget::WorkshopFeedback { .. }
             | PromptTarget::AgentConversationName
             | PromptTarget::RenameSound
             | PromptTarget::DuplicateSound
             | PromptTarget::Track(_)
             | PromptTarget::Clip(_)
             | PromptTarget::DrumLaneName { .. }
-            | PromptTarget::SongTitle
-            | PromptTarget::SongPartName(_)
-            | PromptTarget::KeepProgression(_)
             // A lyric is written in whatever language is being sung, and phonemes in IPA:
             // neither is a notation this field can state rules for or complete against.
             | PromptTarget::Lyric { .. }
@@ -524,6 +495,8 @@ pub enum PendingAction {
     StartRecording,
     /// Shut the window.
     CloseWindow,
+    /// Close this document's tab.
+    CloseTab,
     /// Leave.
     Quit,
     /// Leave after saving and restart through the verified update helper.
@@ -626,6 +599,7 @@ pub enum PromptBody {
 /// An open sheet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Prompt {
+    feedback_foci: Option<[gpui::FocusHandle; 5]>,
     /// Heading above the body.
     pub title: SharedString,
     /// What it is asking for.
@@ -652,6 +626,15 @@ pub struct Prompt {
 }
 
 impl Prompt {
+    /// Star controls that must retain keyboard focus while this sheet is open.
+    pub(crate) fn feedback_focus_handles(&self) -> Option<&[gpui::FocusHandle; 5]> {
+        self.feedback_foci.as_ref()
+    }
+    /// Give a feedback sheet stable keyboard destinations for its five star choices.
+    pub(crate) fn with_feedback_focus(mut self, cx: &mut Context<AurisApp>) -> Self {
+        self.feedback_foci = Some(std::array::from_fn(|_| cx.focus_handle().tab_stop(true)));
+        self
+    }
     /// A prompt editing `text`.
     pub fn new(
         title: impl Into<SharedString>,
@@ -659,6 +642,7 @@ impl Prompt {
         text: impl Into<String>,
     ) -> Self {
         Self {
+            feedback_foci: None,
             title: title.into(),
             body: PromptBody::Text {
                 target,
@@ -696,6 +680,7 @@ impl Prompt {
     /// A prompt asking a question rather than taking a name.
     pub fn ask(title: impl Into<SharedString>, question: Question) -> Self {
         Self {
+            feedback_foci: None,
             title: title.into(),
             body: PromptBody::Ask(question),
             error: None,
@@ -712,6 +697,7 @@ impl Prompt {
         lines: impl IntoIterator<Item = SharedString>,
     ) -> Self {
         Self {
+            feedback_foci: None,
             title: title.into(),
             body: PromptBody::Notice(lines.into_iter().collect()),
             error: None,
@@ -915,6 +901,44 @@ impl AurisApp {
             return;
         }
         let outcome = match target {
+            PromptTarget::WorkshopThreadName { workshop } => {
+                if text.is_empty() || text.chars().count() > 80 {
+                    self.reject_prompt(self.t(Key::WorkshopThreadNameInvalid));
+                    return;
+                }
+                if !self
+                    .song_workshop
+                    .as_ref()
+                    .is_some_and(|state| state.rename_thread(workshop, text))
+                {
+                    self.reject_prompt(self.t(Key::WorkshopThreadUnavailable));
+                    return;
+                }
+                Ok(())
+            }
+            PromptTarget::WorkshopFeedback {
+                workshop,
+                candidate,
+                rating,
+            } => {
+                let feedback = auris_session::workshop::Feedback {
+                    rating,
+                    comment: text,
+                };
+                if feedback.validate().is_err() {
+                    self.reject_prompt(self.t(Key::WorkshopFeedbackInvalid));
+                    return;
+                }
+                let sent = self
+                    .song_workshop
+                    .as_ref()
+                    .is_some_and(|state| state.send_feedback(workshop, candidate, feedback));
+                if !sent {
+                    self.reject_prompt(self.t(Key::WorkshopFeedbackUnavailable));
+                    return;
+                }
+                Ok(())
+            }
             PromptTarget::AgentChordReference { key, meter } => {
                 let result = auris_session::music_reference::chord_reference(&text, key, meter)
                     .and_then(|value| self.attach_agent_music_reference(&value, "chords"));
@@ -1049,164 +1073,6 @@ impl AurisApp {
             // job rather than an empty field's.
             PromptTarget::Section(at) => {
                 self.session.set_section(at, Some(text));
-                Ok(())
-            }
-            // Targets that edit the song sheet do not record an undo step: the sheet is
-            // a question about a song nobody has written yet.
-            PromptTarget::SongTitle => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    dials.title = text;
-                }
-                Ok(())
-            }
-            PromptTarget::SongKey => match auris_session::prelude::MusicalKey::parse(&text) {
-                Some(key) => {
-                    if let Some(dials) = self.song_sheet.as_mut() {
-                        dials.key = key;
-                        dials.tonality = None;
-                        dials.sound = None;
-                    }
-                    Ok(())
-                }
-                None => {
-                    self.reject_prompt(messages::not_a_key(self.language(), &text));
-                    return;
-                }
-            },
-            PromptTarget::SongTempo => match text.parse::<f64>() {
-                Ok(bpm) if crate::ui::compose_sheet::TEMPO.contains(&bpm) => {
-                    if let Some(dials) = self.song_sheet.as_mut() {
-                        dials.tempo = bpm;
-                        dials.pace = None;
-                    }
-                    Ok(())
-                }
-                _ => {
-                    self.reject_prompt(format!(
-                        "{} (20–400 BPM)",
-                        messages::not_a_tempo(self.language(), &text)
-                    ));
-                    return;
-                }
-            },
-            PromptTarget::SongSectionTempo(index) => {
-                let bpm = if text.is_empty() {
-                    None
-                } else {
-                    match text.parse::<f64>() {
-                        Ok(bpm) if (20.0..=400.0).contains(&bpm) => Some(bpm),
-                        _ => {
-                            self.reject_prompt(self.t(Key::SongTempoHint));
-                            return;
-                        }
-                    }
-                };
-                if let Some(section) = self
-                    .song_sheet
-                    .as_mut()
-                    .and_then(|d| d.sections.get_mut(index))
-                {
-                    section.tempo = bpm;
-                }
-                Ok(())
-            }
-            PromptTarget::SongSeed => match text.parse::<u64>() {
-                Ok(seed) => {
-                    if let Some(dials) = self.song_sheet.as_mut() {
-                        dials.seed = seed;
-                    }
-                    Ok(())
-                }
-                Err(_) => {
-                    self.reject_prompt(messages::not_a_seed(self.language(), &text));
-                    return;
-                }
-            },
-            // Refused rather than clamped, the same answer the timeline's meter fields give:
-            // there is no nearest signature to land on.
-            PromptTarget::SongMeter => match text.parse::<TimeSignature>() {
-                Ok(meter) => {
-                    if let Some(dials) = self.song_sheet.as_mut() {
-                        dials.meter = meter;
-                    }
-                    Ok(())
-                }
-                Err(_) => {
-                    self.reject_prompt(messages::not_a_signature(self.language(), &text));
-                    return;
-                }
-            },
-            // A part's name is what the composer keys its material by, so two of one name would
-            // be two parts writing the same notes — and the format refuses it outright.
-            PromptTarget::SongPartName(index) => {
-                if text.trim().is_empty() {
-                    self.reject_prompt(self.t(Key::NameCannotBeEmpty).to_string());
-                    return;
-                }
-                let renamed = self.song_sheet.as_mut().is_some_and(|dials| {
-                    crate::ui::compose_sheet::rename_part(dials, index, &text)
-                });
-                if !renamed {
-                    self.reject_prompt(self.t(Key::NameAlreadyUsed).to_string());
-                    return;
-                }
-                Ok(())
-            }
-            // A progression written out by hand. Named after the section it was written for, so
-            // there is one prompt rather than two — and a second section can still reach it, from
-            // the same picker, under that name.
-            PromptTarget::SongSectionChart(index) => {
-                let Some(chart) = Chart::parse(&text) else {
-                    self.reject_prompt(messages::not_a_chord(self.language(), &text));
-                    return;
-                };
-                let name = self
-                    .song_sheet
-                    .as_ref()
-                    .and_then(|dials| dials.sections.get(index))
-                    .map(|section| section.name.clone());
-                if let (Some(dials), Some(name)) = (self.song_sheet.as_mut(), name) {
-                    crate::ui::compose_sheet::give_section_chart(dials, index, &name, chart);
-                }
-                Ok(())
-            }
-            // The one prompt that reaches past the sheet: the book outlives the song.
-            PromptTarget::KeepProgression(index) => {
-                let held = self.song_sheet.as_ref().and_then(|dials| {
-                    let section = dials.sections.get(index)?;
-                    let (_, chart) = dials
-                        .charts
-                        .iter()
-                        .find(|(name, _)| name == &section.chords)?;
-                    Some(chart.clone())
-                });
-                let Some(chart) = held else {
-                    self.close_accepted_prompt();
-                    return;
-                };
-                if text.trim().is_empty() {
-                    self.reject_prompt(self.t(Key::NameCannotBeEmpty).to_string());
-                    return;
-                }
-                if !self.progressions.keep(&text, &chart, chart.mode) {
-                    // A name the built-in catalogue already uses, or none at all.
-                    self.reject_prompt(self.t(Key::NameAlreadyUsed).to_string());
-                    return;
-                }
-                if let Err(error) = self.progressions.save() {
-                    self.reject_prompt(messages::failed(
-                        self.language(),
-                        self.t(Key::SongKeepProgression),
-                        &error.to_string(),
-                    ));
-                    return;
-                }
-                self.set_status(messages::saved(
-                    self.language(),
-                    &auris_session::progressions::ProgressionBook::path()
-                        .display()
-                        .to_string(),
-                ));
                 Ok(())
             }
             PromptTarget::Seed(clip) => match text.parse::<u64>() {
@@ -1403,7 +1269,7 @@ impl AurisApp {
         }
     }
 
-    /// Reports a rejected answer where it can be corrected, above any underlying song sheet.
+    /// Reports a rejected answer where it can be corrected, in the active prompt.
     pub(crate) fn reject_prompt(&mut self, error: impl Into<String>) {
         let error = error.into();
         if let Some(prompt) = self.prompt.as_mut() {
@@ -1616,7 +1482,26 @@ impl AurisApp {
             PendingAction::ImportMidi(path) => self.import_midi_at(path, cx),
             PendingAction::ImportMidiPicked => self.pick_and_import_midi(cx),
             PendingAction::StartRecording => self.toggle_recording(window, cx),
-            PendingAction::CloseWindow => window.remove_window(),
+            PendingAction::CloseWindow => {
+                if let Some(tabs) = self.project_tabs.clone() {
+                    let id = cx.entity_id();
+                    let revision = self.session.revision();
+                    crate::project_tabs::update_window(tabs, cx, move |tabs, window, cx| {
+                        tabs.approve_close_window(id, revision, window, cx)
+                    });
+                } else {
+                    window.remove_window();
+                }
+            }
+            PendingAction::CloseTab => {
+                if let Some(tabs) = self.project_tabs.clone() {
+                    let id = cx.entity_id();
+                    let revision = self.session.revision();
+                    crate::project_tabs::update_window(tabs, cx, move |tabs, window, cx| {
+                        tabs.approve_close_tab(id, revision, window, cx)
+                    });
+                }
+            }
             PendingAction::Quit => self.approve_quit(cx),
             PendingAction::RestartForUpdate => self.complete_update_restart(cx),
         }
@@ -1637,6 +1522,75 @@ impl AurisApp {
         // ⌘ on macOS, Ctrl elsewhere. Reading `platform` directly would put select-all on the
         // Windows key, which opens the shell's own menu long before the application sees it.
         let command = event.keystroke.modifiers.secondary();
+
+        if let Some(foci) = self
+            .prompt
+            .as_ref()
+            .and_then(|prompt| prompt.feedback_foci.as_ref())
+        {
+            let mut handles = foci.to_vec();
+            handles.extend([
+                self.focus.clone(),
+                self.modal_focus.prompt_cancel().clone(),
+                self.modal_focus.prompt_confirm().clone(),
+            ]);
+            let focused = handles
+                .iter()
+                .position(|handle| handle.is_focused(window))
+                .unwrap_or(5);
+            let composing = self
+                .prompt
+                .as_ref()
+                .and_then(Prompt::field)
+                .is_some_and(|f| f.marked().is_some());
+            if !composing {
+                match event.keystroke.key.as_str() {
+                    "escape" => {
+                        self.cancel_prompt();
+                        return true;
+                    }
+                    "tab" => {
+                        let next = if shift {
+                            (focused + handles.len() - 1) % handles.len()
+                        } else {
+                            (focused + 1) % handles.len()
+                        };
+                        window.focus(&handles[next]);
+                        return true;
+                    }
+                    "enter" if command => {
+                        self.commit_prompt(window, cx);
+                        return true;
+                    }
+                    "enter" | "space" | " " if focused < 5 => {
+                        self.set_feedback_rating(focused as u8 + 1);
+                        return true;
+                    }
+                    "enter" | "space" | " " if focused > 5 => {
+                        self.activate_focused_prompt_button(window, cx);
+                        return true;
+                    }
+                    "enter" => {
+                        if let Some(field) = self.prompt.as_mut().and_then(Prompt::field_mut) {
+                            field.insert("\n");
+                        }
+                        return true;
+                    }
+                    "up" | "down" if focused == 5 => {
+                        if let Some(field) = self.prompt.as_mut().and_then(Prompt::field_mut) {
+                            if event.keystroke.key == "up" {
+                                field.move_up(shift);
+                            } else {
+                                field.move_down(shift);
+                            }
+                        }
+                        return true;
+                    }
+                    _ if focused != 5 => return true,
+                    _ => {}
+                }
+            }
+        }
 
         let button_prompt = self.prompt.as_ref().and_then(|prompt| match &prompt.body {
             PromptBody::Ask(question) => Some((
@@ -1778,14 +1732,20 @@ impl AurisApp {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(self.render_prompt_field(
-                        field.content().to_string().into(),
-                        field.selection(),
-                        field.marked(),
-                        focus,
-                        view,
-                        &theme,
-                    ))
+                    .children(self.render_feedback_rating(prompt, cx))
+                    .child(if matches!(target, PromptTarget::WorkshopFeedback { .. }) {
+                        self.render_feedback_comment(field, cx).into_any_element()
+                    } else {
+                        self.render_prompt_field(
+                            field.content().to_string().into(),
+                            field.selection(),
+                            field.marked(),
+                            focus,
+                            view,
+                            &theme,
+                        )
+                        .into_any_element()
+                    })
                     .children(prompt.error.as_ref().map(|error| {
                         div()
                             .id("prompt-error")
@@ -1811,6 +1771,10 @@ impl AurisApp {
                     // The default button names the edit the sheet will commit.
                     match target {
                         PromptTarget::SaveSound(_) => self.t(Key::CmdSave).into(),
+                        PromptTarget::WorkshopThreadName { .. } => self.t(Key::Rename).into(),
+                        PromptTarget::WorkshopFeedback { .. } => {
+                            self.t(Key::WorkshopFeedbackSend).into()
+                        }
                         PromptTarget::DuplicateSound => self.t(Key::DuplicateSoundConfirm).into(),
                         PromptTarget::DrumAssignment { .. }
                         | PromptTarget::NewDrumLane(_)
@@ -1953,6 +1917,116 @@ impl AurisApp {
                         .child(buttons),
                 ),
         )
+    }
+
+    /// Change the explicit star choice without altering the user's written impressions.
+    fn set_feedback_rating(&mut self, value: u8) {
+        let corrected = if let Some(prompt) = self.prompt.as_mut()
+            && let PromptBody::Text {
+                target: PromptTarget::WorkshopFeedback { rating, .. },
+                ..
+            } = &mut prompt.body
+        {
+            *rating = value;
+            prompt.error.take()
+        } else {
+            None
+        };
+        if let Some(error) = corrected
+            && self.status == error.as_ref()
+        {
+            self.set_status("");
+        }
+    }
+
+    fn render_feedback_rating(
+        &self,
+        prompt: &Prompt,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let PromptTarget::WorkshopFeedback { rating, .. } = prompt.target()? else {
+            return None;
+        };
+        let foci = prompt.feedback_foci.as_ref()?;
+        let mut choices = div().flex().gap_1();
+        for value in 1..=5u8 {
+            choices = choices.child(
+                button_enabled(
+                    ("feedback-star", usize::from(value)),
+                    format!("{value} {}", if value <= rating { "★" } else { "☆" }),
+                    ButtonStyle::Ghost,
+                    ButtonState::available(value == rating, true),
+                    self.theme.accent,
+                    &self.theme,
+                    cx.listener(move |this, _, _, cx| {
+                        this.set_feedback_rating(value);
+                        cx.notify();
+                    }),
+                )
+                .track_focus(&foci[usize::from(value - 1)]),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(self.t(Key::WorkshopFeedbackRating))
+                .child(choices)
+                .into_any_element(),
+        )
+    }
+
+    fn render_feedback_comment(
+        &self,
+        field: &TextField,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let theme = self.theme.clone();
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(self.t(Key::WorkshopFeedbackComment))
+            .child(
+                div()
+                    .id("feedback-comment")
+                    .debug_selector(|| "feedback-comment".into())
+                    .w_full()
+                    .h(gpui::rems(7.0))
+                    .rounded(theme.atelier.shape.radius_sm)
+                    .bg(theme.surface_sunken)
+                    .border_1()
+                    .border_color(theme.border)
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                            if let Some(field) = this.prompt.as_mut().and_then(Prompt::field_mut) {
+                                if let Some(offset) = crate::ui::text_area::wrapped_area_offset_at(
+                                    window,
+                                    field.content(),
+                                    event.position,
+                                ) {
+                                    field.place_caret(offset, event.modifiers.shift);
+                                } else {
+                                    field.caret_to_end();
+                                }
+                            }
+                            this.focus.focus(window);
+                            cx.notify();
+                        }),
+                    )
+                    .child(crate::ui::text_area::editable_wrapped_area(
+                        field.content().to_owned().into(),
+                        field.selection(),
+                        field.marked(),
+                        true,
+                        self.focus.clone(),
+                        cx.entity(),
+                        theme.clone(),
+                    )),
+            )
+            .child(self.render_prompt_hint(Key::WorkshopFeedbackHint, &theme))
     }
 
     /// The box the rename sheet types into.
@@ -2134,7 +2208,20 @@ impl AurisApp {
                     "prompt-ok",
                     confirm,
                     confirm_style,
-                    ButtonState::Enabled(Latch::Off),
+                    ButtonState::available(
+                        false,
+                        self.prompt.as_ref().is_none_or(|prompt| {
+                            !matches!(
+                                prompt.target(),
+                                Some(PromptTarget::WorkshopFeedback { rating: 0, .. })
+                            ) && (!matches!(
+                                prompt.target(),
+                                Some(PromptTarget::WorkshopFeedback { .. })
+                            ) || prompt
+                                .field()
+                                .is_none_or(|field| field.content().chars().count() <= 2000))
+                        }),
+                    ),
                     theme.accent,
                     &theme,
                     cx.listener(|this, _, window, cx| {
@@ -2232,26 +2319,28 @@ impl AurisApp {
     /// The palette first: opening it closes the rename sheet, so the two are never both open, and
     /// asking in this order means the answer does not depend on that staying true.
     fn writable_field(&mut self) -> Option<&mut TextField> {
-        if self.compose_progress.is_some() {
-            return None;
-        }
-        self.reconcile_section_lyrics();
         // Menus sit above every field and accept choices rather than text. Keep both ordinary
         // input and IME updates away from the editor they cover.
         if self.menu.is_some() {
             return None;
+        }
+        if self.timbre_map.open
+            && self.timbre_map.search_focused
+            && self.prompt.is_none()
+            && self.palette.is_none()
+            && self.menu_bar.is_none()
+        {
+            return Some(&mut self.timbre_map.search);
         }
         // The chooser covers the whole window and nothing behind it is drawn. A sheet waiting
         // there — the recovery offer is opened at launch, before the chooser — must not take
         // the text typed into the workshop, or every letter vanishes while Backspace, which the
         // workshop handles as a key, still works.
         if self.project_chooser.is_some() {
-            if self.workshop_chord_prompt() {
+            if self.workshop_prompt_open() {
                 return self.prompt.as_mut()?.field_mut();
             }
-            if let Some(browser) = self.song_library.as_mut() {
-                return browser.focused.then_some(&mut browser.search);
-            }
+
             return self.song_workshop.as_mut()?.field_mut();
         }
         if self.menu_bar.is_some() {
@@ -2265,19 +2354,11 @@ impl AurisApp {
         if let Some(prompt) = self.prompt.as_mut() {
             return prompt.field_mut();
         }
-        if let Some(browser) = self.song_library.as_mut() {
-            return browser.focused.then_some(&mut browser.search);
-        }
+
         if let Some(workshop) = self.song_workshop.as_mut() {
             return workshop.field_mut();
         }
-        // The lyrics box on the song sheet, while one holds the keyboard.
-        if let Some(edit) = self.lyrics_edit.as_mut() {
-            return Some(&mut edit.field);
-        }
-        if self.song_sheet.is_some() {
-            return None;
-        }
+
         if self.library_search_focused {
             return Some(&mut self.library_search);
         }
@@ -2293,20 +2374,23 @@ impl crate::ui::text_field::HasTextField for AurisApp {
     }
 
     fn readable_field(&self) -> Option<&TextField> {
-        if self.compose_progress.is_some() {
-            return None;
-        }
         if self.menu.is_some() {
             return None;
         }
+        if self.timbre_map.open
+            && self.timbre_map.search_focused
+            && self.prompt.is_none()
+            && self.palette.is_none()
+            && self.menu_bar.is_none()
+        {
+            return Some(&self.timbre_map.search);
+        }
         // In step with `writable_field`.
         if self.project_chooser.is_some() {
-            if self.workshop_chord_prompt() {
+            if self.workshop_prompt_open() {
                 return self.prompt.as_ref()?.field();
             }
-            if let Some(browser) = self.song_library.as_ref() {
-                return browser.focused.then_some(&browser.search);
-            }
+
             return self.song_workshop.as_ref()?.field();
         }
         if self.menu_bar.is_some() {
@@ -2318,18 +2402,11 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         if let Some(prompt) = self.prompt.as_ref() {
             return prompt.field();
         }
-        if let Some(browser) = self.song_library.as_ref() {
-            return browser.focused.then_some(&browser.search);
-        }
+
         if let Some(workshop) = self.song_workshop.as_ref() {
             return workshop.field();
         }
-        if let Some(edit) = self.lyrics_edit.as_ref() {
-            return Some(&edit.field);
-        }
-        if self.song_sheet.is_some() {
-            return None;
-        }
+
         if self.library_search_focused {
             return Some(&self.library_search);
         }
@@ -2346,11 +2423,6 @@ impl crate::ui::text_field::HasTextField for AurisApp {
         self.reset_workshop_completions();
         if let Some(palette) = self.palette.as_mut() {
             palette.selected = 0;
-        }
-        // The lyrics box writes through to the song sheet's dials on every change; typing
-        // arrives here, so this is where the copy has to happen.
-        if self.song_library.is_none() {
-            self.sync_section_lyrics();
         }
     }
 }
@@ -2632,6 +2704,12 @@ mod tests {
     /// is added to the returned list.
     fn every_target() -> Vec<PromptTarget> {
         let representatives = vec![
+            PromptTarget::WorkshopFeedback {
+                workshop: 1,
+                candidate: 1,
+                rating: 4,
+            },
+            PromptTarget::WorkshopThreadName { workshop: 1 },
             PromptTarget::DuplicateSound,
             PromptTarget::RenameSound,
             PromptTarget::SaveSound(TrackId(1)),
@@ -2672,20 +2750,14 @@ mod tests {
             },
             PromptTarget::ClipSourceTempo(ClipId(1)),
             PromptTarget::Position,
-            PromptTarget::SongTitle,
-            PromptTarget::SongKey,
-            PromptTarget::SongTempo,
-            PromptTarget::SongMeter,
-            PromptTarget::SongSeed,
-            PromptTarget::SongPartName(0),
-            PromptTarget::SongSectionChart(0),
-            PromptTarget::KeepProgression(0),
         ];
         for target in &representatives {
             match target {
                 PromptTarget::SaveSound(_)
                 | PromptTarget::AgentConversationName
                 | PromptTarget::AgentChordReference { .. }
+                | PromptTarget::WorkshopFeedback { .. }
+                | PromptTarget::WorkshopThreadName { .. }
                 | PromptTarget::RenameSound
                 | PromptTarget::DuplicateSound
                 | PromptTarget::Track(_)
@@ -2708,16 +2780,7 @@ mod tests {
                 | PromptTarget::DrumLaneName { .. }
                 | PromptTarget::DrumLaneNote { .. }
                 | PromptTarget::ClipSourceTempo(_)
-                | PromptTarget::Position
-                | PromptTarget::SongTitle
-                | PromptTarget::SongKey
-                | PromptTarget::SongTempo
-                | PromptTarget::SongMeter
-                | PromptTarget::SongSeed
-                | PromptTarget::SongPartName(_)
-                | PromptTarget::SongSectionTempo(_)
-                | PromptTarget::SongSectionChart(_)
-                | PromptTarget::KeepProgression(_) => {}
+                | PromptTarget::Position => {}
             }
         }
         representatives
@@ -2740,74 +2803,6 @@ mod tests {
             ClipId(1)
         )));
         assert!(!empty_prompt_is_meaningful(PromptTarget::Clip(ClipId(1))));
-    }
-
-    #[test]
-    fn the_song_sheet_asks_for_a_key_the_same_way_the_timeline_does() {
-        // The bug this whole arrangement exists to make unrepeatable. Both fields parse with
-        // `MusicalKey::parse` and refuse with the same message, and both said `like C major` —
-        // but the list was chosen by the target, so the sheet's key field offered nothing at all
-        // and the timeline's offered the circle.
-        assert_eq!(
-            PromptTarget::SongKey.notation(),
-            PromptTarget::Key(AT).notation()
-        );
-        assert_eq!(PromptTarget::SongKey.hint(), PromptTarget::Key(AT).hint());
-        for typed in ["", "c", "min", "dorian"] {
-            assert_eq!(
-                completions(PromptTarget::SongKey, typed),
-                completions(PromptTarget::Key(AT), typed),
-                "the two key fields differ on `{typed}`"
-            );
-        }
-        assert!(!completions(PromptTarget::SongKey, "").is_empty());
-        // And the same for the seed and the meter, the other questions the sheet asks twice.
-        assert_eq!(
-            PromptTarget::SongSeed.notation(),
-            PromptTarget::Seed(ClipId(1)).notation()
-        );
-        assert_eq!(
-            PromptTarget::SongMeter.notation(),
-            PromptTarget::Signature(AT).notation()
-        );
-    }
-
-    #[test]
-    fn a_progression_completes_the_chord_being_written_and_leaves_the_bars_alone() {
-        // A progression is a line of chords, so the list under it is the chord list — offered
-        // for the chord being written. Completing the whole box would have thrown away every bar
-        // already typed, which is why the field had no completion at all before.
-        let written = "| I | V | vi | b";
-        let offered = completions(PromptTarget::SongSectionChart(0), written);
-        assert_eq!(offered, ["bIII", "bVI", "bVII", "bVII7"], "{offered:?}");
-
-        let mut prompt = Prompt::new("", PromptTarget::SongSectionChart(0), written);
-        assert!(prompt.complete_next());
-        assert_eq!(prompt.field().unwrap().content(), "| I | V | vi | bIII");
-        // And the walk goes on replacing that one chord rather than growing the line.
-        assert!(prompt.complete_next());
-        assert_eq!(prompt.field().unwrap().content(), "| I | V | vi | bVI");
-
-        // A bar line with nothing after it yet offers the whole vocabulary.
-        assert_eq!(
-            completions(PromptTarget::SongSectionChart(0), "| I |"),
-            completions(PromptTarget::Chord(AT), "")
-        );
-
-        // The chord field itself still takes the whole box: one chord is the whole answer there,
-        // and the sheet closes on choosing one.
-        assert!(
-            PromptTarget::Chord(AT)
-                .notation()
-                .unwrap()
-                .completes_whole_field()
-        );
-        assert!(
-            !PromptTarget::SongSectionChart(0)
-                .notation()
-                .unwrap()
-                .completes_whole_field()
-        );
     }
 
     #[test]
@@ -3129,6 +3124,9 @@ mod window_tests {
             });
         });
         cx.simulate_keystrokes("space");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("space").unwrap(),
+        });
         paint(&app, cx);
 
         cx.update(|window, cx| {
@@ -3283,7 +3281,14 @@ mod window_tests {
         cx.run_until_parked();
 
         app.read_with(cx, |this, _| {
-            assert_eq!(this.session.project().name, "Recovered song");
+            assert_eq!(
+                this.session.project().name,
+                "Recovered song",
+                "status={}, pending={}, prompt={:?}",
+                this.status,
+                this.background_command.is_some(),
+                this.prompt
+            );
             assert!(
                 this.session
                     .project()
@@ -3459,6 +3464,9 @@ mod window_tests {
             );
         });
         cx.simulate_keystrokes("enter");
+        cx.simulate_event(gpui::KeyUpEvent {
+            keystroke: gpui::Keystroke::parse("enter").unwrap(),
+        });
         app.read_with(cx, |this, _| {
             assert!(
                 this.prompt.is_none(),
@@ -3520,86 +3528,6 @@ mod window_tests {
         app.read_with(cx, |this, _| {
             assert!(this.prompt.is_none());
             assert_eq!(this.session.harmony().chord_at(at), Chord::parse("F#m"));
-        });
-    }
-
-    #[gpui::test]
-    fn a_notice_over_song_lyrics_blocks_text_and_editing_until_dismissed(cx: &mut TestAppContext) {
-        use crate::ui::text_field::HasTextField;
-
-        let (app, cx) = open(cx);
-        app.update(cx, |this, _| {
-            this.open_song_sheet();
-            this.focus_section_lyrics(0);
-        });
-        paint(&app, cx);
-        cx.simulate_input("さくら");
-        let before = app.update(cx, |this, _| {
-            let before = this.lyrics_edit.clone();
-            this.open_prompt(Prompt::notice("Song", ["Please review the song.".into()]));
-            before
-        });
-        paint(&app, cx);
-        cx.simulate_input("隠れた入力");
-        cx.simulate_keystrokes("left backspace delete secondary-a tab");
-        app.read_with(cx, |this, _| {
-            assert!(this.prompt.is_some());
-            assert!(this.readable_field().is_none());
-            assert_eq!(this.lyrics_edit, before);
-            let edit = this.lyrics_edit.as_ref().unwrap();
-            assert_eq!(
-                this.song_sheet
-                    .as_ref()
-                    .unwrap()
-                    .sections
-                    .iter()
-                    .find(|section| section.name == edit.section)
-                    .unwrap()
-                    .lyrics,
-                "さくら"
-            );
-        });
-        cx.simulate_keystrokes("enter");
-        paint(&app, cx);
-        cx.simulate_input("のはな");
-        app.read_with(cx, |this, _| {
-            assert!(this.prompt.is_none());
-            assert_eq!(
-                this.lyrics_edit.as_ref().unwrap().field.content(),
-                "さくらのはな"
-            );
-        });
-    }
-
-    #[gpui::test]
-    fn a_song_sheet_without_lyrics_focus_blocks_background_search_input(cx: &mut TestAppContext) {
-        use crate::ui::text_field::{HasTextField, TextField};
-
-        let (app, cx) = open(cx);
-        let before = app.update(cx, |this, _| {
-            this.panels.show(crate::dock::Panel::Library);
-            this.library_search_focused = true;
-            this.library_search = TextField::new("Piano".to_string());
-            this.library_search.caret_to_end();
-            this.open_song_sheet();
-            this.library_search.clone()
-        });
-        paint(&app, cx);
-        cx.simulate_input("hidden");
-        cx.simulate_keystrokes("left backspace delete secondary-a tab enter");
-        app.read_with(cx, |this, _| {
-            assert!(this.song_sheet.is_some());
-            assert!(this.lyrics_edit.is_none());
-            assert!(this.readable_field().is_none());
-            assert!(this.library_search_focused);
-            assert_eq!(this.library_search, before);
-        });
-        click("song-sheet-cancel", cx);
-        paint(&app, cx);
-        cx.simulate_input("s");
-        app.read_with(cx, |this, _| {
-            assert!(this.song_sheet.is_none());
-            assert_eq!(this.library_search.content(), "Pianos");
         });
     }
 
@@ -3666,69 +3594,6 @@ mod window_tests {
             assert!(this.prompt.is_none());
             assert_eq!(this.session.midi_clip(clip).unwrap().name, "Clip");
         });
-    }
-
-    #[gpui::test]
-    fn long_song_answers_remain_editable_with_the_error_above_the_song_sheet(
-        cx: &mut TestAppContext,
-    ) {
-        let (app, cx) = open(cx);
-        cx.dispatch_action(actions::ComposeSong);
-        let (target, rejected, corrected) = (
-            PromptTarget::SongSectionChart(0),
-            format!("{}| H7 |", "| I | V ".repeat(80)),
-            "| I | V |",
-        );
-        {
-            app.update(cx, |this, _| {
-                this.open_prompt(Prompt::new("Song", target, ""));
-            });
-            paint(&app, cx);
-            let song = app.read_with(cx, |this, _| this.song_sheet.clone());
-            cx.simulate_input(&rejected);
-            cx.simulate_keystrokes("enter");
-            paint(&app, cx);
-            app.read_with(cx, |this, _| {
-                let prompt = this.prompt.as_ref().expect("the song answer was retained");
-                assert_eq!(prompt.target(), Some(target));
-                assert_eq!(prompt.field().unwrap().content(), rejected);
-                assert!(prompt.error.as_ref().unwrap().contains(&rejected));
-                assert_eq!(
-                    this.song_sheet, song,
-                    "rejection does not partly edit the song"
-                );
-            });
-            let error = cx
-                .debug_bounds("prompt-error")
-                .expect("an inline error is drawn");
-            let confirm = cx
-                .debug_bounds("prompt-ok")
-                .expect("the answer button is drawn");
-            assert!(error.size.height <= gpui::px(96.0));
-            assert!(error.bottom() <= confirm.top());
-
-            cx.simulate_keystrokes("secondary-a");
-            cx.simulate_input(corrected);
-            cx.simulate_keystrokes("enter");
-            app.read_with(cx, |this, _| {
-                assert!(this.prompt.is_none());
-                let dials = this
-                    .song_sheet
-                    .as_ref()
-                    .expect("only the answer sheet closed");
-                match target {
-                    PromptTarget::SongSectionChart(index) => {
-                        let (_, chart) = dials
-                            .charts
-                            .iter()
-                            .find(|(name, _)| name == &dials.sections[index].chords)
-                            .expect("the corrected chart was kept");
-                        assert_eq!(*chart, Chart::parse(corrected).unwrap());
-                    }
-                    _ => unreachable!(),
-                }
-            });
-        }
     }
 
     #[gpui::test]

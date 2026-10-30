@@ -73,6 +73,8 @@ pub enum Edit {
     MoveMixerNodes,
     /// Mixer nodes were automatically arranged.
     ArrangeMixerNodes,
+    /// The document was given a different name.
+    RenameProject,
     /// A track was renamed.
     RenameTrack,
     /// A track was given a different colour.

@@ -560,8 +560,8 @@ dependencies = [
 
 [[package]]
 name = "atelier"
-version = "0.1.0"
-source = "git+https://github.com/uthree/design-language?rev=22d3a55316b22d749af91ebff918758e41c39226#22d3a55316b22d749af91ebff918758e41c39226"
+version = "0.2.0"
+source = "git+https://github.com/uthree/design-language?rev=b584b128658858fdd7917e003271dd35dadfd279#b584b128658858fdd7917e003271dd35dadfd279"
 dependencies = [
  "gpui",
  "image",
@@ -632,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "auris-agent"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-session",
  "auris-toolbox",
@@ -657,7 +657,7 @@ dependencies = [
 
 [[package]]
 name = "auris-analysis"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "auris-dsp",
@@ -672,7 +672,7 @@ dependencies = [
 
 [[package]]
 name = "auris-clap"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "clack-extensions",
@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "auris-cli"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-i18n",
  "auris-session",
@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "auris-compose"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "serde",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "auris-core"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "base64 0.23.1",
  "serde",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "auris-dsp"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "ndarray",
@@ -732,7 +732,7 @@ dependencies = [
 
 [[package]]
 name = "auris-engine"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "cpal",
@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "auris-gpu"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "auris-dsp",
@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "auris-gpui"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "atelier",
  "auris-agent",
@@ -769,6 +769,7 @@ dependencies = [
  "hex",
  "hound",
  "image",
+ "jsonc-parser",
  "log",
  "markdown",
  "objc2",
@@ -788,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "auris-i18n"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "objc2-foundation",
  "serde",
@@ -798,7 +799,7 @@ dependencies = [
 
 [[package]]
 name = "auris-io"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "flac-codec",
@@ -817,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "auris-mcp"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-session",
  "auris-toolbox",
@@ -831,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "auris-sampler"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "auris-dsp",
@@ -842,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "auris-session"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-analysis",
  "auris-clap",
@@ -879,7 +880,7 @@ dependencies = [
 
 [[package]]
 name = "auris-singer"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "auris-vocal",
@@ -899,7 +900,7 @@ dependencies = [
 
 [[package]]
 name = "auris-synth"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "auris-dsp",
@@ -910,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "auris-toolbox"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-session",
  "base64 0.23.1",
@@ -925,7 +926,7 @@ dependencies = [
 
 [[package]]
 name = "auris-update-helper"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "hex",
  "serde",
@@ -937,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "auris-vocal"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "jpreprocess",
@@ -948,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "auris-vst3"
-version = "0.14.0"
+version = "0.16.0"
 dependencies = [
  "auris-core",
  "crossbeam-queue",
@@ -4701,6 +4702,15 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jsonc-parser"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6d80e6d70e7911a29f3cf3f44f452df85d06f73572b494ca99a2cad3fcf8f4"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@
 mod discovery;
 mod lyric_repair;
 mod provider_status;
+pub mod tool_calls;
 mod tool_failures;
 pub use discovery::{ModelConnection, discover_models_background};
 pub use provider_status::{ProviderStatus, ProviderUpdate, check_providers_background};
@@ -16,6 +17,7 @@ pub use attachments::{AttachmentKind, attachment_kind, validate_attachments};
 pub mod approval_review;
 mod completion;
 pub mod input_suggestion;
+pub mod issue_diagnosis;
 pub mod song_authoring;
 pub mod song_ideas;
 pub mod timbre_names;
@@ -131,7 +133,10 @@ fn parse_args(
     let mut url = None;
     let mut model = None;
     let mut key_env = None;
-    let mut max_turns = 40usize;
+    // A single-tool response can consume one model turn per call, followed by a final
+    // answer. Rig refuses tools on its last model turn, so leave one additional turn
+    // for the shared host to diagnose an attempted call beyond the allowance.
+    let mut max_turns = prefs.tool_call_limit().saturating_add(2);
     let mut context_tokens = prefs.context_tokens.unwrap_or(32768);
     let output_tokens = prefs.output_tokens.unwrap_or(4096);
     let mut thinking = prefs.thinking;
@@ -1352,6 +1357,11 @@ async fn json_conversation(
                 }));
             }
             Err(message) => {
+                // Rig may wrap a limit diagnostic before the outer cancellation branch
+                // is polled. Preserve the shared diagnostic and do not start another turn.
+                if let Some(error) = bridge.tool_limit_error() {
+                    return Err(error);
+                }
                 memory.push_interrupted(&said, &message);
                 history = memory.messages();
                 if let Some(generation) = history_generation.as_mut()
@@ -1505,6 +1515,35 @@ mod tests {
                 .iter()
                 .any(|definition| definition.name == "search_instruments")
         );
+        let live = names
+            .iter()
+            .find(|tool| tool.name == "search_instruments")
+            .unwrap();
+        let saved = toolbox::tool_catalog()
+            .into_iter()
+            .find(|tool| tool.name == "search_instruments")
+            .unwrap();
+        for schema in [&live.parameters, &saved.parameters] {
+            let schema = schema.to_string();
+            for field in [
+                "character",
+                "brightness",
+                "attack",
+                "sustain",
+                "release",
+                "noise",
+            ] {
+                assert!(schema.contains(field), "Missing {field}");
+            }
+        }
+        let command = toolbox::live_agent::command("search_instruments", &serde_json::json!({"request":{"mode":"character","query":"ふんわり","targets":{"release":0.1},"limit":3}})).unwrap().unwrap();
+        assert!(matches!(
+            command,
+            auris_session::live_agent::Command::SearchInstruments {
+                request: auris_session::SoundSearch::Character { .. },
+                ..
+            }
+        ));
     }
 
     #[tokio::test]
@@ -1544,7 +1583,7 @@ mod tests {
         assert_eq!(options.provider, Provider::Ollama);
         assert_eq!(options.url, None);
         assert_eq!(options.key, None);
-        assert_eq!(options.max_turns, 40);
+        assert_eq!(options.max_turns, 1002);
         assert_eq!(options.prompt.as_deref(), Some("write me a song"));
     }
 

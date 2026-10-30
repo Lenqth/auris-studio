@@ -16,78 +16,18 @@ use crate::ui::tooltip::keyed_tip;
 /// An indeterminate activity mark. Pair it with text naming the work in progress.
 /// The animation exists only while the caller renders this element.
 pub fn activity_indicator(id: impl Into<ElementId>, color: Hsla) -> gpui::AnyElement {
-    use gpui::{Animation, AnimationExt};
-
     let id = id.into();
     let selector = id.clone();
-    let mark = div()
-        .id(id)
+    div()
+        .id(ElementId::NamedChild(
+            Box::new(id.clone()),
+            "activity".into(),
+        ))
         .debug_selector(move || selector.to_string())
-        .size_3()
-        .flex_shrink_0();
-    if reduced_motion() {
-        return mark.child(activity_arc(0.0, color)).into_any_element();
-    }
-    mark.with_animation(
-        "activity-rotation",
-        Animation::new(std::time::Duration::from_millis(1000)).repeat(),
-        move |mark, phase| mark.child(activity_arc(phase, color)),
-    )
-    .into_any_element()
-}
-
-fn activity_arc(phase: f32, color: Hsla) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |bounds, _, window, _| {
-            let side = bounds.size.width.min(bounds.size.height);
-            let radius = side * 0.38;
-            let center = bounds.center();
-            let mut path = gpui::PathBuilder::stroke(side * 0.12);
-            for step in 0..=24 {
-                let angle = (phase + step as f32 / 32.0) * std::f32::consts::TAU;
-                let point = center + point(radius * angle.cos(), radius * angle.sin());
-                if step == 0 {
-                    path.move_to(point);
-                } else {
-                    path.line_to(point);
-                }
-            }
-            if let Ok(path) = path.build() {
-                window.paint_path(path, color);
-            }
-        },
-    )
-    .size_full()
-}
-
-fn reduced_motion() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
-        };
-        use windows::core::BOOL;
-        let mut enabled = BOOL(1);
-        // SAFETY: This query writes one BOOL to a live, correctly sized local value.
-        let result = unsafe {
-            SystemParametersInfoW(
-                SPI_GETCLIENTAREAANIMATION,
-                0,
-                Some(std::ptr::from_mut(&mut enabled).cast()),
-                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
-            )
-        };
-        result.is_ok() && !enabled.as_bool()
-    }
-    #[cfg(target_os = "macos")]
-    {
-        objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        false
-    }
+        .flex()
+        .flex_none()
+        .child(atelier::Spinner::new(id).color(color))
+        .into_any_element()
 }
 
 /// A horizontal separator.
@@ -179,7 +119,7 @@ where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
     let label: SharedString = label.into();
-    button_with_content(
+    button_enabled(
         id,
         label,
         style,
@@ -209,8 +149,27 @@ where
     L: Into<SharedString>,
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
-    let label: SharedString = label.into();
-    button_with_content(id, label, style, state, active_color, theme, on_click)
+    // These controls are extended with bounded content, caller-owned focus and key contexts.
+    // Keep that frame as the interaction owner; nesting a native tab stop steals those gestures.
+    button_with_content(
+        id,
+        label.into(),
+        style,
+        state,
+        active_color,
+        theme,
+        on_click,
+    )
+}
+
+// Auris attaches keymap-aware tooltip callbacks and domain gestures to this layout host.
+// The native button owns all painting, focus, activation and its original test selector.
+fn command_frame(id: ElementId, command: atelier::Button) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(ElementId::NamedChild(Box::new(id), "layout".into()))
+        .flex()
+        .flex_none()
+        .child(command)
 }
 
 /// A [`button_enabled`] whose label yields to a narrower parent instead of escaping it.
@@ -281,8 +240,7 @@ where
         .id(id)
         .debug_selector(move || selector.to_string())
         .tab_index(0)
-        .key_context("AurisDisclosure")
-        .on_action(|_: &ClaimDisclosureActivation, _, _| {})
+        .key_context(atelier::CONTROL_CONTEXT)
         .focus(|this| this.border_1().border_color(theme.selection))
         .flex()
         .items_center()
@@ -404,6 +362,7 @@ where
         })
         .when(enabled, |this| {
             this.tab_index(0)
+                .key_context(atelier::CONTROL_CONTEXT)
                 .focus(|this| this.border_color(theme.selection))
                 .hover(|this| this.bg(hover))
                 .active(|this| this.bg(atelier::mix(hover, text_color, 0.08)))
@@ -413,156 +372,53 @@ where
         .child(label)
 }
 
-/// One page of a navigation column: Atelier's `ListItem`, made reachable from the keyboard.
-///
-/// Atelier's row is drawn for the pointer only; a window whose pages are chosen from a sidebar
-/// still has to be operable with Tab and Enter, so this is the same row (icon lane, label, an
-/// optional faint description, the selected fill) with a focus stop and the shared focus ring.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn nav_item<F>(
-    id: &'static str,
-    label: impl Into<SharedString>,
-    description: Option<SharedString>,
-    glyph: atelier::IconName,
-    selected: bool,
-    enabled: bool,
-    theme: &Theme,
-    on_click: F,
-) -> gpui::Stateful<gpui::Div>
-where
-    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-{
-    let atelier = &theme.atelier;
-    let colors = &atelier.colors;
-    let height = match description {
-        Some(_) => atelier.density.row + atelier.typography.size_sm,
-        None => atelier.density.row,
-    };
-    let hover = colors.hover;
-    div()
-        .id(id)
-        .debug_selector(move || id.into())
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(atelier.spacing.sm)
-        .h(height)
-        .px(atelier.spacing.sm)
-        .rounded(atelier.shape.radius_sm)
-        .border_1()
-        .border_color(gpui::transparent_black())
-        .text_size(atelier.typography.size_md)
-        .text_color(if selected {
-            colors.text
-        } else {
-            colors.text_muted
-        })
-        .when(selected, |row| {
-            row.bg(colors.selected)
-                .font_weight(atelier.typography.label_weight)
-        })
-        .when(enabled && !selected, |row| {
-            row.hover(move |style| style.bg(hover))
-        })
-        .when(enabled, |row| {
-            row.tab_index(0)
-                .focus(|row| row.border_color(theme.selection))
-                .on_click(on_click)
-        })
-        .when(!enabled, |row| row.opacity(0.62))
-        .child(div().flex().flex_none().justify_center().w(px(16.0)).child(
-            atelier::Icon::new(glyph).size(px(15.0)).color(if selected {
-                colors.accent_text
-            } else {
-                colors.text_faint
-            }),
-        ))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .flex_1()
-                .min_w_0()
-                .child(div().truncate().child(label.into()))
-                .children(description.map(|description| {
-                    div()
-                        .truncate()
-                        .text_size(atelier.typography.size_sm)
-                        .font_weight(gpui::FontWeight::NORMAL)
-                        .text_color(colors.text_faint)
-                        .child(description)
-                })),
-        )
-}
-
 /// A square button holding one drawn icon, used in the transport bar.
 ///
 /// The icon is painted rather than typed so a row of them shares one weight and colour; see
 /// [`crate::ui::icons`].
 /// Returned concretely for the reason [`button`] is, and more urgently: this one has no text on
 /// it at all, so a tooltip is the only thing that can name it.
+// This adapter retains Auris's dynamic shortcut tooltips around the native Atelier button.
 pub fn icon_button<I, F>(
+    // atelier: allow
     id: I,
     glyph: Icon,
     active: bool,
     active_color: Hsla,
-    theme: &Theme,
+    _theme: &Theme,
     on_click: F,
 ) -> gpui::Stateful<gpui::Div>
 where
     I: Into<ElementId>,
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
-    // Atelier draws toolbar icons as ghost buttons: no fill or hairline until the pointer is
-    // over them, and a latched one filled with its own colour.
-    let background = if active {
-        active_color
-    } else {
-        gpui::transparent_black()
-    };
-    let foreground = if active {
-        theme.text_on(active_color)
-    } else {
-        theme.text_muted
-    };
-    let hover = if active {
-        theme.hovered(background, 0.14)
-    } else {
-        theme.surface_hover
-    };
+    icon_button_enabled(id, glyph, active, true, active_color, _theme, on_click)
+}
 
-    // The id again, this time as a name a test can find the button by. `debug_selector` compiles
-    // to nothing unless gpui is built with `test-support`, which only `cargo test` does — so the
-    // shipped binary carries an `Arc` bump and no string. Every icon button in the application
-    // gets a handle out of this one line, which is why it is here rather than at each call site.
+/// A toolbar command whose unavailable state also leaves the keyboard traversal order.
+pub fn icon_button_enabled<I, F>(
+    id: I,
+    glyph: Icon,
+    active: bool,
+    enabled: bool,
+    active_color: Hsla,
+    _theme: &Theme,
+    on_click: F,
+) -> gpui::Stateful<gpui::Div>
+where
+    I: Into<ElementId>,
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+{
     let id: ElementId = id.into();
-    let handle = id.clone();
-
-    div()
-        .id(id)
-        .debug_selector(move || handle.to_string())
-        .tab_index(0)
-        .focus(|this| this.border_color(theme.selection))
-        .flex()
-        .items_center()
-        .justify_center()
-        .size(theme.atelier.density.control_md)
-        .rounded(
-            theme
-                .atelier
-                .control_radius(theme.atelier.density.control_md),
-        )
-        .border_1()
-        .border_color(if active {
-            active_color
-        } else {
-            gpui::transparent_black()
-        })
-        .bg(background)
-        .hover(|this| this.bg(hover))
-        .active(|this| this.opacity(0.75))
-        .child(icon(glyph, theme.atelier.typography.size_lg, foreground))
-        .on_click(on_click)
+    command_frame(
+        id.clone(),
+        atelier::Button::icon_only(id, glyph.source())
+            .size(atelier::ControlSize::Small)
+            .selected(active)
+            .disabled(!enabled)
+            .tint(active_color)
+            .on_click(on_click),
+    )
 }
 
 /// A button showing an icon next to a word, for actions where the icon alone is ambiguous.
@@ -570,7 +426,7 @@ pub fn icon_label<I, L, F>(
     id: I,
     glyph: Icon,
     label: L,
-    theme: &Theme,
+    _theme: &Theme,
     on_click: F,
 ) -> impl IntoElement + use<I, L, F>
 where
@@ -579,36 +435,9 @@ where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
     let id: ElementId = id.into();
-    let selector = id.clone();
-    div()
-        .id(id)
-        .debug_selector(move || selector.to_string())
-        .tab_index(0)
-        .focus(|this| this.border_color(theme.selection))
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(theme.atelier.spacing.xs)
-        .h(theme.atelier.density.control_sm)
-        .px(theme.atelier.spacing.sm)
-        .rounded(
-            theme
-                .atelier
-                .control_radius(theme.atelier.density.control_sm),
-        )
-        .border_1()
-        .border_color(theme.border)
-        .bg(theme.surface_raised)
-        .text_xs()
-        .text_color(theme.text)
-        .hover(|this| this.bg(theme.surface_hover))
-        .active(|this| this.opacity(0.75))
-        .child(icon(
-            glyph,
-            theme.atelier.typography.size_sm,
-            theme.text_muted,
-        ))
-        .child(label.into())
+    atelier::Button::new(id, label)
+        .icon(glyph.source())
+        .size(atelier::ControlSize::Small)
         .on_click(on_click)
 }
 
@@ -618,7 +447,7 @@ where
 pub fn chain_button<I, F>(
     id: I,
     glyph: Icon,
-    theme: &Theme,
+    _theme: &Theme,
     on_click: F,
 ) -> gpui::Stateful<gpui::Div>
 where
@@ -626,28 +455,12 @@ where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 {
     let id = id.into();
-    let selector = id.clone();
-    div()
-        .id(id)
-        .debug_selector(move || selector.to_string())
-        .tab_index(0)
-        .focus(|this| this.border_color(theme.selection))
-        .flex()
-        .items_center()
-        .justify_center()
-        .size(theme.atelier.density.control_sm)
-        .rounded(
-            theme
-                .atelier
-                .control_radius(theme.atelier.density.control_sm),
-        )
-        .bg(theme.surface)
-        .border_1()
-        .border_color(theme.border_subtle)
-        .hover(|this| this.bg(theme.surface_hover).border_color(theme.border))
-        .active(|this| this.opacity(0.75))
-        .child(icon(glyph, px(11.0), theme.text_muted))
-        .on_click(on_click)
+    command_frame(
+        id.clone(),
+        atelier::Button::icon_only(id, glyph.source())
+            .size(atelier::ControlSize::Small)
+            .on_click(on_click),
+    )
 }
 
 /// A draggable divider between two panels.
@@ -700,9 +513,6 @@ where
 pub enum RowColumn {
     /// Equal label and value lanes, matching the geometry of a labelled value slider.
     Equal,
-    /// The label is a column this wide. For a panel of a fixed width whose values are long — a
-    /// key, a groove, a progression — where the button wants every pixel the label does not.
-    Label(Pixels),
     /// The value button is a column this wide. For a panel the user can resize, where buttons
     /// that all end in the same place read as a column and a label free to stretch never
     /// squeezes one.
@@ -854,9 +664,6 @@ where
             .border_color(gpui::transparent_black())
             .child(caption.flex_1().min_w_0())
             .child(div().flex_1().min_w_0().child(control)),
-        RowColumn::Label(width) => row
-            .child(caption.w(width).flex_shrink_0())
-            .child(div().flex_1().min_w_0().child(control)),
         RowColumn::Value(width) => row
             .child(caption.flex_1().min_w_0())
             .child(div().w(width).flex_shrink_0().child(control)),
@@ -882,6 +689,7 @@ where
         .id(id)
         .debug_selector(move || selector.to_string())
         .tab_index(0)
+        .key_context(atelier::CONTROL_CONTEXT)
         .focus(|this| this.border_color(theme.selection))
         .flex()
         .items_center()
@@ -914,8 +722,9 @@ where
         .on_click(on_click)
 }
 
-/// A readout with a caption above it, as a hardware transport displays one.
+/// A caption and value inside the transport's shared control surface.
 pub fn readout<C: Into<SharedString>, V: Into<SharedString>>(
+    // atelier: allow — caption, value and unit share the parent transport's surface.
     caption: C,
     value: V,
     sub: Option<SharedString>,
@@ -926,13 +735,9 @@ pub fn readout<C: Into<SharedString>, V: Into<SharedString>>(
         .flex()
         .flex_col()
         .justify_center()
+        .h_full()
         .w(width)
         .px_2()
-        .py_1()
-        .rounded(Metrics::RADIUS_MD)
-        .bg(theme.surface_sunken)
-        .border_1()
-        .border_color(theme.border_subtle)
         .child(
             div()
                 .text_xs()
@@ -956,7 +761,7 @@ pub const ZOOM_SLIDER_WIDTH: Pixels = px(96.0);
 ///
 /// Wide enough that a parameter can be dialled in precisely, short enough that sweeping a filter
 /// end to end does not need two swipes. It belongs to the widget rather than to any one panel:
-/// a plugin's parameters, a clip's dials and the song sheet's are the same bar, and a plugin that
+/// plugin parameters and clip dials use the same bar, and a plugin that
 /// answered a drag twice as fast as the sheet did would be a bar that means something different
 /// depending on where it was drawn.
 pub const DRAG_RANGE_PIXELS: f32 = 220.0;
@@ -1140,16 +945,6 @@ pub struct SliderKeyboardEvent {
 /// The ordinary keyboard increment for controls whose displayed resolution is one percent.
 pub const SLIDER_PERCENT_STEP: f32 = 0.01;
 
-/// Claims activation key-downs while the disclosure's click handler acts on key-up.
-#[derive(Clone, Debug, PartialEq, gpui::Action)]
-#[action(namespace = auris_disclosure, no_json)]
-pub(crate) struct ClaimDisclosureActivation;
-
-/// Reserves Enter/Space for focused visualization controls instead of transport shortcuts.
-#[derive(Clone, Debug, PartialEq, gpui::Action)]
-#[action(namespace = auris_visualization, no_json)]
-pub(crate) struct ClaimVisualizationActivation;
-
 /// A slider-local action carrying the standard key that requested an adjustment.
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = auris_slider, no_json)]
@@ -1161,7 +956,7 @@ pub(crate) struct AdjustSlider {
 ///
 /// Control contexts are below pane and window contexts in the focus path. Sliders claim their
 /// adjustment keys, and disclosures reserve Enter/Space for activation instead of transport.
-pub(crate) fn key_bindings() -> [gpui::KeyBinding; 12] {
+pub(crate) fn key_bindings() -> [gpui::KeyBinding; 8] {
     [
         gpui::KeyBinding::new("left", AdjustSlider { key: "left" }, Some("AurisSlider")),
         gpui::KeyBinding::new("down", AdjustSlider { key: "down" }, Some("AurisSlider")),
@@ -1179,18 +974,6 @@ pub(crate) fn key_bindings() -> [gpui::KeyBinding; 12] {
         ),
         gpui::KeyBinding::new("home", AdjustSlider { key: "home" }, Some("AurisSlider")),
         gpui::KeyBinding::new("end", AdjustSlider { key: "end" }, Some("AurisSlider")),
-        gpui::KeyBinding::new("enter", ClaimDisclosureActivation, Some("AurisDisclosure")),
-        gpui::KeyBinding::new("space", ClaimDisclosureActivation, Some("AurisDisclosure")),
-        gpui::KeyBinding::new(
-            "enter",
-            ClaimVisualizationActivation,
-            Some("AurisVisualizationControls"),
-        ),
-        gpui::KeyBinding::new(
-            "space",
-            ClaimVisualizationActivation,
-            Some("AurisVisualizationControls"),
-        ),
     ]
 }
 
@@ -1228,7 +1011,7 @@ pub(crate) fn slider_fraction_after_key(fraction: f32, key: &str) -> Option<f32>
 ///
 /// A bar is dragged, and that is the whole of how it is edited. It used to take a scroll handler
 /// too, and every one of these lives inside a panel that scrolls — the mixer strips, the
-/// inspector, the song sheet. Rolling the wheel to get down a column of tracks changed the level
+/// inspector. Rolling the wheel to get down a column of tracks changed the level
 /// of whichever fader the pointer happened to cross on the way, silently, with no drag to
 /// remember having started and nothing on the screen saying which of them moved.
 ///
@@ -1275,7 +1058,7 @@ where
         .id(id)
         .debug_selector(move || selector.to_string())
         .tab_index(0)
-        .key_context("AurisSlider")
+        .key_context("AurisSlider AtelierControl")
         .focus(|this| this.border_color(theme.selection))
         .flex()
         .items_center()
@@ -1409,7 +1192,7 @@ where
         .id(id)
         .debug_selector(move || handle.to_string())
         .tab_index(0)
-        .key_context("AurisSlider")
+        .key_context("AurisSlider AtelierControl")
         .focus(|this| this.border_color(theme.selection))
         .flex()
         .items_center()
@@ -1463,6 +1246,7 @@ where
 /// `level` and `peak` are normalised 0..1 positions produced by [`db_to_meter_position`], which
 /// applies a piecewise scale so the useful -60..0 dB range is not crushed into the top pixels.
 pub fn level_meter(
+    // atelier: allow — the engine supplies piecewise dB positions and a latched clip marker.
     level: f32,
     peak: f32,
     clipped: bool,
@@ -1712,6 +1496,7 @@ mod tests {
 
     #[gpui::test]
     fn shared_buttons_tab_both_ways_activate_and_skip_disabled(cx: &mut TestAppContext) {
+        cx.update(|cx| Theme::dark().install(cx));
         let (view, cx) = cx.add_window_view(|_, cx| ButtonHarness {
             focus: cx.focus_handle(),
             primary: 0,
@@ -1744,6 +1529,7 @@ mod tests {
 
     #[gpui::test]
     fn shared_slider_is_a_tab_stop_and_answers_the_standard_keys(cx: &mut TestAppContext) {
+        cx.update(|cx| Theme::dark().install(cx));
         cx.update(|cx| cx.bind_keys(key_bindings()));
         let (view, cx) = cx.add_window_view(|_, cx| SliderHarness {
             focus: cx.focus_handle(),
@@ -1808,7 +1594,7 @@ mod tests {
     #[test]
     fn a_full_sweep_of_a_bar_is_the_drag_range_and_stops_at_both_ends() {
         // Every bar in the application is dragged through this, so the number here is what makes
-        // a plugin's filter and the song sheet's tempo answer a hand at the same rate.
+        // a plugin's filter and a clip's density answer a hand at the same rate.
         assert!((dragged(0.0, DRAG_RANGE_PIXELS) - 1.0).abs() < 1e-6);
         assert!((dragged(1.0, -DRAG_RANGE_PIXELS)).abs() < 1e-6);
         assert!((dragged(0.5, DRAG_RANGE_PIXELS / 2.0) - 1.0).abs() < 1e-6);

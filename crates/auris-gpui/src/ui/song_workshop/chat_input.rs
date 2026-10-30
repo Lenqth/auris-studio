@@ -3,14 +3,87 @@ use super::*;
 use crate::ui::chat_commands::{self, CompletionKey, Scope};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
-    pub(crate) fn workshop_chord_prompt(&self) -> bool {
+    fn workshop_reasoning_picker(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Entity<super::super::reasoning_picker::ReasoningPicker>> {
+        use super::super::reasoning_picker::{Change, Handle, Options, ReasoningPicker};
+        let s = self.song_workshop.as_ref()?;
+        let selected = s.models.iter().find(|m| m.matches(&s.preferences));
+        let choices = if s.preferences.backend == "opencode" {
+            vec![auris_session::ReasoningEffort::Default]
+        } else if let Some(choices) = selected.and_then(|m| m.efforts.clone()) {
+            choices
+        } else if s.preferences.backend == "antigravity" {
+            use auris_session::ReasoningEffort::*;
+            vec![Default, Low, Medium, High]
+        } else {
+            super::super::agent_chat::controls::effort_choices(
+                s.preferences.provider == "openai" || s.preferences.backend == "codex",
+            )
+            .to_vec()
+        };
+        let options = Options {
+            id: "workshop-effort",
+            theme: self.theme.clone(),
+            language: self.language(),
+            model: selected
+                .map(|m| m.label())
+                .unwrap_or_else(|| s.preferences.model.clone()),
+            choices,
+            effort: s.preferences.effort,
+            fast: s.preferences.fast_mode,
+            supports_fast: s.preferences.supports_fast_mode(),
+            enabled: !s.busy(),
+        };
+        if let Some(handle) = &s.reasoning_picker {
+            handle.view.update(cx, |picker, _| picker.options = options);
+            return Some(handle.view.clone());
+        }
+        let focus = cx.focus_handle().tab_stop(true);
+        let view = cx.new(|cx| ReasoningPicker::new(options, focus, cx));
+        let subscription = cx.subscribe(&view, |this, _, change: &Change, cx| {
+            if let Some(s) = &mut this.song_workshop
+                && !s.busy()
+            {
+                s.active_field = None;
+                match change {
+                    Change::Opened => {}
+                    Change::Effort(effort) => {
+                        s.preferences.effort = *effort;
+                        s.preferences.thinking = None;
+                    }
+                    Change::Fast if s.preferences.supports_fast_mode() => {
+                        s.preferences.fast_mode = !s.preferences.fast_mode
+                    }
+                    Change::Reset => {
+                        s.preferences.effort = auris_session::ReasoningEffort::Default;
+                        s.preferences.thinking = None;
+                        s.preferences.fast_mode = false;
+                    }
+                    Change::Fast => {}
+                }
+                cx.notify();
+            }
+        });
+        self.song_workshop.as_mut()?.reasoning_picker = Some(Handle {
+            view: view.clone(),
+            _subscription: subscription,
+        });
+        Some(view)
+    }
+
+    pub(crate) fn workshop_prompt_open(&self) -> bool {
         self.song_workshop.is_some()
-            && self.prompt.as_ref().is_some_and(|p| {
-                matches!(
-                    p.target(),
-                    Some(crate::ui::prompt::PromptTarget::AgentChordReference { .. })
-                )
-            })
+            && (self.startup_update_prompt_open()
+                || self.prompt.as_ref().is_some_and(|p| {
+                    matches!(
+                        p.target(),
+                        Some(crate::ui::prompt::PromptTarget::AgentChordReference { .. })
+                            | Some(crate::ui::prompt::PromptTarget::WorkshopFeedback { .. })
+                            | Some(crate::ui::prompt::PromptTarget::WorkshopThreadName { .. })
+                    )
+                }))
     }
 
     pub(super) fn render_workshop_input(
@@ -18,6 +91,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let reasoning = self.workshop_reasoning_picker(cx);
         let Some(s) = &self.song_workshop else {
             return div().into_any_element();
         };
@@ -34,12 +108,10 @@ impl AurisApp {
                     format!("{} / {}", s.preferences.backend, s.preferences.model)
                 }
             });
-        let effort = self.t(crate::ui::agent_chat::controls::effort_key(
-            s.preferences.effort,
-        ));
         let focused = s.active_field == Some(0);
         let busy = s.busy();
-        let can_send = !busy
+        let queueing = busy || !s.queued.is_empty();
+        let can_send = !s.brief_locked()
             && !s.references.midi_loading
             && !s.brief.content().trim().is_empty()
             && (s.preferences.is_configured() || s.brief.content().trim().starts_with('/'));
@@ -65,7 +137,7 @@ impl AurisApp {
             self.language(),
             cx,
         );
-        let action = if busy {
+        let stop = busy.then(|| {
             agent_components::composer_action(
                 "song-cancel",
                 self.t(Key::WorkshopCancel),
@@ -75,22 +147,44 @@ impl AurisApp {
                 &theme,
                 cx.listener(|this, _, _, cx| {
                     if let Some(s) = &mut this.song_workshop {
+                        // Stopping means stop: what is waiting stays, and waits to be resumed.
+                        s.queue_paused = true;
                         s.stop();
                     }
                     cx.notify();
                 }),
             )
-        } else {
-            agent_components::composer_action(
-                "song-generate",
-                self.t(Key::WorkshopSend),
-                agent_components::ComposerAction::Send,
-                can_send,
-                true,
-                &theme,
-                cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
+        });
+        // Send stays beside Stop rather than giving way to it, so a message can be written and
+        // put in line while a round is still being composed.
+        let action = agent_components::composer_action(
+            "song-generate",
+            self.t(if queueing {
+                Key::AgentQueue
+            } else {
+                Key::WorkshopSend
+            }),
+            agent_components::ComposerAction::Send,
+            can_send,
+            true,
+            &theme,
+            cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
+        );
+        let interrupt_key = crate::actions::menu_keystroke("secondary-enter");
+        let queue_hint = queueing.then(|| {
+            div().text_xs().text_color(theme.text_muted).child(
+                self.t(Key::AgentQueueHint)
+                    .replace("{interrupt}", &interrupt_key),
             )
-        };
+        });
+        let queue = self.workshop_queue_view(cx);
+        let inline_previews: Vec<_> = attachments
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                self.inline_attachment(path, format!("song-inline-draft-{index}"), window, cx)
+            })
+            .collect();
         let mut body = crate::ui::agent_components::composer_frame(
             "song-workshop-composer",
             &theme,
@@ -167,12 +261,14 @@ impl AurisApp {
                     )
             }),
         ))
+        .children(inline_previews)
         .when(self.music_references().midi_draft.is_some(), |body| {
             body.child(self.midi_editor(window.viewport_size().height * 0.4, cx))
         })
         .when_some(attachment_error, |body, error| {
             body.child(agent_components::error_notice(error))
         })
+        .children(queue)
         .children(completions)
         .child(self.workshop_field(0, placeholder, true, cx))
         .children(suggestion.map(|suffix| {
@@ -183,21 +279,17 @@ impl AurisApp {
                 .items_center()
                 .gap(theme.atelier.spacing.xs)
                 .child(
-                    div()
-                        .debug_selector(|| "workshop-accept-suggestion".into())
-                        .min_w_0()
-                        .overflow_hidden()
-                        .child(
-                            atelier::Button::new("workshop-accept-suggestion", suffix.to_owned())
-                                .ghost()
-                                .size(atelier::ControlSize::Small)
-                                .tooltip(suffix.to_owned())
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.focus_workshop_input(window);
-                                    this.accept_workshop_suggestion();
-                                    cx.notify();
-                                })),
-                        ),
+                    div().min_w_0().overflow_hidden().child(
+                        atelier::Button::new("workshop-accept-suggestion", suffix.to_owned())
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .tooltip(suffix.to_owned())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.focus_workshop_input(window);
+                                this.accept_workshop_suggestion();
+                                cx.notify();
+                            })),
+                    ),
                 )
                 .child(
                     div()
@@ -234,74 +326,34 @@ impl AurisApp {
                         ),
                 )
                 .child(
-                    div()
-                        .debug_selector(|| "workshop-model".into())
-                        .min_w_0()
-                        .max_w_full()
-                        .overflow_hidden()
-                        .child(
-                            atelier::Button::new("workshop-model", model)
-                                .ghost()
-                                .size(atelier::ControlSize::Small)
-                                .icon_after(atelier::IconName::ChevronDown)
-                                .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                                    this.workshop_model_menu(event.position());
-                                    cx.notify();
-                                })),
-                        ),
-                )
-                .child(
-                    div().debug_selector(|| "workshop-effort".into()).child(
-                        atelier::Button::new(
-                            "workshop-effort",
-                            format!("{}: {effort}", self.t(Key::AgentEffort)),
-                        )
-                        .ghost()
-                        .size(atelier::ControlSize::Small)
-                        .icon(atelier::IconName::Brain)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            if let Some(s) = &mut this.song_workshop {
-                                let levels = s
-                                    .models
-                                    .iter()
-                                    .find(|m| m.matches(&s.preferences))
-                                    .and_then(|m| m.efforts.clone())
-                                    .unwrap_or_else(|| {
-                                        vec![auris_session::ReasoningEffort::Default]
-                                    });
-                                if !levels.is_empty() {
-                                    let index = levels
-                                        .iter()
-                                        .position(|e| *e == s.preferences.effort)
-                                        .map_or(0, |i| (i + 1) % levels.len());
-                                    s.preferences.effort = levels[index];
-                                }
-                            }
-                            cx.notify();
-                        })),
+                    div().min_w_0().max_w_full().overflow_hidden().child(
+                        atelier::Button::new("workshop-model", model)
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .icon_after(atelier::IconName::ChevronDown)
+                            .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
+                                this.workshop_model_menu(event.position());
+                                cx.notify();
+                            })),
                     ),
                 )
+                .children(reasoning)
                 .child(
-                    div()
-                        .debug_selector(|| "workshop-model-settings".into())
-                        .child(
-                            atelier::Button::icon_only(
-                                "workshop-model-settings",
-                                atelier::IconName::Settings,
-                            )
-                            .size(atelier::ControlSize::Small)
-                            .tooltip(self.t(Key::AgentConfigure))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.open_settings_tab(
-                                    crate::settings_window::SettingsTab::Agent,
-                                    cx,
-                                )
-                            })),
-                        ),
+                    atelier::Button::icon_only(
+                        "workshop-model-settings",
+                        atelier::IconName::Settings,
+                    )
+                    .size(atelier::ControlSize::Small)
+                    .tooltip(self.t(Key::AgentConfigure))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.open_settings_tab(crate::settings_window::SettingsTab::Agent, cx)
+                    })),
                 )
                 .child(div().flex_1())
+                .children(stop)
                 .child(action),
-        );
+        )
+        .children(queue_hint);
         if let Some(feedback) = &command_feedback {
             body = body.child(match feedback {
                 Ok(text) => agent_components::status_notice(text.clone()),
@@ -320,7 +372,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.workshop_chord_prompt() {
+        if self.workshop_prompt_open() {
             if self.prompt_key(event, window, cx) {
                 cx.stop_propagation();
                 cx.notify();
@@ -335,7 +387,7 @@ impl AurisApp {
         if let Some(s) = &mut self.song_workshop
             && s.foci[0].is_focused(window)
         {
-            if s.submitted || s.brief.marked().is_some() {
+            if s.brief_locked() || s.brief.marked().is_some() {
                 return;
             }
             let matches = s
@@ -393,6 +445,10 @@ impl AurisApp {
             if event.keystroke.key == "enter" {
                 if event.keystroke.modifiers.shift {
                     s.brief.insert("\n");
+                } else if event.keystroke.modifiers.secondary()
+                    && (s.busy() || !s.queued.is_empty())
+                {
+                    self.submit_workshop_brief_now();
                 } else {
                     self.start_song_workshop(cx);
                 }

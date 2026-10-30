@@ -126,7 +126,7 @@ impl AurisApp {
         Ok(())
     }
 
-    fn open_agent_chords(&mut self) {
+    pub(crate) fn open_agent_chords(&mut self) {
         if !self.can_attach_agent_music() {
             return;
         }
@@ -144,44 +144,6 @@ impl AurisApp {
             "",
         ));
     }
-
-    pub(super) fn music_composer_controls(
-        &self,
-        available: bool,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        div()
-            .flex()
-            .flex_wrap()
-            .min_w_0()
-            .gap_1()
-            .children(
-                [
-                    ("agent-chords", Key::AgentChords, false),
-                    ("agent-sound", Key::AgentSound, true),
-                ]
-                .into_iter()
-                .map(|(id, label, sound)| {
-                    bounded_button_enabled(
-                        id,
-                        self.t(label),
-                        ButtonStyle::Ghost,
-                        ButtonState::available(false, available && self.can_attach_agent_music()),
-                        self.theme.accent,
-                        &self.theme,
-                        cx.listener(move |this, _, _, cx| {
-                            if sound {
-                                this.timbre_map.open = true;
-                            } else {
-                                this.open_agent_chords();
-                            }
-                            cx.notify();
-                        }),
-                    )
-                }),
-            )
-            .into_any_element()
-    }
 }
 
 #[cfg(test)]
@@ -197,7 +159,20 @@ mod tests {
         });
         paint(&app, cx);
         let before = app.read_with(cx, |this, _| this.project().clone());
-        click("agent-chords", cx);
+        assert!(cx.debug_bounds("agent-midi-new").is_none());
+        assert!(cx.debug_bounds("agent-chords").is_none());
+        click("music-reference-menu", cx);
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let menu = this.menu.as_ref().unwrap();
+            assert_eq!(menu.entries.len(), 5);
+            assert!(matches!(&menu.entries[1], crate::ui::context_menu::MenuEntry::Item(item) if !item.enabled));
+        });
+        cx.simulate_keystrokes("escape");
+        app.read_with(cx, |this, _| assert!(this.menu.is_none()));
+        click("music-reference-menu", cx);
+        // Selected-clip attachment is disabled; Down skips it before reaching chords.
+        cx.simulate_keystrokes("down down enter");
         paint(&app, cx);
         cx.simulate_input("| C/E G7 | vi | F |");
         cx.simulate_keystrokes("enter");
@@ -210,7 +185,13 @@ mod tests {
             assert_eq!(value["chords"][2]["start_ticks"], 3840);
         });
         paint(&app, cx);
-        click("agent-chords", cx);
+        click("music-reference-menu", cx);
+        paint(&app, cx);
+        crate::harness::choose(
+            &app,
+            cx,
+            &crate::ui::context_menu::MenuCommand::ComposerChords,
+        );
         paint(&app, cx);
         cx.simulate_input("| nonsense |");
         cx.simulate_keystrokes("enter");

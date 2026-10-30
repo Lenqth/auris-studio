@@ -1290,8 +1290,7 @@ mod tests {
 
     #[test]
     fn a_preset_survives_being_written_out_and_read_back() {
-        // The song sheet's Save as Specification… writes what it was loaded with, so a preset
-        // that did not round-trip would be a document nobody could keep.
+        // Specifications preserve preset sources, parameters and effects when serialized.
         for preset in PRESETS {
             let spec = preset.spec();
             assert_eq!(

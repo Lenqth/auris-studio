@@ -120,7 +120,8 @@ Source metadata is untrusted; preserve known credits and never invent rights or 
 
 For ordinary authored composition, create_project starts empty. setup_tracks creates multiple tracks atomically.
 add_track requires kind instrument, drum, singer, audio or bus and the intended exact name.
-search_instruments accepts request with mode text and query, similar and reference id, or bounded browse.
+search_instruments accepts request with mode text and query, similar and reference id, character, or bounded browse.
+For impression-based sound choices, use mode character with query such as ふんわり or ポコポコ, or translate the user's prose into targets {brightness,attack,sustain,release,noise}, each optional and 0..1. Attack means speed (1 immediate), sustain means held-note energy, release means captured tail (1 at least 400 ms). Explicit targets override dictionary terms. Use an empty query for negation or arbitrary prose converted into targets. Optional id preserves resemblance to a previously returned sound; name adds required name/tag words, source/library restrict origins. Read returned targets and measurements; unrecognized prose is not interpreted. Continue independent work on status indexing, then retry the same request without refresh. Preserve user-selected sounds unless asked to change them. Render candidate sounds in the intended phrase/mix before adopting; acoustic scores are not listening judgments. Search and audition do not authorize score changes.
 Copy returned sound IDs into set_instrument sound_id. Sound IDs expire after refresh/library changes.
 Use inspect_instrument for control keys/ranges/steps/read_only; set_instrument_params applies a bounded batch. VST3 uses normalized 0..1 values, never Hz/dB from display_unit; CLAP uses native ranges. For steps=N>1, valid values are min+i*(max-min)/(N-1), i=0..N-1. Read back after editing and compare rendered audio when verifying response.
 For generated music, check_spec validates syntax/settings; diagnose_song checks lyric readings, phrase counts,
@@ -1008,9 +1009,7 @@ fn save_checkpointed(session: &mut Session) -> Result<(), String> {
 
 /// A session with no audio device and no GPU, with the shipped SoundFonts.
 ///
-/// The fonts for the same reason `auris compose` loads them: `compose` here and **Compose a
-/// Song…** in the window have to write the same piece, and half the instruments a piece asks
-/// for are in that library.
+/// Loads the same font library used by the desktop application.
 fn headless() -> Result<Session, String> {
     cancellation::check()?;
     let mut options = SessionOptions::headless()

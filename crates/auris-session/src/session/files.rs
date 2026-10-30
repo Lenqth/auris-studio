@@ -286,7 +286,7 @@ impl MidiImportJob {
             .path
             .file_stem()
             .map(|stem| stem.to_string_lossy().to_string())
-            .unwrap_or_else(|| "Untitled".to_string());
+            .unwrap_or_else(|| Project::UNTITLED.to_string());
         let mut project = Project::new(name, self.sample_rate);
         project.tempo_map = imported.tempo_map.clone();
         project.signatures = imported.signatures.clone();
@@ -597,7 +597,7 @@ impl Session {
     /// Replaces the document with an empty project holding one instrument track.
     pub fn new_project(&mut self) {
         self.sound_scope = crate::transient_id::transient_id("session");
-        let mut project = Project::new("Untitled", self.project.sample_rate);
+        let mut project = Project::new(Project::UNTITLED, self.project.sample_rate);
         if let Some(instrument) = self.registry.default_instrument_id() {
             project.add_instrument_track("Track 1", instrument);
         }

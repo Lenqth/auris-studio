@@ -1,24 +1,23 @@
 //! Shared icon vocabulary backed by Atelier's monochrome SVG assets.
 //!
 //! Atelier keeps familiar controls in one 24px SVG family; Auris's
-//! few domain-specific marks live beside the provider assets and use the same stroke geometry.
+//! domain-specific marks live beside the provider assets, use the same stroke geometry,
+//! and reach Atelier's `Icon` as an `IconSource`.
 
-use atelier::{Icon as AtelierIcon, IconName as AtelierIconName};
-use gpui::{Hsla, IntoElement, Pixels, div, prelude::*, svg};
+use atelier::{Icon as AtelierIcon, IconName as AtelierIconName, IconSource};
+use gpui::{Hsla, IntoElement, Pixels};
 
 /// An icon the UI can draw.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Icon {
+    /// A semantic library sound family.
+    Sound(auris_session::SoundIcon),
     /// Return the playhead to the start.
     ToStart,
     /// Start playback.
     Play,
     /// Pause playback.
     Pause,
-    /// Audible preview output.
-    Volume,
-    /// Muted preview output.
-    VolumeMuted,
     /// Stop playback and rewind.
     Stop,
     /// Start recording a take.
@@ -41,6 +40,8 @@ pub enum Icon {
     Cross,
     /// Additional commands: three horizontal dots.
     More,
+    /// The application menu: three horizontal lines.
+    Menu,
     /// A menu item that is currently on.
     Check,
     /// The sound library: a folder with a raised tab.
@@ -67,58 +68,66 @@ pub enum Icon {
     Undo,
     /// Speed: a lightning bolt, for the agent's fast mode.
     Bolt,
-    /// Step forward one edit: Undo's arrow, mirrored. Atelier has no redo glyph, so this one is
-    /// drawn here with the same stroke.
+    /// Step forward one edit: Undo's arrow, mirrored.
     Redo,
 }
 
 /// An element that draws `icon` at `size`, centred in whatever box it is given.
 pub fn icon(icon: Icon, size: Pixels, color: Hsla) -> impl IntoElement + use<> {
-    if let Some(path) = icon.extension_path() {
-        div()
-            .size(size)
-            .text_color(color)
-            .child(svg().path(path).size_full().text_color(color))
-            .into_any_element()
+    AtelierIcon::new(icon.source()).size(size).color(color)
+}
+
+/// Semantic tool identity, shared by chat logs and candidate activity summaries.
+pub(crate) fn tool_icon(name: &str) -> Icon {
+    let name = name.rsplit("__").next().unwrap_or(name);
+    if name.contains("sing") || name.contains("vocal") || name.contains("lyric") {
+        Icon::Microphone
+    } else if name.contains("instrument") || name.contains("soundfont") {
+        Icon::Keyboard
+    } else if name.contains("effect") || name.contains("mix") || name.contains("volume") {
+        Icon::Faders
+    } else if name.contains("audio") || name.contains("render") || name.contains("export") {
+        Icon::Wave
+    } else if name.contains("play") || name.contains("transport") {
+        Icon::Play
+    } else if name.contains("note")
+        || name.contains("phrase")
+        || name.contains("harmon")
+        || name.contains("compos")
+        || name.contains("track")
+        || name.contains("clip")
+    {
+        Icon::Notes
+    } else if name.contains("inspect") || name.contains("diagnos") || name.starts_with("get_") {
+        Icon::Inspector
+    } else if name.contains("read") || name.contains("record") || name.contains("reference") {
+        Icon::Log
+    } else if name.contains("search") || name.contains("list") {
+        Icon::Library
     } else {
-        AtelierIcon::new(icon.atelier_name())
-            .size(size)
-            .color(color)
-            .into_any_element()
+        Icon::Knob
     }
 }
 
 impl Icon {
-    fn extension_path(self) -> Option<&'static str> {
-        match self {
-            Self::Volume => Some("icons/auris-volume.svg"),
-            Self::VolumeMuted => Some("icons/auris-volume-muted.svg"),
-            Self::Punch => Some("icons/auris-punch.svg"),
-            Self::Notes => Some("icons/auris-notes.svg"),
-            Self::Keyboard => Some("icons/auris-keyboard.svg"),
-            Self::Knob => Some("icons/auris-knob.svg"),
-            Self::Redo => Some("icons/auris-redo.svg"),
-            Self::Bolt => Some("icons/auris-bolt.svg"),
-            _ => None,
-        }
-    }
-
     /// Maps Auris's domain vocabulary onto Atelier's shared 24px icon family.
     ///
     /// Atelier deliberately keeps the set small so icon weight, optical centring and state
     /// treatment stay consistent across the editor and agent surfaces. Domain-specific names
-    /// therefore resolve to the nearest established symbol instead of introducing another drawn
-    /// glyph with a different visual grammar.
-    fn atelier_name(self) -> AtelierIconName {
-        match self {
+    /// therefore resolve to established symbols; Auris's domain SVGs share that grid and reach
+    /// the renderer as an [`IconSource`].
+    pub fn source(self) -> IconSource {
+        let name = match self {
+            Self::Sound(family) => return IconSource::svg(sound_icon_path(family)),
+            Self::Menu => return IconSource::svg("icons/menu.svg"),
+            Self::Punch => AtelierIconName::Punch,
+            Self::Notes => AtelierIconName::Notes,
             Self::ToStart => AtelierIconName::SkipBack,
             Self::Play => AtelierIconName::Play,
             Self::Pause => AtelierIconName::Pause,
-            Self::Volume | Self::VolumeMuted => AtelierIconName::Music,
             Self::Stop => AtelierIconName::Stop,
             Self::Record => AtelierIconName::Record,
             Self::Loop => AtelierIconName::Loop,
-            Self::Punch => AtelierIconName::Sliders,
             Self::Metronome => AtelierIconName::Metronome,
             Self::Plus => AtelierIconName::Plus,
             Self::ChevronUp => AtelierIconName::ChevronUp,
@@ -128,17 +137,39 @@ impl Icon {
             Self::More => AtelierIconName::More,
             Self::Check => AtelierIconName::Check,
             Self::Library => AtelierIconName::Folder,
-            Self::Notes => AtelierIconName::Music,
-            Self::Faders | Self::Knob => AtelierIconName::Sliders,
+            Self::Faders => AtelierIconName::Sliders,
+            Self::Knob => AtelierIconName::Knob,
             Self::Inspector => AtelierIconName::Info,
             Self::Log => AtelierIconName::File,
-            Self::Keyboard => AtelierIconName::Music,
+            Self::Keyboard => AtelierIconName::Keyboard,
             Self::Microphone => AtelierIconName::Mic,
             Self::Wave => AtelierIconName::Waveform,
             Self::Agent => AtelierIconName::Sparkles,
             Self::Undo => AtelierIconName::Undo,
-            Self::Redo => AtelierIconName::Undo,
-            Self::Bolt => AtelierIconName::Sparkles,
-        }
+            Self::Redo => AtelierIconName::Redo,
+            Self::Bolt => AtelierIconName::Bolt,
+        };
+        name.into()
+    }
+}
+
+/// Embedded monochrome SVG shared by library rows, map rows and the manual picker.
+pub(crate) fn sound_icon_path(family: auris_session::SoundIcon) -> &'static str {
+    use auris_session::SoundIcon;
+    match family {
+        SoundIcon::Sound => "icons/sound-sound.svg",
+        SoundIcon::Piano => "icons/sound-piano.svg",
+        SoundIcon::Organ => "icons/sound-organ.svg",
+        SoundIcon::Guitar => "icons/sound-guitar.svg",
+        SoundIcon::Bass => "icons/sound-bass.svg",
+        SoundIcon::Strings => "icons/sound-strings.svg",
+        SoundIcon::Brass => "icons/sound-brass.svg",
+        SoundIcon::Wind => "icons/sound-wind.svg",
+        SoundIcon::Drum => "icons/sound-drum.svg",
+        SoundIcon::Bell => "icons/sound-bell.svg",
+        SoundIcon::Voice => "icons/sound-voice.svg",
+        SoundIcon::Synth => "icons/sound-synth.svg",
+        SoundIcon::Pad => "icons/sound-pad.svg",
+        SoundIcon::Pluck => "icons/sound-pluck.svg",
     }
 }

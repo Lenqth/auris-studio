@@ -17,6 +17,8 @@ use std::{
 };
 
 mod preview;
+#[cfg(test)]
+mod scenario_tests;
 
 /// An immutable audition of an unfinished candidate, separate from adoptable music.
 #[derive(Clone)]
@@ -25,6 +27,8 @@ pub struct Preview {
     pub revision: u64,
     /// Rendered audio; never mutated while the user is listening.
     pub audio: Arc<auris_session::prelude::AudioBuffer>,
+    /// Waveform and score sections captured for the same content revision.
+    pub timeline: Arc<auris_session::AuditionTimeline>,
 }
 
 /// Automatic restarts allowed per candidate and explicit recovery request.
@@ -32,22 +36,34 @@ pub const AUTO_RECOVERY_LIMIT: u32 = 3;
 
 /// Commands accepted by the background workshop owner.
 pub enum Command {
+    /// Create an independent song conversation when production is idle.
+    NewThread,
+    /// Open a conversation by its host-assigned identity.
+    OpenThread(String),
+    /// Rename an exact conversation.
+    RenameThread(String, String),
+    /// Archive or restore an exact conversation without deleting its artifacts.
+    ArchiveThread(String, bool),
+    /// Record explicit human feedback for one finished candidate without starting model work.
+    Feedback(String, u64, auris_session::workshop::Feedback),
     /// Submit one natural-language message with model settings captured at submission.
     Send(String, Box<AgentPreferences>, Vec<PathBuf>),
     /// Choose an exact completed candidate without closing the conversation.
     Select(u64, Box<AgentPreferences>, String),
     /// Retry only this candidate in a new artifact directory.
-    Retry(u64),
+    Retry(u64, Box<AgentPreferences>),
     /// Continue an unfinished candidate from its checkpoint with a fresh recovery budget.
     Recover(u64, Box<AgentPreferences>),
-    /// Load auditions for an older comparison without retaining every historical WAV.
+    /// Load a comparison's auditions alongside previously loaded rounds.
     View(usize),
     /// Stop one candidate, or all work when absent.
     Stop(Option<u64>),
-    /// Persist an unsent draft before closing.
-    Draft(String, Vec<PathBuf>),
+    /// Persist a draft only if its captured conversation is still active.
+    ThreadDraft(String, String, Vec<PathBuf>),
     /// Enable or disable cross-project preference evidence.
     Memory(bool),
+    /// Refresh preferences edited in another application surface.
+    ReloadPreferences,
     /// Forget all recorded preferences.
     Forget,
     /// Remove one incorrect or no-longer-relevant preference observation.
@@ -56,6 +72,8 @@ pub enum Command {
 
 /// Full UI snapshot, containing immutable shared audition buffers.
 pub struct Snapshot {
+    /// Project-local conversations available to the sidebar, including the archive.
+    pub threads: Vec<auris_session::workshop::ThreadInfo>,
     /// Durable conversation and comparison history.
     pub document: Document,
     /// Completed candidates currently available for preview or adoption.
@@ -99,16 +117,18 @@ impl Workshop {
                     } else {
                         auris_session::conversations::ConversationStore::for_project(&folder)
                     };
-                    let store = Store::new(conversations.root().into());
-                    let _lease = store.lease()?;
+                    let store = Store::new(conversations.root().into()).active_thread()?;
+                    let lease = store.lease()?;
                     // Do not overwrite an unreadable history with a fresh default.
                     store.load()?;
                     let mut owner = Owner::new(store, settings, events.clone());
+                    owner.lease = Some(lease);
                     owner.run(commands, cancelled);
                     Ok::<(), String>(())
                 })();
                 if let Err(error) = result {
                     let _ = events.send(Snapshot {
+                        threads: Vec::new(),
                         document: Document::default(),
                         candidates: BTreeMap::new(),
                         previews: BTreeMap::new(),
@@ -134,6 +154,19 @@ impl Workshop {
     /// Drain available snapshots; callers should keep the newest.
     pub fn poll(&self) -> Option<Snapshot> {
         self.receiver.try_iter().last()
+    }
+    /// A workshop with no owner thread: the caller receives its commands and supplies its
+    /// snapshots. For a host's tests, which need to see what the window sent and to answer it
+    /// without a model behind it.
+    pub fn loopback() -> (Self, mpsc::Receiver<Command>, mpsc::Sender<Snapshot>) {
+        let (sender, commands) = mpsc::channel();
+        let (snapshots, receiver) = mpsc::channel();
+        let workshop = Self {
+            sender,
+            receiver,
+            stopped: Arc::new(AtomicBool::new(false)),
+        };
+        (workshop, commands, snapshots)
     }
 }
 
@@ -178,7 +211,13 @@ pub fn handoff(
                     text: message.text.clone(),
                     attachments: store.capture_attachments(
                         &conversation.info.id,
-                        &Store::new(store.root().into()).owned_attachments(&message.attachments),
+                        &Store::new(store.root().into())
+                            .thread(if document.thread_id.is_empty() {
+                                "default"
+                            } else {
+                                &document.thread_id
+                            })?
+                            .owned_attachments(&message.attachments),
                     )?,
                 }
             } else {
@@ -205,6 +244,11 @@ pub fn handoff(
             selected.direction.description,
             selected.direction.instructions
         );
+    }
+    let feedback = feedback_context(&document);
+    if !feedback.is_empty() {
+        memory.summary.push_str("\nUser-authored song feedback: ");
+        memory.summary.push_str(&json!(feedback).to_string());
     }
     conversation.transcript.draft = document.draft;
     conversation.transcript.attachments = document.draft_attachments;
@@ -252,8 +296,28 @@ fn capture_references(
 }
 
 fn composition_assignment(candidate: &Candidate, document: &Document) -> String {
-    json!({"assignment":candidate.direction.instructions,"conversation":document.messages})
-        .to_string()
+    json!({"assignment":candidate.direction.instructions,"conversation":document.messages,
+        "user_feedback":feedback_context(document)})
+    .to_string()
+}
+
+fn feedback_context(document: &Document) -> Vec<serde_json::Value> {
+    document
+        .rounds
+        .iter()
+        .rev()
+        .flat_map(|r| r.candidates.iter().rev())
+        .filter_map(|c| {
+            c.feedback.as_ref().map(|feedback| {
+                json!({
+                    "candidate":c.id, "title":c.direction.title,
+                    "description":c.direction.description, "rating":feedback.rating,
+                    "comment":feedback.comment, "source":"user"
+                })
+            })
+        })
+        .take(16)
+        .collect()
 }
 
 #[derive(serde::Deserialize)]
@@ -293,12 +357,45 @@ fn decision(text: &str) -> Result<Decision, String> {
 }
 
 enum JobEvent {
+    Tool(u64, String, Option<bool>),
     Progress(u64, String),
     Preview(u64, Result<Preview, String>),
     Recovering(u64, u32, String),
     Done(u64, Result<Arc<SongCandidate>, String>),
 }
+
+// Backends can repeat call notifications while streaming. Count each invocation once,
+// and keep IDs local to an attempt because a restarted backend may reuse them.
+fn observe_tool_event(
+    candidate: u64,
+    event: &serde_json::Value,
+    calls: &mut BTreeMap<String, bool>,
+    sender: &mpsc::Sender<JobEvent>,
+) {
+    let kind = event["event"].as_str().unwrap_or_default();
+    if !matches!(kind, "call" | "result") {
+        return;
+    }
+    let name = event["tool"].as_str().unwrap_or_default();
+    if name.is_empty() {
+        return;
+    }
+    let id = event["call_id"].as_str().unwrap_or(name).to_owned();
+    if let std::collections::btree_map::Entry::Vacant(entry) = calls.entry(id.clone()) {
+        entry.insert(false);
+        let _ = sender.send(JobEvent::Tool(candidate, name.into(), None));
+    }
+    if kind == "result" && calls.get(&id) == Some(&false) {
+        calls.insert(id, true);
+        let _ = sender.send(JobEvent::Tool(
+            candidate,
+            name.into(),
+            Some(event["ok"] == true),
+        ));
+    }
+}
 struct Owner {
+    lease: Option<std::fs::File>,
     store: Store,
     settings: Settings,
     snapshot: Snapshot,
@@ -321,7 +418,14 @@ impl Owner {
             error = Some(e);
             Document::default()
         });
+        let threads = store.threads().unwrap_or_else(|e| {
+            error.get_or_insert(e);
+            Vec::new()
+        });
         for candidate in document.rounds.iter_mut().flat_map(|r| &mut r.candidates) {
+            for usage in candidate.tools.values_mut() {
+                usage.interrupt();
+            }
             if !candidate.ready && candidate.error.is_none() {
                 candidate.error = Some("Production was interrupted; retry this candidate".into());
             }
@@ -331,13 +435,14 @@ impl Owner {
             Preferences::default()
         });
         let mut candidates = BTreeMap::new();
+        let baseline = document.continuation_candidate().map(|c| c.id);
         for candidate in document
             .rounds
             .iter()
             .flat_map(|r| &r.candidates)
             .filter(|c| {
                 c.ready
-                    && (Some(c.id) == document.selected
+                    && (Some(c.id) == baseline
                         || document
                             .rounds
                             .last()
@@ -355,6 +460,7 @@ impl Owner {
             }
         }
         Self {
+            lease: None,
             prefs: settings.agent.clone(),
             store,
             settings,
@@ -367,6 +473,7 @@ impl Owner {
             job_receiver,
             handles: Vec::new(),
             snapshot: Snapshot {
+                threads,
                 document,
                 candidates,
                 previews: BTreeMap::new(),
@@ -382,7 +489,17 @@ impl Owner {
         if save && let Err(e) = self.store.save(&self.snapshot.document) {
             self.snapshot.error = Some(e);
         }
+        if let Some(thread) = self
+            .snapshot
+            .threads
+            .iter_mut()
+            .find(|t| t.id == self.snapshot.document.thread_id)
+        {
+            thread.title = self.snapshot.document.sidebar_title();
+            thread.archived = self.snapshot.document.archived;
+        }
         let _ = self.events.send(Snapshot {
+            threads: self.snapshot.threads.clone(),
             document: self.snapshot.document.clone(),
             candidates: self.snapshot.candidates.clone(),
             previews: self.snapshot.previews.clone(),
@@ -426,6 +543,8 @@ impl Owner {
                                     ready: false,
                                     error: None,
                                     recoveries: 0,
+                                    tools: Default::default(),
+                                    feedback: None,
                                 });
                             }
                             self.snapshot.document.rounds.push(Round {
@@ -442,6 +561,24 @@ impl Owner {
             }
             while let Ok(event) = self.job_receiver.try_recv() {
                 match event {
+                    JobEvent::Tool(id, name, result) if self.jobs.contains_key(&id) => {
+                        if let Some(candidate) = self
+                            .snapshot
+                            .document
+                            .rounds
+                            .iter_mut()
+                            .flat_map(|r| &mut r.candidates)
+                            .find(|c| c.id == id)
+                        {
+                            let usage = candidate.tools.entry(name).or_default();
+                            match result {
+                                None => usage.total += 1,
+                                Some(true) => usage.succeeded += 1,
+                                Some(false) => usage.failed += 1,
+                            }
+                        }
+                        self.publish(true);
+                    }
                     JobEvent::Preview(id, result)
                         if self
                             .jobs
@@ -469,6 +606,9 @@ impl Owner {
                             .find(|c| c.id == id)
                         {
                             candidate.recoveries = count;
+                            for usage in candidate.tools.values_mut() {
+                                usage.interrupt();
+                            }
                             candidate.error = Some(error);
                         }
                         self.snapshot.progress.insert(id, "recovering".into());
@@ -484,6 +624,16 @@ impl Owner {
                             .remove(&id)
                             .is_none_or(|c| c.load(Ordering::Acquire));
                         self.snapshot.progress.remove(&id);
+                        // A single completed edit advances the selected song. Comparisons,
+                        // older recovery jobs and a selection changed during production do not.
+                        let advance_selection = !cancelled
+                            && result.is_ok()
+                            && self.snapshot.document.selected.is_some()
+                            && self.snapshot.document.rounds.last().is_some_and(|round| {
+                                matches!(round.candidates.as_slice(), [candidate]
+                                    if candidate.id == id
+                                        && candidate.parent == self.snapshot.document.selected)
+                            });
                         {
                             let result = if cancelled {
                                 Err("Composition stopped".into())
@@ -498,6 +648,9 @@ impl Owner {
                                 .flat_map(|r| &mut r.candidates)
                                 .find(|c| c.id == id);
                             if let Some(entry) = entry {
+                                for usage in entry.tools.values_mut() {
+                                    usage.interrupt();
+                                }
                                 match result {
                                     Ok(candidate) => {
                                         entry.ready = true;
@@ -509,6 +662,9 @@ impl Owner {
                                     Err(e) => entry.error = Some(e),
                                 }
                             }
+                        }
+                        if advance_selection {
+                            self.snapshot.document.selected = Some(id);
                         }
                         self.publish(true);
                     }
@@ -523,17 +679,110 @@ impl Owner {
         for handle in self.handles.drain(..) {
             let _ = handle.join();
         }
-        // Draft commands sent immediately before Drop must still be durable.
+        for usage in self
+            .snapshot
+            .document
+            .rounds
+            .iter_mut()
+            .flat_map(|r| &mut r.candidates)
+            .flat_map(|c| c.tools.values_mut())
+        {
+            usage.interrupt();
+        }
+        // Persist accepted storage-only commands even when the window closes immediately.
         for command in commands.try_iter() {
-            if let Command::Draft(draft, attachments) = command {
-                self.snapshot.document.draft = draft;
-                self.snapshot.document.draft_attachments = attachments;
+            if matches!(
+                command,
+                Command::ThreadDraft(..)
+                    | Command::Feedback(..)
+                    | Command::NewThread
+                    | Command::OpenThread(_)
+                    | Command::RenameThread(..)
+                    | Command::ArchiveThread(..)
+            ) {
+                self.command(command);
             }
         }
         self.publish(true);
     }
     fn command(&mut self, command: Command) {
         match command {
+            Command::NewThread => {
+                if !self.can_change_thread() {
+                    return;
+                }
+                match self
+                    .store
+                    .create_thread()
+                    .and_then(|store| self.change_thread(store))
+                {
+                    Ok(()) => {}
+                    Err(error) => self.snapshot.error = Some(error),
+                }
+            }
+            Command::OpenThread(id) => {
+                if !self.can_change_thread() {
+                    return;
+                }
+                if id == self.snapshot.document.thread_id {
+                    return;
+                }
+                match self
+                    .store
+                    .thread(&id)
+                    .and_then(|store| self.change_thread(store))
+                {
+                    Ok(()) => {}
+                    Err(error) => self.snapshot.error = Some(error),
+                }
+            }
+            Command::RenameThread(id, title) => {
+                if !self.can_change_thread() {
+                    return;
+                }
+                if let Err(error) = self.update_thread(&id, |document| document.rename(&title)) {
+                    self.snapshot.error = Some(error);
+                }
+            }
+            Command::ArchiveThread(id, archived) => {
+                if !self.can_change_thread() {
+                    return;
+                }
+                if let Err(error) = self.update_thread(&id, |document| {
+                    document.archived = archived;
+                    Ok(())
+                }) {
+                    self.snapshot.error = Some(error);
+                    return;
+                }
+                if archived && id == self.snapshot.document.thread_id {
+                    let next = self
+                        .snapshot
+                        .threads
+                        .iter()
+                        .find(|t| !t.archived && t.id != id)
+                        .map(|t| self.store.thread(&t.id))
+                        .unwrap_or_else(|| self.store.create_thread());
+                    if let Err(error) = next.and_then(|store| self.change_thread(store)) {
+                        self.snapshot.error = Some(error);
+                    }
+                }
+            }
+            Command::ThreadDraft(thread, text, attachments) => {
+                if thread == self.snapshot.document.thread_id {
+                    self.snapshot.document.draft = text;
+                    self.snapshot.document.draft_attachments = attachments;
+                }
+            }
+            Command::Feedback(thread, id, feedback) => {
+                if thread != self.snapshot.document.thread_id {
+                    self.snapshot.error = Some("Feedback belongs to another conversation".into());
+                    return;
+                }
+                if let Err(error) = self.snapshot.document.record_feedback(id, feedback) {
+                    self.snapshot.error = Some(error);
+                }
+            }
             Command::Send(text, prefs, attachments)
                 if self.planner.is_none() && self.jobs.is_empty() =>
             {
@@ -561,7 +810,11 @@ impl Owner {
                     }
                 };
                 self.selection_followup = false;
-                self.planned_parent = self.snapshot.document.selected;
+                self.planned_parent = self
+                    .snapshot
+                    .document
+                    .continuation_candidate()
+                    .map(|c| c.id);
                 self.snapshot.error = None;
                 match auris_session::workshop::load_preferences() {
                     Ok(preferences) => self.snapshot.preferences = preferences,
@@ -578,21 +831,16 @@ impl Owner {
                     references,
                     attachments,
                 });
-                let selected = self
-                    .snapshot
-                    .document
-                    .rounds
-                    .iter()
-                    .flat_map(|r| &r.candidates)
-                    .find(|c| Some(c.id) == self.snapshot.document.selected);
+                let selected = self.snapshot.document.continuation_candidate();
                 let voices = auris_session::library::voices_with_settings(&self.settings);
                 let candidate_history: Vec<_> = self.snapshot.document.rounds.iter().map(|round| {
                     json!({"after_message": round.after_message, "candidates": round.candidates.iter().map(|candidate| {
                         json!({"id": candidate.id, "parent": candidate.parent,
-                            "title": candidate.direction.title, "description": candidate.direction.description})
+                            "title": candidate.direction.title, "description": candidate.direction.description,
+                            "feedback": candidate.feedback})
                     }).collect::<Vec<_>>()})
                 }).collect();
-                let prompt = json!({"conversation": self.snapshot.document.messages, "selected": selected, "selected_score":self.snapshot.document.selected.and_then(|id| self.snapshot.candidates.get(&id)).map(|c| c.workshop_outline()),
+                let prompt = json!({"conversation": self.snapshot.document.messages, "selected": selected, "selected_score":self.planned_parent.and_then(|id| self.snapshot.candidates.get(&id)).map(|c| c.workshop_outline()),
                     "candidate_history": candidate_history,
                     "preference_evidence": self.snapshot.preferences.context(), "installed_voices": voices}).to_string();
                 let references = self
@@ -687,6 +935,7 @@ impl Owner {
                     "conversation":self.snapshot.document.messages,
                     "selected":selected,
                     "selected_score":self.snapshot.candidates[&id].workshop_outline(),
+                    "user_feedback":feedback_context(&self.snapshot.document),
                     "preference_recorded":recorded,
                     "instruction":"Acknowledge the selected song and propose 3 to 5 concrete, distinct arrangement or improvement options in a numbered list in reply, grounded in this song and the conversation. Ask which option to pursue and invite a custom request. Mention preference recording only if preference_recorded is true. Return an empty directions array; selection requests suggestions, not another production batch. Do not claim to have listened."
                 }).to_string();
@@ -714,7 +963,7 @@ impl Owner {
                     self.launch(candidate);
                 }
             }
-            Command::Retry(id)
+            Command::Retry(id, prefs)
                 if self.jobs.len() < 3
                     && !self.jobs.contains_key(&id)
                     && self.planner.is_none() =>
@@ -728,8 +977,11 @@ impl Owner {
                     .find(|c| c.id == id)
                     .cloned();
                 if let Some(mut candidate) = candidate {
+                    self.prefs = *prefs;
                     self.snapshot.document.next_id += 1;
                     candidate.id = self.snapshot.document.next_id;
+                    candidate.tools.clear();
+                    candidate.feedback = None;
                     candidate.ready = false;
                     candidate.error = None;
                     candidate.recoveries = 0;
@@ -751,27 +1003,8 @@ impl Owner {
                     }
                 }
             }
-            Command::Draft(draft, attachments) => {
-                self.snapshot.document.draft = draft;
-                self.snapshot.document.draft_attachments = attachments;
-            }
             Command::View(index) => {
                 if let Some(round) = self.snapshot.document.rounds.get(index) {
-                    let ids: Vec<_> = round
-                        .candidates
-                        .iter()
-                        .filter(|c| c.ready)
-                        .map(|c| c.id)
-                        .collect();
-                    self.snapshot.candidates.retain(|id, _| {
-                        ids.contains(id) || Some(*id) == self.snapshot.document.selected
-                    });
-                    self.snapshot.previews.retain(|id, _| {
-                        self.jobs.contains_key(id) || round.candidates.iter().any(|c| c.id == *id)
-                    });
-                    self.snapshot.preview_errors.retain(|id, _| {
-                        self.jobs.contains_key(id) || round.candidates.iter().any(|c| c.id == *id)
-                    });
                     for candidate in &round.candidates {
                         if candidate.ready && !self.snapshot.candidates.contains_key(&candidate.id)
                         {
@@ -790,6 +1023,10 @@ impl Owner {
                     }
                 }
             }
+            Command::ReloadPreferences => match auris_session::workshop::load_preferences() {
+                Ok(p) => self.snapshot.preferences = p,
+                Err(e) => self.snapshot.error = Some(e),
+            },
             Command::Memory(enabled) => {
                 match auris_session::workshop::update_preferences(|p| p.enabled = enabled) {
                     Ok(p) => self.snapshot.preferences = p,
@@ -813,6 +1050,42 @@ impl Owner {
             }
             _ => {}
         }
+    }
+    fn can_change_thread(&mut self) -> bool {
+        let idle = self.planner.is_none() && self.jobs.is_empty();
+        if !idle {
+            self.snapshot.error = Some("Stop production before changing conversations".into());
+        }
+        idle
+    }
+    fn change_thread(&mut self, store: Store) -> Result<(), String> {
+        store.load()?;
+        self.store.save(&self.snapshot.document)?;
+        let lease = store.lease()?;
+        store.load()?;
+        let mut next = Self::new(store, self.settings.clone(), self.events.clone());
+        next.store.set_active_thread()?;
+        next.lease = Some(lease);
+        *self = next;
+        Ok(())
+    }
+    fn update_thread(
+        &mut self,
+        id: &str,
+        update: impl FnOnce(&mut Document) -> Result<(), String>,
+    ) -> Result<(), String> {
+        if id == self.snapshot.document.thread_id {
+            update(&mut self.snapshot.document)?;
+            self.store.save(&self.snapshot.document)?;
+        } else {
+            let store = self.store.thread(id)?;
+            let _lease = store.lease()?;
+            let mut document = store.load()?;
+            update(&mut document)?;
+            store.save(&document)?;
+        }
+        self.snapshot.threads = self.store.threads()?;
+        Ok(())
     }
     fn launch(&mut self, mut candidate: Candidate) {
         let cancel = Arc::new(AtomicBool::new(false));
@@ -1102,9 +1375,9 @@ fn compose(
             }))}).to_string(),"policy":prefs.policy,"attachments":references}).to_string(),
     )?;
     let deadline = Instant::now() + Duration::from_secs(900);
-    let mut edits = 0;
     let mut denials = 0;
     let mut last_failure = String::new();
+    let mut tool_calls = BTreeMap::new();
     let completion = loop {
         if cancel.load(Ordering::Acquire) {
             return Err("Cancelled".into());
@@ -1122,6 +1395,7 @@ fn compose(
             }
             Err(_) => return Err("Candidate worker stopped".into()),
         };
+        observe_tool_event(candidate.id, &event, &mut tool_calls, sender);
         match event["event"].as_str().unwrap_or_default() {
             "permission" => {
                 let allowed = auris_session::agent_policy::Operation::parse(
@@ -1154,10 +1428,6 @@ fn compose(
                 }
             }
             "edit" => {
-                edits += 1;
-                if edits > 160 {
-                    return Err("Candidate exceeded its tool budget".into());
-                }
                 let action = event["command"]["action"].as_str().unwrap_or_default();
                 let stage = match action {
                     "edit_harmony" | "suggest_harmony" => "harmony",
@@ -1200,10 +1470,17 @@ fn compose(
                     .collect::<String>();
             }
             "error" => {
-                return Err(event["message"]
+                let message = event["message"]
                     .as_str()
                     .unwrap_or("Candidate failed")
-                    .into());
+                    .to_owned();
+                // Repeating a deliberately exhausted allowance automatically would multiply
+                // the user's chosen limit. Explicit recovery starts a fresh allowance.
+                return Err(if crate::tool_calls::limit_from_error(&message).is_some() {
+                    AttemptError::permanent(message)
+                } else {
+                    message.into()
+                });
             }
             "ended" => return Err("Candidate ended without completing".into()),
             _ => {}
@@ -1310,6 +1587,212 @@ fn execute(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn loading_another_round_keeps_earlier_auditions_and_errors() {
+        use super::*;
+        let directory = tempfile::tempdir().unwrap();
+        let (sender, _) = mpsc::channel();
+        let mut owner = Owner::new(
+            Store::new(directory.path().into()),
+            Settings::default(),
+            sender,
+        );
+        for id in [1, 2] {
+            owner.snapshot.document.rounds.push(Round {
+                after_message: 0,
+                candidates: vec![Candidate { id, ..assignment() }],
+            });
+            owner.snapshot.previews.insert(
+                id,
+                Preview {
+                    revision: 1,
+                    audio: Arc::new(auris_session::prelude::AudioBuffer::stereo(100, 100.0)),
+                    timeline: Default::default(),
+                },
+            );
+        }
+        owner
+            .snapshot
+            .preview_errors
+            .insert(1, "Earlier diagnostic".into());
+        owner.command(Command::View(0));
+        owner.command(Command::View(1));
+        assert_eq!(owner.snapshot.previews.len(), 2);
+        assert_eq!(
+            owner.snapshot.preview_errors.get(&1).map(String::as_str),
+            Some("Earlier diagnostic")
+        );
+    }
+
+    #[test]
+    fn closing_immediately_after_feedback_keeps_the_rating_and_scoped_draft() {
+        use super::*;
+        let directory = tempfile::tempdir().unwrap();
+        let store = Store::new(directory.path().into());
+        let (events, _) = mpsc::channel();
+        let mut owner = Owner::new(store.clone(), Settings::default(), events);
+        let mut candidate = assignment();
+        candidate.ready = true;
+        owner.snapshot.document.rounds.push(Round {
+            after_message: 0,
+            candidates: vec![candidate],
+        });
+        let (sender, commands) = mpsc::channel();
+        sender
+            .send(Command::Feedback(
+                "default".into(),
+                1,
+                auris_session::workshop::Feedback {
+                    rating: 5,
+                    comment: "Keep this melody".into(),
+                },
+            ))
+            .unwrap();
+        sender
+            .send(Command::ThreadDraft(
+                "default".into(),
+                "Next request".into(),
+                vec![],
+            ))
+            .unwrap();
+        owner.run(commands, Arc::new(AtomicBool::new(true)));
+        let restored = store.load().unwrap();
+        assert_eq!(
+            restored.rounds[0].candidates[0]
+                .feedback
+                .as_ref()
+                .unwrap()
+                .rating,
+            5
+        );
+        assert_eq!(restored.draft, "Next request");
+    }
+    #[test]
+    fn switching_threads_preserves_scoped_drafts_and_archiving_is_reversible() {
+        use super::*;
+        let directory = tempfile::tempdir().unwrap();
+        let store = Store::new(directory.path().into());
+        let (sender, _) = mpsc::channel();
+        let mut owner = Owner::new(store.clone(), Settings::default(), sender);
+        owner.command(Command::ThreadDraft(
+            "default".into(),
+            "Original draft".into(),
+            vec![],
+        ));
+        owner.command(Command::NewThread);
+        let second = owner.snapshot.document.thread_id.clone();
+        assert_ne!(second, "default");
+        owner.command(Command::ThreadDraft(
+            "default".into(),
+            "Stale late draft".into(),
+            vec![],
+        ));
+        assert!(owner.snapshot.document.draft.is_empty());
+        owner.command(Command::ThreadDraft(
+            second.clone(),
+            "Second draft".into(),
+            vec![],
+        ));
+        owner.command(Command::RenameThread(second.clone(), "Second song".into()));
+        owner.command(Command::OpenThread("default".into()));
+        assert_eq!(owner.snapshot.document.draft, "Original draft");
+        owner.command(Command::ArchiveThread(second.clone(), true));
+        assert!(
+            owner
+                .snapshot
+                .threads
+                .iter()
+                .any(|t| t.id == second && t.archived)
+        );
+        owner.command(Command::ArchiveThread(second.clone(), false));
+        owner.command(Command::OpenThread(second.clone()));
+        assert_eq!(owner.snapshot.document.draft, "Second draft");
+        assert_eq!(owner.snapshot.document.title, "Second song");
+        owner.jobs.insert(99, Arc::new(AtomicBool::new(false)));
+        owner.command(Command::NewThread);
+        assert_eq!(owner.snapshot.document.thread_id, second);
+        assert!(owner.snapshot.error.is_some());
+        assert_eq!(
+            store.active_thread().unwrap().load().unwrap().title,
+            "Second song"
+        );
+    }
+    #[test]
+    fn feedback_is_persisted_and_attributed_in_future_composer_context() {
+        use super::*;
+        let directory = tempfile::tempdir().unwrap();
+        let store = Store::new(directory.path().into());
+        let (sender, _) = mpsc::channel();
+        let mut owner = Owner::new(store.clone(), Settings::default(), sender);
+        let mut candidate = assignment();
+        candidate.ready = true;
+        owner.snapshot.document.rounds.push(Round {
+            after_message: 0,
+            candidates: vec![candidate],
+        });
+        owner.command(Command::Feedback(
+            "default".into(),
+            1,
+            auris_session::workshop::Feedback {
+                rating: 4,
+                comment: "Keep the melody, soften the drums".into(),
+            },
+        ));
+        owner.publish(true);
+        let restored = store.load().unwrap();
+        assert_eq!(
+            restored.rounds[0].candidates[0]
+                .feedback
+                .as_ref()
+                .unwrap()
+                .rating,
+            4
+        );
+        let context: serde_json::Value =
+            serde_json::from_str(&composition_assignment(&assignment(), &restored)).unwrap();
+        assert_eq!(context["user_feedback"][0]["candidate"], 1);
+        assert_eq!(
+            context["user_feedback"][0]["comment"],
+            "Keep the melody, soften the drums"
+        );
+        assert!(owner.planner.is_none());
+        assert!(owner.jobs.is_empty());
+    }
+    #[test]
+    fn tool_observations_count_parallel_calls_once_and_accept_result_only_events() {
+        use super::*;
+        let (sender, receiver) = mpsc::channel();
+        let mut calls = BTreeMap::new();
+        for event in [
+            json!({"event":"call","call_id":"a","tool":"edit_notes"}),
+            json!({"event":"call","call_id":"a","tool":"edit_notes"}),
+            json!({"event":"call","call_id":"b","tool":"edit_notes"}),
+            json!({"event":"result","call_id":"a","tool":"edit_notes","ok":true}),
+            json!({"event":"result","call_id":"a","tool":"edit_notes","ok":true}),
+            json!({"event":"result","call_id":"b","tool":"edit_notes","ok":false}),
+            json!({"event":"result","call_id":"c","tool":"inspect_project","ok":true}),
+        ] {
+            observe_tool_event(1, &event, &mut calls, &sender);
+        }
+        let observed: Vec<_> = receiver
+            .try_iter()
+            .map(|event| match event {
+                JobEvent::Tool(id, name, result) => (id, name, result),
+                _ => panic!("Expected a tool observation"),
+            })
+            .collect();
+        assert_eq!(
+            observed,
+            vec![
+                (1, "edit_notes".into(), None),
+                (1, "edit_notes".into(), None),
+                (1, "edit_notes".into(), Some(true)),
+                (1, "edit_notes".into(), Some(false)),
+                (1, "inspect_project".into(), None),
+                (1, "inspect_project".into(), Some(true)),
+            ]
+        );
+    }
     use super::*;
     #[test]
     #[ignore = "real model inference; requires AURIS_WORKSHOP_EVAL_OUTPUT and AURIS_WORKSHOP_EVAL_MODEL"]
@@ -1412,6 +1895,132 @@ mod tests {
         let requests = seen.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert!(!requests[0].contains("Current Auris permission mode"));
+    }
+
+    #[test]
+    fn unselected_single_song_is_inherited_by_followup_composer_after_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(dir.path().into());
+        let cancel = AtomicBool::new(false);
+        let mut session = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        execute(
+            &mut session,
+            json!({"action":"add_track","name":"Original drums","kind":"drum"}),
+            &Settings::default(),
+            &cancel,
+        )
+        .unwrap();
+        execute(
+            &mut session,
+            json!({"action":"generate_phrase","track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}),
+            &Settings::default(),
+            &cancel,
+        ).unwrap();
+        session
+            .finish_workshop_candidate(
+                &store.candidate_path(1),
+                idea(&assignment().direction),
+                &cancel,
+            )
+            .unwrap();
+        let original_tracks = session.project().tracks.clone();
+        let parent_path = store.candidate_path(1).join("song/song.auris");
+        let original_file = std::fs::read(&parent_path).unwrap();
+        drop(session);
+        let mut parent = assignment();
+        parent.ready = true;
+        let mut failed = assignment();
+        failed.id = 2;
+        failed.error = Some("Previous revision started without the original score".into());
+        store
+            .save(&Document {
+                next_id: 2,
+                rounds: vec![
+                    Round {
+                        after_message: 0,
+                        candidates: vec![parent],
+                    },
+                    Round {
+                        after_message: 0,
+                        candidates: vec![failed],
+                    },
+                ],
+                ..Default::default()
+            })
+            .unwrap();
+        let director = json!({"role":"assistant","content":json!({
+            "reply":"Keep the arrangement and slow it down.", "directions":[assignment().direction]
+        }).to_string()})
+        .to_string();
+        let edit = json!({"role":"assistant","tool_calls":[{
+            "id":"tempo", "type":"function", "function":{
+                "name":"edit_timeline", "arguments":json!({"operation":{"kind":"set_tempo","at_tick":0,"bpm":90.0}}).to_string()
+            }
+        }]}).to_string();
+        let answer = json!({"role":"assistant","content":"Finished the tempo change."}).to_string();
+        let (url, seen) = crate::tests::mock_server(vec![
+            crate::tests::completion(&director, "stop"),
+            crate::tests::completion(&edit, "tool_calls"),
+            crate::tests::completion(&answer, "stop"),
+        ]);
+        let (events, snapshots) = mpsc::channel();
+        let mut owner = Owner::new(store.clone(), Settings::default(), events);
+        owner.command(Command::Send(
+            "Keep the arrangement, but slow it to 90 BPM.".into(),
+            Box::new(AgentPreferences {
+                provider: "openai".into(),
+                model: "mock".into(),
+                url,
+                ..Default::default()
+            }),
+            vec![],
+        ));
+        assert_eq!(
+            owner.planned_parent,
+            Some(1),
+            "a followup must start from the saved song"
+        );
+        let (commands, receiver) = mpsc::channel();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop = stopped.clone();
+        let thread = std::thread::spawn(move || owner.run(receiver, stop));
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let snapshot = loop {
+            let snapshot = snapshots
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .unwrap();
+            assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
+            if snapshot.document.rounds.len() == 3 && snapshot.progress.is_empty() {
+                break snapshot;
+            }
+        };
+        stopped.store(true, Ordering::Release);
+        drop(commands);
+        thread.join().unwrap();
+        let child = &snapshot.document.rounds[2].candidates[0];
+        assert!(child.ready, "{:?}", child.error);
+        assert_eq!(child.parent, Some(1));
+        assert_eq!(snapshot.document.selected, None);
+        let mut restored = Session::new(SessionOptions::headless().with_balance(false)).unwrap();
+        restored
+            .open(&store.candidate_path(3).join("song/song.auris"))
+            .unwrap();
+        assert_eq!(restored.project().tracks, original_tracks);
+        assert_eq!(restored.project().bpm(), 90.0);
+        assert_eq!(std::fs::read(parent_path).unwrap(), original_file);
+        let requests = seen.lock().unwrap();
+        let request: serde_json::Value = serde_json::from_str(&requests[0]).unwrap();
+        let prompt: serde_json::Value = serde_json::from_str(
+            request["messages"].as_array().unwrap().last().unwrap()["content"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(prompt["selected"]["id"], 1);
+        assert_eq!(
+            prompt["selected_score"]["tracks"][0]["name"],
+            "Original drums"
+        );
     }
 
     #[test]
@@ -1612,6 +2221,8 @@ mod tests {
             ready: false,
             error: None,
             recoveries: 0,
+            tools: Default::default(),
+            feedback: None,
             direction: Direction {
                 title: "Test".into(),
                 description: "A short instrumental".into(),
@@ -1963,6 +2574,102 @@ mod tests {
     }
 
     #[test]
+    fn tool_call_limit_stops_without_auto_recovery_and_explicit_recovery_keeps_the_score() {
+        let call =
+            |id: String, name: &str, args: serde_json::Value| {
+                crate::tests::completion(&json!({"role":"assistant","tool_calls":[{
+                "id":id,"type":"function","function":{"name":name,"arguments":args.to_string()}
+            }]}).to_string(), "tool_calls")
+            };
+        let mut responses = vec![call(
+            "setup".into(),
+            "add_track",
+            json!({"name":"Kit","kind":"drum"}),
+        )];
+        responses.extend((0..100).map(|id| call(format!("read-{id}"), "capabilities", json!({}))));
+        let (url, seen) = crate::tests::mock_server(responses);
+        let prefs = AgentPreferences {
+            provider: "openai".into(),
+            model: "mock".into(),
+            url,
+            max_tool_calls: Some(100),
+            ..Default::default()
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("1");
+        let (sender, receiver) = mpsc::channel();
+        let cancel = AtomicBool::new(false);
+        let mut attempts = 0;
+        let result = recover_candidate(
+            &assignment(),
+            &cancel,
+            &sender,
+            |_, _| true,
+            |candidate| {
+                attempts += 1;
+                compose(
+                    candidate,
+                    prefs.clone(),
+                    Settings::default(),
+                    folder.clone(),
+                    None,
+                    &cancel,
+                    &sender,
+                    &[],
+                )
+            },
+        );
+        let error = result
+            .err()
+            .expect("the configured limit must stop this candidate");
+        assert_eq!(crate::tool_calls::limit_from_error(&error), Some(100));
+        assert_eq!(attempts, 1);
+        assert_eq!(seen.lock().unwrap().len(), 101);
+        assert!(
+            !receiver
+                .try_iter()
+                .any(|event| matches!(event, JobEvent::Recovering(..)))
+        );
+        let mut restored = Session::new(SessionOptions::headless()).unwrap();
+        restored
+            .open(&folder.join("checkpoint/checkpoint.auris"))
+            .unwrap();
+        assert_eq!(restored.project().tracks.len(), 1);
+        drop(restored);
+
+        let (url, _) = crate::tests::mock_server(vec![
+            call(
+                "continue".into(),
+                "generate_phrase",
+                json!({"track":1,"part":"drums","start_bar":1,"bars":2,"seed":42}),
+            ),
+            crate::tests::completion(r#"{"role":"assistant","content":"Finished"}"#, "stop"),
+        ]);
+        let mut candidate = assignment();
+        candidate.error = Some(error);
+        let prefs = AgentPreferences {
+            url,
+            max_tool_calls: Some(250),
+            ..prefs
+        };
+        let recovered = compose(
+            &candidate,
+            prefs,
+            Settings::default(),
+            folder.clone(),
+            None,
+            &cancel,
+            &sender,
+            &[],
+        )
+        .unwrap();
+        assert!(recovered.audio.peak() > 1e-8);
+        let mut restored = Session::new(SessionOptions::headless()).unwrap();
+        restored.open(&folder.join("song/song.auris")).unwrap();
+        assert_eq!(restored.project().tracks.len(), 1);
+    }
+
+    #[test]
     fn composer_creates_persistent_audition_through_real_session_tools() {
         let call = |id: &str, name: &str, arguments: serde_json::Value| {
             json!({"role":"assistant","tool_calls":[{"id":id,"type":"function","function":{"name":name,"arguments":arguments.to_string()}}]}).to_string()
@@ -2014,9 +2721,26 @@ mod tests {
         assert!(dir.path().join("1/song/song.auris").is_file());
         assert_eq!(seen.lock().unwrap().len(), 5);
         assert!(seen.lock().unwrap()[1].contains("worker_lifetime"));
+        let events: Vec<_> = receiver.try_iter().collect();
+        let completed: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                JobEvent::Tool(_, name, Some(ok)) => Some((name.as_str(), *ok)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            completed,
+            vec![
+                ("production_record", true),
+                ("add_track", true),
+                ("generate_phrase", true),
+                ("inspect_audio", true)
+            ]
+        );
         assert!(
-            receiver
-                .try_iter()
+            events
+                .iter()
                 .any(|e| matches!(e, JobEvent::Progress(_, stage) if stage == "compose"))
         );
     }

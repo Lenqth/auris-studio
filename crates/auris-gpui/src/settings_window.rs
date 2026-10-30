@@ -4,7 +4,10 @@
 //! project and should not compete with it for space. It holds a weak handle to the main view
 //! and applies every change through that, so there is still exactly one owner of the session.
 
-use atelier::{Edge, IconName, SectionHeader, Sidebar};
+use atelier::{
+    Button, ControlSize, Edge, FormField, FormGroup, IconName, ListItem, SectionHeader, Sidebar,
+    StatusBar, Switch,
+};
 use auris_i18n::{Key, Language, messages};
 use auris_session::prelude::*;
 use auris_session::session::AudioStatus;
@@ -24,14 +27,16 @@ use crate::titlebar;
 use crate::ui::icons::Icon;
 use crate::ui::palette;
 use crate::ui::text_field::{HasTextField, KeyEffect, TextField};
-use crate::ui::widgets::{ButtonStyle, button, chain_button, divider, nav_item};
+use crate::ui::widgets::{ButtonStyle, button, chain_button};
 use crate::voice_setup_window::VoiceSetupTab;
 
 mod agent;
 mod appearance_editor;
 #[cfg(test)]
 mod appearance_tests;
+mod chrome;
 mod dropdown;
+mod personalization;
 mod search;
 mod toolbar;
 
@@ -49,6 +54,8 @@ pub enum SettingsTab {
     Keys,
     /// Language-model connection and generation settings.
     Agent,
+    /// Locally recorded song choices and their corrections.
+    Personalization,
 }
 
 /// The devices the host could see when the window opened.
@@ -79,6 +86,7 @@ pub struct SettingsWindow {
     font_families: Vec<String>,
     tab: SettingsTab,
     agent: agent::AgentSettings,
+    personalization: personalization::Personalization,
     /// What the host can see, refreshed on request or when the audio host changes.
     devices: AudioDevices,
     hosts: Vec<String>,
@@ -218,6 +226,7 @@ impl SettingsWindow {
             font_families,
             tab: SettingsTab::General,
             agent: agent::AgentSettings::new(agent, cx),
+            personalization: Default::default(),
             devices,
             hosts: Session::audio_hosts(),
             audio,
@@ -275,7 +284,6 @@ impl SettingsWindow {
         assign: fn(&mut PointerGestures, PointerGesture),
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let theme = self.theme.clone();
         let choices = PointerGesture::ALL
             .into_iter()
             .filter(|gesture| offered(*gesture))
@@ -292,19 +300,8 @@ impl SettingsWindow {
             },
             cx,
         );
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .w(px(200.0))
-                    .flex_shrink_0()
-                    .text_xs()
-                    .text_color(theme.text_muted)
-                    .child(self.t(label)),
-            )
-            .child(div().flex_1().min_w_0().child(control))
+        FormField::new(self.t(label))
+            .child(control)
             .into_any_element()
     }
 
@@ -366,28 +363,21 @@ impl SettingsWindow {
         cx.notify();
     }
 
-    /// The navigation column: search first, then the four pages, then the setup guide.
+    /// The navigation column: search first, then settings pages, then the setup guide.
     ///
     /// Atelier's preferences layout: a leading `Sidebar` of list rows instead of a row of
     /// latched buttons squeezed into the title bar, so every page is named in full at every
-    /// window size and the title bar keeps only the title. The rows are [`nav_item`]s rather
-    /// than Atelier's `ListItem` so the pages stay in the Tab order.
+    /// window size and the title bar keeps only the title. Each row is a tab stop.
     fn render_nav(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let theme = self.theme.clone();
         let spacing = theme.atelier.spacing;
         let current = (!self.searching()).then_some(self.tab);
         let search = self.render_search(cx);
         let page = |id: &'static str, label: Key, icon: IconName, tab: SettingsTab| {
-            nav_item(
-                id,
-                self.t(label),
-                None,
-                icon,
-                current == Some(tab),
-                true,
-                &theme,
-                cx.listener(move |this, _, window, cx| this.select_tab(tab, window, cx)),
-            )
+            ListItem::new(id, self.t(label))
+                .icon(icon)
+                .selected(current == Some(tab))
+                .on_click(cx.listener(move |this, _, window, cx| this.select_tab(tab, window, cx)))
         };
         Sidebar::new(Edge::Left)
             .w(if window.viewport_size().width < px(640.0) {
@@ -418,36 +408,39 @@ impl SettingsWindow {
                 SettingsTab::Agent,
             ))
             .child(page(
+                "tab-personalization",
+                Key::PreferenceTab,
+                IconName::Music,
+                SettingsTab::Personalization,
+            ))
+            .child(page(
                 "tab-keys",
                 Key::TabKeys,
-                IconName::Code,
+                IconName::Keyboard,
                 SettingsTab::Keys,
             ))
             .child(div().flex_1())
             .child(
-                div()
-                    .debug_selector(|| "settings-setup-guide".into())
-                    .child(
-                        atelier::Button::new("settings-setup-guide", self.t(Key::SetupGuide))
-                            .ghost()
-                            .icon(IconName::Info)
-                            .full_width()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let _ = this.app.update(cx, |app, cx| app.open_setup_guide(cx));
-                            })),
-                    ),
+                atelier::Button::new("settings-setup-guide", self.t(Key::SetupGuide))
+                    .ghost()
+                    .icon(IconName::Info)
+                    .full_width()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let _ = this.app.update(cx, |app, cx| app.open_setup_guide(cx));
+                    })),
             )
     }
 
     /// The page's own heading: what it is called and what it covers.
     fn render_page_header(&self) -> Option<AnyElement> {
-        if self.searching() {
+        if self.searching() || self.tab == SettingsTab::Personalization {
             return None;
         }
         let (title, description) = match self.tab {
             SettingsTab::General => (Key::TabGeneral, Key::SettingsGeneralHelp),
             SettingsTab::Audio => (Key::TabAudio, Key::SettingsAudioHelp),
             SettingsTab::Agent => (Key::AgentPanel, Key::SettingsAgentHelp),
+            SettingsTab::Personalization => (Key::PreferenceHeading, Key::PreferenceHelp),
             SettingsTab::Keys => (Key::TabKeys, Key::SettingsKeysHelp),
         };
         Some(
@@ -541,234 +534,198 @@ impl SettingsWindow {
             |this, value, cx| this.apply_singer_acceleration(value, cx),
             cx,
         );
+        let switch = |id: &'static str,
+                      label: Key,
+                      note: Key,
+                      on: bool,
+                      apply: fn(&mut Self, bool, &mut Context<Self>)| {
+            FormField::new(self.t(label))
+                .description(self.t(note))
+                .beside()
+                .child(
+                    Switch::new(id, on)
+                        .on_change(cx.listener(move |this, on: &bool, _, cx| apply(this, *on, cx))),
+                )
+        };
+        let autosave = switch(
+            "autosave",
+            Key::Autosave,
+            Key::AutosaveNote,
+            self.autosave,
+            |this, on, cx| this.apply_autosave(on, cx),
+        );
+        let auto_update = switch(
+            "auto-update",
+            Key::AutoUpdate,
+            Key::AutoUpdateNote,
+            self.auto_update,
+            |this, on, cx| this.apply_auto_update(on, cx),
+        );
+        let snap = switch(
+            "snap-note-lengths",
+            Key::SnapNoteLengths,
+            Key::SnapNoteLengthsNote,
+            self.snap_note_lengths,
+            |this, on, cx| this.apply_snap_note_lengths(on, cx),
+        );
+        let installed_dictionary = auris_session::library::installed_dictionary();
+        let dictionary = FormField::new(self.t(Key::JapaneseDictionaryHeading))
+            .description(self.t(Key::JapaneseDictionaryNote))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(theme.atelier.typography.size_sm)
+                    .text_color(match (&self.japanese_dictionary, &installed_dictionary) {
+                        (None, None) => theme.text_muted,
+                        _ => theme.text,
+                    })
+                    .truncate()
+                    // An empty setting is not an empty state: the shipped dictionary stands in,
+                    // and the row should say which one is answering.
+                    .child(match &self.japanese_dictionary {
+                        Some(folder) => folder.display().to_string(),
+                        None => match installed_dictionary {
+                            Some(_) => self.t(Key::ValueShippedDictionary).to_string(),
+                            None => self.t(Key::ValueNotSet).to_string(),
+                        },
+                    }),
+            )
+            .child(
+                Button::new("dictionary-choose", self.t(Key::MenuChoose))
+                    .size(ControlSize::Small)
+                    .on_click(cx.listener(|this, _, _, cx| this.choose_japanese_dictionary(cx))),
+            )
+            .child(
+                Button::new("dictionary-clear", self.t(Key::MenuClear))
+                    .ghost()
+                    .size(ControlSize::Small)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.apply_japanese_dictionary(None, cx);
+                    })),
+            );
+        let setup = |id: &'static str, label: Key, tab: VoiceSetupTab| {
+            Button::new(id, self.t(label))
+                .on_click(cx.listener(move |this, _, _, cx| this.open_voice_setup(tab, cx)))
+        };
+        let voice_setup = FormField::new(self.t(Key::VoiceSetupTitle)).child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap(theme.atelier.spacing.sm)
+                .child(setup(
+                    "settings-setup-voicevox",
+                    Key::BrowserSetupVoicevox,
+                    VoiceSetupTab::Voicevox,
+                ))
+                .child(setup(
+                    "settings-setup-diffsinger",
+                    Key::BrowserSetupDiffSinger,
+                    VoiceSetupTab::DiffSinger,
+                ))
+                .child(setup(
+                    "settings-setup-leapsinger",
+                    Key::BrowserSetupLeapSinger,
+                    VoiceSetupTab::LeapSinger,
+                )),
+        );
+        let pointer_note = if self.pointer.create == PointerGesture::Click {
+            // Only while it applies. A standing warning about a setting nobody has chosen is a
+            // line every user reads once and no user acts on.
+            format!(
+                "{} {}",
+                self.t(Key::PointerNote),
+                self.t(Key::PointerClickNote)
+            )
+        } else {
+            self.t(Key::PointerNote).to_owned()
+        };
+        let pointer_create = self.gesture_row(
+            "pointer-create",
+            Key::PointerCreate,
+            self.pointer.create,
+            |_| true,
+            PointerGestures::set_create,
+            cx,
+        );
+        let pointer_delete = self.gesture_row(
+            "pointer-delete",
+            Key::PointerDelete,
+            self.pointer.delete,
+            PointerGesture::may_delete,
+            PointerGestures::set_delete,
+            cx,
+        );
+        let voice_paths = self.render_voice_paths(cx);
+
+        let language = self.matches_section(Section::Language);
+        let project = [Section::Autosave, Section::AutoUpdate, Section::Snap]
+            .iter()
+            .any(|section| self.matches_section(*section));
+        let general = language || project || self.matches_section(Section::Dictionary);
         div()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap(theme.atelier.spacing.xl)
             .when(self.matches_section(Section::Appearance), |view| {
                 view.child(appearance_control)
             })
-            .when(self.matches_section(Section::Language), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::LanguageHeading), &theme))
-                    .child(language_control)
-                    .child(note(self.t(Key::LanguageNote), &theme))
+            .when(general, |view| {
+                view.child(
+                    FormGroup::untitled()
+                        .when(language, |group| {
+                            group.child(
+                                FormField::new(self.t(Key::LanguageHeading))
+                                    .description(self.t(Key::LanguageNote))
+                                    .child(language_control),
+                            )
+                        })
+                        .when(self.matches_section(Section::Autosave), |group| {
+                            group.child(autosave)
+                        })
+                        .when(self.matches_section(Section::AutoUpdate), |group| {
+                            group.child(auto_update)
+                        })
+                        .when(self.matches_section(Section::Snap), |group| {
+                            group.child(snap)
+                        })
+                        .when(self.matches_section(Section::Dictionary), |group| {
+                            group.child(dictionary)
+                        }),
+                )
             })
             .when(self.matches_section(Section::Pointer), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::PointerHeading), &theme))
-                    .child(self.gesture_row(
-                        "pointer-create",
-                        Key::PointerCreate,
-                        self.pointer.create,
-                        |_| true,
-                        PointerGestures::set_create,
-                        cx,
-                    ))
-                    .child(self.gesture_row(
-                        "pointer-delete",
-                        Key::PointerDelete,
-                        self.pointer.delete,
-                        PointerGesture::may_delete,
-                        PointerGestures::set_delete,
-                        cx,
-                    ))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.text_muted)
-                            .child(self.t(Key::PointerNote)),
-                    )
-                    // Only while it applies. A standing warning about a setting nobody has chosen is a
-                    // line every user reads once and no user acts on.
-                    .when(self.pointer.create == PointerGesture::Click, |this| {
-                        this.child(
-                            div()
-                                .text_xs()
-                                .text_color(theme.text_muted)
-                                .child(self.t(Key::PointerClickNote)),
-                        )
-                    })
-            })
-            .when(self.matches_section(Section::Autosave), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::Autosave), &theme))
-                    .child(div().flex().gap_1().child(button(
-                        "autosave",
-                        self.t(if self.autosave {
-                            Key::ValueOn
-                        } else {
-                            Key::ValueOff
-                        }),
-                        ButtonStyle::Normal,
-                        self.autosave,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.apply_autosave(!this.autosave, cx);
-                        }),
-                    )))
-                    .child(note(self.t(Key::AutosaveNote), &theme))
-            })
-            .when(self.matches_section(Section::AutoUpdate), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::AutoUpdate), &theme))
-                    .child(div().flex().gap_1().child(button(
-                        "auto-update",
-                        self.t(if self.auto_update {
-                            Key::ValueOn
-                        } else {
-                            Key::ValueOff
-                        }),
-                        ButtonStyle::Normal,
-                        self.auto_update,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.apply_auto_update(!this.auto_update, cx);
-                        }),
-                    )))
-                    .child(note(self.t(Key::AutoUpdateNote), &theme))
-            })
-            .when(self.matches_section(Section::Snap), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::SnapNoteLengths), &theme))
-                    .child(div().flex().gap_1().child(button(
-                        "snap-note-lengths",
-                        self.t(if self.snap_note_lengths {
-                            Key::ValueOn
-                        } else {
-                            Key::ValueOff
-                        }),
-                        ButtonStyle::Normal,
-                        self.snap_note_lengths,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.apply_snap_note_lengths(!this.snap_note_lengths, cx);
-                        }),
-                    )))
-                    .child(note(self.t(Key::SnapNoteLengthsNote), &theme))
-            })
-            .when(self.matches_section(Section::Dictionary), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(
-                        self.t(Key::JapaneseDictionaryHeading),
-                        &theme,
-                    ))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_sm()
-                                    .text_color(
-                                        match (
-                                            &self.japanese_dictionary,
-                                            auris_session::library::installed_dictionary(),
-                                        ) {
-                                            (None, None) => theme.text_muted,
-                                            _ => theme.text,
-                                        },
-                                    )
-                                    .truncate()
-                                    // An empty setting is not an empty state: the shipped dictionary
-                                    // stands in, and the row should say which one is answering.
-                                    .child(match &self.japanese_dictionary {
-                                        Some(folder) => folder.display().to_string(),
-                                        None => {
-                                            match auris_session::library::installed_dictionary() {
-                                                Some(_) => {
-                                                    self.t(Key::ValueShippedDictionary).to_string()
-                                                }
-                                                None => self.t(Key::ValueNotSet).to_string(),
-                                            }
-                                        }
-                                    }),
-                            )
-                            .child(button(
-                                "dictionary-choose",
-                                self.t(Key::MenuChoose),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| this.choose_japanese_dictionary(cx)),
-                            ))
-                            .child(button(
-                                "dictionary-clear",
-                                self.t(Key::MenuClear),
-                                ButtonStyle::Ghost,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.apply_japanese_dictionary(None, cx);
-                                }),
-                            )),
-                    )
-                    .child(note(self.t(Key::JapaneseDictionaryNote), &theme))
+                view.child(
+                    FormGroup::new(self.t(Key::PointerHeading))
+                        .description(pointer_note)
+                        .child(pointer_create)
+                        .child(pointer_delete),
+                )
             })
             .when(self.matches_section(Section::Singer), |view| {
-                view.child(divider(&theme))
-                    .child(section_title(self.t(Key::SingerComputeHeading), &theme))
-                    .child(acceleration_control)
-                    .child(note(self.t(Key::SingerComputeNote), &theme))
-                    .child(section_title(self.t(Key::BrowserVoices), &theme))
-                    .child(self.render_voice_paths(cx))
-                    .child(note(self.t(Key::VoiceFoldersNote), &theme))
-                    .child(section_title(self.t(Key::VoiceSetupTitle), &theme))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_2()
-                            .child(button(
-                                "settings-setup-voicevox",
-                                self.t(Key::BrowserSetupVoicevox),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.open_voice_setup(VoiceSetupTab::Voicevox, cx);
-                                }),
-                            ))
-                            .child(button(
-                                "settings-setup-diffsinger",
-                                self.t(Key::BrowserSetupDiffSinger),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.open_voice_setup(VoiceSetupTab::DiffSinger, cx);
-                                }),
-                            ))
-                            .child(button(
-                                "settings-setup-leapsinger",
-                                self.t(Key::BrowserSetupLeapSinger),
-                                ButtonStyle::Normal,
-                                false,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
-                                    this.open_voice_setup(VoiceSetupTab::LeapSinger, cx);
-                                }),
-                            )),
-                    )
+                view.child(
+                    FormGroup::new(self.t(Key::SingerComputeHeading))
+                        .child(
+                            FormField::new(self.t(Key::SingerComputeHeading))
+                                .description(self.t(Key::SingerComputeNote))
+                                .child(acceleration_control),
+                        )
+                        .child(
+                            FormField::new(self.t(Key::BrowserVoices))
+                                .description(self.t(Key::VoiceFoldersNote))
+                                .child(voice_paths),
+                        )
+                        .child(voice_setup),
+                )
             })
             .when(self.matches_section(Section::Panels), |view| {
-                view.child(divider(&theme))
-                    .child(self.render_panel_positions(cx))
+                view.child(self.render_panel_positions(cx))
             })
             .when(self.matches_section(Section::Toolbar), |view| {
-                view.child(divider(&theme))
-                    .child(self.render_toolbar_settings(cx))
+                view.child(self.render_toolbar_settings(cx))
+            })
+            .when(self.matches_section(Section::Titlebar), |view| {
+                view.child(self.render_titlebar_settings(cx))
             })
             .into_any_element()
     }
@@ -967,35 +924,11 @@ impl SettingsWindow {
         let audio = self.audio.clone();
         let live = self.live.clone();
         let export = self.export;
-        let mut rows: Vec<AnyElement> = Vec::new();
 
+        let mut devices = FormGroup::new(self.t(Key::AudioDevicesGroup));
+        let mut any_device = false;
         if self.matches_section(Section::Host) {
-            rows.push(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(section_title(self.t(Key::AudioHost), &theme))
-                    .child(button(
-                        "refresh-audio-devices",
-                        self.t(Key::RefreshAudioDevices),
-                        ButtonStyle::Ghost,
-                        false,
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.hosts = Session::audio_hosts();
-                            if let Ok(devices) = this.app.read_with(cx, |app, _| AudioDevices {
-                                output: app.session.output_devices(),
-                                input: app.session.input_devices(),
-                            }) {
-                                this.devices = devices;
-                            }
-                            cx.notify();
-                        }),
-                    ))
-                    .into_any_element(),
-            );
+            any_device = true;
             let mut hosts = vec![(
                 None,
                 self.t(Key::SystemDefaultDevice).to_owned(),
@@ -1015,7 +948,7 @@ impl SettingsWindow {
                     self.t(Key::SettingUnavailable).to_owned(),
                 ));
             }
-            rows.push(self.dropdown(
+            let host = self.dropdown(
                 "audio-host",
                 hosts,
                 &audio.host,
@@ -1034,32 +967,48 @@ impl SettingsWindow {
                     }
                 },
                 cx,
-            ));
+            );
+            devices = devices.child(
+                FormField::new(self.t(Key::AudioHost)).child(host).child(
+                    Button::new("refresh-audio-devices", self.t(Key::RefreshAudioDevices))
+                        .ghost()
+                        .size(ControlSize::Small)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.hosts = Session::audio_hosts();
+                            if let Ok(devices) = this.app.read_with(cx, |app, _| AudioDevices {
+                                output: app.session.output_devices(),
+                                input: app.session.input_devices(),
+                            }) {
+                                this.devices = devices;
+                            }
+                            cx.notify();
+                        })),
+                ),
+            );
         }
         if self.matches_section(Section::Output) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::OutputDevice), &theme));
-            rows.push(self.device_dropdown(DeviceSlot::Output, cx));
+            any_device = true;
+            devices = devices.child(
+                FormField::new(self.t(Key::OutputDevice))
+                    .child(self.device_dropdown(DeviceSlot::Output, cx)),
+            );
         }
         if self.matches_section(Section::Input) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::InputDevice), &theme));
-            if audio.uses_asio() {
-                rows.push(note(self.t(Key::AsioInputNote), &theme));
+            any_device = true;
+            // With ASIO the input is not a choice of its own: the field says why instead.
+            devices = devices.child(if audio.uses_asio() {
+                FormField::new(self.t(Key::InputDevice)).description(self.t(Key::AsioInputNote))
             } else {
-                rows.push(self.device_dropdown(DeviceSlot::Input, cx));
-                rows.push(note(self.t(Key::InputDeviceNote), &theme));
-            }
+                FormField::new(self.t(Key::InputDevice))
+                    .description(self.t(Key::InputDeviceNote))
+                    .child(self.device_dropdown(DeviceSlot::Input, cx))
+            });
         }
+
+        let mut playback = FormGroup::new(self.t(Key::AudioPlaybackGroup));
+        let mut any_playback = false;
         if self.matches_section(Section::Rate) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::SampleRate), &theme));
+            any_playback = true;
             let rates = self.rate_choices();
             let mut rate_choices = vec![(
                 None,
@@ -1082,7 +1031,7 @@ impl SettingsWindow {
                     self.t(Key::SettingUnavailable).to_owned(),
                 ));
             }
-            rows.push(self.dropdown(
+            let rate = self.dropdown(
                 "sample-rate",
                 rate_choices,
                 &audio.sample_rate,
@@ -1096,13 +1045,11 @@ impl SettingsWindow {
                     );
                 },
                 cx,
-            ));
+            );
+            playback = playback.child(FormField::new(self.t(Key::SampleRate)).child(rate));
         }
         if self.matches_section(Section::Buffer) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            rows.push(section_title(self.t(Key::BufferSize), &theme));
+            any_playback = true;
             let mut block_sizes = AudioPreferences::BLOCK_CHOICES.to_vec();
             if !block_sizes.contains(&audio.block_frames) {
                 block_sizes.push(audio.block_frames);
@@ -1119,7 +1066,7 @@ impl SettingsWindow {
                     )
                 })
                 .collect();
-            rows.push(self.dropdown(
+            let block = self.dropdown(
                 "block",
                 blocks,
                 &audio.block_frames,
@@ -1133,8 +1080,7 @@ impl SettingsWindow {
                     );
                 },
                 cx,
-            ));
-            rows.push(note(self.t(Key::RequestedBufferNote), &theme));
+            );
             let actual = live
                 .as_ref()
                 .and_then(|status| {
@@ -1147,15 +1093,18 @@ impl SettingsWindow {
                     ))
                 })
                 .unwrap_or_else(|| self.t(Key::ActualBufferUnknown).to_owned());
-            rows.push(note(&actual, &theme));
+            playback = playback.child(
+                FormField::new(self.t(Key::BufferSize))
+                    .description(self.t(Key::RequestedBufferNote))
+                    .note(actual)
+                    .child(block),
+            );
         }
-        if self.matches_section(Section::Export) {
-            if !rows.is_empty() {
-                rows.push(divider(&theme).into_any_element());
-            }
-            // Export preferences describe the file, independently of the output device's settings.
 
-            rows.push(section_title(self.t(Key::ExportFormat), &theme));
+        // Export preferences describe the file, independently of the output device's settings.
+        let mut file = FormGroup::new(self.t(Key::Export));
+        let any_export = self.matches_section(Section::Export);
+        if any_export {
             let formats = [
                 AudioExportFormat::Wav,
                 AudioExportFormat::Flac,
@@ -1172,7 +1121,7 @@ impl SettingsWindow {
                 )
             })
             .collect();
-            rows.push(self.dropdown(
+            let format = self.dropdown(
                 "export-format",
                 formats,
                 &export.format,
@@ -1194,10 +1143,10 @@ impl SettingsWindow {
                     this.apply_export(export, cx);
                 },
                 cx,
-            ));
+            );
+            file = file.child(FormField::new(self.t(Key::ExportFormat)).child(format));
 
             if !matches!(export.format, AudioExportFormat::Mp3) {
-                rows.push(section_title(self.t(Key::ExportBitDepth), &theme));
                 let depth_choices: &[WavBitDepth] = match export.format {
                     AudioExportFormat::Wav => {
                         &[WavBitDepth::Int16, WavBitDepth::Int24, WavBitDepth::Float32]
@@ -1218,7 +1167,7 @@ impl SettingsWindow {
                         )
                     })
                     .collect();
-                rows.push(self.dropdown(
+                let depth = self.dropdown(
                     "depth",
                     depths,
                     &export.bit_depth,
@@ -1232,9 +1181,9 @@ impl SettingsWindow {
                         );
                     },
                     cx,
-                ));
+                );
+                file = file.child(FormField::new(self.t(Key::ExportBitDepth)).child(depth));
             }
-            rows.push(section_title(self.t(Key::ExportRate), &theme));
             let mut export_rates = vec![(None, self.t(Key::ProjectRate).to_owned(), String::new())];
             let rate_choices: &[u32] = if matches!(export.format, AudioExportFormat::Mp3) {
                 &ExportPreferences::MP3_RATE_CHOICES
@@ -1258,7 +1207,7 @@ impl SettingsWindow {
                     String::new(),
                 ));
             }
-            rows.push(self.dropdown(
+            let export_rate = self.dropdown(
                 "export-rate",
                 export_rates,
                 &export.sample_rate,
@@ -1272,9 +1221,9 @@ impl SettingsWindow {
                     );
                 },
                 cx,
-            ));
+            );
+            file = file.child(FormField::new(self.t(Key::ExportRate)).child(export_rate));
             if matches!(export.format, AudioExportFormat::Mp3) {
-                rows.push(section_title(self.t(Key::ExportBitrate), &theme));
                 let bitrates = [
                     Mp3Bitrate::Kbps128,
                     Mp3Bitrate::Kbps192,
@@ -1284,7 +1233,7 @@ impl SettingsWindow {
                 .into_iter()
                 .map(|bitrate| (bitrate, format!("{} kbps", bitrate.kbps()), String::new()))
                 .collect();
-                rows.push(self.dropdown(
+                let bitrate = self.dropdown(
                     "export-bitrate",
                     bitrates,
                     &export.mp3_bitrate,
@@ -1298,86 +1247,67 @@ impl SettingsWindow {
                         );
                     },
                     cx,
-                ));
+                );
+                file = file.child(FormField::new(self.t(Key::ExportBitrate)).child(bitrate));
             } else {
-                rows.push(section_title(self.t(Key::ExportDither), &theme));
+                // A yes-or-no that applies at once: a switch beside its label. Where dither
+                // cannot apply (float) it stays off and out of reach rather than lying.
                 let dithers = export.dither_applies();
-                let on = export.dither && dithers;
-                if dithers {
-                    rows.push(
-                        div()
-                            .flex()
-                            .gap_1()
-                            .child(button(
-                                "export-dither",
-                                self.t(if on { Key::ValueOn } else { Key::ValueOff }),
-                                ButtonStyle::Normal,
-                                on,
-                                theme.accent,
-                                &theme,
-                                cx.listener(|this, _, _, cx| {
+                file = file.child(
+                    FormField::new(self.t(Key::ExportDither))
+                        .description(self.t(Key::ExportDitherNote))
+                        .beside()
+                        .child(
+                            Switch::new("export-dither", export.dither && dithers)
+                                .disabled(!dithers)
+                                .on_change(cx.listener(|this, on: &bool, _, cx| {
                                     this.apply_export(
                                         ExportPreferences {
-                                            dither: !this.export.dither,
+                                            dither: *on,
                                             ..this.export
                                         },
                                         cx,
                                     );
-                                }),
-                            ))
-                            .into_any_element(),
-                    );
-                } else {
-                    rows.push(
-                        div()
-                            .id("export-dither-disabled")
-                            .text_xs()
-                            .text_color(theme.text_faint)
-                            .child(self.t(Key::ValueOff))
-                            .into_any_element(),
-                    );
-                }
-                rows.push(note(self.t(Key::ExportDitherNote), &theme));
+                                })),
+                        ),
+                );
             }
         }
-        if !self.searching()
-            && let Some(status) = live
-        {
-            rows.push(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(theme.text_muted)
-                    .child({
-                        let suffix = if status.running {
-                            String::new()
-                        } else {
-                            messages::silent_suffix(self.language)
-                        };
-                        messages::running_device(
-                            self.language,
-                            &status.device,
-                            status.sample_rate,
-                            status.channels,
-                            &suffix,
-                        )
-                    })
-                    .children(
-                        status
-                            .gpu
-                            .map(|gpu| div().child(messages::gpu_in_use(self.language, &gpu))),
+        let status = (!self.searching()).then_some(live).flatten().map(|status| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(theme.atelier.spacing.xxs)
+                .text_size(theme.atelier.typography.size_sm)
+                .text_color(theme.text_muted)
+                .child({
+                    let suffix = if status.running {
+                        String::new()
+                    } else {
+                        messages::silent_suffix(self.language)
+                    };
+                    messages::running_device(
+                        self.language,
+                        &status.device,
+                        status.sample_rate,
+                        status.channels,
+                        &suffix,
                     )
-                    .into_any_element(),
-            );
-        }
+                })
+                .children(
+                    status
+                        .gpu
+                        .map(|gpu| div().child(messages::gpu_in_use(self.language, &gpu))),
+                )
+        });
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .children(rows)
+            .gap(theme.atelier.spacing.xl)
+            .when(any_device, |page| page.child(devices))
+            .when(any_playback, |page| page.child(playback))
+            .when(any_export, |page| page.child(file))
+            .children(status)
             .into_any_element()
     }
 
@@ -1539,19 +1469,15 @@ impl SettingsWindow {
         let theme = self.theme.clone();
         let armed = self.capturing.is_some();
         let empty = self.search.content().is_empty();
-        div()
+        // Atelier's field frame around Auris's own editable text: the placeholder stays inside
+        // the editable region rather than in the frame's, for the reason given below.
+        atelier::TextField::new()
             .id("settings-search")
-            .debug_selector(|| "settings-search".to_owned())
             .track_focus(&self.search_focus)
             .tab_index(0)
-            .flex()
-            .items_center()
-            .h(px(28.0))
-            .mb_2()
-            .rounded(Metrics::RADIUS_SM)
-            .bg(theme.surface_sunken)
-            .border_1()
-            .border_color(if armed { theme.border } else { theme.accent })
+            .icon(IconName::Search)
+            .empty(false)
+            .size(ControlSize::Small)
             .child(
                 div()
                     .relative()
@@ -1609,17 +1535,15 @@ impl SettingsWindow {
                 }),
             )
             .when(!empty, |view| {
-                view.child(button(
-                    "clear-settings-search",
-                    self.t(Key::MenuClear),
-                    ButtonStyle::Ghost,
-                    false,
-                    theme.accent,
-                    &theme,
-                    cx.listener(|this, _, window, cx| {
-                        this.select_tab(this.tab, window, cx);
-                    }),
-                ))
+                view.trailing(
+                    Button::icon_only("clear-settings-search", IconName::Close)
+                        .ghost()
+                        .size(ControlSize::Small)
+                        .tooltip(self.t(Key::MenuClear))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.select_tab(this.tab, window, cx);
+                        })),
+                )
             })
             .into_any_element()
     }
@@ -1849,7 +1773,22 @@ impl SettingsWindow {
             return true;
         }
         self.sync_text_focus(window);
+        if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD)
+            && event.keystroke.key == "escape"
+            && self.agent.fields[agent::AgentSettings::PREFERENCE_FIELD]
+                .marked()
+                .is_none()
+            && !self.personalization.busy
+        {
+            self.cancel_preference(window, cx);
+            return true;
+        }
         if self.agent.active.is_some() && self.agent_key(event, cx) {
+            if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD)
+                && self.personalization.busy
+            {
+                window.focus(&self.search_focus);
+            }
             return true;
         }
         if self.agent.active.is_none()
@@ -1964,8 +1903,16 @@ fn output_device_preferences(
 
 impl HasTextField for SettingsWindow {
     fn text_changed(&mut self) {
-        if self.agent.active == Some(agent::AgentSettings::PROMPT_FIELD) {
-            self.agent.prompt_viewport.borrow_mut().follow_caret();
+        if self
+            .agent
+            .active
+            .is_some_and(|index| index >= agent::AgentSettings::PROMPT_FIELD)
+        {
+            if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD) {
+                self.personalization.viewport.borrow_mut().follow_caret();
+            } else {
+                self.agent.prompt_viewport.borrow_mut().follow_caret();
+            }
             return;
         }
         if self.editing_search {
@@ -1982,6 +1929,9 @@ impl HasTextField for SettingsWindow {
 
     fn field(&mut self) -> Option<&mut TextField> {
         if let Some(index) = self.agent.active {
+            if index == agent::AgentSettings::PREFERENCE_FIELD && self.personalization.busy {
+                return None;
+            }
             return Some(&mut self.agent.fields[index]);
         }
         if !self.editing_search {
@@ -1994,6 +1944,9 @@ impl HasTextField for SettingsWindow {
 
     fn readable_field(&self) -> Option<&TextField> {
         if let Some(index) = self.agent.active {
+            if index == agent::AgentSettings::PREFERENCE_FIELD && self.personalization.busy {
+                return None;
+            }
             return Some(&self.agent.fields[index]);
         }
         if !self.editing_search {
@@ -2022,7 +1975,7 @@ impl Render for SettingsWindow {
         }
 
         let theme = self.theme.clone();
-        let titlebar = titlebar::composed(
+        let titlebar = titlebar::bar(
             window,
             &theme,
             titlebar::Parts::new("settings-title", self.t(Key::Settings)),
@@ -2038,6 +1991,7 @@ impl Render for SettingsWindow {
                 SettingsTab::Audio => self.render_audio(cx),
                 SettingsTab::Keys => self.render_keys(cx),
                 SettingsTab::Agent => self.render_agent(cx),
+                SettingsTab::Personalization => self.render_personalization(cx),
             }
         };
         let status = self.status.clone();
@@ -2096,7 +2050,7 @@ impl Render for SettingsWindow {
                                             .flex()
                                             .flex_col()
                                             .w_full()
-                                            .max_w(px(760.0))
+                                            .max_w(theme.atelier.density.form_width)
                                             .children(page_header)
                                             .child(body),
                                     ),
@@ -2104,18 +2058,16 @@ impl Render for SettingsWindow {
                             .child(
                                 div()
                                     .id("settings-status")
-                                    .flex()
-                                    .items_center()
-                                    .min_h(Metrics::STATUS_HEIGHT)
-                                    .max_h(px(84.0))
+                                    .debug_selector(|| "settings-status".into())
                                     .flex_shrink_0()
-                                    .overflow_y_scroll()
-                                    .px(theme.atelier.spacing.xl)
                                     .border_t_1()
                                     .border_color(theme.border_subtle)
-                                    .text_size(theme.atelier.typography.size_sm)
-                                    .text_color(theme.text_muted)
-                                    .child(status),
+                                    .child(
+                                        div()
+                                            .h(theme.atelier.density.status_bar)
+                                            .px(theme.atelier.spacing.xl)
+                                            .child(StatusBar::new().message(status)),
+                                    ),
                             ),
                     ),
             )
@@ -2226,6 +2178,7 @@ mod tests {
             ("tab-general", SettingsTab::General),
             ("tab-audio", SettingsTab::Audio),
             ("tab-agent", SettingsTab::Agent),
+            ("tab-personalization", SettingsTab::Personalization),
             ("tab-keys", SettingsTab::Keys),
         ] {
             // The pages are a column under the title bar, in reading order, inside the window.
@@ -2272,6 +2225,40 @@ mod tests {
                 this.status
             );
         });
+    }
+
+    #[gpui::test]
+    fn japanese_settings_keep_the_form_and_status_bar_inside_the_window(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        cx.run_until_parked();
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut gpui::VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(560.0), px(420.0)));
+        cx.run_until_parked();
+        handle
+            .update(cx, |this, _, cx| {
+                this.sync_appearance(
+                    Appearance {
+                        scheme: "daylight".into(),
+                        ..Appearance::default()
+                    },
+                    Some(Language::Japanese),
+                );
+                cx.notify();
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let status = cx
+            .debug_bounds("settings-status")
+            .expect("settings status bar");
+        assert!(status.bottom() <= px(420.0));
+        assert!(status.left() >= px(0.0) && status.right() <= px(560.0));
+        let page = cx.debug_bounds("settings-page").expect("settings page");
+        assert!(page.left() >= px(0.0) && page.right() <= px(560.0));
     }
 
     #[test]

@@ -2,13 +2,14 @@
 use super::*;
 use crate::ui::icons::{Icon, icon};
 use crate::ui::provider_logo::provider_logo;
-use crate::ui::widgets::button_with_content;
+use crate::ui::widgets::{ButtonState, button_enabled, button_with_content};
 
 pub(super) struct AgentSettings {
     prefs: AgentPreferences,
+    saved: AgentDraft,
     selected_connection: auris_agent::ModelConnection,
-    pub(super) fields: [TextField; 7],
-    pub(super) focus: [FocusHandle; 7],
+    pub(super) fields: [TextField; 8],
+    pub(super) focus: [FocusHandle; 8],
     pub(super) active: Option<usize>,
     expanded_providers: [bool; 4],
     provider_status: [Option<auris_agent::ProviderStatus>; 5],
@@ -21,8 +22,82 @@ pub(super) struct AgentSettings {
         std::rc::Rc<std::cell::RefCell<crate::ui::text_area::ProseViewport>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AgentDraft {
+    provider: String,
+    url: String,
+    api_key_env: String,
+    codex_path: String,
+    claude_path: String,
+    opencode_path: String,
+    antigravity_path: String,
+    context_tokens: Option<u32>,
+    output_tokens: Option<u32>,
+    max_tool_failures: Option<u8>,
+    max_tool_calls: Option<u32>,
+    system_prompt: String,
+}
+
+impl AgentSettings {
+    fn draft(&self) -> AgentDraft {
+        let prompt = self.fields[Self::PROMPT_FIELD].content();
+        AgentDraft {
+            provider: self.prefs.provider.clone(),
+            url: self.fields[0].content().trim().to_owned(),
+            api_key_env: self.fields[1].content().trim().to_owned(),
+            codex_path: self.fields[2].content().trim().to_owned(),
+            claude_path: self.fields[3].content().trim().to_owned(),
+            opencode_path: self.fields[4].content().trim().to_owned(),
+            antigravity_path: self.fields[5].content().trim().to_owned(),
+            context_tokens: self.prefs.context_tokens,
+            output_tokens: self.prefs.output_tokens,
+            max_tool_failures: self.prefs.max_tool_failures,
+            max_tool_calls: self.prefs.max_tool_calls,
+            system_prompt: if prompt.trim().is_empty()
+                || prompt == auris_agent::default_system_prompt()
+            {
+                String::new()
+            } else {
+                prompt.to_owned()
+            },
+        }
+    }
+
+    fn restore(&mut self, draft: AgentDraft) {
+        self.prefs.provider = draft.provider;
+        self.prefs.url = draft.url.clone();
+        self.prefs.api_key_env = draft.api_key_env.clone();
+        self.prefs.codex_path = draft.codex_path.clone();
+        self.prefs.claude_path = draft.claude_path.clone();
+        self.prefs.opencode_path = draft.opencode_path.clone();
+        self.prefs.antigravity_path = draft.antigravity_path.clone();
+        self.prefs.context_tokens = draft.context_tokens;
+        self.prefs.output_tokens = draft.output_tokens;
+        self.prefs.max_tool_failures = draft.max_tool_failures;
+        self.prefs.max_tool_calls = draft.max_tool_calls;
+        self.prefs.system_prompt = draft.system_prompt.clone();
+        for (field, value) in self.fields[..6].iter_mut().zip([
+            draft.url,
+            draft.api_key_env,
+            draft.codex_path,
+            draft.claude_path,
+            draft.opencode_path,
+            draft.antigravity_path,
+        ]) {
+            *field = TextField::new(value);
+        }
+        self.fields[Self::PROMPT_FIELD] = TextField::new(if draft.system_prompt.is_empty() {
+            auris_agent::default_system_prompt().to_owned()
+        } else {
+            draft.system_prompt
+        });
+        self.fields[Self::PROMPT_FIELD].place_caret(0, false);
+    }
+}
+
 impl AgentSettings {
     pub(super) const PROMPT_FIELD: usize = 6;
+    pub(super) const PREFERENCE_FIELD: usize = 7;
 
     pub(super) fn new(prefs: AgentPreferences, cx: &mut Context<SettingsWindow>) -> Self {
         let selected_connection = auris_agent::ModelConnection::from_preferences(&prefs);
@@ -34,8 +109,27 @@ impl AgentSettings {
             prefs.url.clone_from(&endpoint.url);
             prefs.api_key_env.clone_from(&endpoint.api_key_env);
         }
+        let saved = AgentDraft {
+            provider: prefs.provider.clone(),
+            url: prefs.url.trim().to_owned(),
+            api_key_env: prefs.api_key_env.trim().to_owned(),
+            codex_path: prefs.codex_path.trim().to_owned(),
+            claude_path: prefs.claude_path.trim().to_owned(),
+            opencode_path: prefs.opencode_path.trim().to_owned(),
+            antigravity_path: prefs.antigravity_path.trim().to_owned(),
+            context_tokens: prefs.context_tokens,
+            output_tokens: prefs.output_tokens,
+            max_tool_failures: prefs.max_tool_failures,
+            max_tool_calls: prefs.max_tool_calls,
+            system_prompt: if prompt.content() == auris_agent::default_system_prompt() {
+                String::new()
+            } else {
+                prefs.system_prompt.clone()
+            },
+        };
         Self {
             selected_connection,
+            saved,
             fields: [
                 TextField::new(prefs.url.clone()),
                 TextField::new(prefs.api_key_env.clone()),
@@ -44,8 +138,10 @@ impl AgentSettings {
                 TextField::new(prefs.opencode_path.clone()),
                 TextField::new(prefs.antigravity_path.clone()),
                 prompt,
+                TextField::new(String::new()),
             ],
             focus: [
+                cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
                 cx.focus_handle().tab_stop(true),
@@ -280,6 +376,7 @@ impl SettingsWindow {
             prefs.context_tokens = draft.context_tokens;
             prefs.output_tokens = draft.output_tokens;
             prefs.max_tool_failures = draft.max_tool_failures;
+            prefs.max_tool_calls = draft.max_tool_calls;
             prefs.system_prompt = draft.system_prompt;
             app.agent_apply_preferences_with(prefs, save)?;
             cx.notify();
@@ -293,6 +390,7 @@ impl SettingsWindow {
                 if let Some(connection) = connection {
                     self.agent.selected_connection = connection;
                 }
+                self.agent.saved = self.agent.draft();
                 self.t(Key::AgentSettingsApplied).to_owned()
             }
             Ok(Err(error)) => error.to_string(),
@@ -301,37 +399,54 @@ impl SettingsWindow {
         cx.notify();
     }
 
+    fn revert_agent(&mut self, cx: &mut Context<Self>) {
+        let saved = self.agent.saved.clone();
+        self.agent.restore(saved);
+        self.agent.active = None;
+        self.agent.prompt_viewport.borrow_mut().follow_caret();
+        self.agent.checked_fields = None;
+        self.agent.provider_status = Default::default();
+        self.status.clear();
+        cx.notify();
+    }
+
     pub(super) fn agent_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let Some(index) = self.agent.active else {
             return false;
         };
-        if index == AgentSettings::PROMPT_FIELD {
-            self.agent.prompt_viewport.borrow_mut().follow_caret();
+        if index == AgentSettings::PREFERENCE_FIELD && self.personalization.busy {
+            return event.keystroke.key != "tab";
+        }
+        if index >= AgentSettings::PROMPT_FIELD {
+            if index == AgentSettings::PREFERENCE_FIELD {
+                self.personalization.viewport.borrow_mut().follow_caret();
+            } else {
+                self.agent.prompt_viewport.borrow_mut().follow_caret();
+            }
             let key = event.keystroke.key.as_str();
             let shift = event.keystroke.modifiers.shift;
             let secondary = event.keystroke.modifiers.secondary();
-            if self.agent.fields[AgentSettings::PROMPT_FIELD]
-                .marked()
-                .is_some()
-            {
+            if self.agent.fields[index].marked().is_some() {
                 return false;
             }
             match key {
-                "enter" if secondary => self.apply_agent(cx),
-                "enter" => self.agent.fields[AgentSettings::PROMPT_FIELD].insert("\n"),
-                "up" => self.agent.fields[AgentSettings::PROMPT_FIELD].move_up(shift),
-                "down" => self.agent.fields[AgentSettings::PROMPT_FIELD].move_down(shift),
-                "home" if secondary => {
-                    self.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(0, shift)
+                "enter" if secondary => {
+                    if index == AgentSettings::PREFERENCE_FIELD {
+                        self.save_preference(cx);
+                    } else {
+                        self.apply_agent(cx);
+                    }
                 }
+                "enter" => self.agent.fields[index].insert("\n"),
+                "up" => self.agent.fields[index].move_up(shift),
+                "down" => self.agent.fields[index].move_down(shift),
+                "home" if secondary => self.agent.fields[index].place_caret(0, shift),
                 "end" if secondary => {
-                    let end = self.agent.fields[AgentSettings::PROMPT_FIELD]
-                        .content()
-                        .len();
-                    self.agent.fields[AgentSettings::PROMPT_FIELD].place_caret(end, shift);
+                    let end = self.agent.fields[index].content().len();
+                    self.agent.fields[index].place_caret(end, shift);
                 }
                 _ => {
-                    let handled = self.agent.fields[AgentSettings::PROMPT_FIELD]
+                    let handled = self.agent.fields[index]
                         .apply_key_with_clipboard(key, shift, secondary, true, cx)
                         != KeyEffect::Ignored;
                     if handled {
@@ -419,13 +534,30 @@ impl SettingsWindow {
             .into_any_element()
     }
 
-    fn agent_prompt(&self, cx: &mut Context<Self>) -> AnyElement {
-        let field = &self.agent.fields[AgentSettings::PROMPT_FIELD];
-        let focus = self.agent.focus[AgentSettings::PROMPT_FIELD].clone();
+    pub(super) fn agent_prompt(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        let viewport = if index == AgentSettings::PREFERENCE_FIELD {
+            self.personalization.viewport.clone()
+        } else {
+            self.agent.prompt_viewport.clone()
+        };
+        let click_viewport = viewport.clone();
+        let field = &self.agent.fields[index];
+        let focus = self.agent.focus[index].clone();
         let pointer_focus = focus.clone();
         div()
-            .id("agent-system-prompt")
-            .debug_selector(|| "agent-system-prompt".to_owned())
+            .id(if index == AgentSettings::PREFERENCE_FIELD {
+                "preference-context"
+            } else {
+                "agent-system-prompt"
+            })
+            .debug_selector(move || {
+                if index == AgentSettings::PREFERENCE_FIELD {
+                    "preference-context"
+                } else {
+                    "agent-system-prompt"
+                }
+                .to_owned()
+            })
             .track_focus(&focus)
             .tab_index(0)
             .w_full()
@@ -442,43 +574,48 @@ impl SettingsWindow {
                 field.content().to_owned().into(),
                 field.selection(),
                 field.marked(),
-                self.agent.active == Some(AgentSettings::PROMPT_FIELD),
+                self.agent.active == Some(index)
+                    && !(index == AgentSettings::PREFERENCE_FIELD && self.personalization.busy),
                 focus,
                 cx.entity(),
                 self.theme.clone(),
-                self.agent.prompt_viewport.clone(),
+                viewport,
             ))
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                    if this.agent.fields[AgentSettings::PROMPT_FIELD]
-                        .marked()
-                        .is_none()
-                        && let Some(offset) = this.agent.prompt_viewport.borrow().offset_at(
+                    if this.agent.fields[index].marked().is_none()
+                        && let Some(offset) = click_viewport.borrow().offset_at(
                             window,
-                            this.agent.fields[AgentSettings::PROMPT_FIELD].content(),
+                            this.agent.fields[index].content(),
                             event.position,
                         )
                     {
-                        this.agent.fields[AgentSettings::PROMPT_FIELD]
-                            .place_caret(offset, event.modifiers.shift);
+                        this.agent.fields[index].place_caret(offset, event.modifiers.shift);
                     }
-                    this.agent.active = Some(AgentSettings::PROMPT_FIELD);
+                    this.agent.active = Some(index);
                     this.editing_search = false;
                     window.focus(&pointer_focus);
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
-                this.agent.prompt_viewport.borrow_mut().scroll_by(
-                    event
-                        .delta
-                        .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
-                        .y,
-                );
-                cx.stop_propagation();
-                cx.notify();
-            }))
+            .on_scroll_wheel(
+                cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
+                    let viewport = if index == AgentSettings::PREFERENCE_FIELD {
+                        &this.personalization.viewport
+                    } else {
+                        &this.agent.prompt_viewport
+                    };
+                    viewport.borrow_mut().scroll_by(
+                        event
+                            .delta
+                            .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
+                            .y,
+                    );
+                    cx.stop_propagation();
+                    cx.notify();
+                }),
+            )
             .into_any_element()
     }
 
@@ -568,20 +705,20 @@ impl SettingsWindow {
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(section_title(self.t(label), theme))
-                    .child(self.agent_field(index, cx))
-                    .child(note(self.t(help), theme));
-                let (name, logo, help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
-                details = details
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(provider_logo(logo, theme.text))
-                            .child(crate::setup_guide::setup_link(name, name, url, theme)),
-                    )
-                    .child(note(self.t(help), theme));
+                        FormField::new(self.t(label))
+                            .description(self.t(help))
+                            .child(self.agent_field(index, cx)),
+                    );
+                let (name, logo, _help, url) = crate::setup_guide::AGENT_SETUP[index - 2];
+                details = details.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(provider_logo(logo, theme.text))
+                        .child(crate::setup_guide::setup_link(name, name, url, theme)),
+                );
                 if let Some(status) = status {
                     if let Some(path) = &status.executable {
                         details = details.child(note(&path.display().to_string(), theme));
@@ -707,12 +844,15 @@ impl SettingsWindow {
                 .child(div().text_base().child(self.t(Key::AgentApiConnection)))
                 .into_any_element(),
             self.agent_provider_status(4),
-            section_title(self.t(Key::AgentProviderLabel), &theme),
-            provider_control,
-            section_title(self.t(Key::AgentUrlLabel), &theme),
-            self.agent_field(0, cx),
-            section_title(self.t(Key::AgentKeyEnvLabel), &theme),
-            self.agent_field(1, cx),
+            FormField::new(self.t(Key::AgentProviderLabel))
+                .child(provider_control)
+                .into_any_element(),
+            FormField::new(self.t(Key::AgentUrlLabel))
+                .child(self.agent_field(0, cx))
+                .into_any_element(),
+            FormField::new(self.t(Key::AgentKeyEnvLabel))
+                .child(self.agent_field(1, cx))
+                .into_any_element(),
         ];
         if self.agent_provider_status_is_current(4)
             && let Some(error) = self.agent.provider_status[4]
@@ -724,75 +864,106 @@ impl SettingsWindow {
         if provider == "ollama" {
             let context = self.agent.prefs.context_tokens.unwrap_or(32768);
             let output = self.agent.prefs.output_tokens.unwrap_or(4096);
-            rows.push(section_title(self.t(Key::AgentContextTokens), &theme));
             rows.push(
-                self.dropdown(
-                    "agent-context-tokens",
-                    [32768, 65536, 131072, 262144]
-                        .into_iter()
-                        .map(|n| (n, format!("{}K", n / 1024), String::new()))
-                        .collect(),
-                    &context,
-                    |this, value, cx| {
-                        this.agent.prefs.context_tokens = Some(value);
-                        this.agent.prefs.output_tokens = Some(
-                            this.agent
-                                .prefs
-                                .output_tokens
-                                .unwrap_or(4096)
-                                .min(value / 4),
-                        );
-                        cx.notify();
-                    },
-                    cx,
-                ),
+                FormField::new(self.t(Key::AgentContextTokens))
+                    .child(
+                        self.dropdown(
+                            "agent-context-tokens",
+                            [32768, 65536, 131072, 262144]
+                                .into_iter()
+                                .map(|n| (n, format!("{}K", n / 1024), String::new()))
+                                .collect(),
+                            &context,
+                            |this, value, cx| {
+                                this.agent.prefs.context_tokens = Some(value);
+                                this.agent.prefs.output_tokens = Some(
+                                    this.agent
+                                        .prefs
+                                        .output_tokens
+                                        .unwrap_or(4096)
+                                        .min(value / 4),
+                                );
+                                cx.notify();
+                            },
+                            cx,
+                        ),
+                    )
+                    .into_any_element(),
             );
-            rows.push(section_title(self.t(Key::AgentOutputTokens), &theme));
             rows.push(
-                self.dropdown(
-                    "agent-output-tokens",
-                    [4096, 8192, 16384, 32768, 65536]
-                        .into_iter()
-                        .map(|n| (n, format!("{}K", n / 1024), String::new()))
-                        .collect(),
-                    &output,
-                    |this, value, cx| {
-                        this.agent.prefs.output_tokens = Some(value);
-                        if value >= this.agent.prefs.context_tokens.unwrap_or(32768) / 2 {
-                            this.agent.prefs.context_tokens = Some(value * 4);
-                        }
-                        cx.notify();
-                    },
-                    cx,
-                ),
+                FormField::new(self.t(Key::AgentOutputTokens))
+                    .child(
+                        self.dropdown(
+                            "agent-output-tokens",
+                            [4096, 8192, 16384, 32768, 65536]
+                                .into_iter()
+                                .map(|n| (n, format!("{}K", n / 1024), String::new()))
+                                .collect(),
+                            &output,
+                            |this, value, cx| {
+                                this.agent.prefs.output_tokens = Some(value);
+                                if value >= this.agent.prefs.context_tokens.unwrap_or(32768) / 2 {
+                                    this.agent.prefs.context_tokens = Some(value * 4);
+                                }
+                                cx.notify();
+                            },
+                            cx,
+                        ),
+                    )
+                    .into_any_element(),
             );
             rows.push(note(self.t(Key::AgentOutputTokensHelp), &theme));
         }
-        rows.push(section_title(self.t(Key::AgentToolFailureLimit), &theme));
+        let limit = self.agent.prefs.tool_call_limit();
+        let mut limits = vec![100, 250, 500, 1000, 2000, 5000, 10000];
+        limits.push(limit);
+        limits.sort_unstable();
+        limits.dedup();
         rows.push(
-            self.dropdown(
-                "agent-tool-failure-limit",
-                (1..=20usize)
-                    .map(|n| (n, n.to_string(), String::new()))
-                    .collect(),
-                &self.agent.prefs.tool_failure_limit(),
-                |this, value, cx| {
-                    this.agent.prefs.max_tool_failures = Some(value as u8);
-                    cx.notify();
-                },
-                cx,
-            ),
+            FormField::new(self.t(Key::AgentToolCallLimit))
+                .description(self.t(Key::AgentToolCallLimitHelp))
+                .child(
+                    self.dropdown(
+                        "agent-tool-call-limit",
+                        limits
+                            .into_iter()
+                            .map(|n| (n, n.to_string(), String::new()))
+                            .collect(),
+                        &limit,
+                        |this, value, cx| {
+                            this.agent.prefs.max_tool_calls = Some(value as u32);
+                            cx.notify();
+                        },
+                        cx,
+                    ),
+                )
+                .into_any_element(),
+        );
+        rows.push(
+            FormField::new(self.t(Key::AgentToolFailureLimit))
+                .child(
+                    self.dropdown(
+                        "agent-tool-failure-limit",
+                        (1..=20usize)
+                            .map(|n| (n, n.to_string(), String::new()))
+                            .collect(),
+                        &self.agent.prefs.tool_failure_limit(),
+                        |this, value, cx| {
+                            this.agent.prefs.max_tool_failures = Some(value as u8);
+                            cx.notify();
+                        },
+                        cx,
+                    ),
+                )
+                .into_any_element(),
         );
         rows.push(note(self.t(Key::AgentToolFailureLimitHelp), &theme));
         rows.push(
-            div()
-                .pt_4()
-                .text_base()
-                .child(self.t(Key::AgentSystemPrompt))
+            FormField::new(self.t(Key::AgentSystemPrompt))
+                .description(self.t(Key::AgentSystemPromptHelp))
+                .child(self.agent_prompt(AgentSettings::PROMPT_FIELD, cx))
                 .into_any_element(),
         );
-        rows.push(note(self.t(Key::AgentSystemPromptHelp), &theme));
-        rows.push(self.agent_prompt(cx));
         rows.push(
             button(
                 "agent-prompt-reset",
@@ -812,14 +983,26 @@ impl SettingsWindow {
             .into_any_element(),
         );
         rows.push(
-            button(
+            button_enabled(
                 "agent-apply",
                 self.t(Key::AgentApply),
                 ButtonStyle::Primary,
-                false,
+                ButtonState::available(false, self.agent.draft() != self.agent.saved),
                 theme.accent,
                 &theme,
                 cx.listener(|this, _, _, cx| this.apply_agent(cx)),
+            )
+            .into_any_element(),
+        );
+        rows.push(
+            button_enabled(
+                "agent-revert",
+                self.t(Key::AgentRevert),
+                ButtonStyle::Normal,
+                ButtonState::available(false, self.agent.draft() != self.agent.saved),
+                theme.accent,
+                &theme,
+                cx.listener(|this, _, _, cx| this.revert_agent(cx)),
             )
             .into_any_element(),
         );
@@ -838,6 +1021,24 @@ impl SettingsWindow {
 mod tests {
     use super::*;
     use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn agent_draft_revert_restores_only_the_saved_settings(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        handle
+            .update(cx, |this, _, cx| {
+                assert_eq!(this.agent.draft(), this.agent.saved);
+                this.agent.fields[2] = TextField::new("draft-codex.exe");
+                this.agent.prefs.max_tool_failures = Some(17);
+                assert_ne!(this.agent.draft(), this.agent.saved);
+                this.revert_agent(cx);
+                assert_eq!(this.agent.draft(), this.agent.saved);
+                assert_eq!(this.agent.fields[2].content(), this.agent.saved.codex_path);
+            })
+            .unwrap();
+    }
 
     #[gpui::test]
     fn provider_results_arrive_independently_and_edits_invalidate_only_their_route(
@@ -974,6 +1175,57 @@ mod tests {
     }
 
     #[gpui::test]
+    fn tool_call_limit_dropdown_saves_and_reaches_the_panel(cx: &mut TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        let cx = &mut VisualTestContext::from_window(handle.into(), cx);
+        cx.simulate_resize(gpui::size(px(760.0), px(1200.0)));
+        cx.run_until_parked();
+        crate::harness::click("tab-agent", cx);
+        click_visible_control("agent-tool-call-limit", cx);
+        cx.simulate_keystrokes("down enter");
+        handle
+            .update(cx, |this, _, cx| {
+                assert_ne!(
+                    this.agent.draft(),
+                    this.agent.saved,
+                    "Changing only the limit must enable Apply"
+                );
+                this.apply_agent_with(cx, |settings| {
+                    assert_eq!(settings.agent.tool_call_limit(), 2000);
+                    Ok::<(), String>(())
+                });
+                assert_eq!(this.agent.draft(), this.agent.saved);
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.preferences().tool_call_limit(), 2000);
+        });
+    }
+
+    #[gpui::test]
+    fn tool_call_limit_draft_can_revert_without_changing_saved_preferences(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, cx| this.open_settings(cx));
+        let handle = app.read_with(cx, |this, _| this.settings_window.unwrap());
+        handle
+            .update(cx, |this, _, cx| {
+                this.agent.prefs.max_tool_calls = Some(5000);
+                assert_ne!(this.agent.draft(), this.agent.saved);
+                this.revert_agent(cx);
+                assert_eq!(this.agent.prefs.max_tool_calls, None);
+                assert_eq!(this.agent.draft(), this.agent.saved);
+            })
+            .unwrap();
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.settings.agent.max_tool_calls, None);
+        });
+    }
+
+    #[gpui::test]
     fn provider_disclosure_keeps_unsaved_paths_when_closed(cx: &mut TestAppContext) {
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, cx| this.open_settings(cx));
@@ -1006,7 +1258,7 @@ mod tests {
     fn click_visible_control(selector: &'static str, cx: &mut VisualTestContext) {
         let body = cx.debug_bounds("settings-body").unwrap();
         let field = cx.debug_bounds(selector).unwrap();
-        // Adding a CLI connection can move the API fields below the initial viewport.
+        // Additional settings can move a control below the initial viewport.
         // Scroll as a user would before testing their pointer and caret behavior.
         if field.top() < body.top() || field.bottom() > body.bottom() {
             cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1084,6 +1336,7 @@ mod tests {
         cx.simulate_resize(gpui::size(px(1020.0), px(1600.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
+        click_visible_control("agent-system-prompt", cx);
         let bounds = cx.debug_bounds("agent-system-prompt").unwrap();
         let position = bounds.origin + gpui::point(px(12.0), px(12.0));
         cx.simulate_click(position, gpui::Modifiers::none());
@@ -1135,7 +1388,7 @@ mod tests {
         cx.simulate_resize(gpui::size(px(1020.0), px(1600.0)));
         cx.run_until_parked();
         crate::harness::click("tab-agent", cx);
-        crate::harness::click("agent-system-prompt", cx);
+        click_visible_control("agent-system-prompt", cx);
         cx.simulate_keystrokes("secondary-a");
         cx.simulate_input("二番も作る。");
         cx.simulate_keystrokes("enter");

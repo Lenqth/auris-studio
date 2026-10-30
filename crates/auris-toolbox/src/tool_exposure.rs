@@ -119,6 +119,7 @@ pub fn tool_group(name: &str) -> &'static str {
         | "import_midi"
         | "setup_tracks"
         | "add_track"
+        | "rename_project"
         | "rename_track"
         | "remove_track"
         | "set_instrument"

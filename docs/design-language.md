@@ -2,25 +2,27 @@
 
 Auris Studio uses the Atelier design language from `uthree/design-language`, pinned in
 `crates/auris-gpui/Cargo.toml` to revision
-`ae5b23ed61b23e6e0366c9aeaaae134c009da0c3`. The application selects Atelier's Glass direction and
+`b584b128658858fdd7917e003271dd35dadfd279`. The application selects Atelier's Glass direction and
 adapts its existing `Theme` through the `Theme::atelier` field, `Theme::install`, and
 `Theme::sync_atelier`. Existing Auris palette identifiers remain available while shared controls,
 agent surfaces, and the application shell read the corresponding Atelier tokens.
 
 At startup, `atelier::Assets::with_fallback` serves Atelier's embedded icon set first and then
-`ui::provider_logo::ProviderAssets`. The fallback contains the provider marks and Auris-specific
-24px SVGs for volume, mute, punch, notes, keyboard, and knob controls. The application icon files
+`ui::provider_logo::ProviderAssets`. The fallback contains the provider marks, the caption glyphs and
+the Auris-specific 24px SVGs for the [library's musical-family presets](timbre-map.md).
+These share Atelier's grid and stroke geometry and reach its `Icon` as an `IconSource::svg`;
+shared controls use Atelier's own marks. The application icon files
 in `crates/auris-gpui/assets/` are generated Atelier element-cell exports for Auris Studio (`Au`),
 including the editable, size-specific, symbolic, PNG, ICO, and ICNS forms. The redistributed
 canonical icon files carry the upstream Apache-2.0 text in `assets/ATELIER-LICENSE`.
 
-The editor transcript and song workshop share `ui::agent_components`: user messages, assistant
-messages, status and error notices, thinking indicators, the composer frame, its wrapping control
-lane, and keyboard-operable send/stop commands. The adapter keeps
+The editor transcript and song workshop share Atelier's native `UserMessage`, `AssistantMessage`,
+`SelectableText`, `CopyButton`, status notices, thinking indicators and `AudioPlayer` controls.
+The adapter keeps
 the existing Auris session state, editable fields, attachments, and permission handling in their
 own views while giving both workflows the same Atelier agent presentation primitives.
-An agent answer is drawn without Atelier's avatar-and-name line: a conversation has exactly two
-voices, the person's is the accent bubble on the trailing edge, and whatever is not in a bubble
+An agent answer is Atelier's `AssistantMessage::anonymous()`, without the avatar-and-name line:
+a conversation has exactly two voices, the person's is the accent bubble on the trailing edge, and whatever is not in a bubble
 is the agent. The agent itself is marked by Atelier's sparkle wherever it is opened, and the
 composer's fast mode is a single bolt.
 
@@ -35,11 +37,10 @@ selected track headers use the accent fill, clips use rounded coloured bodies an
 outlines, and the trailing agent dock opens at 380 px. Both conversation entry points share the
 same introductory state, message forms and inset composer. Saved dock widths remain intact.
 
-Every window's title bar is composed by `titlebar::composed` the way Atelier's `TitleBar` is:
-the title sits on the window's centre line with a short subtitle beside it, Back (or, in the
-editor, Undo and Redo) leads at the left, and nothing else sits in it. The two
-sides grow from bases that make up for the native traffic lights and caption buttons, so the
-title stays centred on the window rather than on whatever space the controls leave.
+Every window's title bar follows Atelier's native `TitleBar`: one slim row with the title on the
+window centre line, no subtitle, and only the frequent leading/trailing commands. Back (or, in the
+editor, Undo and Redo) leads at the left while the empty title-bar region remains a drag target.
+Native window controls keep platform caption and traffic-light behavior intact.
 
 The chooser is built from Atelier's own components, as in the upstream `auris_screens` example:
 a `Sidebar` of `ListItem`s (new, recent, and the setup guide at the foot), `OptionCard`s for how
@@ -52,8 +53,9 @@ of its own; a first run opens the chooser on it, and Settings brings it forward 
 window shows the chooser. Inactive windows hold a still frame of the metal, and Atelier's motion
 policy stills it entirely.
 
-Choosing "Create with AI" hands the panel over to the song workshop: for one `motion.normal` the
-metal stays mounted while a panel-coloured shape grows from the chooser panel to the whole body
+Choosing "AI workshop" hands the panel over to the song workshop: for one `motion.normal` the
+metal stays mounted while Atelier's `Morph` grows a panel-coloured shape from the chooser panel to
+the whole body
 and the workshop fades in over it; Back plays the same hand-over in reverse. The metal stays
 under the workshop too, behind a veil of the surface colour that the shape turns into as it
 arrives: thin while the conversation is empty, thicker once there is a transcript, and solid
@@ -67,10 +69,22 @@ beneath it with "Use my preferences" as a `Switch`.
 Settings and the singing-backend setup are preferences windows in one shape: a leading
 `Sidebar` names every page in full (the settings search sits at its head, the setup guide at its
 foot), and each page opens with a `SectionHeader` saying what it covers, on a surface at a
-reading width with its own actions and status underneath. Atelier has no form pattern yet, so
-fields follow its `TextField` metrics with the label above the field and groups under a
-section-weight heading. The rows are `ui::widgets::nav_item` rather than Atelier's `ListItem`,
-which is pointer-only, so every page stays in the Tab order.
+reading width with its own actions and status underneath. The navigation rows are Atelier's
+`ListItem`s, each a tab stop. The General page is built from `FormGroup`s of `FormField`s, with
+yes-or-no settings as a `Switch` beside its label, and the search sits in Atelier's `TextField`
+frame around Auris's own editable text.
+
+The form column uses Atelier's `density.form_width`, and each page reports the last operation in
+a native `StatusBar`; inline field errors remain beside the field that needs recovery.
+Agent connection fields form a draft: Apply and Revert are enabled only after an edit, and
+Revert restores those fields without changing the model or permission mode of a live conversation.
+
+The editor and song workshop keep a small application composer adapter built from Atelier tokens
+and components because those workflows combine queued-send state, simultaneous Send/Stop actions,
+MIDI editing, attachment management and workflow-specific completion controls. It is intentionally
+not a direct use of native `Composer`: the native slots cannot express those simultaneous domain
+states. The adapter preserves the same tone, notice, disabled and keyboard treatments while domain
+controls remain owned by their views.
 
 Toolbar icon buttons are Atelier ghost buttons: no fill or hairline until hovered, and filled
 with their signal colour when latched.

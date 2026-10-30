@@ -6,6 +6,7 @@ use crate::dock::{Dock, Panel};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Section {
     Agent,
+    Personalization,
     Appearance,
     Language,
     Pointer,
@@ -16,6 +17,7 @@ pub(super) enum Section {
     Singer,
     Panels,
     Toolbar,
+    Titlebar,
     Host,
     Output,
     Input,
@@ -25,8 +27,9 @@ pub(super) enum Section {
 }
 
 impl Section {
-    const ALL: [Self; 17] = [
+    const ALL: [Self; 19] = [
         Self::Agent,
+        Self::Personalization,
         Self::Appearance,
         Self::Language,
         Self::Pointer,
@@ -37,6 +40,7 @@ impl Section {
         Self::Singer,
         Self::Panels,
         Self::Toolbar,
+        Self::Titlebar,
         Self::Host,
         Self::Output,
         Self::Input,
@@ -48,6 +52,7 @@ impl Section {
     fn tab(self) -> SettingsTab {
         match self {
             Self::Agent => SettingsTab::Agent,
+            Self::Personalization => SettingsTab::Personalization,
             Self::Host | Self::Output | Self::Input | Self::Rate | Self::Buffer | Self::Export => {
                 SettingsTab::Audio
             }
@@ -57,6 +62,12 @@ impl Section {
 
     fn keys(self) -> &'static [Key] {
         match self {
+            Self::Personalization => &[
+                Key::PreferenceHeading,
+                Key::PreferenceHelp,
+                Key::WorkshopMemory,
+                Key::WorkshopForget,
+            ],
             Self::Agent => &[
                 Key::AgentPanel,
                 Key::AgentSystemPrompt,
@@ -72,10 +83,16 @@ impl Section {
                 Key::AgentKeyEnvLabel,
                 Key::AgentContextTokens,
                 Key::AgentOutputTokens,
+                Key::AgentToolCallLimit,
+                Key::AgentToolCallLimitHelp,
                 Key::AgentEffort,
             ],
             Self::Appearance => &[
                 Key::AppearanceHeading,
+                Key::GlassEffect,
+                Key::GlassEffectNote,
+                Key::ImportTheme,
+                Key::ImportThemeNote,
                 Key::UiFont,
                 Key::UiFontNote,
                 Key::ThemeName,
@@ -153,6 +170,20 @@ impl Section {
                 Key::CmdToggleCycle,
                 Key::CmdToggleMetronome,
             ],
+            Self::Titlebar => &[
+                Key::TitlebarMenusHeading,
+                Key::TitlebarMenusNote,
+                Key::TitlebarMenusNative,
+                Key::GroupFile,
+                Key::GroupEdit,
+                Key::GroupTrack,
+                Key::GroupCompose,
+                Key::GroupView,
+                Key::GroupTransport,
+                Key::MenuWindow,
+                Key::GroupAnalysis,
+                Key::GroupHelp,
+            ],
             Self::Output => &[Key::OutputDevice],
             Self::Input => &[Key::InputDevice, Key::InputDeviceNote, Key::AsioInputNote],
             Self::Rate => &[Key::SampleRate, Key::DeviceDefaultRate],
@@ -218,6 +249,7 @@ impl SettingsWindow {
             SettingsTab::General,
             SettingsTab::Audio,
             SettingsTab::Agent,
+            SettingsTab::Personalization,
             SettingsTab::Keys,
         ] {
             let found = if tab == SettingsTab::Keys {
@@ -233,6 +265,7 @@ impl SettingsWindow {
                 SettingsTab::Audio => Key::TabAudio,
                 SettingsTab::Keys => Key::TabKeys,
                 SettingsTab::Agent => Key::AgentPanel,
+                SettingsTab::Personalization => Key::PreferenceHeading,
             };
             rows.push(section_title(self.t(title), &self.theme));
             rows.push(match tab {
@@ -240,6 +273,7 @@ impl SettingsWindow {
                 SettingsTab::Audio => self.render_audio(cx),
                 SettingsTab::Keys => self.render_keys(cx),
                 SettingsTab::Agent => self.render_agent(cx),
+                SettingsTab::Personalization => self.render_personalization(cx),
             });
         }
         if rows.is_empty() {

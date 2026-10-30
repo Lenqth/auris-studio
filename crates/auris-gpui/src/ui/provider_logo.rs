@@ -6,36 +6,64 @@ use gpui::{AssetSource, Hsla, IntoElement, SharedString, div, prelude::*, svg};
 
 const MARKS: &[(&str, &[u8])] = &[
     (
-        "icons/auris-volume.svg",
-        include_bytes!("../../assets/icons/auris-volume.svg"),
+        "icons/menu.svg",
+        include_bytes!("../../assets/icons/menu.svg"),
     ),
     (
-        "icons/auris-volume-muted.svg",
-        include_bytes!("../../assets/icons/auris-volume-muted.svg"),
+        "icons/sound-sound.svg",
+        include_bytes!("../../assets/icons/sound-sound.svg"),
     ),
     (
-        "icons/auris-punch.svg",
-        include_bytes!("../../assets/icons/auris-punch.svg"),
+        "icons/sound-piano.svg",
+        include_bytes!("../../assets/icons/sound-piano.svg"),
     ),
     (
-        "icons/auris-notes.svg",
-        include_bytes!("../../assets/icons/auris-notes.svg"),
+        "icons/sound-organ.svg",
+        include_bytes!("../../assets/icons/sound-organ.svg"),
     ),
     (
-        "icons/auris-keyboard.svg",
-        include_bytes!("../../assets/icons/auris-keyboard.svg"),
+        "icons/sound-guitar.svg",
+        include_bytes!("../../assets/icons/sound-guitar.svg"),
     ),
     (
-        "icons/auris-knob.svg",
-        include_bytes!("../../assets/icons/auris-knob.svg"),
+        "icons/sound-bass.svg",
+        include_bytes!("../../assets/icons/sound-bass.svg"),
     ),
     (
-        "icons/auris-redo.svg",
-        include_bytes!("../../assets/icons/auris-redo.svg"),
+        "icons/sound-strings.svg",
+        include_bytes!("../../assets/icons/sound-strings.svg"),
     ),
     (
-        "icons/auris-bolt.svg",
-        include_bytes!("../../assets/icons/auris-bolt.svg"),
+        "icons/sound-brass.svg",
+        include_bytes!("../../assets/icons/sound-brass.svg"),
+    ),
+    (
+        "icons/sound-wind.svg",
+        include_bytes!("../../assets/icons/sound-wind.svg"),
+    ),
+    (
+        "icons/sound-drum.svg",
+        include_bytes!("../../assets/icons/sound-drum.svg"),
+    ),
+    (
+        "icons/sound-bell.svg",
+        include_bytes!("../../assets/icons/sound-bell.svg"),
+    ),
+    (
+        "icons/sound-voice.svg",
+        include_bytes!("../../assets/icons/sound-voice.svg"),
+    ),
+    (
+        "icons/sound-synth.svg",
+        include_bytes!("../../assets/icons/sound-synth.svg"),
+    ),
+    (
+        "icons/sound-pad.svg",
+        include_bytes!("../../assets/icons/sound-pad.svg"),
+    ),
+    (
+        "icons/sound-pluck.svg",
+        include_bytes!("../../assets/icons/sound-pluck.svg"),
     ),
     (
         "icons/caption-minimize.svg",
@@ -135,6 +163,29 @@ pub(crate) fn provider_logo(provider: &str, color: Hsla) -> impl IntoElement + u
 mod tests {
     use super::*;
 
+    #[test]
+    fn every_sound_family_has_a_distinct_embedded_svg() {
+        let paths: Vec<_> = auris_session::SoundIcon::ALL
+            .iter()
+            .copied()
+            .map(
+                |family| match crate::ui::icons::Icon::Sound(family).source() {
+                    atelier::IconSource::Svg(path) => path,
+                    other => {
+                        panic!("sound family {family:?} must use its embedded SVG, got {other:?}")
+                    }
+                },
+            )
+            .collect();
+        assert_eq!(
+            paths.iter().collect::<std::collections::HashSet<_>>().len(),
+            paths.len()
+        );
+        for path in paths {
+            assert!(ProviderAssets.load(&path).unwrap().is_some(), "{path}");
+        }
+    }
+
     #[gpui::test]
     fn embedded_provider_and_extension_icons_render_without_external_files(
         cx: &mut gpui::TestAppContext,
@@ -155,25 +206,6 @@ mod tests {
                     .any(|pixel| pixel[3] > 0),
                 "{path} is empty"
             );
-        }
-    }
-
-    #[test]
-    fn extension_icon_inventory_is_complete_and_unique() {
-        let paths: Vec<_> = MARKS
-            .iter()
-            .map(|(path, _)| *path)
-            .filter(|path| path.starts_with("icons/auris-"))
-            .collect();
-        assert_eq!(paths.len(), 8);
-        assert_eq!(
-            paths.iter().collect::<std::collections::HashSet<_>>().len(),
-            paths.len()
-        );
-        for path in paths {
-            let bytes = ProviderAssets.load(path).unwrap().unwrap();
-            assert!(bytes.starts_with(b"<svg"), "{path} is not an SVG asset");
-            assert!(bytes.windows(10).any(|window| window == b"width=\"24\""));
         }
     }
 

@@ -1,171 +1,225 @@
-//! Project identity and playback controls in the themed window title bar.
+//! Compact project navigation, history and menus; playback lives in the control bar below.
 
 use auris_i18n::Key;
-use gpui::{Context, IntoElement, Pixels, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, IntoElement, Pixels, Window, div, prelude::*, px};
 
 use crate::app::AurisApp;
-use crate::dock::Dock;
 use crate::titlebar;
 use crate::ui::icons::Icon;
-use crate::ui::prompt::PendingAction;
 use crate::ui::widgets::icon_button;
 
-/// Whether there is room beside playback and the native controls for the panel switches.
-///
-/// Smaller windows keep every switch in the status bar. The project name truncates first;
-/// playback and window controls always retain their full hit targets.
-pub(crate) fn panels_in_titlebar(width: Pixels) -> bool {
-    width >= px(1000.0)
-}
-
 impl AurisApp {
-    /// Draws the title bar, with playback above its readouts and panel switches to the right.
+    /// Draws project identity, the application menu and native window controls.
     pub(crate) fn render_title_bar(
         &self,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let theme = &self.theme;
-        let panels = panels_in_titlebar(window.viewport_size().width);
-        let controls_width = titlebar::controls_width(window);
         let controls = titlebar::controls(
             window,
             theme,
             cx.listener(|this, _, window, cx| {
-                if this.confirm_discard(PendingAction::CloseWindow) {
-                    this.save_window_placement();
-                    window.remove_window();
-                }
+                this.close_project_window(window, cx);
                 cx.notify();
             }),
         );
 
-        titlebar::titlebar(window, theme)
-            .child(
+        titlebar::bar(
+            window,
+            theme,
+            titlebar::Parts::new("project-title", self.document_title()).leading(
                 div()
                     .flex()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
                     .items_center()
-                    // Balance the native macOS buttons so playback remains on the same centre
-                    // line as the readouts below, regardless of which platform owns the frame.
-                    .pr(titlebar::traffic_light_inset(window))
+                    .gap_1()
+                    .child(self.render_application_menu_button(cx))
                     .child(
-                        div()
-                            .flex()
-                            .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .items_center()
-                            .child(self.render_history_buttons(cx))
-                            .child(
-                                titlebar::drag_region("project-title")
-                                    .flex_1()
-                                    .px_3()
-                                    .text_size(theme.atelier.typography.size_md)
-                                    .font_weight(theme.atelier.typography.label_weight)
-                                    .child(div().truncate().child(self.window_title())),
-                            ),
+                        atelier::Button::icon_only("editor-start", atelier::IconName::ChevronLeft)
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .tooltip(self.t(Key::BackToStart))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.show_editor_start(window, cx)
+                            })),
                     )
-                    .child(
-                        div()
-                            .debug_selector(|| "titlebar-transport".into())
-                            .flex()
-                            .flex_shrink_0()
-                            .items_center()
-                            .child(self.render_transport_buttons(cx)),
-                    )
-                    .child(
-                        div()
-                            .relative()
-                            .flex()
-                            .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .items_center()
-                            .child(
-                                div()
-                                    // Let panel switches use the balancing inset while the
-                                    // two flex columns keep playback centred in the window.
-                                    .absolute()
-                                    .left_0()
-                                    .right(-titlebar::traffic_light_inset(window))
-                                    .flex()
-                                    .h_full()
-                                    .items_center()
-                                    .pr(controls_width + px(8.0))
-                                    .child(
-                                        titlebar::drag_region("titlebar-space")
-                                            .flex_1()
-                                            .min_w(px(12.0)),
-                                    )
-                                    .when(panels, |bar| {
-                                        bar.children(Dock::ALL.into_iter().map(|dock| {
-                                            div().ml_1().child(self.dock_switches(
-                                                dock,
-                                                px(24.0),
-                                                cx,
-                                            ))
-                                        }))
-                                    }),
-                            ),
-                    ),
+                    .child(self.render_history_buttons(cx))
+                    .children(self.render_titlebar_menus(window, cx)),
+            ),
+            controls,
+        )
+    }
+
+    /// A single entry point to all application commands on Windows and Linux.
+    pub(crate) fn render_application_menu_button(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        div().when(Self::wants_menu_bar(), |slot| {
+            slot.child(
+                icon_button(
+                    "application-menu",
+                    Icon::Menu,
+                    self.menu_bar.is_some_and(|menu| !menu.from_titlebar),
+                    self.theme.accent,
+                    &self.theme,
+                    cx.listener(|_, _, window, cx| {
+                        window.dispatch_action(Box::new(crate::actions::OpenMenuBar), cx);
+                    }),
+                )
+                .tooltip(self.tip(Key::CmdOpenMenuBar, "view.menu_bar")),
             )
-            .child(
-                controls
-                    .absolute()
-                    .top(titlebar::resize_inset(window))
-                    .right_0()
-                    .h(titlebar::HEIGHT - titlebar::resize_inset(window) - px(1.0)),
-            )
+        })
     }
 }
 
 impl AurisApp {
-    /// Undo and Redo at the leading edge of the title bar, where Back sits on the other screens.
-    ///
-    /// They are the commands people reach for most often after playback, and the menu bar is a
-    /// long way from the canvas. Each is disabled while there is nothing to step over, and its
-    /// tooltip carries the key so the button teaches the shortcut.
-    fn render_history_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    /// Measured menu shortcuts that fit beside navigation, title and native window controls.
+    /// Remaining categories stay available in the application menu.
+    pub(crate) fn titlebar_menu_layout(
+        &self,
+        window: &Window,
+    ) -> Vec<(usize, gpui::SharedString, Pixels)> {
+        if !Self::wants_menu_bar() {
+            return Vec::new();
+        }
+        let spacing = self.theme.atelier.spacing;
+        let reserved = titlebar::controls_width(window)
+            + spacing.md * 2.0
+            + self.theme.atelier.density.control_sm * 4.0
+            + spacing.sm * 2.0
+            + spacing.xxl * 4.0;
+        let mut available = (window.viewport_size().width - reserved).max(px(0.0));
+        let mut visible = Vec::new();
+        for (index, section) in self.menu_model().into_iter().enumerate() {
+            if !section.category.is_some_and(|category| {
+                self.appearance
+                    .titlebar_menus
+                    .iter()
+                    .any(|id| id == category.id())
+            }) {
+                continue;
+            }
+            let width = super::paint::measure_label(
+                window,
+                section.name.clone(),
+                self.theme.atelier.typography.size_sm,
+            ) + spacing.sm * 2.0;
+            if width + spacing.xs > available {
+                break;
+            }
+            available -= width + spacing.xs;
+            visible.push((index, section.name, width));
+        }
+        visible
+    }
+
+    fn render_titlebar_menus(&self, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let layout = self.titlebar_menu_layout(window);
+        self.menu_title_bounds
+            .borrow_mut()
+            .retain(|index, _| layout.iter().any(|(shown, _, _)| index == shown));
+        layout
+            .into_iter()
+            .map(|(index, label, width)| {
+                let bounds = self.menu_title_bounds.clone();
+                let open = self
+                    .menu_bar
+                    .is_some_and(|menu| menu.from_titlebar && menu.index == index);
+                div()
+                    .relative()
+                    .w(width)
+                    .flex_shrink_0()
+                    .on_mouse_move(cx.listener(move |this, _: &gpui::MouseMoveEvent, _, cx| {
+                        if let Some(menu) = this.menu_bar
+                            && (menu.index != index || !menu.from_titlebar)
+                        {
+                            this.set_menu_bar(Some(super::menu_bar::OpenMenu {
+                                index,
+                                from_titlebar: true,
+                                clicked: false,
+                                highlighted: None,
+                            }));
+                            cx.notify();
+                        }
+                    }))
+                    .child(
+                        atelier::Button::new(("titlebar-menu", index), label)
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .radius(self.theme.atelier.shape.radius_sm)
+                            .full_width()
+                            .selected(open)
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                let close = this.menu_bar.is_some_and(|menu| {
+                                    menu.index == index && menu.from_titlebar && menu.clicked
+                                });
+                                this.menu = None;
+                                if !close && this.menu_focus_return.is_none() {
+                                    this.menu_focus_return = window.focused(cx);
+                                }
+                                this.set_menu_bar((!close).then_some(super::menu_bar::OpenMenu {
+                                    from_titlebar: true,
+                                    ..super::menu_bar::OpenMenu::at(index)
+                                }));
+                                if !close {
+                                    window.focus(&this.menu_focus);
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        gpui::canvas(
+                            move |painted, _, _| {
+                                bounds.borrow_mut().insert(index, painted);
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
+                    )
+                    .into_any_element()
+            })
+            .collect()
+    }
+
+    /// Undo and Redo in the title bar, beside project navigation.
+    pub(crate) fn render_history_buttons(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let theme = &self.theme;
         let step = |id: &'static str, glyph: Icon, enabled: bool, label, command| {
-            icon_button(
-                id,
-                glyph,
-                false,
-                theme.accent,
-                theme,
-                cx.listener(move |this, _, _, cx| {
+            let shortcut = self.keystroke_for(command);
+            atelier::Button::icon_only(id, glyph.source())
+                .ghost()
+                .size(atelier::ControlSize::Small)
+                .disabled(!enabled)
+                .tooltip(format!("{} · {shortcut}", self.t(label)))
+                .on_click(cx.listener(move |this, _, _, cx| {
                     if glyph == Icon::Undo {
                         this.undo();
                     } else {
                         this.redo();
                     }
                     cx.notify();
-                }),
-            )
-            .size(theme.atelier.density.control_sm)
-            .when(!enabled, |button| button.opacity(0.45))
-            .tooltip(self.tip(label, command))
+                }))
         };
         div()
-            .debug_selector(|| "titlebar-history".into())
+            .debug_selector(|| "editing-history".into())
             .flex()
             .flex_shrink_0()
             .items_center()
             .gap(theme.atelier.spacing.xxs)
-            .pl(theme.atelier.spacing.sm)
             .child(step(
-                "titlebar-undo",
+                "editing-undo",
                 Icon::Undo,
                 self.session.can_undo(),
                 Key::CmdUndo,
                 "edit.undo",
             ))
             .child(step(
-                "titlebar-redo",
+                "editing-redo",
                 Icon::Redo,
                 self.session.can_redo(),
                 Key::CmdRedo,
@@ -182,23 +236,67 @@ mod tests {
     use crate::harness::{click, open, paint, resize, with_a_clip};
 
     #[gpui::test]
-    fn titlebar_controls_still_change_the_document_and_relocate_panels(cx: &mut TestAppContext) {
+    fn start_button_keeps_unsaved_work_and_escape_resumes_it(cx: &mut TestAppContext) {
+        let (app, cx, _, clip) = with_a_clip(cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        click("editor-start", cx);
+        paint(&app, cx);
+        assert!(cx.debug_bounds("project-chooser").is_some());
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.project(), &before);
+            assert!(this.project().midi_clip(clip).is_some());
+            assert!(this.session.is_dirty());
+        });
+        cx.simulate_keystrokes("escape");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.project_chooser.is_none());
+            assert_eq!(this.project(), &before);
+        });
+        click("editor-start", cx);
+        paint(&app, cx);
+        click("chooser-close", cx);
+        app.read_with(cx, |this, _| assert!(this.project_chooser.is_none()));
+    }
+
+    #[gpui::test]
+    fn creating_from_the_returned_start_screen_asks_before_replacing_unsaved_work(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, _, _) = with_a_clip(cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        click("editor-start", cx);
+        paint(&app, cx);
+        click("chooser-confirm", cx);
+        paint(&app, cx);
+        assert!(cx.debug_bounds("prompt-cancel").is_some());
+        click("prompt-cancel", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.project_chooser.is_none());
+            assert_eq!(this.project(), &before);
+        });
+    }
+
+    #[gpui::test]
+    fn playback_and_panel_switches_stay_outside_the_titlebar(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.document_title(), "Untitled");
+            assert!(this.window_title().contains("Auris Studio"));
+        });
         for width in [1360.0, 640.0, 1100.0] {
             resize(&app, cx, size(px(width), px(700.0)));
-            let transport = cx.debug_bounds("titlebar-transport").unwrap();
-            assert_eq!(transport.center().x, px(width / 2.0));
-            if let Some(minimize) = cx.debug_bounds("window-minimize") {
-                assert!(transport.right() <= minimize.left());
-            }
-            if super::panels_in_titlebar(px(width)) {
-                // The agent is the last switch in the default right dock.
-                let rightmost = cx.debug_bounds("panel-switch-5").unwrap().right();
-                let controls_left = cx
-                    .debug_bounds("window-minimize")
-                    .map_or(px(width), |bounds| bounds.left());
-                assert_eq!(rightmost, controls_left - px(8.0));
-            }
+            let title = cx.debug_bounds("project-title").unwrap();
+            // Native title bars keep the title centred until side controls need the room; once
+            // they do, Atelier shifts it away rather than letting it overlap a control.
+            assert!(title.left() >= px(0.0) && title.right() <= px(width));
+            let history = cx.debug_bounds("editing-history").unwrap();
+            assert!(history.top() >= px(0.0) && history.bottom() <= crate::titlebar::HEIGHT);
+            let transport = cx.debug_bounds("transport-buttons").unwrap();
+            assert!(transport.top() >= crate::titlebar::HEIGHT);
+            let panels = cx.debug_bounds("panel-switch-5").unwrap();
+            assert!(panels.top() > transport.bottom());
+            assert!(panels.right() <= px(width));
             let looping = app.read_with(cx, |this, _| this.project().loop_enabled);
             click("loop", cx);
             app.read_with(cx, |this, _| {
@@ -211,6 +309,85 @@ mod tests {
                 assert_eq!(this.panels.is_open(Panel::Mixer), !open)
             });
             paint(&app, cx);
+        }
+    }
+
+    #[gpui::test]
+    fn pinned_menu_categories_open_locally_and_keyboard_navigation_stays_with_them(
+        cx: &mut TestAppContext,
+    ) {
+        if !crate::app::AurisApp::wants_menu_bar() {
+            return;
+        }
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.appearance.titlebar_menus = crate::appearance::Appearance::default().titlebar_menus
+        });
+        resize(&app, cx, size(px(1360.), px(700.)));
+        for index in [0, 1, 4] {
+            let selector: &'static str =
+                Box::leak(format!("titlebar-menu-{index}").into_boxed_str());
+            let button = cx.debug_bounds(selector).unwrap();
+            assert!(button.bottom() <= crate::titlebar::HEIGHT);
+        }
+        click("titlebar-menu-0", cx);
+        paint(&app, cx);
+        let popup = cx.debug_bounds("titlebar-menu-panel").unwrap();
+        assert!(popup.top() >= crate::titlebar::HEIGHT);
+        assert!(
+            (popup.left() - cx.debug_bounds("titlebar-menu-0").unwrap().left()).abs() <= px(1.)
+        );
+        for index in [1, 4, 0] {
+            cx.simulate_keystrokes("right");
+            paint(&app, cx);
+            app.read_with(cx, |this, _| {
+                let menu = this.menu_bar.unwrap();
+                assert_eq!(menu.index, index);
+                assert!(menu.from_titlebar);
+            });
+        }
+        let return_focus = app.read_with(cx, |this, _| this.menu_focus_return.clone().unwrap());
+        cx.simulate_keystrokes("escape");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.menu_bar.is_none()));
+        cx.update(|window, _| assert!(return_focus.is_focused(window)));
+        click("titlebar-menu-4", cx);
+        cx.simulate_keystrokes("down enter");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.palette.is_some()));
+    }
+
+    #[gpui::test]
+    fn all_pinned_categories_yield_to_the_title_and_keep_the_full_menu_accessible(
+        cx: &mut TestAppContext,
+    ) {
+        if !crate::app::AurisApp::wants_menu_bar() {
+            return;
+        }
+        let (app, cx) = open(cx);
+        app.update(cx, |this, _| {
+            this.appearance.titlebar_menus = crate::menu::MenuCategory::ALL
+                .iter()
+                .map(|category| category.id().to_owned())
+                .collect()
+        });
+        for width in [1360., 640., 480.] {
+            resize(&app, cx, size(px(width), px(700.)));
+            let shown = cx.update(|window, cx| {
+                app.read_with(cx, |this, _| this.titlebar_menu_layout(window))
+            });
+            let title = cx.debug_bounds("project-title").unwrap();
+            for (index, _, _) in shown {
+                let selector: &'static str =
+                    Box::leak(format!("titlebar-menu-{index}").into_boxed_str());
+                let button = cx.debug_bounds(selector).unwrap();
+                assert!(button.right() <= title.left());
+            }
+            assert!(cx.debug_bounds("editing-redo").unwrap().right() <= title.left());
+            click("application-menu", cx);
+            paint(&app, cx);
+            assert!(cx.debug_bounds("application-menu-panel").is_some());
+            cx.simulate_keystrokes("escape");
         }
     }
 

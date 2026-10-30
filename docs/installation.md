@@ -8,8 +8,9 @@ and portable archives. Desktop releases contain the application, the `auris` CLI
 contain the CLI and dictionary. Built-in physical instruments do not require a separate sound
 library.
 
-Installer-backed desktop apps check for updates shortly after launch and every six hours while
-open. When a newer release has an installer for the current platform, Auris Studio downloads it
+Desktop apps check for updates shortly after launch and every six hours while open. The start
+screen shows available releases, download progress and a restart action when an update is ready.
+When a newer release has an installer for the current installed app, Auris Studio downloads it
 in the background and checks its size and SHA-256 digest against the release metadata. Choose
 **Restart and Update** when prompted, or leave the downloaded update ready for the next normal
 quit. The update helper applies it after Auris Studio exits. Turn background updates off under
@@ -68,6 +69,36 @@ required.
 
 Extract `auris-v<version>-linux-x86_64.tar.gz` and keep `auris` beside its `Dictionary`
 directory. Linux releases do not include the desktop application or MCP server.
+
+## Building and installing from source
+
+Install Rust 1.95 or newer and Git, then complete the prerequisites for your OS in
+[Development](development.md#building-on-each-platform). Clone the repository and run the desktop:
+
+```sh
+git clone https://github.com/uthree/auris-studio.git
+cd auris-studio
+cargo run --release
+```
+
+On macOS and Windows, install the desktop, CLI and MCP executables with Cargo from the
+repository root:
+
+```sh
+cargo install --locked --path crates/auris-gpui
+cargo install --locked --path crates/auris-cli
+cargo install --locked --path crates/auris-mcp
+```
+
+For a CLI-only installation, including on Linux, run only the `auris-cli` command above.
+Cargo builds release binaries and installs them in its bin directory (by default
+`~/.cargo/bin`, or `%USERPROFILE%\.cargo\bin` on Windows). With that directory on `PATH`,
+run `auris-studio`, `auris help`, or `auris-mcp`. This installs executables; it does not create
+an app bundle or OS shortcuts. To update, pull the desired source revision and repeat the
+install commands.
+
+Cargo does not install the Japanese lyrics dictionary. Follow the dictionary setup in
+[Development](development.md#building-on-each-platform) if you use kanji lyrics.
 
 ## Building the installers
 

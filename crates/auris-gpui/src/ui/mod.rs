@@ -4,6 +4,8 @@
 //! gpui entities: one owner is simpler than synchronising the shared project and engine state.
 //! [`tooltip`] owns GPUI tooltip lifetimes. [`reference_piano_roll`] hosts the same note editor
 //! on an independent session, keeping conversational references outside the song.
+//! Self-contained controls such as [`reasoning_picker`] own transient focus and presentation
+//! state, while conversation preferences and the document stay with the application.
 
 pub mod agent_chat;
 pub(crate) mod agent_components;
@@ -15,9 +17,6 @@ pub(crate) mod audio_player;
 pub mod automation;
 pub(crate) mod chat_commands;
 pub mod commands;
-mod compose_job;
-pub(crate) mod compose_progress;
-pub mod compose_sheet;
 pub mod context_menu;
 mod convert;
 #[cfg(test)]
@@ -50,6 +49,7 @@ mod portrait_image;
 pub(crate) mod project_chooser;
 pub mod prompt;
 pub(crate) mod provider_logo;
+pub(crate) mod reasoning_picker;
 pub(crate) mod reference_piano_roll;
 pub(crate) mod rhythm_grid;
 pub mod root;
@@ -58,7 +58,6 @@ pub mod scrollbars;
 pub mod selection;
 pub mod singer;
 pub(crate) mod singer_portrait;
-pub(crate) mod song_search;
 pub(crate) mod song_workshop;
 pub(crate) mod spectrogram;
 pub mod status_bar;

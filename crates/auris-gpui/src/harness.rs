@@ -102,6 +102,21 @@ fn configuration_root_in(parent: &std::path::Path) -> std::path::PathBuf {
         .keep()
 }
 
+/// Opens the native window's tab container with the same isolated configuration as other tests.
+pub(crate) fn open_tabs(
+    cx: &mut TestAppContext,
+) -> (
+    Entity<crate::project_tabs::ProjectTabs>,
+    &mut VisualTestContext,
+) {
+    isolate_config();
+    cx.update(gpui_component::init);
+    cx.update(crate::project_windows::install);
+    let (tabs, cx) = cx.add_window_view(crate::project_tabs::ProjectTabs::new);
+    cx.run_until_parked();
+    (tabs, cx)
+}
+
 /// Opens the application in a test window, as `main` opens it in a real one.
 pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<AurisApp>, &mut VisualTestContext) {
     isolate_config();
@@ -556,142 +571,13 @@ mod tests {
         });
     }
 
-    /// The song sheet takes words per section — in the lyrics boxes standing beside the form,
-    /// no popup anywhere — and a piece written from it arrives singing them. Return breaks a
-    /// line rather than committing, because in these boxes a line is a phrase.
-    #[gpui::test]
-    fn the_song_sheet_takes_words_per_section_and_the_piece_sings_them(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        cx.dispatch_action(actions::ComposeSong);
-        paint(&app, cx);
-
-        app.update(cx, |this, _| {
-            assert!(this.song_sheet.is_some(), "the sheet opened");
-            // A tiny song, so the write below is a moment rather than a minute.
-            if let Some(dials) = this.song_sheet.as_mut() {
-                dials.sections.truncate(1);
-                dials.sections[0].bars = 2;
-                dials.form = vec![dials.sections[0].name.clone()];
-            }
-            this.focus_section_lyrics(0);
-            assert!(this.lyrics_edit.is_some(), "the box took the keyboard");
-        });
-        paint(&app, cx);
-        cx.simulate_input("さくら");
-        cx.simulate_keystrokes("enter");
-        cx.simulate_input("さいた");
-        paint(&app, cx);
-        cx.simulate_keystrokes("escape");
-        paint(&app, cx);
-
-        app.update(cx, |this, _| {
-            assert!(this.lyrics_edit.is_none(), "escape put the keyboard down");
-            assert!(
-                this.song_sheet.is_some(),
-                "and the song sheet stayed up — the words are on it, not over it"
-            );
-            let dials = this.song_sheet.as_ref().unwrap();
-            assert_eq!(
-                dials.sections[0].lyrics, "さくら\nさいた",
-                "every keystroke landed on the dials, the line break included"
-            );
-
-            let spec = crate::ui::compose_sheet::song_spec(dials);
-            assert!(spec.to_toml().contains("さくら"), "and the file would too");
-            let piece = auris_session::prelude::compose(&spec);
-            let report = this.session.compose(&piece).unwrap();
-            assert_eq!(report.sung, 6, "six moras reached the song");
-            assert!(
-                this.session
-                    .project()
-                    .tracks
-                    .iter()
-                    .any(|track| track.kind.is_singer()),
-                "on a vocal track of their own"
-            );
-        });
-    }
-
-    /// Tab walks the lyrics boxes from section to section, and each keeps the words it was
-    /// given — a verse is usually followed by writing the chorus, without touching the mouse.
-    #[gpui::test]
-    fn tab_walks_the_lyrics_boxes_from_verse_to_chorus(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        cx.dispatch_action(actions::ComposeSong);
-        paint(&app, cx);
-
-        app.update(cx, |this, _| {
-            let dials = this.song_sheet.as_mut().expect("the song sheet is open");
-            dials.sections.truncate(2);
-            // The chorus twice, so the walk also proves a repeated section is one stop.
-            dials.form = vec![
-                dials.sections[0].name.clone(),
-                dials.sections[1].name.clone(),
-                dials.sections[1].name.clone(),
-            ];
-            this.focus_section_lyrics(0);
-        });
-        paint(&app, cx);
-        cx.simulate_input("ひらり");
-        cx.simulate_keystrokes("tab");
-        paint(&app, cx);
-        cx.simulate_input("はらり");
-        cx.simulate_keystrokes("tab");
-        paint(&app, cx);
-
-        app.update(cx, |this, _| {
-            let dials = this.song_sheet.as_ref().unwrap();
-            assert_eq!(dials.sections[0].lyrics, "ひらり");
-            assert_eq!(dials.sections[1].lyrics, "はらり");
-            assert_eq!(
-                this.lyrics_edit.as_ref().map(|edit| edit.section.as_str()),
-                Some(dials.sections[0].name.as_str()),
-                "two stops on the walk, however often the chorus plays: it wrapped"
-            );
-        });
-    }
-
-    /// Editing follows a section by name while form changes rebuild and reorder section storage.
-    #[gpui::test]
-    fn lyrics_edit_stays_with_its_section_when_the_form_reorders(cx: &mut TestAppContext) {
-        let (app, cx) = open(cx);
-        cx.dispatch_action(actions::ComposeSong);
-        paint(&app, cx);
-
-        let edited = app.update(cx, |this, _| {
-            let dials = this.song_sheet.as_ref().expect("the song sheet is open");
-            let edited = dials.sections[1].name.clone();
-            this.focus_section_lyrics(1);
-            let dials = this.song_sheet.as_mut().expect("the song sheet is open");
-            crate::ui::compose_sheet::add_to_form(dials, 0, "bridge");
-            assert_ne!(dials.sections[1].name, edited, "the raw index moved");
-            edited
-        });
-        paint(&app, cx);
-        cx.simulate_input("ことば");
-
-        app.read_with(cx, |this, _| {
-            let dials = this.song_sheet.as_ref().unwrap();
-            let section = dials
-                .sections
-                .iter()
-                .find(|section| section.name == edited)
-                .expect("the edited section remains in the form");
-            assert_eq!(section.lyrics, "ことば");
-            assert_eq!(
-                dials.sections[1].lyrics, "",
-                "the section that inherited the old index was not overwritten"
-            );
-        });
-    }
-
     /// A voice clicked on the shelf with no singer track anywhere refuses with the line
     /// naming the cure, exactly as the file picker does.
     #[gpui::test]
     fn a_shelf_voice_needs_a_singer_track(cx: &mut TestAppContext) {
         let (app, cx) = open(cx);
         app.update(cx, |this, cx| {
-            this.set_track_voice(std::path::PathBuf::from("/nowhere/voice.onnx"), cx);
+            this.set_track_voice(std::path::PathBuf::from("/nowhere/voice.onnx"), None, cx);
             assert!(
                 this.status
                     .contains(auris_i18n::Key::ErrorNoSingerTrack.get(this.language())),
@@ -881,6 +767,9 @@ mod tests {
             // for asynchronous conversation-store initialization.
             this.panels.show(crate::dock::Panel::Agent);
             this.settings.agent = Default::default();
+            // This form test must enqueue before networking. Ollama's startup preflight can
+            // fail on the deliberately closed endpoint before the first message is sent.
+            this.settings.agent.provider = "openai".into();
             this.settings.agent.url = "http://127.0.0.1:1".into();
             this.agent_chat.configuring = true;
             let prefs = this.settings.agent.clone();

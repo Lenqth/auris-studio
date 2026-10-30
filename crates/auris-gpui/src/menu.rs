@@ -79,10 +79,80 @@ pub enum MenuRow {
 
 /// One menu on the bar.
 pub struct MenuSection {
+    /// Stable identity for configurable title-bar shortcuts; the macOS application menu has none.
+    pub category: Option<MenuCategory>,
     /// Title shown on the bar.
     pub name: SharedString,
     /// The rows, in order.
     pub rows: Vec<MenuRow>,
+}
+
+/// Categories that can be shown directly in the editor title bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuCategory {
+    /// Project files and import/export.
+    File,
+    /// Selection and musical editing.
+    Edit,
+    /// Track commands.
+    Track,
+    /// Accompaniment and level balancing.
+    Compose,
+    /// Panels, lanes and command search.
+    View,
+    /// Playback and recording.
+    Transport,
+    /// Auxiliary windows and project tabs.
+    Window,
+    /// Music and audio analysis.
+    Analysis,
+    /// Documentation and application information.
+    Help,
+}
+
+impl MenuCategory {
+    /// Categories in their conventional menu order.
+    pub const ALL: [Self; 9] = [
+        Self::File,
+        Self::Edit,
+        Self::Track,
+        Self::Compose,
+        Self::View,
+        Self::Transport,
+        Self::Window,
+        Self::Analysis,
+        Self::Help,
+    ];
+
+    /// Stable preference identifier, independent of language and platform menu offsets.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Edit => "edit",
+            Self::Track => "track",
+            Self::Compose => "compose",
+            Self::View => "view",
+            Self::Transport => "transport",
+            Self::Window => "window",
+            Self::Analysis => "analysis",
+            Self::Help => "help",
+        }
+    }
+
+    /// Localized category title.
+    pub fn label(self) -> Key {
+        match self {
+            Self::File => Key::GroupFile,
+            Self::Edit => Key::GroupEdit,
+            Self::Track => Key::GroupTrack,
+            Self::Compose => Key::GroupCompose,
+            Self::View => Key::GroupView,
+            Self::Transport => Key::GroupTransport,
+            Self::Window => Key::MenuWindow,
+            Self::Analysis => Key::GroupAnalysis,
+            Self::Help => Key::GroupHelp,
+        }
+    }
 }
 
 /// A command row: always available, never ticked.
@@ -135,6 +205,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     if cfg!(target_os = "macos") {
         sections.push(MenuSection {
             // The application's own name is not translated — it is what the bundle is called.
+            category: None,
             name: "Auris Studio".into(),
             rows: vec![
                 command(
@@ -159,6 +230,11 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
             t(Key::MenuOpenProjectItem),
             actions::OpenProject,
             "file.open",
+        ),
+        command(
+            t(Key::CmdCloseTab),
+            actions::CloseProjectTab,
+            "file.close_tab",
         ),
         MenuRow::Separator,
         command(t(Key::CmdSave), actions::SaveProject, "file.save"),
@@ -232,11 +308,13 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         file.push(command(t(Key::MenuQuitApp), actions::Quit, "file.quit"));
     }
     sections.push(MenuSection {
+        category: Some(MenuCategory::File),
         name: t(Key::GroupFile),
         rows: file,
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Edit),
         name: t(Key::GroupEdit),
         rows: vec![
             command_if(state.can_undo, t(Key::CmdUndo), actions::Undo, "edit.undo"),
@@ -365,6 +443,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Track),
         name: t(Key::GroupTrack),
         rows: vec![
             command(
@@ -436,32 +515,15 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         ],
     });
 
-    // A menu of its own, and named for what it does rather than for how it is fed. Composing was
-    // one row in the middle of File, between Open Project and Save, carrying the label of the
-    // *specification file* route — so the sheet, which is the way in that needs no file at all,
-    // was announced as "Compose from Specification…" and the file route was in no menu whatever.
-    // Nobody who had not been told was going to find either.
     sections.push(MenuSection {
+        category: Some(MenuCategory::Compose),
         name: t(Key::GroupCompose),
         rows: vec![
-            command(t(Key::CmdComposeSong), actions::ComposeSong, "file.compose"),
-            command(
-                t(Key::CmdComposeFromSpec),
-                actions::ComposeFromSpec,
-                "file.compose_spec",
-            ),
-            MenuRow::Separator,
-            // Under the same heading and below a rule, because it is the composer pointed the
-            // other way: the two above replace the document with a piece, and this one writes
-            // parts around a piece of it that is already there.
             command(
                 t(Key::CmdAccompanyMelody),
                 actions::AccompanyMelody,
                 "file.accompany",
             ),
-            // With the composer rather than with the mixer, because this is what composing already
-            // does at the end of every piece — the row is here for the piece that was written
-            // before it existed, and for the one whose instruments have been changed since.
             command(
                 t(Key::CmdBalanceLevels),
                 actions::BalanceLevels,
@@ -473,6 +535,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     // The palette leads, because a menu is where somebody who does not know it exists will find
     // it — and once it is open, everything below is reachable by typing its name instead.
     sections.push(MenuSection {
+        category: Some(MenuCategory::View),
         name: t(Key::GroupView),
         rows: vec![
             command(
@@ -567,6 +630,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Transport),
         name: t(Key::GroupTransport),
         rows: vec![
             // Play is not ticked, though it is as much a switch as the rest: the transport bar
@@ -640,6 +704,7 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Window),
         name: t(Key::MenuWindow),
         rows: Panel::ALL
             .into_iter()
@@ -651,15 +716,25 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                     panels.is_detached(panel),
                 )
             })
-            .chain([command(
-                t(Key::VisualizerTitle),
-                actions::ToggleVisualizer,
-                "visualizer.toggle",
-            )])
+            .chain([
+                command(
+                    t(Key::VisualizerTitle),
+                    actions::ToggleVisualizer,
+                    "visualizer.toggle",
+                ),
+                MenuRow::Separator,
+                command(t(Key::CmdNextTab), actions::NextProjectTab, "view.next_tab"),
+                command(
+                    t(Key::CmdPreviousTab),
+                    actions::PreviousProjectTab,
+                    "view.previous_tab",
+                ),
+            ])
             .collect(),
     });
 
     sections.push(MenuSection {
+        category: Some(MenuCategory::Analysis),
         name: t(Key::GroupAnalysis),
         rows: vec![
             command(
@@ -697,8 +772,14 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
         ],
     });
     sections.push(MenuSection {
+        category: Some(MenuCategory::Help),
         name: t(Key::GroupHelp),
         rows: vec![
+            command(
+                t(Key::IssueReport),
+                actions::ReportProblem,
+                "help.report_problem",
+            ),
             command(
                 t(Key::CmdCheckForUpdates),
                 actions::CheckForUpdates,
@@ -959,6 +1040,7 @@ mod tests {
         assert_eq!(
             labels,
             [
+                Key::IssueReport.get(Language::English),
                 Key::CmdCheckForUpdates.get(Language::English),
                 Key::CmdAbout.get(Language::English),
             ]
@@ -966,33 +1048,26 @@ mod tests {
     }
 
     #[test]
-    fn both_ways_into_the_composer_are_in_a_menu_of_their_own() {
-        // `Session::compose` was written with the composer and the desktop application never
-        // called it, so the whole feature existed only for `auris compose`. Then it was one row
-        // in File — carrying the label of the specification-file route, while dispatching the
-        // song sheet, and with the file route itself in no menu at all. Both are named for what
-        // they are now, under a heading somebody looking for the composer would open.
+    fn composition_menu_exposes_accompaniment_and_mix_balance() {
         let compose = plain(Language::English)
             .into_iter()
             .find(|section| section.name == Key::GroupCompose.get(Language::English))
-            .expect("composing has a menu of its own");
-        let labels: Vec<String> = compose
+            .expect("Compose menu");
+        let labels: Vec<_> = compose
             .rows
             .iter()
             .filter_map(|row| match row {
-                MenuRow::Command { label, .. } => Some(label.to_string()),
+                MenuRow::Command { label, .. } => Some(label.as_ref()),
                 _ => None,
             })
             .collect();
-        for expected in [
-            Key::CmdComposeSong.get(Language::English),
-            Key::CmdComposeFromSpec.get(Language::English),
-        ] {
-            assert!(
-                labels.iter().any(|label| label == expected),
-                "`{expected}` is not in the Compose menu"
-            );
-        }
+        assert_eq!(
+            labels,
+            [
+                Key::CmdAccompanyMelody.get(Language::English),
+                Key::CmdBalanceLevels.get(Language::English),
+            ]
+        );
     }
 
     #[test]

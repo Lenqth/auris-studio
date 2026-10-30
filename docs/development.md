@@ -201,6 +201,17 @@ of the system cannot drift away from the system without the build saying so.
 
 ## Testing the window
 
+Project tabs retain independent `AurisApp` entities inside `ProjectTabs`, the native window's
+root view. Each document keeps its session, Undo history, selection, chat and background jobs.
+Only the selected document is painted. The tab strip uses the shared themed buttons and scrolls
+horizontally; Ctrl+Tab and Ctrl+Shift+Tab cycle tabs, and Command+W on macOS or Ctrl+W elsewhere
+closes the current tab. New Project opens another start screen in the same window. Opening an
+already-open project selects its existing tab. Window close checks every tab's unsaved changes;
+application quit checks every document across all windows. Approval is tied to a document's
+revision and is rechecked after asynchronous saves. Tab selection releases held preview notes
+but does not transfer realtime audio; explicit audio commands do that, and recording blocks
+transfer. `harness::open_tabs` exercises the complete container with isolated preferences.
+
 The Window menu switches each dock panel between the main window and a separate native window.
 The layout file preserves that choice, visibility and the return dock. Closing a detached panel
 hides it; the View menu reopens it, and clearing its Window-menu check returns it to its dock.
@@ -226,8 +237,14 @@ handlers cannot prevent the native window-move action.
 
 The layout takes its project identity from [Zed's title bar](https://github.com/zed-industries/zed/blob/main/crates/title_bar/src/title_bar.rs)
 and its centered transport readouts from [Logic Pro's control bar](https://support.apple.com/en-euro/guide/logicpro/lgcp5bdd6d9d/mac).
-When changing the title-bar height, include it in `AurisApp::chrome_height` so dock sizing and
-initial timeline coordinates agree with the view tree. Check native dragging, resizing and
+The title bar holds project identity and the application-menu trigger. Playback and its
+readouts share one inset surface in the control bar; editing controls and meters use a second
+row in narrow windows.
+Panel switches stay at the bottom edge, with labels when space permits. On Windows and Linux,
+the application menu opens as an overlay from its trigger or F10. Arrow keys navigate it and
+Escape returns focus to the invoking control. macOS retains the system menu bar.
+Keep both title-bar and responsive transport heights in `AurisApp::chrome_height` so dock sizing
+and initial timeline coordinates agree with the view tree. Check native dragging, resizing and
 window controls on each platform; the headless harness exercises the application controls.
 
 `crates/auris-gpui/src/harness.rs` opens the whole application in a window with no display, no

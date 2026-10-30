@@ -1,4 +1,26 @@
 //! How Auris Studio fits together.
+//!
+//! # Issue drafts and disclosure consent
+//!
+//! [`crate::issue_report::Draft`] is ephemeral and excludes application logs, user prompts and
+//! musical preference evidence until the person approves each exact local excerpt. Consent
+//! is scoped to one draft, never persisted in settings, and cannot be granted by a model or
+//! permission-bypass mode. Editing or removing a private excerpt revokes its approval and
+//! invalidates any derived AI assessment. The desktop snapshots this launch's bounded logs,
+//! the current chat/selected song conversation, and recent preference evidence; it does not
+//! attach project files or audio. Local redaction is best-effort, so review remains necessary.
+//!
+//! `suggest_issue_report` returns only an optional invitation, after distinguishing application
+//! limitations from missing agent tools, configuration, denied permissions and transient errors.
+//! The desktop opens it only on a human action. Optional AI diagnosis separately asks to send the
+//! displayed draft to the configured provider, with no tools, saved instructions or history.
+//! It examines supplied evidence and cannot establish reproduction or source-level root cause.
+//! Clipboard and browser actions use the same consent-filtered body. GitHub opens without a body
+//! in its URL; the person pastes, reviews and publishes there.
+//! Model-authored title/explanation proposals also require local review before entering the draft.
+//!
+//! # Runtime tools
+//!
 //! Saved-project MCP registers and dispatches through the toolbox execution registry.
 //! Runtime discovery and help use the same enabled tool set as execution.
 //! Built-in backends share documentation search, discovery, help and capability tools.
@@ -23,18 +45,21 @@
 //! each crate's own front page explains what that crate is for, and this one explains why the
 //! boundaries between them are where they are.
 //!
-//! # Multiple project windows
+//! # Project tabs and windows
 //!
-//! Each desktop project window owns a separate session, undo history, recovery workspace,
-//! agent conversation and background jobs. File-open requests are routed by the application;
-//! an already-open path activates its existing window. Closing one project leaves the others
-//! alive. Application quit collects save decisions from every project before closing any.
+//! Each desktop project tab owns a separate session, undo history, recovery workspace,
+//! agent conversation and background jobs. A native window retains those document entities
+//! and paints the selected one. New and open commands add tabs; an already-open path selects
+//! its existing tab and activates its window. Closing a tab checks that document's unsaved
+//! changes. Closing a window checks all its tabs, and application quit collects save decisions
+//! from every project before closing any. Save approvals carry document identities and
+//! revisions so edits made during an asynchronous save require another decision.
 //!
 //! Realtime audio has one owner. Other sessions use [`crate::Session::set_audio_suspended`]
 //! to release hardware while retaining their documents and offline rendering capabilities.
 //! An explicit playback, recording or monitoring command transfers ownership; focus alone
 //! does not. A recording session refuses suspension. Headless sessions never acquire hardware.
-//! The desktop coordinates the windows; device lifecycle remains in the session layer.
+//! The desktop coordinates tabs and windows; device lifecycle remains in the session layer.
 //! Settings editors save differences against their previous snapshots with
 //! [`crate::Settings::save_changes`] so an unrelated setting from another window survives.
 //!
@@ -48,12 +73,26 @@
 //! parallel; voice inference and final audition rendering use a bounded audio-work gate.
 //! Progress describes observed command stages, never simulated elapsed-time percentages.
 //! Selecting an exact candidate sets the baseline for further edits without closing the chat.
+//! Without an explicit selection, the latest successful round supplies the baseline only when
+//! it contains a single candidate. Failed revisions retain that earlier baseline; comparisons
+//! require an explicit choice. This implicit continuation does not record a preference selection.
+//! A successful single-candidate edit of the selected song advances the baseline to that result.
+//! Comparisons, cancelled jobs and recovery of older rounds do not change the selection.
 //! Descendants open that candidate's saved score; selection never regenerates the music.
 //! The session's `workshop` store retains transcripts, comparison rounds, parent identities,
-//! documents and audition assets. Save As copies the store together with conversations.
+//! documents and audition assets. Each project can keep multiple named workshop conversations,
+//! including their drafts, attachments and candidate feedback. Archiving is reversible; opening
+//! another conversation waits until production has stopped. The legacy workshop remains the
+//! default conversation. Save As copies every workshop conversation and its assets.
+//! Explicit one-to-five-star ratings and comments belong to the exact candidate and inform
+//! subsequent requests in that conversation; they never change the score or start production.
 //! The frontend owns presentation, provider selection, audition and explicit editor handoff.
 //! Local cross-project preference evidence records contextual choices. It is optional, inspectable
 //! and clearable, and does not infer dislike from nonselection or override explicit instructions.
+//! The desktop's personalization settings show the complete preference history, allow corrections to a
+//! request or chosen alternative, and support individual removal or a confirmed history reset.
+//! Corrections compare the original observation under the storage lock, so concurrent selection,
+//! deletion or reset cannot be silently overwritten. Preference I/O runs on a background executor.
 //! Direction planning, lyric generation and composer workers share the agent's musical-design
 //! principles. The conversational composer extends the resolved live-agent prompt with its
 //! isolated-session contract: expressive note authoring, purposeful arrangement, a mixer pass
@@ -204,6 +243,19 @@
 //! bounded handle eviction and process restart invalidate IDs; heavyweight catalog eviction does
 //! not redirect an issued handle. Neither discovery nor measurement edits the document.
 //!
+//! Character discovery shares [`crate::TimbreTargets`] between the map and `search_instruments`
+//! mode `character`. Matched reference notes also produce fixed-scale brightness, attack speed,
+//! held sustain, captured release and noise descriptors. These do not depend on catalogue PCA
+//! normalization. Local Japanese/English impression terms map to target hypotheses; explicit
+//! targets override them. Arbitrary prose and negation are translated by the calling agent into
+//! targets, not interpreted by the local dictionary. Responses expose targets, recognized terms,
+//! measured descriptors and relative mismatch, never a probability or listening judgment.
+//! Optional reference IDs blend full-feature resemblance with target distance; ordinary name,
+//! source and library constraints still apply. Character and similarity searches reuse one bounded
+//! background index. Isolated native plugins remain metadata-only. Release uses the captured
+//! 400 ms tail and explicitly marks censored lower bounds. Desktop browsing keeps PCA and semantic
+//! coordinates separate; searching changes the result order/highlights without moving points.
+//!
 //! The live agent queries the owning session for built-in instruments, loaded SoundFont
 //! presets and installed CLAP/VST3 instruments. The frontend supplies its configured plugin
 //! search folders. Discovery caches plugin descriptors and issues opaque, session-local
@@ -271,7 +323,15 @@
 //! snapshot shares immutable SoundFonts with independent background instruments, measures matched
 //! reference notes through [`auris_dsp::timbre`], and retains previews and a feature-space index.
 //! The desktop displays PCA coordinates and clusters, while similarity queries use the complete
-//! standardized features. Only adopting a sound edits a track; audition uses a cached one-shot.
+//! standardized features. Only adopting a sound edits a track. Map audition uses independent
+//! output previews, including in an empty project. [`crate::Session::timbre_preview_job`] reuses
+//! the cached middle-C one-shot or renders an actual note from the same immutable library snapshot
+//! on a worker. The desktop cancels obsolete requests before replacing or closing the preview.
+//! Library family icons are separate metadata: `SoundIcon` interprets each preset's own name,
+//! cluster summaries count every member's family, and an isolated agent completion can suggest
+//! a name and an icon from that fixed vocabulary. Manual corrections live in application
+//! settings, keyed by instrument ID or resolved font path/bank/patch, rather than scan-local
+//! cluster IDs. The desktop applies these corrections before automatic hints.
 //! It also runs an explicitly prepared YAMNet ONNX model for instrument-presence
 //! tagging, using ONNX Runtime's CPU provider. The optional weights are external runtime data,
 //! and inference never downloads them. The session collects written notes or shares source audio with
@@ -1612,6 +1672,11 @@ pub mod composition {
     //! Source offsets count Unicode scalars in the original lyric. Dictionary output does not
     //! establish character-to-mora alignment, so no such alignment is guessed.
     //!
+    //! [`Session::write_lyrics_with_reading`](crate::Session::write_lyrics_with_reading) accepts
+    //! written lyrics and an independent kana pronunciation, including without a dictionary.
+    //! The written spelling stays on the first note with `+` continuations; phonemes carry
+    //! pronunciation. Workshop cards read that written score rather than the kana reading.
+    //!
     //! Existing singer phrases are compared through explicit
     //! [`ClipComparison`](crate::lyric_harness::ClipComparison) relationships. Each selected span
     //! is a contiguous monophonic run with one established mora per note. Pitch, relative onset,
@@ -1639,22 +1704,13 @@ pub mod composition {
     //! The top-level `singer` field selects a voice model path, and `singer_speaker` optionally
     //! names its speaker. The session validates both before replacing the document and assigns
     //! the voice and speaker's timing tables to the generated vocal track in the same undo step.
-    //! The desktop song sheet offers installed voices, a file picker and speaker selection,
-    //! including asynchronous VOICEVOX Engine discovery before any singer track exists. The basic
-    //! view pairs lyrics with style, voice, title, tempo and a brightness/energy XY pad. Detailed
-    //! settings discloses key, meter, groove, seed, the second XY pad and section/part controls;
-    //! toggling the presentation preserves every setting and the active lyrics editor. A separate
-    //! drum area selects one kit source, while melodic parts have their own roster and add control.
-    //! Detailed performance controls can be expanded, and section tempo accepts any BPM in the
-    //! specification's range, with an empty field following the song tempo.
     //!
     //! A part's optional `source` names an exact SoundFont file, bank and patch, or a CLAP/VST3
     //! instrument and its stable plugin id. The session validates these sources before replacing
     //! the document, including hosted instrument activation, and never substitutes another sound.
-    //! Imported picker fonts are cached without changing the open document until composition.
     //! Chosen sources use the existing sampler and hosted track representation for playback and
     //! saving. Collect Assets and asset recovery also update the stored song specification, so
-    //! reopening the sheet and composing again follow the same file as the saved arrangement.
+    //! subsequent composition follows the same file as the saved arrangement.
     //!
     //! [`auris_compose`] turns a text document into notes on a timeline through
     //! [`compose`](auris_compose::compose). Generation is a pure function of the specification
@@ -1685,20 +1741,6 @@ pub mod composition {
     //! defaults, not promises about how a scale must feel. The generator shares modal phrase
     //! shapes, building chords from the selected scale and retaining its characteristic tones
     //! through chord colouring and section arrivals. Explicit `key`/`scale` and `tempo` win.
-    //! The song sheet uses these same choices, while the saved specification contains their
-    //! resolved musical values. Exact key, rhythmic detail and arrangement live in its advanced view.
-    //!
-    //! The song sheet can audition a section's block chords before writing the song.
-    //! [`crate::ChordPreviewJob`] snapshots the request and renders up to eight complete bars
-    //! on a fixed FM keyboard on a worker. The preview bypasses the document's tracks and mixer,
-    //! stops arrangement playback, and works in an empty project. Replacement buffers travel
-    //! back through the engine's retired-data channel; the callback never frees their storage.
-    //! [`crate::ChordPreview::apply_to`] adopts the full section chart as given harmony, including
-    //! explicit chord qualities, while retaining the melody seed and other sections. The GUI
-    //! rejects stale completions after edits, section changes, cancellation or an audio-rate change.
-    //! Storage uses [`auris_core::theory::chart::Chart::to_text`] so a pinned major V in minor
-    //! survives saving and regeneration. Trial candidates do not modify the document or history.
-    //!
     //! A detailed specification can name every musical choice:
     //!
     //! ```text
@@ -1803,15 +1845,6 @@ pub mod composition {
     //! composing it again. The runnable `compose_search` example and `docs/composition-search.md`
     //! show the request and report format.
     //!
-    //! The desktop song sheet captures its inputs and session revision, then runs
-    //! [`search_composition_with_progress`](crate::composition_search::search_composition_with_progress)
-    //! on a worker. Its observer publishes attempt counts and the best density. Changing the
-    //! sheet or document invalidates the run; cancellation keeps the worker busy until the
-    //! current composition finishes. A generation guard prevents a closed sheet's late result
-    //! from reaching a newly opened sheet. Explicit adoption uses the retained score in the
-    //! ordinary source-preparation and balance pipeline, as one undoable composition command;
-    //! playback begins only after successful completion.
-    //!
     //! # Auditioning rendered audio
     //!
     //! Retained renders are auditioned through
@@ -1824,8 +1857,15 @@ pub mod composition {
     //! pause, seek and volume controls through [`OutputPreviewStatus`](crate::OutputPreviewStatus).
     //! These use atomics, never callback locks or allocations, and do not edit the document mixer.
     //! Initial position and volume are queued together with PCM, including muted starts. Completion,
-    //! cancellation and device loss remain terminal; replay queues a fresh request. Both desktop
+    //! cancellation and device loss remain terminal; replay queues a fresh request. Desktop
     //! preview surfaces compose the same player with keyboard-operable seek and volume sliders.
+    //!
+    //! Workshop auditions retain an [`AuditionTimeline`](crate::AuditionTimeline) with each
+    //! immutable buffer. Workers measure bounded absolute peaks across all channels; section
+    //! times come from the captured score's tempo map. The frontend draws Atelier's `PeakBars`
+    //! under proportional section buttons and keeps the timeline of the audio actually chosen
+    //! while newer drafts arrive. Seeking a section or the waveform changes only the audition
+    //! clock. Unnamed score gaps and rendered effect tails stay unnamed.
     //!
     //! # Two stages
     //!
@@ -2104,11 +2144,9 @@ pub mod singing {
     //! does not wait for a running render. A cold voice has no cached speaker list yet; an
     //! explicit picker action may load it, while repainting the inspector must not.
     //! Artwork follows a separate path: [`Session::singer_portrait_source`](crate::Session::singer_portrait_source)
-    //! snapshots the selected voice without I/O. The song sheet uses
-    //! [`SingerPortraitSource::for_voice`](crate::SingerPortraitSource::for_voice) before a
-    //! track exists, and takes priority over the inspector while open. Both use the same
-    //! bounded display and asynchronous cache. [`load_singer_portrait`](crate::load_singer_portrait)
-    //! reads its optional image on a worker. VOICEVOX resolves the decoding style's singer
+    //! snapshots the selected voice without I/O. The inspector uses a bounded display and
+    //! asynchronous cache. [`load_singer_portrait`](crate::load_singer_portrait) reads its
+    //! optional image on a worker. VOICEVOX resolves the decoding style's singer
     //! UUID and requests `/singer_info` in URL format, downloading only the selected style's
     //! portrait or its character fallback. The frontend bounds decoded image dimensions, caches
     //! missing artwork and failures too, and only displays results for the current saved source
@@ -2142,7 +2180,7 @@ pub mod singing {
     //! below the selected voicebank, and a saved VOICEVOX connection may contact only a numeric
     //! loopback address. An explicitly loaded model that exceeds those background rules is not
     //! reused by the automatic cache. The inspector applies the same loopback rule before it
-    //! requests VOICEVOX artwork. The manual Sing command, voice picker, and open song sheet
+    //! requests VOICEVOX artwork. The manual Sing command and voice picker
     //! retain ordinary explicit access to the path or service the person chose.
     //!
     //! A backend that predicts pitch also returns the acoustic curve used for decoding, after
@@ -2748,14 +2786,14 @@ pub mod harmony {
     //! with independent expression, and gives the band one shared ensemble group. Guitar
     //! strokes, quiet ghost pickups and solo pitch gestures remain clip transforms; they never
     //! enter the writers or their note digests. The optional `performance` field survives the
-    //! song sheet and `.asong` round trips. Omitting it retains plain lean/wander behavior.
+    //! `.asong` round trips. Omitting it retains plain lean/wander behavior.
     //! Retaking updates inherited ghost/expression seeds without replacing edited controls or
     //! ensemble groups. Singing melody parts keep the singer's separate ornament pipeline.
     //!
     //! The independent `writing_style` field selects the written vocabulary: phrase span,
     //! melodic moves, bass figures, comping rhythm and lyric rhythm. It uses the same palette
     //! names but is stored in `ClipRecipe::style` for regeneration. Changing only `performance`
-    //! still cannot alter the score. Presets select both; the song sheet preserves both fields.
+    //! still cannot alter the score. Presets select both fields.
     //!
     //! [`set_clip_transforms`](crate::Session::set_clip_transforms) replaces the stack whole,
     //! and [`freeze_clip_transforms`](crate::Session::freeze_clip_transforms) is the recipe's

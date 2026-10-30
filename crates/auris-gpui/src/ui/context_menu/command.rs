@@ -7,7 +7,6 @@
 
 use auris_i18n::{Key, messages};
 use auris_session::prelude::*;
-use auris_session::{VoicevoxConnection, VoicevoxSpeakerChoice};
 
 use gpui::{Context, Pixels, Point};
 
@@ -20,6 +19,18 @@ use super::timeline::progression_target;
 /// What choosing a menu item does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuCommand {
+    /// Rename an exact project-local song conversation.
+    WorkshopThreadRename(String),
+    /// Archive or restore an exact project-local song conversation.
+    WorkshopThreadArchive(String, bool),
+    /// Opens a reference score draft, optionally from the selected MIDI clip.
+    ComposerMelody(bool),
+    /// Attaches a MIDI file to the current conversation.
+    ComposerMidi,
+    /// Opens the chord reference prompt for the current conversation.
+    ComposerChords,
+    /// Opens the sound map to attach an instrument choice.
+    ComposerSound,
     /// Selects a model for the new-song draft.
     WorkshopModel(usize),
     /// Refreshes the new-song model catalogue.
@@ -64,28 +75,6 @@ pub enum MenuCommand {
     SetVolumeContour {
         clip: ClipId,
         preset: VolumeContourPreset,
-    },
-    /// Voice model for the song sheet's vocal part.
-    SongSinger(Option<String>),
-    /// Speaker within the song sheet's selected voice file.
-    SongSpeaker { path: String, speaker: String },
-    /// An Engine singing style discovered for the song sheet.
-    SongVoicevoxSpeaker {
-        connection: std::sync::Arc<VoicevoxConnection>,
-        choice: VoicevoxSpeakerChoice,
-    },
-    /// Refreshes the song sheet's speaker picker.
-    RefreshSongSpeakers(Point<Pixels>),
-    /// Browse for a voice before composing the song.
-    ChooseSongSinger,
-    /// Add or remove the song's shared kit.
-    SongDrums(bool),
-    /// Share an original section's sung note slots with another lyric.
-    SongMelodySource {
-        /// Position in the sheet's section list.
-        section: usize,
-        /// Original section name, or an independently composed melody.
-        source: Option<String>,
     },
     /// Recognize written chords on one track, or across all pitched tracks.
     AnalyzeChords(Option<TrackId>),
@@ -154,6 +143,8 @@ pub enum MenuCommand {
         track: TrackId,
         /// The voice entry file.
         path: std::path::PathBuf,
+        /// The saved VOICEVOX style, if this row names one.
+        speaker: Option<String>,
     },
     /// Choose a named speaker or backend style for an explicit singer track.
     SingerSpeaker {
@@ -291,84 +282,6 @@ pub enum MenuCommand {
     NewAudioTrack,
     /// Append a bus.
     NewBusTrack,
-    /// Set the song sheet's time signature.
-    ///
-    /// These eight turn the *sheet* rather than the document: nothing they set has been written
-    /// until Write is pressed, so none of them records an undo step.
-    SongMeter(u32, u32),
-    /// Closing gesture for the generated song.
-    SongEnding(Ending),
-    /// Type a meter the song sheet's list does not offer.
-    SongTypeMeter,
-    /// Set the song sheet's mood from a named feeling.
-    SongMood(&'static str),
-    /// Set a major, minor, or mood-derived mode.
-    SongTonality(Tonality),
-    /// Selects a harmonic character without requiring theory vocabulary.
-    SongSound(ScaleChoice),
-    /// Chooses the section whose chord progression is auditioned.
-    SongPreviewSection(String),
-    /// Set the song speed in ordinary words.
-    SongPace(Pace),
-    /// Set what one section of the song sheet plays, by chart name or catalogue name.
-    SongSectionChords {
-        /// Which section, by position in the sheet's list.
-        section: usize,
-        /// A progression the song already carries, or one the catalogue knows.
-        name: String,
-    },
-    /// Leave one section's progression to the composer to invent, fresh from the seed.
-    SongInventProgression(usize),
-    /// Write out the progression one section of the song sheet plays.
-    SongWriteProgression(usize),
-    /// Keep the progression one section plays, in the book that outlives this song.
-    SongKeepProgression(usize),
-    /// Move one section of the song sheet away from the key.
-    SongSectionTranspose {
-        /// Which section, by position in the sheet's list.
-        section: usize,
-        /// How far, in semitones.
-        steps: i32,
-    },
-    /// Point one place in the song sheet's form at a section.
-    SongFormName {
-        /// Which place in the order.
-        place: usize,
-        /// The section it should play.
-        name: String,
-    },
-    /// Add a playing of a section to the song sheet's form.
-    SongAddSection {
-        /// After which place in the order.
-        place: usize,
-        /// The section to play.
-        name: String,
-    },
-    /// Set the song sheet's drum groove.
-    SongGroove(&'static str),
-    /// Set the role of one part on the song sheet.
-    SongPartRole {
-        /// Which part, by position in the roster.
-        part: usize,
-        /// What it plays.
-        role: Role,
-    },
-    /// Replace everything on the song sheet with one of the composer's whole-song presets.
-    SongPreset(&'static str),
-    /// Set the octave of one part on the song sheet.
-    SongPartOctave {
-        /// Which part, by position in the roster.
-        part: usize,
-        /// Which octave it sits in.
-        octave: i32,
-    },
-    /// Set which MIDI note one drum part of the song sheet strikes.
-    SongPartNote {
-        /// Which part, by position in the roster.
-        part: usize,
-        /// The note it strikes.
-        note: u8,
-    },
     /// Straighten a clip out, taking one of its curves off entirely.
     ClearCurve {
         /// Whose curve.
@@ -392,8 +305,6 @@ pub enum MenuCommand {
         /// Whether it should be showing afterwards.
         shown: bool,
     },
-    /// Add a part of this role to the song sheet's roster.
-    SongAddPart(Role),
     /// Open the list of places a track's output could go.
     ShowOutputPicker {
         /// Track being routed.
@@ -681,8 +592,6 @@ pub enum MenuCommand {
     },
     /// Read a melody's harmony and write a band behind it.
     AccompanyClip(ClipId),
-    /// Take a clip's tune as the motif and open the song sheet holding it.
-    TakeClipAsMotif(ClipId),
     /// Write a generated clip's notes again, from the harmony as it now stands.
     RegenerateClip(ClipId),
     /// Write another take of a generated clip.
@@ -954,9 +863,13 @@ impl AurisApp {
                 self.select_track(track);
                 self.choose_singer_voice(cx);
             }
-            MenuCommand::SingerVoice { track, path } => {
+            MenuCommand::SingerVoice {
+                track,
+                path,
+                speaker,
+            } => {
                 self.select_track(track);
-                self.apply_singer_voice(track, path, cx);
+                self.apply_singer_voice_selection(track, path, speaker, cx);
             }
             MenuCommand::SingerSpeaker { track, speaker } => {
                 self.set_singer_speaker_for(track, speaker)
@@ -1086,174 +999,21 @@ impl AurisApp {
             MenuCommand::NewSingerTrack => self.add_singer_track(),
             MenuCommand::NewAudioTrack => self.add_audio_track(),
             MenuCommand::NewBusTrack => self.add_bus_track(),
-            MenuCommand::SongMeter(numerator, denominator) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    dials.meter = TimeSignature::new(numerator, denominator);
-                }
-            }
-            MenuCommand::SongTypeMeter => self.prompt_for_song_meter(),
-            MenuCommand::SongEnding(ending) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    dials.ending = ending;
-                }
-            }
-            MenuCommand::SongMood(name) => {
-                if let (Some(dials), Some(mood)) = (self.song_sheet.as_mut(), Mood::named(name)) {
-                    crate::ui::compose_sheet::set_song_mood(dials, mood);
-                }
-            }
-            MenuCommand::SongTonality(tonality) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::set_song_tonality(dials, tonality);
-                }
-            }
-            MenuCommand::SongSound(sound) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::set_song_sound(dials, sound);
-                }
-            }
-            MenuCommand::SongPreviewSection(section) => self.select_chord_preview_section(section),
-            MenuCommand::SongPace(pace) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::set_song_pace(dials, pace);
-                }
-            }
-            MenuCommand::SongSectionChords { section, name } => {
-                // The song's own charts and the catalogue first, then the book. Read before the
-                // sheet is borrowed, because both live on `self`.
-                let kept = self.progressions.chart(&name);
-                if let Some(dials) = self.song_sheet.as_mut()
-                    && !crate::ui::compose_sheet::set_section_chart(dials, section, &name)
-                    && let Some(chart) = kept
-                {
-                    crate::ui::compose_sheet::give_section_chart(dials, section, &name, chart);
-                }
-            }
-            MenuCommand::SongInventProgression(section) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::invent_section_chart(dials, section);
-                }
-            }
-            MenuCommand::SongWriteProgression(section) => {
-                let title = self.t(Key::SongChords);
-                let current = self
-                    .song_sheet
-                    .as_ref()
-                    .and_then(|dials| {
-                        let held = dials.sections.get(section)?;
-                        let (_, chart) =
-                            dials.charts.iter().find(|(name, _)| name == &held.chords)?;
-                        // An unwritten chart has no bars to prefill; an empty prompt reads as
-                        // "write one", where its `|` would read as a chart of nothing.
-                        (!chart.is_unwritten()).then(|| chart.to_string())
-                    })
-                    .unwrap_or_default();
-                self.open_prompt(crate::ui::prompt::Prompt::new(
-                    title,
-                    crate::ui::prompt::PromptTarget::SongSectionChart(section),
-                    current,
-                ));
-            }
-            MenuCommand::SongKeepProgression(section) => {
-                let title = self.t(Key::SongKeepProgression);
-                self.open_prompt(crate::ui::prompt::Prompt::new(
-                    title,
-                    crate::ui::prompt::PromptTarget::KeepProgression(section),
-                    String::new(),
-                ));
-            }
-            MenuCommand::SongSectionTranspose { section, steps } => {
-                if let Some(section) = self
-                    .song_sheet
-                    .as_mut()
-                    .and_then(|dials| dials.sections.get_mut(section))
-                {
-                    section.transpose = steps;
-                }
-            }
             MenuCommand::WorkshopModel(index) => self.choose_workshop_model(index),
+            MenuCommand::WorkshopThreadRename(id) => self.rename_workshop_thread(id, cx),
+            MenuCommand::WorkshopThreadArchive(id, archived) => {
+                self.archive_workshop_thread(id, archived, cx)
+            }
             MenuCommand::WorkshopRefreshModels => self.refresh_workshop_models(),
-            MenuCommand::SongSinger(path) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    if dials.singer != path {
-                        dials.singer_speaker = None;
-                    }
-                    dials.singer = path;
+            MenuCommand::ComposerMelody(selection) => self.start_midi_draft(selection),
+            MenuCommand::ComposerMidi => self.choose_midi_attachment(cx),
+            MenuCommand::ComposerChords => self.open_agent_chords(),
+            MenuCommand::ComposerSound => {
+                if self.can_attach_agent_music() {
+                    self.timbre_map.open = true;
                 }
             }
-            MenuCommand::SongSpeaker { path, speaker } => {
-                if let Some(dials) = self.song_sheet.as_mut()
-                    && dials.singer.as_deref() == Some(&path)
-                {
-                    dials.singer_speaker = Some(speaker);
-                }
-            }
-            MenuCommand::SongVoicevoxSpeaker { connection, choice } => {
-                self.select_song_voicevox_speaker(&connection, &choice);
-            }
-            MenuCommand::RefreshSongSpeakers(at) => self.open_song_speaker_menu(at, cx),
-            MenuCommand::ChooseSongSinger => self.choose_song_singer(cx),
-            MenuCommand::SongDrums(enabled) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::set_song_drums(dials, enabled);
-                }
-            }
-            MenuCommand::SongMelodySource { section, source } => {
-                if let Some(section) = self
-                    .song_sheet
-                    .as_mut()
-                    .and_then(|d| d.sections.get_mut(section))
-                {
-                    section.melody_from = source;
-                }
-            }
-            MenuCommand::SongFormName { place, name } => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::set_form_entry(dials, place, &name);
-                }
-            }
-            MenuCommand::SongAddSection { place, name } => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::add_to_form(dials, place, &name);
-                }
-            }
-            MenuCommand::SongGroove(name) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    dials.groove = name.to_string();
-                }
-            }
-            MenuCommand::SongPartRole { part, role } => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::set_part_role(dials, part, role);
-                }
-            }
-            MenuCommand::SongPreset(name) => {
-                if let Some(preset) = preset(name) {
-                    self.song_sheet = Some(crate::ui::compose_sheet::style_dials(
-                        preset,
-                        self.song_sheet.as_ref(),
-                    ));
-                    self.lyrics_edit = None;
-                }
-            }
-            MenuCommand::SongPartOctave { part, octave } => {
-                if let Some(part) = self
-                    .song_sheet
-                    .as_mut()
-                    .and_then(|dials| dials.parts.get_mut(part))
-                {
-                    part.octave = octave;
-                }
-            }
-            MenuCommand::SongPartNote { part, note } => {
-                if let Some(part) = self
-                    .song_sheet
-                    .as_mut()
-                    .and_then(|dials| dials.parts.get_mut(part))
-                {
-                    part.note = Some(note);
-                }
-            }
+
             MenuCommand::ClearCurve { clip, which } => {
                 self.session.clear_curve(clip, which);
             }
@@ -1269,11 +1029,6 @@ impl AurisApp {
             MenuCommand::ShowCurveLane { which, shown } => {
                 self.panels.set_curve_lane(which, shown);
                 self.remember_layout();
-            }
-            MenuCommand::SongAddPart(role) => {
-                if let Some(dials) = self.song_sheet.as_mut() {
-                    crate::ui::compose_sheet::add_part(dials, role);
-                }
             }
             MenuCommand::ShowOutputPicker { track, at } => {
                 let menu = self.output_menu(at, track);
@@ -1606,28 +1361,6 @@ impl AurisApp {
                         ));
                     }
                     Err(error) => self.set_failed_status(self.failure(Key::MenuAccompany, &error)),
-                }
-            }
-            MenuCommand::TakeClipAsMotif(clip) => {
-                // The notes and the key in force where the clip sits, read before the sheet is
-                // borrowed. The document's key rather than a detected one: a clip in the piece
-                // is in the piece's key, and a note that strays is pulled to the nearest degree
-                // exactly as playback would pull it.
-                let notes = self.session.midi_clip(clip).map(|midi| midi.notes.clone());
-                let start = self.clip_extent(clip).map(|(start, _)| start);
-                if let (Some(notes), Some(start)) = (notes, start) {
-                    let key = self.session.project().harmony.key_at(start);
-                    let motif = motif_of(&notes, key);
-                    if motif.len() < 2 {
-                        self.set_failed_status(self.t(Key::ErrorMotifTooShort).to_string());
-                    } else {
-                        let count = motif.len();
-                        self.open_song_sheet();
-                        if let Some(dials) = self.song_sheet.as_mut() {
-                            dials.motif = motif;
-                        }
-                        self.set_status(messages::motif_taken(self.language(), count));
-                    }
                 }
             }
             MenuCommand::RegenerateClip(clip) => {

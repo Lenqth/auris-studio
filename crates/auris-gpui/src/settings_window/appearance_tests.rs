@@ -34,6 +34,41 @@ fn open_appearance_settings(
 }
 
 #[gpui::test]
+fn imported_themes_and_the_glass_switch_keep_independent_saved_choices(cx: &mut TestAppContext) {
+    let _appearance = crate::harness::AppearanceTestGuard::new();
+    let (app, handle, mut cx) = open_appearance_settings(cx);
+    let cx = &mut cx;
+    crate::harness::click("glass-effect", cx);
+    assert!(!Appearance::load().glass_effect);
+    let appearance = Appearance::default();
+    let source = appearance.selected_scheme();
+    let imported = crate::appearance::CustomScheme::from_scheme(
+        "imported".into(),
+        source.name.into(),
+        &source,
+    );
+    handle
+        .update(cx, |this, _, cx| {
+            this.apply_imported_theme(imported.clone(), cx)
+        })
+        .unwrap();
+    cx.run_until_parked();
+    let saved = Appearance::load();
+    assert!(!saved.glass_effect);
+    assert_eq!(saved.custom_schemes.len(), 1);
+    assert_ne!(saved.custom_schemes[0].name, source.name);
+    assert_eq!(saved.scheme, saved.custom_schemes[0].id);
+    app.read_with(cx, |this, _| {
+        assert_eq!(this.theme.atelier.material, atelier::Material::Opaque)
+    });
+    crate::harness::click("glass-effect", cx);
+    assert!(Appearance::load().glass_effect);
+    app.read_with(cx, |this, _| {
+        assert_eq!(this.theme.atelier.material, atelier::Material::Translucent)
+    });
+}
+
+#[gpui::test]
 fn a_japanese_theme_is_committed_then_edited_without_losing_its_font(cx: &mut TestAppContext) {
     let _appearance = crate::harness::AppearanceTestGuard::new();
     let (app, handle, mut cx) = open_appearance_settings(cx);

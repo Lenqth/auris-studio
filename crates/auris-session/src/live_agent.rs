@@ -55,6 +55,11 @@ fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
 #[derive(Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    /// Offer an optional local Issue draft after verifying a missing feature or suspected defect. Check tool_help/capabilities first; distinguish application limitations from missing agent tools, configuration, denied permissions and transient errors. Explain workarounds and uncertainty. Never quote or summarize private prompts, logs or learned preferences in this suggestion. The desktop shows an invitation; only the human can open it and authorize each private context category. Does not publish, send context to AI, or grant consent.
+    SuggestIssueReport {
+        /// Generic title and evidence-based limitation, without private conversation excerpts.
+        suggestion: crate::issue_report::Suggestion,
+    },
     /// Opt in to bounded transition evidence, read its cursor or stop collection. Starting requires explicit user consent via the host permission gate. No audio or document edits.
     ExecutionTrace {
         /// Collection control or cursor read.
@@ -336,13 +341,16 @@ pub enum Command {
         /// Exact speaker name; omit for the voice's default. Unknown names are refused with available names.
         speaker: Option<String>,
     },
-    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Kana is split into moras; other text requires the installed Japanese dictionary. Insufficient note slots are refused without editing; later unfilled notes keep their words. Returns filled count, available notes and full clip name; one transaction. Use read_notes to verify before sing.
+    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. Keep original kanji/kana spelling in text for display; supply optional kana reading separately for pronunciation, including without a dictionary. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Without reading, kana is split into moras and other text requires the installed Japanese dictionary. Insufficient note slots are refused without editing; later unfilled notes keep their words. Returns filled count, available notes and full clip name; one transaction. Use read_notes to verify before sing.
     WriteLyrics {
         /// Stable singer clip ID.
         clip: u64,
-        /// Nonempty phrase, e.g. さくらさいた.
+        /// Original nonempty written phrase, e.g. 桜咲いた. Never replace it with its reading.
         #[schemars(length(min = 1, max = 16384))]
         text: String,
+        /// Optional nonempty kana pronunciation, e.g. さくらさいた; leaves the written text intact.
+        #[schemars(length(min = 1, max = 16384))]
+        reading: Option<String>,
         /// Zero-based storage index from read_notes; notes from this position in time order receive lyrics.
         from: Option<usize>,
     },
@@ -413,9 +421,9 @@ pub enum Command {
         aspect: Option<crate::audio_review::assessment::ComparisonAspect>,
     },
 
-    /// Search instruments by text, acoustic reference, or bounded browsing. Copy returned sound IDs into set_instrument. Paging, filters and acoustic-index status are shared across backends.
+    /// Search instruments by text, acoustic reference, character/impression, or bounded browsing. Character mode accepts Japanese/English impressions and explicit 0..1 targets (brightness, attack speed, sustain, captured release, noise); translate arbitrary prose/negation into targets and omit query when necessary. Optional id retains resemblance to an existing sound; name restricts names/tags. Inspect returned targets, character and relative distance, then render a musical phrase before adopting. Copy returned sound IDs into set_instrument. Retry indexing results later without refreshing. Shared by desktop Agent and MCP.
     SearchInstruments {
-        /// Explicit text, similar or browse request.
+        /// Explicit text, similar, character or browse request.
         request: crate::SoundSearch,
         /// Rescan only on the first page; invalidates existing acoustic measurements.
         #[serde(default)]
@@ -452,6 +460,12 @@ pub enum Command {
         name: String,
         /// One string: instrument, drum, singer, audio or bus. Never an array or instrument ID.
         kind: TrackKind,
+    },
+    /// Give the song its title. The title names the project and is what Save As and exports suggest as the file name until the user saves. Name a new song once its character is clear; keep a title the user gave or chose unless asked to change it.
+    RenameProject {
+        /// The song title, 1-120 characters.
+        #[schemars(length(min = 1, max = 120))]
+        title: String,
     },
     /// Rename a track using its stable numeric ID from inspect_project or add_track.
     RenameTrack {
@@ -548,6 +562,7 @@ impl Command {
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::SuggestIssueReport { .. }
             | Self::ExecutionTrace { .. }
             | Self::PhraseVariation { .. }
             | Self::SuggestHarmony { .. }
@@ -667,6 +682,10 @@ impl Session {
             );
         }
         match command {
+            Command::SuggestIssueReport { suggestion } => {
+                suggestion.validate()?;
+                Ok(serde_json::json!({"suggestion":suggestion,"published":false,"private_context_included":false,"next":"The desktop offers a report invitation. The human must open the draft and explicitly approve each private context category. No permission to disclose or publish has been granted."}).to_string())
+            }
             Command::ExecutionTrace { operation } => self.execution_trace(operation),
             Command::PhraseVariation {
                 expected_revision,
@@ -820,9 +839,20 @@ impl Session {
                 clear_chords,
                 section.as_deref(),
             ),
-            Command::WriteLyrics { clip, text, from } => {
+            Command::WriteLyrics {
+                clip,
+                text,
+                reading,
+                from,
+            } => {
                 if text.trim().is_empty() || text.len() > 16384 {
                     return Err("text must contain lyrics within 16384 UTF-8 bytes".into());
+                }
+                if reading
+                    .as_ref()
+                    .is_some_and(|reading| reading.len() > 16384)
+                {
+                    return Err("reading must fit within 16384 UTF-8 bytes".into());
                 }
                 let (track, target) = self
                     .project()
@@ -853,7 +883,7 @@ impl Session {
                     .unwrap_or(0);
                 let indices = &indices[first..];
                 let filled = self
-                    .write_lyrics(ClipId(clip), indices, &text)
+                    .write_lyrics_with_reading(ClipId(clip), indices, &text, reading.as_deref())
                     .map_err(error)?;
                 Ok(
                     serde_json::json!({"filled":filled,"available":indices.len(),"clip_name":self.midi_clip(ClipId(clip)).map(|clip| &clip.name),"unsaved":true})
@@ -1041,6 +1071,14 @@ impl Session {
                     TrackKind::Bus => self.add_bus_track(name),
                 };
                 Ok(serde_json::json!({"track":id.0,"unsaved":true}).to_string())
+            }
+            Command::RenameProject { title } => {
+                let title = title.trim();
+                if title.is_empty() || title.chars().count() > 120 {
+                    return Err("A song title needs 1-120 characters".into());
+                }
+                self.rename_project(title);
+                Ok(serde_json::json!({"title":title,"unsaved":true}).to_string())
             }
             Command::RenameTrack { track, name } => {
                 if name.trim().is_empty() {
@@ -1421,6 +1459,33 @@ mod tests {
             session.project().loop_region,
             Some((Ticks::from_beats(8.0), Ticks::from_beats(24.0)))
         );
+    }
+
+    #[test]
+    fn the_agent_titles_the_song_and_the_title_becomes_the_suggested_file_name() {
+        let mut session = session();
+        assert_eq!(session.document_title(), Project::UNTITLED);
+        let before = session.project().clone();
+        for title in ["", "   ", &"x".repeat(121)] {
+            assert!(
+                session
+                    .agent_command(Command::RenameProject {
+                        title: title.into(),
+                    })
+                    .is_err()
+            );
+            assert_eq!(session.project(), &before);
+        }
+        session
+            .agent_command(Command::RenameProject {
+                title: "  夜明けのテーマ ".into(),
+            })
+            .unwrap();
+        assert_eq!(session.project().name, "夜明けのテーマ");
+        assert_eq!(session.document_title(), "夜明けのテーマ");
+        assert!(session.is_dirty());
+        session.undo();
+        assert_eq!(session.project().name, Project::UNTITLED);
     }
 
     #[test]

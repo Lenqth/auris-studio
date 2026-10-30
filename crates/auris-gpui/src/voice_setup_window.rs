@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::process::Child;
 
-use atelier::{Edge, IconName, SectionHeader, Sidebar};
+use atelier::{Edge, IconName, ListItem, SectionHeader, Sidebar, StatusBar};
 use auris_i18n::{Key, Language, messages};
 use auris_session::{
     DiffSingerSetup, LeapSingerCheck, LeapSingerSetup, LeapSingerVariant, VoicevoxCatalog,
@@ -24,7 +24,7 @@ use crate::theme::{Metrics, Theme};
 use crate::titlebar;
 use crate::ui::prompt::{editable_text, field_text};
 use crate::ui::text_field::{HasTextField, KeyEffect, TextField};
-use crate::ui::widgets::{ButtonState, ButtonStyle, button, button_enabled, disclosure, nav_item};
+use crate::ui::widgets::{ButtonState, ButtonStyle, button, button_enabled, disclosure};
 
 /// Which external backend is being configured.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -412,21 +412,18 @@ impl VoiceSetupWindow {
                 VoiceSetupTab::DiffSinger => IconName::Folder,
                 VoiceSetupTab::LeapSinger => IconName::Waveform,
             };
-            nav_item(
-                id,
-                self.t(label),
-                Some(self.t(brief).into()),
-                glyph,
-                self.tab == tab,
-                !self.saving,
-                &theme,
-                cx.listener(move |this, _, _, cx| {
+            ListItem::new(id, self.t(label))
+                .icon(glyph)
+                .description(self.t(brief))
+                .description_lines(2)
+                .selected(self.tab == tab)
+                .disabled(self.saving)
+                .on_click(cx.listener(move |this, _, _, cx| {
                     this.invalidate_request();
                     this.tab = tab;
                     this.active = Field::first(tab);
                     cx.notify();
-                }),
-            )
+                }))
         };
         let pages = [
             page(
@@ -1273,7 +1270,7 @@ impl VoiceSetupWindow {
             }
             Err(error) => {
                 self.catalog = None;
-                self.status = error;
+                self.status = messages::voicevox_connection_failed(self.language, &error);
                 self.status_failed = true;
             }
         }
@@ -1475,7 +1472,7 @@ impl Render for VoiceSetupWindow {
             window.focus(&self.focus);
         }
         let theme = self.theme.clone();
-        let titlebar = titlebar::composed(
+        let titlebar = titlebar::bar(
             window,
             &theme,
             titlebar::Parts::new("voice-setup-title", self.t(Key::VoiceSetupTitle)),
@@ -1535,7 +1532,9 @@ impl Render for VoiceSetupWindow {
                                             .flex()
                                             .flex_col()
                                             .w_full()
-                                            .max_w(px(640.0))
+                                            .max_w(theme.atelier.density.form_width)
+                                            .min_w_0()
+                                            .flex_shrink_0()
                                             .child(header)
                                             .child(body),
                                     ),
@@ -1544,22 +1543,13 @@ impl Render for VoiceSetupWindow {
                             .child(
                                 div()
                                     .id("voice-setup-status")
-                                    .min_h(Metrics::STATUS_HEIGHT)
-                                    .max_h_24()
+                                    .debug_selector(|| "voice-setup-status".into())
+                                    .h(theme.atelier.density.status_bar)
                                     .flex_shrink_0()
-                                    .overflow_y_scroll()
                                     .px(theme.atelier.spacing.xl)
-                                    .flex()
-                                    .items_center()
                                     .border_t_1()
                                     .border_color(theme.border_subtle)
-                                    .text_size(theme.atelier.typography.size_sm)
-                                    .text_color(if self.status_failed {
-                                        theme.danger
-                                    } else {
-                                        theme.text_muted
-                                    })
-                                    .child(self.status.clone()),
+                                    .child(StatusBar::new().message(self.status.clone())),
                             ),
                     ),
             )
@@ -1618,7 +1608,8 @@ impl AurisApp {
         let theme = self.theme.clone();
         let language = self.language();
         let bounds = Bounds::centered(None, size(px(820.0), px(660.0)), cx);
-        let opened: Result<WindowHandle<VoiceSetupWindow>, _> = cx.open_window(
+        let opened: Result<WindowHandle<VoiceSetupWindow>, _> = crate::native_window::open(
+            cx,
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(480.0), px(360.0))),
@@ -1729,7 +1720,7 @@ mod tests {
             );
             assert!(
                 this.voice_list()
-                    .contains(&("My LeapSinger".into(), path.clone()))
+                    .contains(&("My LeapSinger".into(), path.clone(), None))
             );
         });
         // The saved source snapshot allows a second edit without reopening the dialog.
@@ -2052,6 +2043,11 @@ mod tests {
             let bounds = cx.debug_bounds(action).unwrap();
             assert!(bounds.bottom() <= px(320.0) && bounds.right() <= px(480.0));
         }
+        let status = cx
+            .debug_bounds("voice-setup-status")
+            .expect("the status bar remains attached to the window footer");
+        assert!(status.bottom() <= px(320.0));
+        assert!(status.left() >= px(0.0) && status.right() <= px(480.0));
         crate::harness::click("voice-tab-diffsinger", cx);
         cx.run_until_parked();
         for action in ["diff-choose-folder", "diff-save"] {

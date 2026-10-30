@@ -22,15 +22,19 @@ mod auxiliary_window;
 #[cfg(test)]
 mod harness;
 mod i18n;
+mod issue_report_window;
 mod keymap;
 mod logbook;
 mod menu;
+mod native_window;
+mod project_tabs;
 mod project_windows;
 mod settings_window;
 mod setup_guide;
 mod startup_soundfonts;
 mod termination;
 mod theme;
+mod theme_import;
 mod titlebar;
 mod update_check;
 mod voice_setup_window;
@@ -76,6 +80,7 @@ fn main() {
         // The Markdown renderer and Atelier share the application's resolved palette.
         gpui_component::init(cx);
         appearance::Appearance::load().theme().install(cx);
+        install_component_language(Settings::load().language(), cx);
         // The menu bar is built before the window, so the language comes from the settings file
         // rather than from the view that has not been created yet. `AurisApp` loads the same
         // file a moment later, and rebuilds these menus whenever the choice changes.
@@ -88,23 +93,34 @@ fn main() {
         project_windows::install(cx);
         let window = project_windows::create(cx).expect("could not open the main window");
         window
-            .update(cx, |view, _, cx| {
-                view.download_missing_soundfonts(cx);
-                view.start_auto_updates(cx);
+            .update(cx, |tabs, _, cx| {
+                tabs.active().update(cx, |view, cx| {
+                    view.download_missing_soundfonts(cx);
+                    view.start_auto_updates(cx);
+                });
             })
             .ok();
         cx.on_action(|_: &actions::Quit, cx| project_windows::request_quit(cx));
         if let Some(path) = project_argument(std::env::args_os()) {
             window
-                .update(cx, |view, _, cx| view.open_project_at(path, cx))
+                .update(cx, |tabs, _, cx| {
+                    tabs.active()
+                        .update(cx, |view, cx| view.open_project_at(path, cx))
+                })
                 .ok();
         } else {
             window
-                .update(cx, |view, window, cx| view.show_project_chooser(window, cx))
+                .update(cx, |tabs, window, cx| {
+                    tabs.active()
+                        .update(cx, |view, cx| view.show_project_chooser(window, cx))
+                })
                 .ok();
         }
         window
-            .update(cx, |view, _, cx| view.offer_initial_setup(cx))
+            .update(cx, |tabs, _, cx| {
+                tabs.active()
+                    .update(cx, |view, cx| view.offer_initial_setup(cx))
+            })
             .ok();
         cx.spawn(async move |cx| {
             loop {
@@ -126,6 +142,15 @@ fn main() {
     });
 }
 
+/// Keeps component-owned labels in the same language as the application.
+pub(crate) fn install_component_language(language: auris_i18n::Language, cx: &mut App) {
+    match language {
+        auris_i18n::Language::English => atelier::Strings::english(),
+        auris_i18n::Language::Japanese => atelier::Strings::japanese(),
+    }
+    .install(cx);
+}
+
 /// The local file a URL from the shell's open-document event names.
 ///
 /// Only `file:` URLs: the bundle declares the `.auris` document type and nothing else, so
@@ -140,8 +165,7 @@ fn handed_over_project(url: &str) -> Option<PathBuf> {
 
 /// The project to open at launch, out of the arguments the shell handed over.
 ///
-/// The first argument that is not an option, and nothing after it: one window holds one
-/// document, so a second path could only replace the first as it finished loading.
+/// The first argument that is not an option names the initial project tab.
 ///
 /// Anything starting with `-` is skipped rather than rejected. That is not politeness about
 /// flags this binary does not have — it is what makes launching from the macOS Finder work at
