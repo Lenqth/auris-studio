@@ -238,7 +238,8 @@ handlers cannot prevent the native window-move action.
 The layout takes its project identity from [Zed's title bar](https://github.com/zed-industries/zed/blob/main/crates/title_bar/src/title_bar.rs)
 and its centered transport readouts from [Logic Pro's control bar](https://support.apple.com/en-euro/guide/logicpro/lgcp5bdd6d9d/mac).
 The title bar holds project identity and the application-menu trigger. Playback and its
-readouts share the control bar; editing controls and meters use a second row in narrow windows.
+readouts share one inset surface in the control bar; editing controls and meters use a second
+row in narrow windows.
 Panel switches stay at the bottom edge, with labels when space permits. On Windows and Linux,
 the application menu opens as an overlay from its trigger or F10. Arrow keys navigate it and
 Escape returns focus to the invoking control. macOS retains the system menu bar.

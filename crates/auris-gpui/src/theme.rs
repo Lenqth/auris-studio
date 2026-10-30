@@ -1464,9 +1464,7 @@ impl Theme {
 pub struct Metrics;
 
 impl Metrics {
-    /// Height of the transport readout bar below the title bar.
-    ///
-    /// The playback buttons live in the title bar; this row holds their readouts and meters.
+    /// Height of the shared playback and readout bar below the title bar.
     pub const TRANSPORT_HEIGHT: Pixels = px(54.0);
 
     /// Extra room for editing controls and meters in narrow editor windows.

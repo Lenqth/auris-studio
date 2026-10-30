@@ -524,6 +524,7 @@ impl AurisApp {
                     div()
                         .id("position")
                         .debug_selector(|| "position".into())
+                        .h_full()
                         .cursor_pointer()
                         .on_mouse_down(
                             gpui::MouseButton::Left,
@@ -643,9 +644,21 @@ impl AurisApp {
             .flex()
             .items_center()
             .flex_shrink_0()
-            .gap_3()
-            .child(self.render_transport_buttons(cx))
-            .child(div().flex().items_center().gap_1().children(readouts));
+            .h(Metrics::TRANSPORT_HEIGHT - theme.atelier.spacing.xs * 2.0)
+            .rounded(Metrics::RADIUS_MD)
+            .overflow_hidden()
+            .bg(theme.surface_sunken)
+            .border_1()
+            .border_color(theme.border_subtle)
+            .child(div().px_1().child(self.render_transport_buttons(cx)))
+            .children(readouts.into_iter().map(|readout| {
+                div()
+                    .flex()
+                    .h_full()
+                    .border_l_1()
+                    .border_color(theme.border_subtle)
+                    .child(readout)
+            }));
         let meters = div()
             .flex()
             .id("transport-meters")
@@ -706,10 +719,7 @@ impl AurisApp {
                 .into_any_element()
         }
     }
-    /// One field of the transport's readout: a faint caption over a value, in a sunken box.
-    ///
-    /// Logic's LCD is a row of these, and the point of sharing the chrome is that they read as a
-    /// row rather than as a tempo box with something bolted beside it.
+    /// One captioned field inside the shared playback and readout surface.
     fn lcd_field(
         &self,
         id: &'static str,
@@ -725,15 +735,11 @@ impl AurisApp {
             .flex()
             .flex_col()
             .justify_center()
+            .h_full()
             .w(width)
             .px_2()
-            .py_1()
-            .rounded(Metrics::RADIUS_MD)
-            .bg(theme.surface_sunken)
-            .border_1()
-            .border_color(theme.border_subtle)
             .cursor_pointer()
-            .hover(|this| this.border_color(theme.border))
+            .hover(|this| this.bg(theme.surface_hover))
             .child(
                 div()
                     .truncate()
