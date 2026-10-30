@@ -44,6 +44,7 @@ pub(crate) enum ChooserPage {
 
 #[derive(Default)]
 pub(crate) struct ProjectChooser {
+    return_to_editor: bool,
     pub(crate) page: ChooserPage,
     selected: usize,
     ai: bool,
@@ -117,6 +118,23 @@ fn arriving_opacity(delta: f32) -> f32 {
 }
 
 impl AurisApp {
+    pub(crate) fn show_editor_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.session.release_typed_notes();
+        self.stop_audition();
+        self.close_menu();
+        self.close_menu_bar();
+        self.show_project_chooser(window, cx);
+        if let Some(chooser) = &mut self.project_chooser {
+            chooser.return_to_editor = true;
+        }
+    }
+
+    fn resume_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.project_chooser = None;
+        self.focus_pane(self.last_pane, window);
+        cx.notify();
+    }
+
     pub(crate) fn show_project_chooser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.project_chooser = Some(ProjectChooser::default());
         self.set_status("");
@@ -267,8 +285,12 @@ impl AurisApp {
                 self.open_song_workshop(window, cx);
             }
             ChooserPage::New => {
+                let return_to_editor = chooser.return_to_editor;
                 self.project_chooser = None;
                 self.focus_pane(Pane::Arrangement, window);
+                if return_to_editor {
+                    self.new_project_asking();
+                }
             }
             ChooserPage::Setup => self.step_setup_guide(true, cx),
         }
@@ -310,6 +332,9 @@ impl AurisApp {
             }
             "enter" => self.choose_project(window, cx),
             "escape" if chooser.page == ChooserPage::Setup => self.setup_escape(window, cx),
+            "escape" if chooser.return_to_editor && self.opening_project.is_none() => {
+                self.resume_editor(window, cx)
+            }
             "escape" if self.opening_project.is_none() => {
                 if self.project_tabs.is_some() {
                     self.close_project_tab(cx);
@@ -502,6 +527,7 @@ impl AurisApp {
 
     fn chooser_footer(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
+        let return_to_editor = chooser.return_to_editor;
         if chooser.page == ChooserPage::Setup {
             return self.render_setup_footer(chooser.setup_step, cx);
         }
@@ -522,16 +548,25 @@ impl AurisApp {
                 .on_click(cx.listener(|this, _, _, cx| this.pick_and_open_project(cx)))
                 .into_any_element(),
             div().flex_1().into_any_element(),
-            Button::new("chooser-close", self.t(Key::ChooseClose))
-                .disabled(busy)
-                .on_click(cx.listener(|this, _, window, cx| {
-                    if this.project_tabs.is_some() {
-                        this.close_project_tab(cx);
-                    } else {
-                        window.remove_window();
-                    }
-                }))
-                .into_any_element(),
+            Button::new(
+                "chooser-close",
+                self.t(if return_to_editor {
+                    Key::ResumeProject
+                } else {
+                    Key::ChooseClose
+                }),
+            )
+            .disabled(busy)
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if return_to_editor {
+                    this.resume_editor(window, cx);
+                } else if this.project_tabs.is_some() {
+                    this.close_project_tab(cx);
+                } else {
+                    window.remove_window();
+                }
+            }))
+            .into_any_element(),
             Button::new("chooser-confirm", commit)
                 .primary()
                 .disabled(!can_choose)

@@ -23,11 +23,10 @@ impl AurisApp {
     /// Renders the status bar.
     pub(crate) fn render_status_bar(
         &self,
-        width: Pixels,
+        _width: Pixels,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let theme = self.theme.clone();
-        let labels = width >= px(1000.0);
         let audio = self.session.audio_status();
         let engine = if audio.running {
             format!("{:.0} Hz · {} ch", audio.sample_rate, audio.channels)
@@ -57,7 +56,7 @@ impl AurisApp {
             .border_color(theme.border_subtle)
             .text_xs()
             .text_color(theme.text_muted)
-            .child(self.dock_switches(Dock::Left, labels, cx))
+            .child(self.dock_switches(Dock::Left, cx))
             .when(background_running, |bar| {
                 bar.child(activity_indicator(
                     "background-command-activity",
@@ -159,8 +158,8 @@ impl AurisApp {
             .child(engine)
             // The bottom dock's switches before the right dock's, which is the order they sit in
             // going clockwise from the middle of the window.
-            .child(self.dock_switches(Dock::Bottom, labels, cx))
-            .child(self.dock_switches(Dock::Right, labels, cx))
+            .child(self.dock_switches(Dock::Bottom, cx))
+            .child(self.dock_switches(Dock::Right, cx))
     }
 
     /// Where the typing keyboard's hands are, while it is switched on.
@@ -204,14 +203,13 @@ impl AurisApp {
     pub(crate) fn dock_switches(
         &self,
         dock: Dock,
-        labels: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let theme = self.theme.clone();
         div().flex().items_center().gap(px(1.0)).children(
             self.panels
                 .panels_in(dock)
-                .map(|panel| self.panel_switch(panel, labels, &theme, cx)),
+                .map(|panel| self.panel_switch(panel, &theme, cx)),
         )
     }
 
@@ -219,7 +217,6 @@ impl AurisApp {
     fn panel_switch(
         &self,
         panel: Panel,
-        labels: bool,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
@@ -250,12 +247,7 @@ impl AurisApp {
         let shortcut = self.keystroke_for(panel.command());
 
         let id = ("panel-switch", panel as usize);
-        let command = if labels {
-            atelier::Button::new(id, self.t(self.shown_panel_label(panel)))
-                .icon(panel.icon().source())
-        } else {
-            atelier::Button::icon_only(id, panel.icon().source())
-        };
+        let command = atelier::Button::icon_only(id, panel.icon().source());
         div()
             .id(("panel-switch-frame", panel as usize))
             .relative()
@@ -265,8 +257,8 @@ impl AurisApp {
                 command
                     .ghost()
                     .size(atelier::ControlSize::Small)
+                    .radius(theme.atelier.shape.radius_sm)
                     .selected(open)
-                    .tint(if unread { theme.warning } else { theme.accent })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.toggle_panel(panel);
                         cx.notify();

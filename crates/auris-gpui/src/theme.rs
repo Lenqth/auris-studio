@@ -1189,7 +1189,7 @@ impl Theme {
         colors.record = self.record;
         colors.playhead = self.playhead;
         colors.meter = [self.meter_low, self.meter_mid, self.meter_high];
-        colors.agent = atelier::ensure_contrast(colors.agent, self.surface, 4.5);
+        colors.agent = self.accent_text;
         colors.agent_wash = Self::translucent(colors.agent, 0.10);
         // No bezel. Atelier lifts a secondary `Button` with a top-lit gradient and a drop shadow
         // whenever this is visible, and the Glass direction leaves it visible, so those buttons

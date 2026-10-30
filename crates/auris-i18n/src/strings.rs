@@ -2078,6 +2078,10 @@ new のオプション
     AgentThinkingOn { en: "On", ja: "有効" }
     AgentThinkingOff { en: "Off", ja: "無効" }
     AgentEffort { en: "Reasoning effort", ja: "推論レベル" }
+    ReasoningReset { en: "Reset reasoning effort and fast mode", ja: "思考量と高速モードを標準に戻す" }
+    ReasoningUnavailable { en: "This model does not offer the saved effort level.", ja: "このモデルは保存された思考量に対応していません。" }
+    BackToStart { en: "Back to start", ja: "起動画面に戻る" }
+    ResumeProject { en: "Resume editing", ja: "編集を再開" }
     AgentEffortDefault { en: "Model default", ja: "モデルの既定値" }
     AgentEffortNone { en: "Off", ja: "オフ" }
     AgentEffortMinimal { en: "Minimal", ja: "最小" }

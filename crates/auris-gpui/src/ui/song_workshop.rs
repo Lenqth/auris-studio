@@ -52,6 +52,7 @@ pub(crate) struct SongWorkshop {
     models: Vec<super::agent_chat::ModelOption>,
     model_receiver: Option<mpsc::Receiver<Result<String, String>>>,
     model_error: Option<String>,
+    reasoning_picker: Option<super::reasoning_picker::Handle>,
     completions: super::chat_commands::Completions,
     command_feedback: Option<Result<String, String>>,
     input_assist: input_assist::InputAssist,
@@ -348,6 +349,7 @@ impl AurisApp {
                 self.settings.agent.clone(),
             )),
             model_error: None,
+            reasoning_picker: None,
             completions: Default::default(),
             command_feedback: None,
             input_assist: input_assist::InputAssist::new(identity - 1, std::time::Instant::now()),
@@ -2939,6 +2941,83 @@ mod tests {
             assert!(s.brief.content().is_empty());
             assert!(!s.submitted);
         });
+    }
+
+    #[gpui::test]
+    fn reasoning_popover_uses_supported_steps_and_keeps_workshop_preferences_local(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        cx.update(|window, cx| {
+            app.update(cx, |this, cx| {
+                this.show_project_chooser(window, cx);
+                this.open_song_workshop(window, cx);
+            })
+        });
+        make_ready(&app, cx);
+        let before = app.read_with(cx, |this, _| this.settings.agent.clone());
+        app.update(cx, |this, _| {
+            let s = this.song_workshop.as_mut().unwrap();
+            s.preferences.backend = "codex".into();
+            s.preferences.model = "fixture".into();
+            s.preferences.effort = auris_session::ReasoningEffort::Default;
+            s.preferences.fast_mode = false;
+            s.models = vec![super::super::agent_chat::ModelOption {
+                name: "fixture".into(),
+                efforts: Some(vec![
+                    auris_session::ReasoningEffort::Low,
+                    auris_session::ReasoningEffort::High,
+                ]),
+                ..Default::default()
+            }];
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("workshop-effort", cx);
+        crate::harness::paint(&app, cx);
+        let popup = cx.debug_bounds("workshop-effort-popup").unwrap();
+        assert!(popup.bottom() <= cx.debug_bounds("workshop-effort").unwrap().top());
+        cx.simulate_keystrokes("right");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().preferences.effort,
+                auris_session::ReasoningEffort::Low
+            )
+        });
+        cx.simulate_keystrokes("end");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().preferences.effort,
+                auris_session::ReasoningEffort::High
+            )
+        });
+        let slider = cx.debug_bounds("workshop-effort-slider").unwrap();
+        crate::harness::press(cx, slider.center());
+        crate::harness::release(cx, slider.center());
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert_eq!(
+                this.song_workshop.as_ref().unwrap().preferences.effort,
+                auris_session::ReasoningEffort::Low
+            )
+        });
+        crate::harness::click("reasoning-fast-mode", cx);
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.song_workshop.as_ref().unwrap().preferences.fast_mode)
+        });
+        crate::harness::click("reasoning-reset", cx);
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let prefs = &this.song_workshop.as_ref().unwrap().preferences;
+            assert_eq!(prefs.effort, auris_session::ReasoningEffort::Default);
+            assert!(!prefs.fast_mode);
+            assert_eq!(this.settings.agent, before);
+        });
+        cx.simulate_keystrokes("escape");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| assert!(this.song_workshop.is_some()));
     }
 
     #[gpui::test]

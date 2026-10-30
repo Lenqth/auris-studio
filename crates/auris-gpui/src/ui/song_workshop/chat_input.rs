@@ -3,6 +3,76 @@ use super::*;
 use crate::ui::chat_commands::{self, CompletionKey, Scope};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
+    fn workshop_reasoning_picker(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Entity<super::super::reasoning_picker::ReasoningPicker>> {
+        use super::super::reasoning_picker::{Change, Handle, Options, ReasoningPicker};
+        let s = self.song_workshop.as_ref()?;
+        let selected = s.models.iter().find(|m| m.matches(&s.preferences));
+        let choices = if s.preferences.backend == "opencode" {
+            vec![auris_session::ReasoningEffort::Default]
+        } else if let Some(choices) = selected.and_then(|m| m.efforts.clone()) {
+            choices
+        } else if s.preferences.backend == "antigravity" {
+            use auris_session::ReasoningEffort::*;
+            vec![Default, Low, Medium, High]
+        } else {
+            super::super::agent_chat::controls::effort_choices(
+                s.preferences.provider == "openai" || s.preferences.backend == "codex",
+            )
+            .to_vec()
+        };
+        let options = Options {
+            id: "workshop-effort",
+            theme: self.theme.clone(),
+            language: self.language(),
+            model: selected
+                .map(|m| m.label())
+                .unwrap_or_else(|| s.preferences.model.clone()),
+            choices,
+            effort: s.preferences.effort,
+            fast: s.preferences.fast_mode,
+            supports_fast: s.preferences.supports_fast_mode(),
+            enabled: !s.busy(),
+        };
+        if let Some(handle) = &s.reasoning_picker {
+            handle.view.update(cx, |picker, _| picker.options = options);
+            return Some(handle.view.clone());
+        }
+        let focus = cx.focus_handle().tab_stop(true);
+        let view = cx.new(|cx| ReasoningPicker::new(options, focus, cx));
+        let subscription = cx.subscribe(&view, |this, _, change: &Change, cx| {
+            if let Some(s) = &mut this.song_workshop
+                && !s.busy()
+            {
+                s.active_field = None;
+                match change {
+                    Change::Opened => {}
+                    Change::Effort(effort) => {
+                        s.preferences.effort = *effort;
+                        s.preferences.thinking = None;
+                    }
+                    Change::Fast if s.preferences.supports_fast_mode() => {
+                        s.preferences.fast_mode = !s.preferences.fast_mode
+                    }
+                    Change::Reset => {
+                        s.preferences.effort = auris_session::ReasoningEffort::Default;
+                        s.preferences.thinking = None;
+                        s.preferences.fast_mode = false;
+                    }
+                    Change::Fast => {}
+                }
+                cx.notify();
+            }
+        });
+        self.song_workshop.as_mut()?.reasoning_picker = Some(Handle {
+            view: view.clone(),
+            _subscription: subscription,
+        });
+        Some(view)
+    }
+
     pub(crate) fn workshop_prompt_open(&self) -> bool {
         self.song_workshop.is_some()
             && (self.startup_update_prompt_open()
@@ -21,6 +91,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let reasoning = self.workshop_reasoning_picker(cx);
         let Some(s) = &self.song_workshop else {
             return div().into_any_element();
         };
@@ -37,9 +108,6 @@ impl AurisApp {
                     format!("{} / {}", s.preferences.backend, s.preferences.model)
                 }
             });
-        let effort = self.t(crate::ui::agent_chat::controls::effort_key(
-            s.preferences.effort,
-        ));
         let focused = s.active_field == Some(0);
         let busy = s.busy();
         let queueing = busy || !s.queued.is_empty();
@@ -261,33 +329,7 @@ impl AurisApp {
                             })),
                     ),
                 )
-                .child(
-                    atelier::Button::new(
-                        "workshop-effort",
-                        format!("{}: {effort}", self.t(Key::AgentEffort)),
-                    )
-                    .ghost()
-                    .size(atelier::ControlSize::Small)
-                    .icon(atelier::IconName::Brain)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        if let Some(s) = &mut this.song_workshop {
-                            let levels = s
-                                .models
-                                .iter()
-                                .find(|m| m.matches(&s.preferences))
-                                .and_then(|m| m.efforts.clone())
-                                .unwrap_or_else(|| vec![auris_session::ReasoningEffort::Default]);
-                            if !levels.is_empty() {
-                                let index = levels
-                                    .iter()
-                                    .position(|e| *e == s.preferences.effort)
-                                    .map_or(0, |i| (i + 1) % levels.len());
-                                s.preferences.effort = levels[index];
-                            }
-                        }
-                        cx.notify();
-                    })),
-                )
+                .children(reasoning)
                 .child(
                     atelier::Button::icon_only(
                         "workshop-model-settings",

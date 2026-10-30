@@ -28,8 +28,22 @@ impl AurisApp {
         titlebar::bar(
             window,
             theme,
-            titlebar::Parts::new("project-title", self.document_title())
-                .leading(self.render_application_menu_button(cx)),
+            titlebar::Parts::new("project-title", self.document_title()).leading(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(self.render_application_menu_button(cx))
+                    .child(
+                        atelier::Button::icon_only("editor-start", atelier::IconName::ChevronLeft)
+                            .ghost()
+                            .size(atelier::ControlSize::Small)
+                            .tooltip(self.t(Key::BackToStart))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.show_editor_start(window, cx)
+                            })),
+                    ),
+            ),
             controls,
         )
     }
@@ -113,6 +127,48 @@ mod tests {
 
     use crate::dock::Panel;
     use crate::harness::{click, open, paint, resize, with_a_clip};
+
+    #[gpui::test]
+    fn start_button_keeps_unsaved_work_and_escape_resumes_it(cx: &mut TestAppContext) {
+        let (app, cx, _, clip) = with_a_clip(cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        click("editor-start", cx);
+        paint(&app, cx);
+        assert!(cx.debug_bounds("project-chooser").is_some());
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.project(), &before);
+            assert!(this.project().midi_clip(clip).is_some());
+            assert!(this.session.is_dirty());
+        });
+        cx.simulate_keystrokes("escape");
+        paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.project_chooser.is_none());
+            assert_eq!(this.project(), &before);
+        });
+        click("editor-start", cx);
+        paint(&app, cx);
+        click("chooser-close", cx);
+        app.read_with(cx, |this, _| assert!(this.project_chooser.is_none()));
+    }
+
+    #[gpui::test]
+    fn creating_from_the_returned_start_screen_asks_before_replacing_unsaved_work(
+        cx: &mut TestAppContext,
+    ) {
+        let (app, cx, _, _) = with_a_clip(cx);
+        let before = app.read_with(cx, |this, _| this.project().clone());
+        click("editor-start", cx);
+        paint(&app, cx);
+        click("chooser-confirm", cx);
+        paint(&app, cx);
+        assert!(cx.debug_bounds("prompt-cancel").is_some());
+        click("prompt-cancel", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.project_chooser.is_none());
+            assert_eq!(this.project(), &before);
+        });
+    }
 
     #[gpui::test]
     fn playback_and_panel_switches_stay_outside_the_titlebar(cx: &mut TestAppContext) {

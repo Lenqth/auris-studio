@@ -93,8 +93,13 @@ pub(crate) struct NavigateAgentModel {
 /// The selector context wins before window actions such as Down-to-select-the-next-track while
 /// the model control owns focus. Tab deliberately remains unbound so normal focus traversal can
 /// continue after dismissing the menu.
-pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 9] {
+pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 10] {
     [
+        gpui::KeyBinding::new(
+            "escape",
+            super::reasoning_picker::DismissReasoningPicker,
+            Some("AurisReasoningPicker"),
+        ),
         gpui::KeyBinding::new(
             "secondary-r",
             NavigateAgentModel { key: "refresh" },
@@ -3657,11 +3662,6 @@ impl AurisApp {
                             .text_xs()
                             .text_color(theme.text_muted)
                             .child(
-                                atelier::Icon::new(atelier::IconName::Sparkles)
-                                    .size(theme.atelier.typography.size_lg)
-                                    .color(theme.atelier.colors.agent),
-                            )
-                            .child(
                                 div()
                                     .flex_1()
                                     .min_w_0()
@@ -4494,9 +4494,9 @@ impl AurisApp {
         true
     }
 
-    /// Two quiet selectors sharing the model/effort lane of the composer.
+    /// Model and shared reasoning controls below the composer.
     fn agent_model_picker(&mut self, cx: &mut gpui::Context<Self>) -> AnyElement {
-        let theme = self.theme.clone();
+        use crate::ui::reasoning_picker::{Change, Handle, Options, ReasoningPicker};
         let enabled = !self.agent_operation_busy();
         let configured = !self.agent_chat.chosen_model.is_empty();
         let focus = self
@@ -4516,22 +4516,70 @@ impl AurisApp {
         } else {
             self.t(Key::AgentChooseModel).to_owned()
         };
-        let efforts = self.agent_chat.effort_choices();
-        let effort_names = efforts
-            .iter()
-            .map(|effort| self.t(controls::effort_key(*effort)).to_owned())
-            .collect::<Vec<_>>();
-        let effort = self.agent_chat.effort;
-        let effort_label = self
-            .t(match effort {
-                ReasoningEffort::Default => Key::AgentEffortDefaultShort,
-                ReasoningEffort::Minimal => Key::AgentEffortMinimalShort,
-                ReasoningEffort::Medium => Key::AgentEffortMediumShort,
-                ReasoningEffort::Xhigh => Key::AgentEffortXhighShort,
-                ReasoningEffort::Max => Key::AgentEffortMaxShort,
-                _ => controls::effort_key(effort),
-            })
-            .to_owned();
+        let options = Options {
+            id: "agent-effort-menu",
+            theme: self.theme.clone(),
+            language: self.language(),
+            model: current.clone(),
+            choices: self.agent_chat.effort_choices(),
+            effort: self.agent_chat.effort,
+            fast: self.agent_chat.fast_mode,
+            supports_fast: self.agent_chat.preferences().supports_fast_mode(),
+            enabled,
+        };
+        let picker = if let Some(handle) = &self.agent_chat.controls.reasoning_picker {
+            handle.view.update(cx, |picker, _| picker.options = options);
+            handle.view.clone()
+        } else {
+            let focus = self
+                .agent_chat
+                .controls
+                .effort_focus
+                .get_or_insert_with(|| cx.focus_handle().tab_index(0).tab_stop(true))
+                .clone();
+            let view = cx.new(|cx| ReasoningPicker::new(options, focus, cx));
+            let subscription = cx.subscribe(&view, |this, _, change: &Change, cx| {
+                if this.agent_operation_busy() {
+                    return;
+                }
+                this.agent_chat.focused = None;
+                match change {
+                    Change::Opened => {}
+                    Change::Effort(effort) => this.agent_effort(*effort),
+                    Change::Fast => {
+                        if let Err(error) = this.agent_fast_mode_with(this.settings_saver()) {
+                            this.agent_chat
+                                .push_entry(ChatEntry::Error(error.to_string()));
+                        }
+                    }
+                    Change::Reset => {
+                        let previous = (
+                            this.agent_chat.effort,
+                            this.agent_chat.thinking,
+                            this.agent_chat.fast_mode,
+                        );
+                        this.agent_chat.effort = ReasoningEffort::Default;
+                        this.agent_chat.thinking = None;
+                        this.agent_chat.fast_mode = false;
+                        if let Err(error) = this.agent_write_through_with(this.settings_saver()) {
+                            (
+                                this.agent_chat.effort,
+                                this.agent_chat.thinking,
+                                this.agent_chat.fast_mode,
+                            ) = previous;
+                            this.agent_chat
+                                .push_entry(ChatEntry::Error(error.to_string()));
+                        }
+                    }
+                }
+                cx.notify();
+            });
+            self.agent_chat.controls.reasoning_picker = Some(Handle {
+                view: view.clone(),
+                _subscription: subscription,
+            });
+            view
+        };
         div()
             .flex()
             .items_center()
@@ -4546,94 +4594,15 @@ impl AurisApp {
                 focus,
                 cx,
             )))
-            .child(
-                div()
-                    .w(px(56.0))
-                    .min_w_0()
-                    .flex_shrink_0()
-                    .child(self.dropdown(
-                        "agent-effort-menu",
-                        effort_label,
-                        self.agent_chat.controls.effort_menu,
-                        &theme,
-                        |this, _| {
-                            if !this.agent_operation_busy() {
-                                this.agent_chat.controls.effort_menu =
-                                    !this.agent_chat.controls.effort_menu;
-                                this.agent_chat.controls.mode_menu = false;
-                                this.agent_chat.model_menu = false;
-                            }
-                        },
-                        cx,
-                    )),
-            )
-            .when(self.agent_chat.preferences().supports_fast_mode(), |row| {
-                row.child(
-                    // A latching icon, like the transport's: lit when fast mode is on, with its
-                    // name and its cost in the tooltip.
-                    button_enabled(
-                        "agent-fast-mode",
-                        "",
-                        ButtonStyle::Ghost,
-                        ButtonState::available(self.agent_chat.fast_mode, enabled),
-                        theme.accent,
-                        &theme,
-                        cx.listener(|this, _, _, cx| {
-                            this.agent_fast_mode();
-                            cx.notify();
-                        }),
-                    )
-                    .w(theme.atelier.density.control_sm)
-                    .px_0()
-                    .child(icon(
-                        Icon::Bolt,
-                        theme.atelier.typography.size_md,
-                        if self.agent_chat.fast_mode {
-                            theme.text_on_accent
-                        } else {
-                            theme.text_muted
-                        },
-                    ))
-                    .tooltip(crate::ui::tooltip::keyed_tip(
-                        format!(
-                            "{} — {}",
-                            self.t(Key::AgentFastMode),
-                            self.t(Key::AgentFastModeHelp)
-                        ),
-                        "",
-                        &theme,
-                    )),
-                )
-            })
-            .when(self.agent_chat.model_menu && enabled, |this| {
+            .child(picker)
+            .when(self.agent_chat.model_menu && enabled, |row| {
                 let names = self
                     .agent_chat
                     .models
                     .iter()
                     .map(ModelOption::label)
                     .collect::<Vec<_>>();
-                this.child(self.model_option_rows(&names, &theme, cx))
-            })
-            .when(self.agent_chat.controls.effort_menu, |this| {
-                this.child(
-                    self.option_rows(
-                        "agent-effort-option",
-                        &effort_names,
-                        efforts
-                            .iter()
-                            .position(|choice| *choice == effort)
-                            .unwrap_or(0),
-                        &theme,
-                        |this, index, _| {
-                            if let Some(effort) =
-                                this.agent_chat.effort_choices().get(index).copied()
-                            {
-                                this.agent_effort(effort);
-                            }
-                        },
-                        cx,
-                    ),
-                )
+                row.child(self.model_option_rows(&names, &self.theme.clone(), cx))
             })
             .into_any_element()
     }
@@ -7940,8 +7909,29 @@ mod tests {
         cx.simulate_keystrokes("escape");
         crate::harness::click("agent-effort-menu", cx);
         crate::harness::paint(&app, cx);
-        let menu = cx.debug_bounds("agent-effort-option-popup").unwrap();
+        let menu = cx.debug_bounds("agent-effort-menu-popup").unwrap();
         assert!(menu.bottom() <= effort.top());
+        cx.simulate_keystrokes("end");
+        crate::harness::paint(&app, cx);
+        app.read_with(cx, |this, _| {
+            let selected = *this.agent_chat.effort_choices().last().unwrap();
+            assert_eq!(this.agent_chat.effort, selected);
+            assert_eq!(this.settings.agent.effort, selected);
+        });
+        cx.simulate_keystrokes("escape");
+        crate::harness::paint(&app, cx);
+        cx.update(|window, cx| {
+            app.read_with(cx, |this, _| {
+                assert!(
+                    this.agent_chat
+                        .controls
+                        .effort_focus
+                        .as_ref()
+                        .unwrap()
+                        .is_focused(window)
+                );
+            })
+        });
     }
 
     #[gpui::test]
@@ -7967,14 +7957,18 @@ mod tests {
                 this.agent_chat
                     .load_preferences(&this.settings.agent.clone());
                 this.agent_chat.models_loaded = true;
-                this.agent_chat.busy = true;
+                this.agent_chat.busy = false;
                 assert!(this.agent_chat.preferences().fast_mode);
                 assert_eq!(this.agent_chat.preferences().effort, ReasoningEffort::High);
             });
             crate::harness::paint(&app, cx);
-            assert_eq!(cx.debug_bounds("agent-fast-mode").is_some(), supported);
+            crate::harness::click("agent-effort-menu", cx);
+            crate::harness::paint(&app, cx);
+            assert_eq!(cx.debug_bounds("reasoning-fast-mode").is_some(), supported);
+            app.update(cx, |this, _| this.agent_chat.busy = true);
+            crate::harness::paint(&app, cx);
             if supported {
-                crate::harness::click("agent-fast-mode", cx);
+                crate::harness::click("reasoning-fast-mode", cx);
                 app.read_with(cx, |this, _| assert!(this.agent_chat.fast_mode));
             }
         }
@@ -8000,6 +7994,34 @@ mod tests {
             assert!(this.agent_chat.fast_mode);
             assert!(this.settings.agent.fast_mode);
         });
+    }
+
+    #[gpui::test]
+    fn reasoning_popover_stays_inside_the_window_from_a_narrow_left_dock(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.panels
+                .move_to(crate::dock::Panel::Agent, crate::dock::Dock::Left);
+            this.panels.set_size(crate::dock::Dock::Left, px(180.0));
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.models_loaded = true;
+        });
+        // The leading dock intentionally folds below the sidebar breakpoint.
+        crate::harness::resize(&app, cx, gpui::size(px(1280.), px(600.)));
+        let panel = cx.debug_bounds("agent-panel").unwrap();
+        let trigger = cx.debug_bounds("agent-effort-menu").unwrap();
+        assert!(
+            trigger.left() >= panel.left() && trigger.right() <= panel.right(),
+            "{trigger:?} outside {panel:?}"
+        );
+        crate::harness::click("agent-effort-menu", cx);
+        crate::harness::paint(&app, cx);
+        let popup = cx.debug_bounds("agent-effort-menu-popup").unwrap();
+        assert!(popup.left() >= px(0.));
+        assert!(popup.right() <= px(1280.));
+        assert!(popup.bottom() <= cx.debug_bounds("agent-effort-menu").unwrap().top());
     }
 
     #[gpui::test]
