@@ -47,6 +47,37 @@ mod tool_surface_eval;
 #[cfg(test)]
 mod transcription_eval;
 
+#[cfg(test)]
+mod issue_reporting_tests {
+    use super::*;
+
+    #[gpui::test]
+    fn issue_tool_offers_an_invitation_without_opening_or_publishing_a_report(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (app, cx) = crate::harness::open(cx);
+        let revision = app.read_with(cx, |this, _| this.session.revision());
+        app.update(cx, |this, cx| {
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.bound_project = this.session.path().map(Path::to_path_buf);
+            this.agent_chat.policy.mode = auris_session::agent_policy::Mode::ReadOnly;
+            let result = this.agent_edit(serde_json::json!({"action":"suggest_issue_report","suggestion":{
+                "title":"Unsupported operation", "explanation":"The capability check found a missing agent operation; the UI may support it."
+            }})).unwrap();
+            assert!(result.contains("\"published\":false"));
+            assert!(this.issue_report_window.is_none());
+            assert_eq!(this.session.revision(), revision);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        crate::harness::click("agent-issue-draft", cx);
+        app.read_with(cx, |this, _| {
+            assert!(this.issue_report_window.is_some());
+            assert_eq!(this.session.revision(), revision);
+        });
+    }
+}
+
 /// Maximum transcript rows retained in the panel.
 const CHAT_CAPACITY: usize = 500;
 
@@ -1053,6 +1084,7 @@ impl AgentLink {
 
 /// Everything the agent panel is, apart from its pixels.
 pub(crate) struct AgentChat {
+    issue_suggestion: Option<auris_session::issue_report::Suggestion>,
     conversations: conversations::Conversations,
     controls: controls::Controls,
     policy: auris_session::agent_policy::Policy,
@@ -1188,6 +1220,7 @@ impl Default for AgentChat {
     fn default() -> Self {
         Self {
             conversations: Default::default(),
+            issue_suggestion: None,
             controls: controls::Controls::default(),
             policy: Default::default(),
             auto_compact_percent: None,
@@ -2139,6 +2172,7 @@ impl AurisApp {
 
     /// Starts fresh model history and rebinds the next child to the current document.
     pub(crate) fn agent_reset_conversation(&mut self) {
+        self.agent_chat.issue_suggestion = None;
         self.attachment_preview = None;
         let _ = self.flush_conversation_storage();
         self.agent_chat.conversations = Default::default();
@@ -2533,12 +2567,83 @@ impl AurisApp {
             );
         }
         self.check_agent_edit(&command)?;
-        serde_json::from_value::<auris_session::live_agent::Command>(command)
-            .map_err(|error| error.to_string())
-            .and_then(|command| {
-                self.session
-                    .agent_command_with_plugin_paths(command, &self.settings.plugin_paths)
+        let command = serde_json::from_value::<auris_session::live_agent::Command>(command)
+            .map_err(|error| error.to_string())?;
+        let suggestion =
+            if let auris_session::live_agent::Command::SuggestIssueReport { suggestion } = &command
+            {
+                Some(suggestion.clone())
+            } else {
+                None
+            };
+        let result = self
+            .session
+            .agent_command_with_plugin_paths(command, &self.settings.plugin_paths)?;
+        if let Some(suggestion) = suggestion {
+            self.agent_chat.issue_suggestion = Some(suggestion);
+        }
+        Ok(result)
+    }
+
+    /// Capture only bounded user-authored text locally; the report still starts with no consent.
+    pub(crate) fn issue_prompt_snapshot(&self) -> String {
+        let mut prompts = self
+            .agent_chat
+            .entries
+            .iter()
+            .rev()
+            .filter_map(|entry| {
+                if let ChatEntry::You { text, .. } = entry {
+                    Some(auris_session::issue_report::bounded(text, 1500))
+                } else {
+                    None
+                }
             })
+            .take(12)
+            .collect::<Vec<_>>();
+        prompts.reverse();
+        let mut text = prompts.join("\n\nUser request:\n");
+        if !self.settings.agent.system_prompt.trim().is_empty() {
+            text.push_str("\n\nCustom agent instructions:\n");
+            text.push_str(&auris_session::issue_report::bounded(
+                &self.settings.agent.system_prompt,
+                3000,
+            ));
+        }
+        auris_session::issue_report::bounded(&text, 6000)
+    }
+
+    fn issue_invitation(&self, cx: &mut gpui::Context<Self>) -> Option<AnyElement> {
+        let suggestion = self.agent_chat.issue_suggestion.as_ref()?;
+        let theme = &self.theme;
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_2()
+                .min_w_0()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(theme.text_muted)
+                        .child(self.t(Key::IssueInvitation)),
+                )
+                .child(div().text_sm().child(suggestion.title.clone()))
+                .child(button(
+                    "agent-issue-draft",
+                    self.t(Key::IssueOpenSuggestion),
+                    ButtonStyle::Normal,
+                    false,
+                    theme.accent,
+                    theme,
+                    cx.listener(|this, _, _, cx| {
+                        let suggestion = this.agent_chat.issue_suggestion.clone();
+                        this.open_issue_report(suggestion, cx);
+                    }),
+                ))
+                .into_any_element(),
+        )
     }
 
     fn start_agent_inspection(&mut self, command: &serde_json::Value) -> Result<(), String> {
@@ -3692,6 +3797,7 @@ impl AurisApp {
                 )))
             })
             .child(self.agent_approval_view(cx))
+            .children(self.issue_invitation(cx))
             .when(
                 operation_busy || self.agent_chat.tokens_in > 0 || self.agent_chat.tokens_out > 0,
                 |this| this.child(self.agent_status_row(&theme)),

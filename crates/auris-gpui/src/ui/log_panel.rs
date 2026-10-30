@@ -66,6 +66,15 @@ impl AurisApp {
                             .child(self.t(Key::LogPanel)),
                     )
                     .child(button(
+                        "log-report",
+                        self.t(Key::IssueReport),
+                        ButtonStyle::Normal,
+                        false,
+                        theme.accent,
+                        &theme,
+                        cx.listener(|this, _, _, cx| this.open_issue_report(None, cx)),
+                    ))
+                    .child(button(
                         "log-clear",
                         self.t(Key::LogClear),
                         ButtonStyle::Normal,

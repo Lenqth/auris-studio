@@ -255,6 +255,7 @@ pub const OPERATIONS: &[&str] = &[
     "edit_project.add_clip",
     "edit_project.generate_phrase",
     "edit_project.inspect_performance",
+    "edit_project.suggest_issue_report",
     "edit_project.set_performance",
     "edit_project.set_loop",
     "search_instruments",

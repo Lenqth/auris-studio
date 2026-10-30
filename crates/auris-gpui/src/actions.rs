@@ -49,6 +49,8 @@ actions!(
         OpenRecent,
         /// Show what this build is.
         ShowAbout,
+        /// Prepare a local issue draft with per-report private-context consent.
+        ReportProblem,
         /// Compare this build with the latest published desktop release.
         CheckForUpdates,
         /// Start or stop playback.
@@ -548,6 +550,7 @@ bindable! {
         // reopens itself while somebody writes about it.
         "view.agent",           GroupView,      CmdShowAgent,          "secondary-alt-a" => ToggleAgent;
         "view.about",           GroupHelp,      CmdAbout,              "" => ShowAbout;
+        "help.report_problem",  GroupHelp,      IssueReport,           "" => ReportProblem;
         "help.check_updates",   GroupHelp,      CmdCheckForUpdates,    "" => CheckForUpdates;
         // The three strips over the arrangement. Out on `secondary-alt-` because they are
         // arrangement furniture rather than things reached mid-take, and because the plain and

@@ -2,7 +2,7 @@
 use auris_session::live_agent::Command;
 use serde_json::Value;
 
-/// Describe only the selected permission mode, consistently for every live transport.
+/// Describe permission and issue-reporting policy consistently for every live transport.
 pub fn permission_context(policy: &auris_session::agent_policy::Policy) -> String {
     use auris_session::agent_policy::Mode;
     let behavior = match policy.mode {
@@ -23,7 +23,7 @@ pub fn permission_context(policy: &auris_session::agent_policy::Policy) -> Strin
         policy.mode.name(),
         policy.deny,
         policy.allow
-    )
+    ) + " If a verified Auris limitation or suspected defect blocks a request, explain the evidence and any workaround, then offer suggest_issue_report. Check tool_help/capabilities first. Distinguish missing agent tools from missing application features, configuration problems, denied permissions and transient failures. Never quote private prompts, history, logs or preferences in the suggestion; only the report UI can obtain the human's per-excerpt consent."
 }
 
 /// A small, flat tool definition derived from the live command contract.
