@@ -17,6 +17,7 @@ pub(super) enum Section {
     Singer,
     Panels,
     Toolbar,
+    Titlebar,
     Host,
     Output,
     Input,
@@ -26,7 +27,7 @@ pub(super) enum Section {
 }
 
 impl Section {
-    const ALL: [Self; 18] = [
+    const ALL: [Self; 19] = [
         Self::Agent,
         Self::Personalization,
         Self::Appearance,
@@ -39,6 +40,7 @@ impl Section {
         Self::Singer,
         Self::Panels,
         Self::Toolbar,
+        Self::Titlebar,
         Self::Host,
         Self::Output,
         Self::Input,
@@ -167,6 +169,20 @@ impl Section {
                 Key::CmdTogglePunch,
                 Key::CmdToggleCycle,
                 Key::CmdToggleMetronome,
+            ],
+            Self::Titlebar => &[
+                Key::TitlebarMenusHeading,
+                Key::TitlebarMenusNote,
+                Key::TitlebarMenusNative,
+                Key::GroupFile,
+                Key::GroupEdit,
+                Key::GroupTrack,
+                Key::GroupCompose,
+                Key::GroupView,
+                Key::GroupTransport,
+                Key::MenuWindow,
+                Key::GroupAnalysis,
+                Key::GroupHelp,
             ],
             Self::Output => &[Key::OutputDevice],
             Self::Input => &[Key::InputDevice, Key::InputDeviceNote, Key::AsioInputNote],

@@ -21,7 +21,6 @@ pub(crate) fn conversation_intro(
         .flex_col()
         .gap(theme.atelier.spacing.md)
         .py(theme.atelier.spacing.xl)
-        .child(atelier::Avatar::agent())
         .child(
             div()
                 .text_size(theme.atelier.typography.size_xl)

@@ -722,9 +722,9 @@ where
         .on_click(on_click)
 }
 
-/// A readout with a caption above it, as a hardware transport displays one.
+/// A caption and value inside the transport's shared control surface.
 pub fn readout<C: Into<SharedString>, V: Into<SharedString>>(
-    // atelier: allow — caption, value and unit form one domain transport well.
+    // atelier: allow — caption, value and unit share the parent transport's surface.
     caption: C,
     value: V,
     sub: Option<SharedString>,
@@ -735,13 +735,9 @@ pub fn readout<C: Into<SharedString>, V: Into<SharedString>>(
         .flex()
         .flex_col()
         .justify_center()
+        .h_full()
         .w(width)
         .px_2()
-        .py_1()
-        .rounded(Metrics::RADIUS_MD)
-        .bg(theme.surface_sunken)
-        .border_1()
-        .border_color(theme.border_subtle)
         .child(
             div()
                 .text_xs()

@@ -1155,6 +1155,7 @@ impl Theme {
     /// Keeps imported and custom Auris palettes consistent with shared Atelier components.
     pub fn sync_atelier(&mut self) {
         self.atelier.typography.ui = self.font.clone();
+        self.atelier.density.title_bar = crate::titlebar::HEIGHT;
         let colors = &mut self.atelier.colors;
         colors.background = self.background;
         colors.surface = self.surface;
@@ -1188,7 +1189,7 @@ impl Theme {
         colors.record = self.record;
         colors.playhead = self.playhead;
         colors.meter = [self.meter_low, self.meter_mid, self.meter_high];
-        colors.agent = atelier::ensure_contrast(colors.agent, self.surface, 4.5);
+        colors.agent = self.accent_text;
         colors.agent_wash = Self::translucent(colors.agent, 0.10);
         // No bezel. Atelier lifts a secondary `Button` with a top-lit gradient and a drop shadow
         // whenever this is visible, and the Glass direction leaves it visible, so those buttons
@@ -1463,10 +1464,11 @@ impl Theme {
 pub struct Metrics;
 
 impl Metrics {
-    /// Height of the transport readout bar below the title bar.
-    ///
-    /// The playback buttons live in the title bar; this row holds their readouts and meters.
+    /// Height of the shared playback and readout bar below the title bar.
     pub const TRANSPORT_HEIGHT: Pixels = px(54.0);
+
+    /// Extra room for editing controls and meters in narrow editor windows.
+    pub const TRANSPORT_AUX_HEIGHT: Pixels = px(32.0);
     /// Height of the timeline ruler above the arrangement.
     pub const RULER_HEIGHT: Pixels = px(28.0);
     /// Height of the harmony lane, between the structure lane and the clip lanes.
@@ -1500,7 +1502,7 @@ impl Metrics {
     /// Height of the header strip at the top of a docked panel.
     pub const PANEL_HEADER_HEIGHT: Pixels = px(28.0);
     /// Height of the status bar along the bottom of the window.
-    pub const STATUS_HEIGHT: Pixels = px(24.0);
+    pub const STATUS_HEIGHT: Pixels = px(28.0);
     /// Height of a control row inside the inspector.
     pub const CONTROL_HEIGHT: Pixels = px(24.0);
     /// Width reserved for a dropdown's trailing disclosure indicator.

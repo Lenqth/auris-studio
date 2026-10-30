@@ -1908,6 +1908,9 @@ mod tests {
             paint(&app, &mut utility);
             let azimuth = app.read_with(&utility, |this, _| this.timbre_map.camera.azimuth);
             utility.update(|window, cx| window.focus(&app.read(cx).focus));
+            if crate::app::AurisApp::wants_menu_bar() {
+                utility.simulate_keystrokes("tab");
+            }
             // AI naming when enabled, Rescan, Close, two axis modes, four views, left and right.
             utility.simulate_keystrokes(if configured {
                 "tab tab tab tab tab tab tab tab tab tab tab"

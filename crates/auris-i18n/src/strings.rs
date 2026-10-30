@@ -743,7 +743,7 @@ strings! {
     CmdSetSignature { en: "Time Signature…", ja: "拍子…" }
     CmdCycleGrid { en: "Next Grid Division", ja: "次のグリッド分割" }
     CmdGoToPosition { en: "Go to Position…", ja: "位置へ移動…" }
-    CmdOpenMenuBar { en: "Open Menu Bar", ja: "メニューバーを開く" }
+    CmdOpenMenuBar { en: "Application menu", ja: "アプリメニュー" }
     CmdFocusNextPane { en: "Focus Next Panel", ja: "次のパネルにフォーカス" }
     CmdFocusPreviousPane { en: "Focus Previous Panel", ja: "前のパネルにフォーカス" }
     // Where a key binding reaches. Shown beside the commands that are not reachable everywhere.
@@ -2079,6 +2079,14 @@ new のオプション
     AgentThinkingOn { en: "On", ja: "有効" }
     AgentThinkingOff { en: "Off", ja: "無効" }
     AgentEffort { en: "Reasoning effort", ja: "推論レベル" }
+    ReasoningReset { en: "Reset reasoning effort and fast mode", ja: "思考量と高速モードを標準に戻す" }
+    ReasoningUnavailable { en: "This model does not offer the saved effort level.", ja: "このモデルは保存された思考量に対応していません。" }
+    BackToStart { en: "Back to start", ja: "起動画面に戻る" }
+    TitlebarMenusHeading { en: "Title bar menus", ja: "タイトルバーのメニュー" }
+    TitlebarMenusNote { en: "Choose which categories appear beside Undo and Redo. Other categories and menus that do not fit remain in the application menu.", ja: "Undo・Redoの隣に常時表示するカテゴリを選びます。非表示のカテゴリや、幅に収まらないメニューはアプリメニューから使えます。" }
+    TitlebarMenusNative { en: "macOS uses the system menu bar for all categories.", ja: "macOSでは、すべてのカテゴリを標準メニューバーで利用できます。" }
+    TitlebarMenusReset { en: "Restore default menus", ja: "初期表示に戻す" }
+    ResumeProject { en: "Resume editing", ja: "編集を再開" }
     AgentEffortDefault { en: "Model default", ja: "モデルの既定値" }
     AgentEffortNone { en: "Off", ja: "オフ" }
     AgentEffortMinimal { en: "Minimal", ja: "最小" }

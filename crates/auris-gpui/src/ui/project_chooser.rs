@@ -44,6 +44,7 @@ pub(crate) enum ChooserPage {
 
 #[derive(Default)]
 pub(crate) struct ProjectChooser {
+    return_to_editor: bool,
     pub(crate) page: ChooserPage,
     selected: usize,
     ai: bool,
@@ -117,6 +118,23 @@ fn arriving_opacity(delta: f32) -> f32 {
 }
 
 impl AurisApp {
+    pub(crate) fn show_editor_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.session.release_typed_notes();
+        self.stop_audition();
+        self.close_menu();
+        self.close_menu_bar();
+        self.show_project_chooser(window, cx);
+        if let Some(chooser) = &mut self.project_chooser {
+            chooser.return_to_editor = true;
+        }
+    }
+
+    fn resume_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.project_chooser = None;
+        self.focus_pane(self.last_pane, window);
+        cx.notify();
+    }
+
     pub(crate) fn show_project_chooser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.project_chooser = Some(ProjectChooser::default());
         self.set_status("");
@@ -267,8 +285,12 @@ impl AurisApp {
                 self.open_song_workshop(window, cx);
             }
             ChooserPage::New => {
+                let return_to_editor = chooser.return_to_editor;
                 self.project_chooser = None;
                 self.focus_pane(Pane::Arrangement, window);
+                if return_to_editor {
+                    self.new_project_asking();
+                }
             }
             ChooserPage::Setup => self.step_setup_guide(true, cx),
         }
@@ -310,6 +332,9 @@ impl AurisApp {
             }
             "enter" => self.choose_project(window, cx),
             "escape" if chooser.page == ChooserPage::Setup => self.setup_escape(window, cx),
+            "escape" if chooser.return_to_editor && self.opening_project.is_none() => {
+                self.resume_editor(window, cx)
+            }
             "escape" if self.opening_project.is_none() => {
                 if self.project_tabs.is_some() {
                     self.close_project_tab(cx);
@@ -383,45 +408,106 @@ impl AurisApp {
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
         let ai_selected = chooser.ai;
         let card = |id: &'static str, ai: bool| {
-            let card = OptionCard::new(
-                id,
-                if ai {
-                    IconName::Sparkles
-                } else {
-                    IconName::Music
-                },
-                self.t(if ai {
-                    Key::WorkshopTitle
-                } else {
-                    Key::ChooseEmpty
-                }),
-            )
-            .description(self.t(if ai {
-                Key::ChooseAiHelp
+            let selected = ai == ai_selected;
+            let on_click = cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                if this.opening_project.is_some() {
+                    return;
+                }
+                if let Some(chooser) = &mut this.project_chooser {
+                    chooser.ai = ai;
+                }
+                if event.click_count() == 2 {
+                    this.choose_project(window, cx);
+                }
+                cx.notify();
+            });
+            let card = if ai {
+                // Only the welcome entry keeps the brand pink; conversation surfaces stay quiet.
+                let colour = atelier::ensure_contrast(
+                    theme.atelier.colors.agent_gradient[1],
+                    theme.surface,
+                    4.5,
+                );
+                div()
+                    .id(id)
+                    .debug_selector(move || id.into())
+                    .tab_index(0)
+                    .key_context(atelier::CONTROL_CONTEXT)
+                    .flex()
+                    .flex_col()
+                    .gap(theme.atelier.spacing.md)
+                    .p(theme.atelier.spacing.lg)
+                    .rounded(theme.atelier.shape.radius_lg)
+                    .bg(theme.atelier.colors.elevated)
+                    .border_1()
+                    .border_color(if selected { theme.accent } else { theme.border })
+                    .focus(|style| {
+                        style
+                            .border_color(theme.accent)
+                            .shadow(theme.atelier.focus_ring())
+                    })
+                    .when(selected, |card| {
+                        card.shadow(vec![gpui::BoxShadow {
+                            color: theme.atelier.colors.focus_ring.opacity(0.35),
+                            offset: point(px(0.), px(0.)),
+                            blur_radius: px(1.),
+                            spread_radius: px(3.),
+                        }])
+                    })
+                    .when(!selected, |card| {
+                        card.hover(|style| style.bg(theme.surface_hover))
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(56.))
+                            .rounded(
+                                atelier::Theme::concentric(
+                                    theme.atelier.shape.radius_lg,
+                                    theme.atelier.spacing.lg,
+                                )
+                                .max(theme.atelier.shape.radius_md),
+                            )
+                            .bg(colour.opacity(0.10))
+                            .child(
+                                atelier::Icon::new(IconName::Sparkles)
+                                    .size(px(28.))
+                                    .color(colour),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(theme.atelier.spacing.xs)
+                            .child(
+                                Label::new(self.t(Key::WorkshopTitle))
+                                    .size(TextSize::Large)
+                                    .heading_weight(),
+                            )
+                            .child(
+                                Label::new(self.t(Key::ChooseAiHelp))
+                                    .size(TextSize::Small)
+                                    .color(TextColor::Muted),
+                            ),
+                    )
+                    .on_click(on_click)
+                    .into_any_element()
             } else {
-                Key::ChooseEmptyHelp
-            }))
-            .selected(ai == ai_selected)
-            .on_click(cx.listener(
-                move |this, event: &gpui::ClickEvent, window, cx| {
-                    if this.opening_project.is_some() {
-                        return;
-                    }
-                    if let Some(chooser) = &mut this.project_chooser {
-                        chooser.ai = ai;
-                    }
-                    if event.click_count() == 2 {
-                        this.choose_project(window, cx);
-                    }
-                    cx.notify();
-                },
-            ));
+                OptionCard::new(id, IconName::Music, self.t(Key::ChooseEmpty))
+                    .description(self.t(Key::ChooseEmptyHelp))
+                    .selected(selected)
+                    .on_click(on_click)
+                    .into_any_element()
+            };
             div()
                 .debug_selector(move || id.into())
                 .flex_1()
-                .min_w(px(220.0))
-                .max_w(px(340.0))
-                .child(if ai { card.agent() } else { card })
+                .min_w(px(220.))
+                .max_w(px(340.))
+                .child(card)
         };
         div()
             .flex()
@@ -502,6 +588,7 @@ impl AurisApp {
 
     fn chooser_footer(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let chooser = self.project_chooser.as_ref().expect("chooser is visible");
+        let return_to_editor = chooser.return_to_editor;
         if chooser.page == ChooserPage::Setup {
             return self.render_setup_footer(chooser.setup_step, cx);
         }
@@ -522,16 +609,25 @@ impl AurisApp {
                 .on_click(cx.listener(|this, _, _, cx| this.pick_and_open_project(cx)))
                 .into_any_element(),
             div().flex_1().into_any_element(),
-            Button::new("chooser-close", self.t(Key::ChooseClose))
-                .disabled(busy)
-                .on_click(cx.listener(|this, _, window, cx| {
-                    if this.project_tabs.is_some() {
-                        this.close_project_tab(cx);
-                    } else {
-                        window.remove_window();
-                    }
-                }))
-                .into_any_element(),
+            Button::new(
+                "chooser-close",
+                self.t(if return_to_editor {
+                    Key::ResumeProject
+                } else {
+                    Key::ChooseClose
+                }),
+            )
+            .disabled(busy)
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if return_to_editor {
+                    this.resume_editor(window, cx);
+                } else if this.project_tabs.is_some() {
+                    this.close_project_tab(cx);
+                } else {
+                    window.remove_window();
+                }
+            }))
+            .into_any_element(),
             Button::new("chooser-confirm", commit)
                 .primary()
                 .disabled(!can_choose)

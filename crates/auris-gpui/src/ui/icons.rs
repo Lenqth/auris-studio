@@ -40,6 +40,8 @@ pub enum Icon {
     Cross,
     /// Additional commands: three horizontal dots.
     More,
+    /// The application menu: three horizontal lines.
+    Menu,
     /// A menu item that is currently on.
     Check,
     /// The sound library: a folder with a raised tab.
@@ -117,6 +119,7 @@ impl Icon {
     pub fn source(self) -> IconSource {
         let name = match self {
             Self::Sound(family) => return IconSource::svg(sound_icon_path(family)),
+            Self::Menu => return IconSource::svg("icons/menu.svg"),
             Self::Punch => AtelierIconName::Punch,
             Self::Notes => AtelierIconName::Notes,
             Self::ToStart => AtelierIconName::SkipBack,

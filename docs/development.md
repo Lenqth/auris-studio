@@ -237,8 +237,14 @@ handlers cannot prevent the native window-move action.
 
 The layout takes its project identity from [Zed's title bar](https://github.com/zed-industries/zed/blob/main/crates/title_bar/src/title_bar.rs)
 and its centered transport readouts from [Logic Pro's control bar](https://support.apple.com/en-euro/guide/logicpro/lgcp5bdd6d9d/mac).
-When changing the title-bar height, include it in `AurisApp::chrome_height` so dock sizing and
-initial timeline coordinates agree with the view tree. Check native dragging, resizing and
+The title bar holds project identity and the application-menu trigger. Playback and its
+readouts share one inset surface in the control bar; editing controls and meters use a second
+row in narrow windows.
+Panel switches stay at the bottom edge, with labels when space permits. On Windows and Linux,
+the application menu opens as an overlay from its trigger or F10. Arrow keys navigate it and
+Escape returns focus to the invoking control. macOS retains the system menu bar.
+Keep both title-bar and responsive transport heights in `AurisApp::chrome_height` so dock sizing
+and initial timeline coordinates agree with the view tree. Check native dragging, resizing and
 window controls on each platform; the headless harness exercises the application controls.
 
 `crates/auris-gpui/src/harness.rs` opens the whole application in a window with no display, no

@@ -161,6 +161,8 @@ impl Render for AurisApp {
         // Pointer coordinates arrive in window space, and the resize handlers need to know how
         // tall the window is to bound the bottom panel; record it once per frame.
         self.viewport_height = window.viewport_size().height;
+        self.transport_height =
+            super::transport_bar::transport_height(window.viewport_size().width);
         // Where the window is, kept for next time. Read rather than written: the file is put
         // out once, on the way out.
         self.remember_window(window);
@@ -256,7 +258,6 @@ impl Render for AurisApp {
             .text_size(theme.atelier.typography.size_md)
             .child(title_bar)
             .children(project_tabs)
-            .children(menu_bar)
             .child(transport)
             .child(
                 div()
@@ -291,6 +292,7 @@ impl Render for AurisApp {
             .child(status)
             .child(drop_ring)
             .children(overlays)
+            .children(menu_bar)
             .children(crate::titlebar::resize_handles(window))
             .into_any_element()
     }
@@ -314,10 +316,11 @@ impl AurisApp {
             return Vec::new();
         }
         // A menu owns Enter/Space while open; they must not activate its focused trigger.
-        if self.menu.is_some() && self.menu_focus_return.is_none() {
+        let menu_open = self.menu.is_some() || self.menu_bar.is_some();
+        if menu_open && self.menu_focus_return.is_none() {
             self.menu_focus_return = Some(window.focused(cx).unwrap_or_else(|| self.focus.clone()));
             window.focus(&self.menu_focus);
-        } else if self.menu.is_none()
+        } else if !menu_open
             && let Some(trigger) = self.menu_focus_return.take()
             && self.menu_focus.contains_focused(window, cx)
         {
@@ -336,7 +339,7 @@ impl AurisApp {
                     .left_0()
                     .right_0()
                     .bottom_0()
-                    .top(crate::titlebar::HEIGHT + self.project_tabs_height() + menu_bar::HEIGHT)
+                    .top(crate::titlebar::HEIGHT)
                     .occlude()
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -803,9 +806,8 @@ impl AurisApp {
             bottom: PanelLayout::bottom_height(
                 asked(Dock::Bottom),
                 viewport.height,
-                // The same chrome `resize_dock` clamps against — menu bar included, where one
-                // is drawn — or the drawn dock and the dragged limit disagree by a row.
-                Self::chrome_height() + self.project_tabs_height(),
+                // Keep the dock's drawn size and drag limit on the same responsive chrome.
+                self.chrome_height() + self.project_tabs_height(),
             ),
         }
     }
@@ -2358,8 +2360,20 @@ impl AurisApp {
             }
             "left" | "right" => {
                 let delta = if event.keystroke.key == "left" { -1 } else { 1 };
-                let index = menu_bar::stepped_section(sections.len(), open.index, delta);
-                self.set_menu_bar(Some(menu_bar::OpenMenu::at(index)));
+                let pinned = self.titlebar_menu_layout(window);
+                let index = if open.from_titlebar && !pinned.is_empty() {
+                    let position = pinned
+                        .iter()
+                        .position(|(index, _, _)| *index == open.index)
+                        .unwrap_or(0);
+                    pinned[menu_bar::stepped_section(pinned.len(), position, delta)].0
+                } else {
+                    menu_bar::stepped_section(sections.len(), open.index, delta)
+                };
+                self.set_menu_bar(Some(menu_bar::OpenMenu {
+                    from_titlebar: open.from_titlebar,
+                    ..menu_bar::OpenMenu::at(index)
+                }));
             }
             "down" | "up" | "home" | "end" => {
                 let key = event.keystroke.key.as_str();
@@ -2429,6 +2443,7 @@ impl AurisApp {
         }
         self.menu = None;
         let next = match self.menu_bar {
+            Some(open) if open.from_titlebar => Some(menu_bar::OpenMenu::at(open.index)),
             Some(_) => None,
             None => Some(menu_bar::OpenMenu::at(0)),
         };

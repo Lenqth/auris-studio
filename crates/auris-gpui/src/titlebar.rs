@@ -14,7 +14,7 @@ use crate::theme::Theme;
 use atelier::TitleBar;
 
 /// Height of the application-drawn title bar, including its lower border.
-pub const HEIGHT: Pixels = px(40.0);
+pub const HEIGHT: Pixels = px(32.0);
 
 const CONTROL_WIDTH: Pixels = px(46.0);
 const GLYPH_SIZE: Pixels = px(10.0);
@@ -25,7 +25,7 @@ pub fn options(title: impl Into<SharedString>) -> WindowOptions {
         titlebar: Some(TitlebarOptions {
             title: Some(title.into()),
             appears_transparent: true,
-            traffic_light_position: Some(point(px(12.0), px(13.0))),
+            traffic_light_position: Some(point(px(12.0), (HEIGHT - px(14.0)) / 2.0)),
         }),
         // `appears_transparent` only hides the native title bar on macOS and Windows.
         // Linux otherwise adds a second, server-drawn title bar above our own.
@@ -155,8 +155,8 @@ pub fn controls_width(window: &Window) -> Pixels {
 
 /// What goes in a title bar laid out the way Atelier's `TitleBar` lays it out.
 ///
-/// The title is the only text in the bar. Status, paths and counts belong in the page or status
-/// bar, so a title cannot be squeezed by a second label at narrow widths.
+/// The title identifies the current object; optional navigation and menu controls occupy the
+/// leading region. Status, paths and counts belong in the page or status bar.
 pub struct Parts {
     id: &'static str,
     title: SharedString,
