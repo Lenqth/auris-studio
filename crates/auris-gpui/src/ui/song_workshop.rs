@@ -2199,9 +2199,9 @@ mod tests {
         crate::harness::paint(&app, cx);
         crate::harness::click("song-brief", cx);
         cx.simulate_input("make it faster");
-        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("secondary-enter");
         cx.simulate_input("and brighter");
-        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("secondary-enter");
         let queued = |app: &gpui::Entity<AurisApp>, cx: &mut gpui::VisualTestContext| {
             app.read_with(cx, |this, _| {
                 let s = this.song_workshop.as_ref().unwrap();
@@ -2226,7 +2226,7 @@ mod tests {
 
         // Typed third, sent first: the secondary modifier stops the round in progress.
         cx.simulate_input("actually, a ballad");
-        cx.simulate_keystrokes("secondary-enter");
+        cx.simulate_keystrokes("secondary-shift-enter");
         assert!(matches!(commands.try_recv(), Ok(Command::Stop(None))));
         assert_eq!(
             queued(&app, cx),

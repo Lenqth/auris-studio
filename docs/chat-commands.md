@@ -12,7 +12,8 @@ share these local slash commands:
 Type `/` to see suggestions. Up and Down select a suggestion. Tab or a click
 fills the input without executing it. Enter completes and executes a complete
 command; a command that needs an argument remains in the input. Escape dismisses
-suggestions while keeping the input focused. Shift+Enter inserts a newline.
+suggestions while keeping the input focused. Outside the suggestions, Enter and
+Shift+Enter insert a newline and Ctrl+Enter (⌘Enter on macOS) sends.
 
 Commands run locally and keep draft attachments. Song conversation model choices
 apply to subsequent requests in that conversation; they do not change the editor's

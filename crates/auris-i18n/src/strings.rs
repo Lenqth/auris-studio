@@ -2233,7 +2233,7 @@ new のオプション
     AgentQueueEdit { en: "Edit queued message", ja: "送信待ちメッセージを編集" }
     AgentQueueEditShort { en: "Edit", ja: "編集" }
     AgentQueueRemove { en: "Remove from queue", ja: "キューから削除" }
-    AgentQueueHint { en: "Enter queues · {interrupt} sends now · Shift+Enter adds a line", ja: "Enterでキューに追加 · {interrupt}で今すぐ送信 · Shift+Enterで改行" }
+    AgentQueueHint { en: "{send} queues · {interrupt} sends now · Enter adds a line", ja: "{send}でキューに追加 · {interrupt}で今すぐ送信 · Enterで改行" }
     AgentInterrupting { en: "Stopping the current turn…", ja: "現在の処理を中断中…" }
     AgentQueueReattach { en: "Attach the reference files again before sending this saved message.", ja: "保存されたメッセージを送るには、参照ファイルをもう一度添付してください。" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }

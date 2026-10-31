@@ -3364,9 +3364,12 @@ impl AurisApp {
             crate::ui::chat_commands::CompletionKey::Handled => return true,
             crate::ui::chat_commands::CompletionKey::Complete { fill, submit } => {
                 self.accept_agent_completion(&fill);
-                if !submit {
-                    return true;
+                if submit {
+                    // Choosing a complete command from the open list is the deliberate act
+                    // that a bare Enter is not elsewhere in the composer.
+                    self.agent_submit(window, cx);
                 }
+                return true;
             }
             crate::ui::chat_commands::CompletionKey::Ignored => {}
         }
@@ -3393,9 +3396,12 @@ impl AurisApp {
                     return true;
                 }
                 ("enter", AgentField::Chat) => {
-                    if event.keystroke.modifiers.shift {
+                    let modifiers = &event.keystroke.modifiers;
+                    if !modifiers.secondary() {
+                        // A bare Enter only breaks the line, so a stray keystroke cannot send a
+                        // half-written request.
                         self.agent_chat.input.insert("\n");
-                    } else if event.keystroke.modifiers.secondary()
+                    } else if modifiers.shift
                         && (self.agent_chat.busy || !self.agent_chat.queued.is_empty())
                     {
                         // The queue's "Send now", from the keyboard: interrupt and go first.
@@ -5337,12 +5343,19 @@ impl AurisApp {
                         .items_center()
                         .gap_1()
                         .px_1p5()
-                        .child(div().flex_1().text_xs().text_color(theme.text_muted).child(
-                            self.t(Key::AgentQueueHint).replace(
-                                "{interrupt}",
-                                &crate::actions::menu_keystroke("secondary-enter"),
+                        .child(
+                            div().flex_1().text_xs().text_color(theme.text_muted).child(
+                                self.t(Key::AgentQueueHint)
+                                    .replace(
+                                        "{send}",
+                                        &crate::actions::menu_keystroke("secondary-enter"),
+                                    )
+                                    .replace(
+                                        "{interrupt}",
+                                        &crate::actions::menu_keystroke("secondary-shift-enter"),
+                                    ),
                             ),
-                        ))
+                        )
                         .child(
                             button_enabled(
                                 "agent-send-now",
@@ -6719,7 +6732,33 @@ mod tests {
     }
 
     #[gpui::test]
-    fn secondary_enter_interrupts_the_running_turn_with_the_composer_message(
+    fn a_bare_enter_breaks_the_line_and_only_secondary_enter_sends(cx: &mut gpui::TestAppContext) {
+        let (app, cx) = crate::harness::open(cx);
+        app.update(cx, |this, _| {
+            this.settings.agent.model = "offline-fixture".into();
+            this.panels.show(crate::dock::Panel::Agent);
+            this.agent_chat.busy = true;
+        });
+        crate::harness::paint(&app, cx);
+        crate::harness::click("agent-input", cx);
+        crate::harness::paint(&app, cx);
+        cx.simulate_input("half");
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input("written");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.input.content(), "half\nwritten");
+            assert!(this.agent_chat.queued.is_empty(), "nothing was sent");
+        });
+        cx.simulate_keystrokes("secondary-enter");
+        app.read_with(cx, |this, _| {
+            assert_eq!(this.agent_chat.queued.len(), 1);
+            assert!(this.agent_chat.busy, "a plain send waits its turn");
+            assert!(this.agent_chat.input.content().is_empty());
+        });
+    }
+
+    #[gpui::test]
+    fn secondary_shift_enter_interrupts_the_running_turn_with_the_composer_message(
         cx: &mut gpui::TestAppContext,
     ) {
         let (app, cx) = crate::harness::open(cx);
@@ -6732,9 +6771,9 @@ mod tests {
         crate::harness::click("agent-input", cx);
         crate::harness::paint(&app, cx);
         cx.simulate_input("later");
-        cx.simulate_keystrokes("enter");
-        cx.simulate_input("urgent");
         cx.simulate_keystrokes("secondary-enter");
+        cx.simulate_input("urgent");
+        cx.simulate_keystrokes("secondary-shift-enter");
         app.read_with(cx, |this, _| {
             let queued = this
                 .agent_chat
@@ -6770,7 +6809,7 @@ mod tests {
         crate::harness::click("agent-input", cx);
         crate::harness::paint(&app, cx);
         cx.simulate_input("first");
-        cx.simulate_keystrokes("enter");
+        cx.simulate_keystrokes("secondary-enter");
         crate::harness::paint(&app, cx);
         cx.update(|window, cx| {
             app.read_with(cx, |this, _| {

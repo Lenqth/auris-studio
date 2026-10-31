@@ -86,7 +86,9 @@ impl Completions {
                     submit: false,
                 };
             }
-            "enter" if !event.keystroke.modifiers.shift && matches[selected].fill != value => {
+            // Enter picks from the open list, even once the draft already reads as the pick: a
+            // bare Enter elsewhere in a composer only breaks the line.
+            "enter" if !event.keystroke.modifiers.shift => {
                 return CompletionKey::Complete {
                     fill: matches[selected].fill.clone(),
                     submit: !matches[selected].fill.ends_with(' '),

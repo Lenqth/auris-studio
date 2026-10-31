@@ -170,11 +170,14 @@ impl AurisApp {
             &theme,
             cx.listener(|this, _, _, cx| this.start_song_workshop(cx)),
         );
-        let interrupt_key = crate::actions::menu_keystroke("secondary-enter");
         let queue_hint = queueing.then(|| {
             div().text_xs().text_color(theme.text_muted).child(
                 self.t(Key::AgentQueueHint)
-                    .replace("{interrupt}", &interrupt_key),
+                    .replace("{send}", &crate::actions::menu_keystroke("secondary-enter"))
+                    .replace(
+                        "{interrupt}",
+                        &crate::actions::menu_keystroke("secondary-shift-enter"),
+                    ),
             )
         });
         let queue = self.workshop_queue_view(cx);
@@ -443,11 +446,11 @@ impl AurisApp {
                 return;
             }
             if event.keystroke.key == "enter" {
-                if event.keystroke.modifiers.shift {
+                let modifiers = &event.keystroke.modifiers;
+                if !modifiers.secondary() {
+                    // A bare Enter only breaks the line, as in the agent's composer.
                     s.brief.insert("\n");
-                } else if event.keystroke.modifiers.secondary()
-                    && (s.busy() || !s.queued.is_empty())
-                {
+                } else if modifiers.shift && (s.busy() || !s.queued.is_empty()) {
                     self.submit_workshop_brief_now();
                 } else {
                     self.start_song_workshop(cx);

@@ -2,7 +2,8 @@
 
 Choose **AI workshop…** in the project chooser. Describe the music in the message
 box, including instruments, mood, duration, voices, lyrics and any material to preserve.
-Enter sends a message; Shift+Enter inserts a line break. Confirming Japanese IME
+Ctrl+Enter (⌘Enter on macOS) sends a message; Enter and Shift+Enter insert a line
+break, so a stray Enter cannot send a half-written request. Confirming Japanese IME
 composition does not send the message. Provider/model and reasoning effort are local
 to this workshop; changing them does not overwrite the application's agent settings.
 
