@@ -19,6 +19,7 @@ pub mod approval_review;
 mod completion;
 pub mod input_suggestion;
 pub mod issue_diagnosis;
+pub mod skills;
 pub mod song_authoring;
 pub mod song_ideas;
 pub mod timbre_names;

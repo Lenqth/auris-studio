@@ -325,6 +325,12 @@ impl AurisApp {
                                     available,
                                     this.t(Key::AgentSound),
                                     MenuCommand::ComposerSound,
+                                )
+                                .separator()
+                                .item_greyed_unless(
+                                    available,
+                                    this.t(Key::AgentSkills),
+                                    MenuCommand::ComposerSkills(event.position()),
                                 );
                         menu.step(1);
                         this.open_menu(menu);

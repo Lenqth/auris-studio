@@ -33,7 +33,7 @@ fn load(path: &std::path::Path, rate: f64) -> Result<Content, String> {
             let score = auris_session::midi_reference::MidiReference::read(path)?;
             Ok(Content::Midi(score))
         }
-        auris_agent::AttachmentKind::Text => {
+        auris_agent::AttachmentKind::Text | auris_agent::AttachmentKind::Skill => {
             let bytes = read_bounded(path, 256 * 1024)?;
             Ok(Content::Text(
                 String::from_utf8(bytes).map_err(|e| e.to_string())?,

@@ -269,7 +269,11 @@ fn capture_references(
         .filter(|path| {
             matches!(
                 crate::attachment_kind(path),
-                Some(crate::AttachmentKind::Midi | crate::AttachmentKind::Text)
+                Some(
+                    crate::AttachmentKind::Midi
+                        | crate::AttachmentKind::Text
+                        | crate::AttachmentKind::Skill
+                )
             )
         })
         .collect();

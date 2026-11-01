@@ -31,6 +31,12 @@ pub enum MenuCommand {
     ComposerChords,
     /// Opens the sound map to attach an instrument choice.
     ComposerSound,
+    /// Lists the installed skills, in a menu anchored where the references menu was.
+    ComposerSkills(Point<Pixels>),
+    /// Attaches a frozen copy of the installed skill whose `SKILL.md` this is.
+    ComposerSkill(std::path::PathBuf),
+    /// Attaches a skill chosen from a file dialog.
+    ComposerSkillFile,
     /// Selects a model for the new-song draft.
     WorkshopModel(usize),
     /// Refreshes the new-song model catalogue.
@@ -1013,6 +1019,9 @@ impl AurisApp {
                     self.timbre_map.open = true;
                 }
             }
+            MenuCommand::ComposerSkills(at) => self.open_skill_menu(at, cx),
+            MenuCommand::ComposerSkill(path) => self.attach_skill(&path, cx),
+            MenuCommand::ComposerSkillFile => self.choose_skill_file(cx),
 
             MenuCommand::ClearCurve { clip, which } => {
                 self.session.clear_curve(clip, which);
