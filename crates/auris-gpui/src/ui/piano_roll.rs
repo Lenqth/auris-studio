@@ -622,6 +622,8 @@ impl AurisApp {
         };
 
         let clip_start = clip.start;
+        // Comments are text over the score, shown whichever view of it is open.
+        let comment_tags = self.roll_comment_tags(cx);
         let source = self.source_score();
         let editable = self.editable_score();
         let overlay = self.overlay_score();
@@ -666,6 +668,14 @@ impl AurisApp {
             .find_map(|(clip, index)| {
                 (Some(clip) == self.selected_clip && editable).then_some(index)
             });
+        // The linter's notes in this clip, each underlined with a squiggle whose hover says what
+        // is wrong and how to fix it.
+        let lint_flagged = match editable {
+            true => self.roll_lint_notes(),
+            false => Vec::new(),
+        };
+        let lint_notes: Vec<usize> = lint_flagged.iter().map(|entry| entry.index).collect();
+        let lint_strips = self.roll_lint_strips(&lint_flagged, &notes, clip_start, cx);
         // After the last read of `clip`, whose borrow the cache lookup cannot share. What
         // the voice will sing, drawn over the notes: the pitch contour so a drawn slide
         // reads as the slide it is, and the phoneme cuts so the sixty milliseconds a
@@ -733,10 +743,13 @@ impl AurisApp {
                     // the text be the part that goes; without it the row's smallest width is the
                     // sum of every word in it, and the slider was the first thing over the side.
                     .min_w_0()
+                    // Kept whole up to a width and only then truncated: shrinking alongside the
+                    // hint, it lost its last letters first and read "Piano Ro" beside a hint that
+                    // still had room to give.
                     .child(
                         div()
-                            .flex_shrink()
-                            .min_w_0()
+                            .flex_shrink_0()
+                            .max_w(px(220.0))
                             .truncate()
                             .child(messages::piano_roll_title(self.language(), &clip_name)),
                     )
@@ -783,6 +796,11 @@ impl AurisApp {
                                         self.language(),
                                         self.t(self.pointer.create.label()),
                                         self.t(self.pointer.delete.label()),
+                                        if cfg!(target_os = "macos") {
+                                            "Option"
+                                        } else {
+                                            "Alt"
+                                        },
                                     ),
                                     RollTool::Velocity => {
                                         messages::piano_roll_velocity_hint(self.language())
@@ -803,9 +821,10 @@ impl AurisApp {
                                 &theme,
                                 Self::opens_menu(cx, |this, at| this.note_snap_menu(at)),
                             )
-                            .w_24()
-                            .min_w_0()
-                            .truncate()
+                            // Its own width and never less: a fixed width cut "Smart (1/16)" at
+                            // both ends and let the label spill over the hint beside it.
+                            .flex_shrink_0()
+                            .whitespace_nowrap()
                             .tooltip(crate::ui::tooltip::keyed_tip(
                                 self.note_snap_tip(),
                                 "",
@@ -878,6 +897,7 @@ impl AurisApp {
                     .child(
                         div()
                             .id("roll")
+                            .relative()
                             .flex_1()
                             .min_w_0()
                             .h_full()
@@ -960,6 +980,7 @@ impl AurisApp {
                                                 &notes,
                                                 &selected,
                                                 failed_note,
+                                                &lint_notes,
                                                 velocity_tag,
                                                 clip_start,
                                                 &view,
@@ -1070,6 +1091,7 @@ impl AurisApp {
                                     this.begin_note_drag(event, cx);
                                 }),
                             )
+                            .children(comment_tags)
                             .on_mouse_down(
                                 MouseButton::Right,
                                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
@@ -1080,7 +1102,9 @@ impl AurisApp {
                                 |this, event: &gpui::ScrollWheelEvent, _, cx| {
                                     this.scroll_roll(event, cx);
                                 },
-                            )),
+                            ))
+                            // Over the canvas, so a squiggle's hover is the squiggle's.
+                            .children(lint_strips),
                     ),
             )
             .child(
@@ -1216,36 +1240,35 @@ impl AurisApp {
                         .size_full()
                     })
                     .when(editable, |lane| {
-                        lane.cursor_pointer()
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                                    this.press_curve_lane(which, event, cx);
-                                }),
-                            )
-                            .on_mouse_down(
-                                MouseButton::Right,
-                                Self::opens_menu(cx, move |this, at| {
-                                    // Taking points off one at a time is the ⌥-click; this is the
-                                    // way back from a curve that got away from somebody. With
-                                    // nothing selected there is nothing to straighten, and an
-                                    // empty menu is a menu `open_menu` declines to show.
-                                    let menu = crate::ui::context_menu::ContextMenu::new(
-                                        at,
-                                        curve_label(which, this.language()),
-                                    );
-                                    match this.selected_clip {
-                                        Some(clip) => menu.item(
-                                            this.t(Key::StraightenCurve),
-                                            crate::ui::context_menu::MenuCommand::ClearCurve {
-                                                clip,
-                                                which,
-                                            },
-                                        ),
-                                        None => menu,
-                                    }
-                                }),
-                            )
+                        lane.on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                                this.press_curve_lane(which, event, cx);
+                            }),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            Self::opens_menu(cx, move |this, at| {
+                                // Taking points off one at a time is the ⌥-click; this is the
+                                // way back from a curve that got away from somebody. With
+                                // nothing selected there is nothing to straighten, and an
+                                // empty menu is a menu `open_menu` declines to show.
+                                let menu = crate::ui::context_menu::ContextMenu::new(
+                                    at,
+                                    curve_label(which, this.language()),
+                                );
+                                match this.selected_clip {
+                                    Some(clip) => menu.item(
+                                        this.t(Key::StraightenCurve),
+                                        crate::ui::context_menu::MenuCommand::ClearCurve {
+                                            clip,
+                                            which,
+                                        },
+                                    ),
+                                    None => menu,
+                                }
+                            }),
+                        )
                     })
                     .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
                         this.scroll_roll(event, cx);
@@ -2115,16 +2138,12 @@ impl AurisApp {
             self.selected_notes.insert(index);
         }
 
-        let menu = self.roll_menu(
-            event.position,
-            under_pointer,
-            pitch,
-            (self
-                .note_snap(tick, gpui::Modifiers::none(), true)
-                .position(tick)
-                - clip_start)
-                .max_zero(),
-        );
+        let snapped = (self
+            .note_snap(tick, gpui::Modifiers::none(), true)
+            .position(tick)
+            - clip_start)
+            .max_zero();
+        let menu = self.roll_menu(event.position, under_pointer, pitch, snapped);
         self.open_menu(menu);
         cx.notify();
     }
@@ -2548,6 +2567,7 @@ fn paint_notes(
     notes: &[Note],
     selected: &[usize],
     failed_note: Option<usize>,
+    lint: &[usize],
     tag: Option<(usize, u8)>,
     clip_start: Ticks,
     view: &TimelineView,
@@ -2559,6 +2579,9 @@ fn paint_notes(
     // Where the tag goes, decided in the loop and drawn after it, so a note painted later cannot
     // land on top of the one thing on the canvas that is only there to be read.
     let mut tag_at = None;
+    // The linter's underlines, likewise drawn after every note: each runs into the gap above the
+    // next row, and the note there would otherwise paint over half of it.
+    let mut squiggles = Vec::new();
     for (index, note) in notes.iter().enumerate() {
         let x = bounds.origin.x + view.tick_to_x(clip_start + note.start);
         let width = view.duration_to_width(note.length).max(px(2.0));
@@ -2596,6 +2619,9 @@ fn paint_notes(
         if selected {
             paint::rounded_outline(window, note_bounds, Metrics::RADIUS_XS, px(2.0), theme.text);
         }
+        if lint.contains(&index) {
+            squiggles.push(note_bounds);
+        }
         if failed_note == Some(index) {
             paint::rounded_outline(
                 window,
@@ -2605,6 +2631,23 @@ fn paint_notes(
                 theme.danger,
             );
         }
+    }
+
+    for note_bounds in squiggles {
+        let baseline = crate::ui::lint::squiggle_baseline(
+            note_bounds.origin.y - px(1.0),
+            pitch_view.row_height,
+        );
+        paint::polyline(
+            window,
+            &crate::ui::lint::squiggle_points(
+                note_bounds.origin.x,
+                note_bounds.origin.x + note_bounds.size.width,
+                baseline,
+            ),
+            px(1.25),
+            theme.warning,
+        );
     }
 
     if let (Some(note_bounds), Some((_, midi))) = (tag_at, tag) {

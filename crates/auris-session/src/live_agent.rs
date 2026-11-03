@@ -2,10 +2,14 @@
 
 use crate::{Session, prelude::*};
 pub mod automation;
+pub mod comments;
 pub mod document_editing;
 pub mod file_jobs;
 pub mod harmony_suggestions;
 mod jobs;
+pub mod layers;
+mod lint;
+pub mod lyric_annotation;
 pub mod recipes;
 pub mod vocal_editing;
 pub use jobs::{AgentJob, AgentResult, AgentStep};
@@ -37,8 +41,28 @@ pub enum HistoryOperation {
 }
 mod vocals;
 pub use vocals::{VocalJob, VocalResult, VocalStep};
+fn lint_limit() -> usize {
+    32
+}
+
 fn sound_search_limit() -> usize {
     10
+}
+
+/// Adds `loop_end_tick` to a clip summary when the clip repeats past its own end.
+///
+/// Left off an unlooped clip so the common case costs a model nothing to read; present, it is the
+/// absolute tick where the repeats stop, which is the value `edit_clip`'s `loop` takes back.
+fn with_loop_end(
+    mut summary: serde_json::Value,
+    start: Ticks,
+    content: Ticks,
+    sounding: Ticks,
+) -> serde_json::Value {
+    if sounding > content {
+        summary["loop_end_tick"] = (start + sounding).raw().into();
+    }
+    summary
 }
 
 fn mixer_summary(mixer: &auris_core::project::MixerStrip) -> serde_json::Value {
@@ -59,6 +83,12 @@ pub enum Command {
     SuggestIssueReport {
         /// Generic title and evidence-based limitation, without private conversation excerpts.
         suggestion: crate::issue_report::Suggestion,
+    },
+    /// Ask the user one question with 2..8 fixed answers, shown as a card under your reply. Exclusive by default; multiple=true allows several. Use it instead of a numbered list whenever the user must choose before you can continue, then end your turn: the pick arrives as the user's next message with the exact labels, and the user may type something else instead. Never answer it yourself. No document edits.
+    OfferChoices {
+        /// Question, options and whether several may be picked.
+        #[serde(flatten)]
+        card: crate::choices::ChoiceCard,
     },
     /// Opt in to bounded transition evidence, read its cursor or stop collection. Starting requires explicit user consent via the host permission gate. No audio or document edits.
     ExecutionTrace {
@@ -174,7 +204,7 @@ pub enum Command {
         /// Required for writes; copied from the latest read.
         expected_revision: Option<String>,
     },
-    /// Inspect, partially edit or explicitly regenerate 1..16 generated clips. Writes preserve other clips and mix state; hand-edited generated notes require explicit replacement permission. Recipe controls change stored notes; performance controls are separate. Subdivision is a grid, not note duration: eighth, sixteenth, eighth-triplet or sixteenth-triplet. Rhythm must use repeating grid steps: x hit, X accent, o ghost, dot/tilde/hyphen rest (example x...x...); empty clears it. Adjust note count and held duration with density and gate, not subdivision.
+    /// Inspect, partially edit or explicitly regenerate 1..16 generated clips. Writes preserve other clips and mix state; hand-edited generated notes require explicit replacement permission. Recipe controls change stored notes; performance controls are separate. Subdivision is a grid, not note duration: eighth, sixteenth, eighth-triplet or sixteenth-triplet. Rhythm must use repeating grid steps: x hit, X accent, o ghost, dot/tilde/hyphen rest (example x...x...); empty clears it. Adjust note count and held duration with density and gate, not subdivision. For a piano-style chord comp, low_root adds the root under the voicing and strum staggers onsets upward by a note value (32 or 64).
     EditRecipe {
         /// Unique stable generated clip IDs.
         #[schemars(length(min = 1, max = 16))]
@@ -247,7 +277,7 @@ pub enum Command {
         /// Explicit read, set or removal operation with absolute ticks.
         operation: document_editing::TimelineOperation,
     },
-    /// Move/copy/split/resize/remove MIDI or audio clips by stable ID. Preserves contents, recipes and performance unless explicitly frozen or baked. One atomic Undo step.
+    /// Move/copy/split/resize/loop/remove MIDI or audio clips by stable ID. Preserves contents, recipes and performance unless explicitly frozen or baked. A looped clip stores one pass (length_ticks) and repeats it to loop_end_tick, so edit the one pass rather than writing the repeats out. One atomic Undo step.
     EditClip {
         /// Stable clip ID from inspect_project.
         clip: u64,
@@ -315,6 +345,16 @@ pub enum Command {
         #[serde(default)]
         clear_chords: bool,
     },
+    /// Write the song-wide lyrics annotation: the line sung at each moment, shown as video captions and read back by inspect_project. Required for every song with words, beside the clip lyrics: write_lyrics annotates the lines it fills automatically, and from_vocals rebuilds it from a singer's notes after note edits. Use write for explicit lines in original spelling, placed by 1-based bar/beat from the first sung word to where the line ends. Never changes notes. One Undo.
+    EditLyrics {
+        /// from_vocals, write or clear.
+        operation: lyric_annotation::Operation,
+    },
+    /// Pin, retype, move or remove comments: notes people and agents leave on a track's lane (song time) or inside a note clip (optionally on a piano-roll pitch row). Comments never sound or change notes. inspect_project lists every comment; read the ones in a passage before editing it. Positions are 1-based song bar/beat. Never remove or rewrite the user's comments unless asked. One Undo.
+    EditComments {
+        /// add, edit or remove.
+        operation: comments::Operation,
+    },
     /// Discover installed singing voices in pages of 16 without loading their models. Copy a returned voice path into set_singer_voice. Discovery is not validation; no models are downloaded.
     ListVoices {
         /// Zero-based page offset; follow next_offset.
@@ -341,7 +381,7 @@ pub enum Command {
         /// Exact speaker name; omit for the voice's default. Unknown names are refused with available names.
         speaker: Option<String>,
     },
-    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. Keep original kanji/kana spelling in text for display; supply optional kana reading separately for pronunciation, including without a dictionary. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Without reading, kana is split into moras and other text requires the installed Japanese dictionary. Insufficient note slots are refused without editing; later unfilled notes keep their words. Returns filled count, available notes and full clip name; one transaction. Use read_notes to verify before sing.
+    /// Write original lyrics (graphemes, not readings) across a singer clip's notes in time order. Keep original kanji/kana spelling in text for display; supply optional kana reading separately for pronunciation, including without a dictionary. The clip name becomes its complete written lyrics without abbreviation. Optional from is a zero-based storage index from read_notes; omit to start at the earliest note. Without reading, kana is split into moras and other text requires the installed Japanese dictionary. Kana is read as a phrase: particles は/へ sing wa/e where they end a space-separated word or the dictionary identifies them, so separate words with spaces (きみは わらう); write わ/え in reading only to force it. Insufficient note slots are refused without editing; later unfilled notes keep their words. Also writes the filled notes' span into the song-wide lyrics annotation in original spelling, one line per text line when each line's moras fill its notes; edit_lyrics refines it. Returns filled count, available notes, full clip name and annotated lines; one transaction. Use read_notes to verify before sing.
     WriteLyrics {
         /// Stable singer clip ID.
         clip: u64,
@@ -384,6 +424,31 @@ pub enum Command {
     },
     /// Read the current arrangement and stable track/clip IDs. Use read_notes for note data.
     Inspect {},
+    /// Lint the song for mechanical problems with one right answer: too many notes struck at once, bars too dense to hear, held minor seconds, muddy low seconds, held notes outside both the written key and chord, avoid notes, duplicate or inaudible notes, impossible pitches, and bars that sound chords with no chord written (fix: the chords the notes spell, when one per bar is unambiguous). It also flags a singer asked for two notes at once and sung notes with no lyric. audio=true also renders the mix and each sounding track (seconds of work) to find clipping, a mix far too loud or quiet, tracks that play notes but make no sound, single notes that sound off their written pitch or with no pitch, and stretches that cancel when summed to mono. Returns diagnostics with stable ids, ticks/bars, note {clip,index} refs and an obvious fix when one exists; pass those ids to apply_lint_fixes. No edits. Passing lint is not musical quality, and a finding may be deliberate: judge it against the user's intent before changing anything. ignore_rules lists what the user chose to ignore, with their reason when written; never undo or work around those.
+    LintProject {
+        /// Also render and measure the audio. Default false.
+        #[serde(default)]
+        audio: bool,
+        /// Optional first one-based bar to report.
+        #[schemars(range(min = 1))]
+        start_bar: Option<u32>,
+        /// Optional number of bars to report from start_bar.
+        #[schemars(range(min = 1))]
+        bars: Option<u32>,
+        /// Zero-based first diagnostic, for paging.
+        #[serde(default)]
+        offset: usize,
+        /// Page size, 1..64; default 32.
+        #[serde(default = "lint_limit")]
+        #[schemars(range(min = 1, max = 64))]
+        limit: usize,
+    },
+    /// Apply the obvious fixes of diagnostics returned by lint_project, by id, as one Undo step. Only diagnostics that still exist in the current document are fixed; audio diagnostics need a lint_project audio=true at the current revision. Returns what was applied and what was not. Diagnostics without a fix need a musical decision: edit the notes yourself instead.
+    ApplyLintFixes {
+        /// 1..64 diagnostic ids from lint_project.
+        #[schemars(length(min = 1, max = 64))]
+        ids: Vec<String>,
+    },
     /// Read bounded scan/measurement failures after searching. Does not rescan.
     InstrumentDiagnostics {
         /// Zero-based first diagnostic.
@@ -429,7 +494,7 @@ pub enum Command {
         #[serde(default)]
         refresh: bool,
     },
-    /// Edit authored notes atomically across 1..16 clips in exact clip-relative ticks (960 per quarter). Velocity is normalized 0..1, never MIDI 0..127; for example {"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}. Use input {"kind":"inline","edits":[...]} or {"kind":"file","source_path":"/absolute/notes.json"}, never both. Edits are typed objects, not JSON strings; expected_revision belongs at the top level. Read read_notes first and supply its revision. Patch indices address original storage order. Preserves recipes, curves, metadata on updated notes and performance. Identical replacements are no-ops.
+    /// Edit authored notes atomically across 1..16 clips at musical positions: bar is the 1-based song bar (as in add_clip, not counted from the clip), beat is 1-based within that bar in the meter's beat (quarter in 4/4, eighth in 6/8), fractional for subdivisions (2.5 offbeat, 2.25 sixteenth, 2.333 triplet), and length_beats counts the same beat. Attacks must sit on a straight subdivision down to an eighth of a beat or a triplet down to a sixth; anything between is refused with the nearest choices, so use swing/humanize performance for feel. Velocity is normalized 0..1, never MIDI 0..127; for example {"pitch":60,"bar":5,"beat":1,"length_beats":1,"velocity":0.75}. Use input {"kind":"inline","edits":[...]} or {"kind":"file","source_path":"/absolute/notes.json"}, never both. Edits are typed objects, not JSON strings; expected_revision belongs at the top level. Read read_notes first and supply its revision. Patch indices address original storage order. Preserves recipes, curves, metadata on updated notes and performance. Identical replacements are no-ops.
     EditNotes {
         /// Exact content revision from the latest read_notes or inspect_project.
         expected_revision: String,
@@ -437,7 +502,7 @@ pub enum Command {
         #[schemars(length(min = 1, max = 16))]
         edits: Vec<note_editing::NoteEdit>,
     },
-    /// Read 1..8 MIDI clip pages in one call. Copy each clip from inspect_project tracks[].clips[].clip or add_clip's clip result, never tracks[].track or add_track's track result. Track IDs and clip IDs are different addresses. Each request is `{clip:<returned clip ID>,offset:0}`; offset defaults to zero. Returns one shared revision and clips containing up to 128 notes each with exact clip-relative ticks, normalized velocity 0..1, original zero-based storage indices (`index`) and a stable timeline rank (`timeline_index`). Pages remain in storage order so edits address the original indices; sort by `timeline_index` for lyric and phrase work. The rank uses start tick then storage index as its tie-break. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
+    /// Read 1..8 MIDI clip pages in one call. Copy each clip from inspect_project tracks[].clips[].clip or add_clip's clip result, never tracks[].track or add_track's track result. Track IDs and clip IDs are different addresses. Each request is `{clip:<returned clip ID>,offset:0}`; offset defaults to zero. Returns one shared revision and clips containing up to 128 notes each with song bar, beat and length_beats in the same units edit_notes takes (each clip also reports its bars `[first,last]`; on_grid:false marks a stored attack between subdivisions), normalized velocity 0..1, original zero-based storage indices (`index`) and a stable timeline rank (`timeline_index`). Pages remain in storage order so edits address the original indices; sort by `timeline_index` for lyric and phrase work. The rank uses start position then storage index as its tie-break. Follow each clip's next_offset; truncated is explicit. Do not edit between pages. Pass the top-level revision to edit_notes; stale indices are rejected.
     ReadNotes {
         /// Up to eight distinct clip pages; omitted offset starts at zero.
         #[schemars(length(min = 1, max = 8))]
@@ -475,7 +540,12 @@ pub enum Command {
         #[schemars(length(min = 1))]
         name: String,
     },
-    /// Remove one track and its clips.
+    /// Add a layer (an instrument track playing another melodic or singer track's notes, for doubling or splitting a part), read or reshape it, or detach it into notes of its own. Shape filters by source key range and top/bottom voice, then transposes and scales velocity/length and shifts by quarter notes; omitted fields keep their values. A layer has no clips of its own: edit the source's notes. Drums cannot be followed.
+    Layer {
+        /// Add, read, shape or detach.
+        operation: layers::Operation,
+    },
+    /// Remove one track and its clips. Layers following it are detached first, keeping their sound.
     RemoveTrack {
         /// Stable track ID.
         track: u64,
@@ -489,11 +559,11 @@ pub enum Command {
         instrument: String,
     },
 
-    /// Measure the whole mix, move every source fader by the same amount toward target_lufs under a true-peak ceiling, and measure again. Keeps relative balance and master gain; refuses automated source gain. The measured result may fall short at fader or peak limits. Persistence follows the host.
+    /// Measure the whole mix, move every source fader by the same amount toward target_lufs under a true-peak ceiling, and measure again. Finish every song with this after the last sound, note or fader change. Keeps relative balance and master gain; refuses automated source gain. When the master chain ends in auris.fx.limiter (new projects have one), its ceiling is set to ceiling_db and peaks may be pushed up to 6 dB into it; without one the loudest moment alone limits the result, which leaves drum-heavy mixes several dB short. The measured result may fall short at fader or peak limits. Persistence follows the host.
     NormalizeMix {
-        /// Desired integrated loudness, -60 to -6 LUFS.
+        /// Desired integrated loudness, -60 to -6 LUFS; defaults to -14, the streaming level a finished song is delivered at.
         #[schemars(range(min = -60, max = -6))]
-        target_lufs: f32,
+        target_lufs: Option<f32>,
         /// Maximum reconstructed peak, -12 to 0 dBTP; defaults to -1.
         #[schemars(range(min = -12, max = 0))]
         ceiling_db: Option<f32>,
@@ -561,8 +631,11 @@ impl Command {
             Self::MixerGraph { operation } => !operation.is_read_only(),
             Self::EditClipCurve { operation, .. } => !operation.is_read_only(),
             Self::EditTimeline { operation } => !operation.is_read_only(),
+            Self::Layer { operation } => !operation.is_read_only(),
             Self::Inspect {}
+            | Self::LintProject { .. }
             | Self::SuggestIssueReport { .. }
+            | Self::OfferChoices { .. }
             | Self::ExecutionTrace { .. }
             | Self::PhraseVariation { .. }
             | Self::SuggestHarmony { .. }
@@ -604,6 +677,7 @@ impl Command {
                 | Self::Preview { .. }
                 | Self::ExportMidi { .. }
                 | Self::VerifyRender { .. }
+                | Self::LintProject { audio: true, .. }
                 | Self::ImportAudio { .. }
                 | Self::ImportMidi { .. }
                 | Self::Checkpoints { .. }
@@ -685,6 +759,10 @@ impl Session {
             Command::SuggestIssueReport { suggestion } => {
                 suggestion.validate()?;
                 Ok(serde_json::json!({"suggestion":suggestion,"published":false,"private_context_included":false,"next":"The desktop offers a report invitation. The human must open the draft and explicitly approve each private context category. No permission to disclose or publish has been granted."}).to_string())
+            }
+            Command::OfferChoices { card } => {
+                card.validate()?;
+                Ok(serde_json::json!({"shown":true,"multiple":card.multiple,"options":card.options.len(),"next":"The desktop shows the card. End your turn now without choosing for the user; the pick arrives as the user's next message."}).to_string())
             }
             Command::ExecutionTrace { operation } => self.execution_trace(operation),
             Command::PhraseVariation {
@@ -882,14 +960,38 @@ impl Session {
                     .transpose()?
                     .unwrap_or(0);
                 let indices = &indices[first..];
-                let filled = self
-                    .write_lyrics_with_reading(ClipId(clip), indices, &text, reading.as_deref())
-                    .map_err(error)?;
+                self.begin_transaction(crate::Edit::WriteLyrics);
+                let filled = match self.write_lyrics_with_reading(
+                    ClipId(clip),
+                    indices,
+                    &text,
+                    reading.as_deref(),
+                ) {
+                    Ok(filled) => filled,
+                    Err(failure) => {
+                        self.end_transaction();
+                        return Err(error(failure));
+                    }
+                };
+                // The song-wide lyrics follow every lyric an agent writes, so a caption or a
+                // lyric sheet never depends on the agent remembering a second call.
+                let lines = self.written_lyric_lines(
+                    ClipId(clip),
+                    &indices[..filled.min(indices.len())],
+                    &text,
+                    reading.as_deref(),
+                );
+                self.annotate_written_lines(&lines);
+                self.end_transaction();
                 Ok(
-                    serde_json::json!({"filled":filled,"available":indices.len(),"clip_name":self.midi_clip(ClipId(clip)).map(|clip| &clip.name),"unsaved":true})
+                    serde_json::json!({"filled":filled,"available":indices.len(),"clip_name":self.midi_clip(ClipId(clip)).map(|clip| &clip.name),
+                        "lyric_annotation":lines.iter().map(|line| serde_json::json!({"text":line.text,"start_tick":line.start.raw(),"end_tick":line.end.raw()})).collect::<Vec<_>>(),
+                        "unsaved":true})
                         .to_string(),
                 )
             }
+            Command::EditLyrics { operation } => self.agent_edit_lyrics(operation),
+            Command::EditComments { operation } => self.agent_edit_comments(operation),
             Command::InspectSinger {
                 track,
                 offset,
@@ -904,6 +1006,7 @@ impl Session {
             | Command::Preview { .. }
             | Command::ExportMidi { .. }
             | Command::VerifyRender { .. }
+            | Command::LintProject { audio: true, .. }
             | Command::ImportAudio { .. }
             | Command::ImportMidi { .. }
             | Command::Checkpoints { .. }
@@ -971,6 +1074,17 @@ impl Session {
             Command::MixerGraph { operation } => self
                 .apply_mixer_graph(&operation)
                 .map(|report| report.to_string()),
+            Command::LintProject {
+                audio: false,
+                start_bar,
+                bars,
+                offset,
+                limit,
+            } => {
+                let request = lint::LintRequest::new(start_bar, bars, offset, limit)?;
+                self.agent_lint_report(&request)
+            }
+            Command::ApplyLintFixes { ids } => self.agent_apply_lint_fixes(&ids),
             Command::InstrumentDiagnostics { offset, limit } => self
                 .sound_library_job(plugin_paths)
                 .diagnostics(offset, limit),
@@ -988,13 +1102,14 @@ impl Session {
                     .iter()
                     .map(|track| {
                         let clips: Vec<_> = if let Some(clips)=track.kind.note_clips() {
-                            clips.iter().map(|clip|serde_json::json!({"clip":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":clip.length.raw(),"note_count":clip.notes.len()})).collect()
+                            clips.iter().map(|clip|with_loop_end(serde_json::json!({"clip":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":clip.length.raw(),"note_count":clip.notes.len()}), clip.start, clip.length, clip.sounding_length())).collect()
                         } else if let Some(audio)=track.kind.as_audio() {
-                            audio.clips.iter().map(|clip|serde_json::json!({"clip":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":project.audio_clip_length_ticks(clip).raw(),"gain_db":clip.gain_db,"source_bpm":clip.source_bpm,"follows_tempo":clip.follows_tempo,"fade_in_frames":clip.fade_in_frames,"fade_out_frames":clip.fade_out_frames,"source_frames":clip.length_frames,"source_sample_rate":project.audio_sources.get(&clip.source).map(|source|source.sample_rate),"fade_in_curve":clip.fade_in_curve,"fade_out_curve":clip.fade_out_curve})).collect()
+                            audio.clips.iter().map(|clip|with_loop_end(serde_json::json!({"clip":clip.id.0,"name":clip.name,"start_tick":clip.start.raw(),"length_ticks":project.audio_clip_length_ticks(clip).raw(),"gain_db":clip.gain_db,"source_bpm":clip.source_bpm,"follows_tempo":clip.follows_tempo,"fade_in_frames":clip.fade_in_frames,"fade_out_frames":clip.fade_out_frames,"source_frames":clip.length_frames,"source_sample_rate":project.audio_sources.get(&clip.source).map(|source|source.sample_rate),"fade_in_curve":clip.fade_in_curve,"fade_out_curve":clip.fade_out_curve}), clip.start, project.audio_clip_length_ticks(clip), project.audio_clip_sounding_ticks(clip))).collect()
                         } else { Vec::new() };
                         serde_json::json!({"track":track.id.0, "name":track.name,
                         "kind":track.kind.label(), "mixer":mixer_summary(&track.mixer), "clips":clips,"drum_assignments":self.drum_assignments(track.id),
                         "instrument":track.kind.as_instrument().map(|inner| &inner.instrument_id),
+                        "layer":track.kind.layer().map(|source| serde_json::json!({"follows":source.track.0,"shape":layers::shape_json(&source.shape)})),
                         "soundfont_preset":self.track_preset(track.id)})
                     })
                     .collect();
@@ -1002,7 +1117,7 @@ impl Session {
                     "document_instance":self.document_instance(), "session_revision":self.revision(),
                     "verification_regions":crate::production_record::verification_regions(project),
                     "sample_rate":project.sample_rate,"duration_seconds":project.duration_seconds(), "harmony":project.harmony,
-                    "sections":project.sections, "tempo_map":project.tempo_map, "signatures":project.signatures, "loop_region":project.loop_region, "loop_enabled":project.loop_enabled, "ticks_per_quarter":Ticks::QUARTER.raw()})
+                    "sections":project.sections, "lyrics":lyric_annotation::lyric_lines_json(project), "comments":comments::comments_json(project), "tempo_map":project.tempo_map, "signatures":project.signatures, "loop_region":project.loop_region, "loop_enabled":project.loop_enabled, "ticks_per_quarter":Ticks::QUARTER.raw()})
                 .to_string())
             }
             Command::InspectAudio {
@@ -1087,6 +1202,7 @@ impl Session {
                 self.rename_track(TrackId(track), name).map_err(error)?;
                 Ok("Renamed track".into())
             }
+            Command::Layer { operation } => self.agent_layer(operation),
             Command::RemoveTrack { track } => {
                 self.remove_track(TrackId(track)).map_err(error)?;
                 Ok("Removed track".into())
@@ -1099,13 +1215,22 @@ impl Session {
                 target_lufs,
                 ceiling_db,
             } => {
-                let ceiling_db = ceiling_db.unwrap_or(-1.0);
+                let target_lufs = target_lufs.unwrap_or(crate::TARGET_LUFS);
+                let ceiling_db = ceiling_db.unwrap_or(crate::session::NEW_DOCUMENT_CEILING_DB);
                 let report = self.normalize_mix(target_lufs, ceiling_db).map_err(error)?;
+                let reached = report.after.lufs.unwrap_or(f32::NEG_INFINITY);
+                let stage = match (report.limited, target_lufs - reached > 1.0) {
+                    (true, _) => " The master limiter holds the ceiling.",
+                    (false, true) => {
+                        " The master chain has no limiter, so the loudest peak stopped the lift; insert auris.fx.limiter last on the master with mixer_graph and normalize again."
+                    }
+                    (false, false) => "",
+                };
                 Ok(format!(
-                    "Moved source faders {:+.2} dB. Mix {:.1} -> {:.1} LUFS; true peak {:.1} -> {:.1} dBTP. Target {:.1} LUFS, ceiling {:.1} dBTP. Inspect_audio again before judging the sound.",
+                    "Moved source faders {:+.2} dB. Mix {:.1} -> {:.1} LUFS; true peak {:.1} -> {:.1} dBTP. Target {:.1} LUFS, ceiling {:.1} dBTP.{stage} Inspect_audio again before judging the sound.",
                     report.offset_db,
                     report.before.lufs.unwrap_or(f32::NEG_INFINITY),
-                    report.after.lufs.unwrap_or(f32::NEG_INFINITY),
+                    reached,
                     report.before.true_peak_db,
                     report.after.true_peak_db,
                     target_lufs,

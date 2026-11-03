@@ -121,6 +121,7 @@ impl Render for AurisApp {
         self.event_window
             .get_or_insert(window.window_handle().window_id());
         self.singer_portraits.release_images(window);
+        self.singer_icons.release_images(window);
         self.spectrograms.release_images(window);
         if crate::project_windows::installed(cx)
             && window.is_window_active()
@@ -161,8 +162,10 @@ impl Render for AurisApp {
         // Pointer coordinates arrive in window space, and the resize handlers need to know how
         // tall the window is to bound the bottom panel; record it once per frame.
         self.viewport_height = window.viewport_size().height;
-        self.transport_height =
-            super::transport_bar::transport_height(window.viewport_size().width);
+        self.transport_height = super::transport_bar::transport_height(
+            window.viewport_size().width,
+            self.appearance.top_bar_layout,
+        );
         // Where the window is, kept for next time. Read rather than written: the file is put
         // out once, on the way out.
         self.remember_window(window);
@@ -258,7 +261,7 @@ impl Render for AurisApp {
             .text_size(theme.atelier.typography.size_md)
             .child(title_bar)
             .children(project_tabs)
-            .child(transport)
+            .children(transport)
             .child(
                 div()
                     .flex()
@@ -473,6 +476,7 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_import_midi))
                     .on_action(Self::window_listener(cx, Self::on_export_midi))
                     .on_action(Self::window_listener(cx, Self::on_export_singer_frames))
+                    .on_action(Self::window_listener(cx, Self::on_export_video))
                     .on_action(Self::window_listener(cx, Self::on_choose_singer_voice))
                     .on_action(Self::window_listener(cx, Self::on_next_singer_speaker))
                     .on_action(Self::window_listener(cx, Self::on_sing))
@@ -534,6 +538,7 @@ impl AurisApp {
                     .on_action(Self::window_listener(cx, Self::on_toggle_agent))
                     .on_action(Self::window_listener(cx, Self::on_toggle_structure_lane))
                     .on_action(Self::window_listener(cx, Self::on_toggle_harmony_lane))
+                    .on_action(Self::window_listener(cx, Self::on_toggle_lyrics_lane))
                     .on_action(Self::window_listener(cx, Self::on_toggle_tempo_marks))
                     .on_action(Self::window_listener(cx, Self::on_toggle_bend_lane))
                     .on_action(Self::window_listener(cx, Self::on_toggle_modulation_lane))
@@ -1561,6 +1566,23 @@ impl AurisApp {
                     }
                 }
             }
+            Drag::LyricLine { at, grab_offset } => {
+                let x = event.position.x - self.timeline_origin().x;
+                let wanted = self
+                    .snap_unless_held(self.timeline.x_to_tick(x) - grab_offset, event.modifiers)
+                    .max_zero();
+                if wanted != at
+                    && self.session.move_lyric_line(at, wanted)
+                    && let Some(Drag::LyricLine { at, .. }) = &mut self.drag
+                {
+                    *at = wanted;
+                }
+            }
+            Drag::Comment {
+                host,
+                id,
+                grab_offset,
+            } => self.drag_comment(host, id, grab_offset, event),
             Drag::PanelScroll {
                 panel,
                 start,
@@ -2002,12 +2024,33 @@ impl AurisApp {
                 let delta = f32::from(event.position.x - start_x);
                 self.drag_perform_dial(clip, dial, start_fraction, delta);
             }
+            Drag::LayerDial {
+                track,
+                dial,
+                start_fraction,
+                start_x,
+            } => {
+                let delta = f32::from(event.position.x - start_x);
+                self.drag_layer_dial(track, dial, start_fraction, delta);
+            }
             Drag::VolumeContourPoint {
                 clip,
                 index,
                 bounds,
             } => {
                 self.drag_volume_contour_point(clip, index, bounds, event.position);
+            }
+            Drag::VideoColour {
+                channel,
+                start_fraction,
+                start_x,
+            } => {
+                let delta = crate::ui::widgets::fine_scaled(
+                    f32::from(event.position.x - start_x),
+                    event.modifiers,
+                );
+                let fraction = crate::ui::widgets::dragged(start_fraction, delta);
+                self.set_video_colour_channel(channel, fraction, false);
             }
             Drag::TimeZoom {
                 start_fraction,
@@ -2074,6 +2117,13 @@ impl AurisApp {
             Some(Drag::DrumLaneReorder { track, .. }) => Some(*track),
             _ => None,
         };
+        // A colour drag changed the look without writing it down on every move; this is the
+        // one write for the whole sweep.
+        if matches!(self.drag, Some(Drag::VideoColour { .. }))
+            && let Err(error) = self.save_settings()
+        {
+            log::warn!("could not save settings: {error}");
+        }
         self.stop_audition();
         // A key of the drawn keyboard pressed with the pointer is let go of here rather than on
         // the key itself, because the pointer may well have left it — or the panel — by now.
@@ -2778,6 +2828,15 @@ impl AurisApp {
         self.export_singer_frames(window, cx);
     }
 
+    fn on_export_video(
+        &mut self,
+        _: &actions::ExportVideo,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_video_export(cx);
+    }
+
     fn on_choose_singer_voice(
         &mut self,
         _: &actions::ChooseSingerVoice,
@@ -3387,6 +3446,20 @@ impl AurisApp {
             cx.notify();
             return;
         }
+        // A selection is the last thing to give back before the engine. Escape is what every
+        // editor deselects with, and a hand that pressed it to let go of some notes got a panic
+        // and a status line instead. The clip the roll is showing stays: dropping it would empty
+        // the editor rather than the selection inside it.
+        if !self.selected_notes.is_empty() {
+            self.selected_notes.clear();
+            cx.notify();
+            return;
+        }
+        if self.selected_clips.len() > 1 {
+            self.selected_clips = self.selected_clip.into_iter().collect();
+            cx.notify();
+            return;
+        }
         // Before the panic rather than after: the engine silences its voices, and a keyboard that
         // still believed it was holding three of them would send their releases into the quiet
         // and then refuse to strike those notes again.
@@ -3581,6 +3654,17 @@ impl AurisApp {
         cx: &mut Context<Self>,
     ) {
         self.panels.lanes.harmony = !self.panels.lanes.harmony;
+        self.remember_layout();
+        cx.notify();
+    }
+
+    fn on_toggle_lyrics_lane(
+        &mut self,
+        _: &actions::ToggleLyricsLane,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.panels.lanes.lyrics = !self.panels.lanes.lyrics;
         self.remember_layout();
         cx.notify();
     }

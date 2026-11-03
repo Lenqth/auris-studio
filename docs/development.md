@@ -25,12 +25,17 @@ BACKEND — no UI dependency of any kind
   crates/auris-i18n     interface text in every language, and nothing else
   crates/auris-session  the document, the engine and every command a frontend needs
   crates/auris-toolbox  the commands as tools for a language model, shared by both model doors
+  crates/auris-video    note-roll videos: frames in software, encoded by an installed ffmpeg
 
 FRONTEND
   crates/auris-gpui     the desktop application  (binary: auris-studio)
   crates/auris-cli      the command line tool    (binary: auris)
   crates/auris-mcp      the Model Context Protocol server (binary: auris-mcp)
   crates/auris-agent    the model client: Ollama / OpenAI-compatible (library: background model worker)
+
+ALONGSIDE THE APPLICATION
+  crates/auris-update-helper  replaces the installed binary once the app has exited
+                              (binary: auris-update-helper)
 
 NOT THE WORKSPACE
   vendor/rustysynth     somebody else's crate, forked — see its own README
@@ -143,8 +148,8 @@ when no adapter is available.
 ### macOS without a full Xcode install
 
 macOS builds require 13.4 or later, matching the shipped Core ML ONNX Runtime. The workspace's
-Cargo configuration sets that deployment target for both architectures; the app bundle and
-the Intel runtime build use the same minimum version.
+Cargo configuration sets that deployment target and the app bundle uses the same minimum
+version. Releases are built for Apple Silicon only; Intel Macs are not supported.
 
 gpui normally compiles its Metal shaders at build time by shelling out to `xcrun metal`, which
 lives inside Xcode and is unreachable while `xcode-select -p` points at the Command Line

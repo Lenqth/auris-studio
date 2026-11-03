@@ -393,6 +393,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn offer_choices_is_a_flat_read_only_question_for_the_window_only() {
+        let definition = definitions()
+            .into_iter()
+            .find(|d| d.name == "offer_choices")
+            .expect("offer_choices is offered to live agents");
+        for field in ["question", "options", "multiple"] {
+            assert!(
+                definition.parameters["properties"].get(field).is_some(),
+                "{field}"
+            );
+        }
+        let args = serde_json::json!({"question":"Which?","options":[{"label":"A"},{"label":"B"}],"multiple":true});
+        let command = command("offer_choices", &args).unwrap().unwrap();
+        assert!(!command.is_mutating() && !command.needs_worker());
+        let operation = auris_session::agent_policy::Operation::parse(
+            "edit_project",
+            &serde_json::json!({"command":{"action":"offer_choices","question":"Which?","options":[{"label":"A"},{"label":"B"}]}}),
+        )
+        .unwrap();
+        assert_eq!(operation.name, "edit_project.offer_choices");
+        assert!(
+            crate::session_tools::definitions()
+                .iter()
+                .all(|tool| tool.name != "offer_choices"),
+            "a saved-project client has no window to draw the card"
+        );
+    }
+
+    #[test]
     fn arrangement_catalog_is_opt_in_and_keeps_typed_bounded_operations() {
         assert!(
             !definitions_with_arrangement(false)
@@ -505,6 +534,12 @@ mod tests {
                 null
             ])
         );
+        assert_eq!(
+            settings["strum"]["enum"],
+            serde_json::json!([0, 16, 32, 64, 128, null])
+        );
+        assert!(settings["low_root"].is_object());
+        assert!(accompaniment_settings["strum"].is_object());
         assert_eq!(settings["rhythm"]["pattern"], "^[xXo.~ \\t|-]*$");
         assert_eq!(settings["rhythm"]["maxLength"], 4096);
         let description = crate::tool_exposure::concise_description(&tool.description);
@@ -567,7 +602,8 @@ mod tests {
         assert_eq!(settings["gate"]["minimum"], 0.05);
         assert_eq!(settings["swing_percent"]["minimum"], 50);
         assert_eq!(settings["swing_percent"]["maximum"], 75);
-        assert_eq!(settings["reset"]["maxItems"], 12);
+        assert_eq!(settings["reset"]["maxItems"], 13);
+        assert_eq!(settings["sustain_ticks"]["maximum"], 3840);
         let parsed = command(
             "set_performance",
             &serde_json::json!({"clip":2,"settings":{"gate":0.5,"expression":{"delay_ms":-12}}}),

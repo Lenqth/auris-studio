@@ -46,6 +46,7 @@ pub mod agent_policy;
 mod audio_attachment;
 pub mod audio_audition;
 pub mod audio_inspection;
+pub mod choices;
 pub use audio_attachment::{AudioAttachmentCopy, copy_audio_attachment, prepare_audio_attachment};
 pub mod audio_input;
 pub mod audio_review;
@@ -81,6 +82,7 @@ pub use plugin_worker::{
 pub mod guide;
 pub mod history;
 pub mod library;
+pub mod lint;
 pub mod mixer_graph;
 pub mod param;
 pub mod progressions;
@@ -95,6 +97,11 @@ pub use sounds::{
 };
 pub mod singer_portrait;
 pub mod transient_id;
+pub mod video;
+pub use video::{
+    BackgroundImage, Ffmpeg, FrameRenderer, NoteColoring, NoteRollStyle, NoteScore, VideoCodec,
+    VideoError, VideoJob, VideoSize, VideoSummary, ffmpeg_install_command, ffmpeg_install_page,
+};
 pub mod voice_setup;
 
 pub use auris_analysis::audio::{AudioAnalysis, AudioChordSegment, TempoAnalysis, TempoCandidate};
@@ -109,7 +116,9 @@ pub use auris_analysis::{AnalysisControl, AnalysisError};
 /// Workspace-owned error variants exposed for frontend localisation.
 pub use auris_core::CoreError;
 /// Mechanical observations exposed through the session boundary.
-pub use auris_core::motion::{MotionFrame, MotionGeometry, MotionVoice};
+pub use auris_core::motion::{
+    MOTION_POINTS, MOTION_VOICES, MotionFrame, MotionGeometry, MotionVoice,
+};
 /// PCM-derived drum measurements, exposed without a frontend DSP dependency.
 pub use auris_dsp::drum_analysis::{AcousticCharacter, DrumAcoustics, DrumSpectrum};
 /// Upper bound on populated groups in a refined library timbre map.
@@ -134,6 +143,7 @@ pub use registry::{DEFAULT_INSTRUMENT, default_registry, plugin_catalogue};
 pub use render::{ExportSummary, RenderJob, StemRenderFailure, StemSummary, stem_tracks};
 pub use session::InstalledPluginFiles;
 pub use session::NoteSelectionPreview;
+pub use session::SungLine;
 pub use session::accompaniment;
 pub use session::arrangement;
 pub use session::lyric_harness;
@@ -146,15 +156,16 @@ pub use session::{
     DEFAULT_VELOCITY, DiscardRecoveryJob, DiskWatchJob, DiskWatchResult, InputChannels, LAYOUT,
     LIMITER_ALLOWANCE_DB, LoadedFont, MIN_PHONEME_SECONDS, MidiExportJob, MidiExportReport,
     MidiExportResult, MidiImportJob, MidiImportResult, MixAnalysis, MusicalTyping,
-    NormalizeMixReport, OCTAVE_RANGE, OpenProjectJob, OpenProjectResult, Played, PluginWindow,
-    Quantize, RECOVERY_DIR_VAR, RecordingReport, RecordingStatus, RecoveryCleanupJob, RecoveryJob,
-    RecoveryQuarantineCleanupJob, RecoveryResult, RecoverySnapshot, Release, SaveJob, SaveReport,
-    SaveResult, SectionLoudness, Session, SessionOptions, SingPlan, SingerFramesExportJob,
-    SingerFramesExportResult, SingerLandingJob, SingerLandingResult, SingerTakeState,
-    SingerVoiceInfo, SingerVoiceLoadJob, SingerVoiceLoadResult, Struck, SungFrames, TARGET_LUFS,
-    TYPING_BEND, TakeReport, TrackLevel, TrackLoudness, TypingRole, VELOCITY_STEP, WHEEL_STEPS,
-    decode_audio, fader_for, faders_lift_db, input_level_of, master_gain_db, quantized,
-    read_soundfont, recovery_dir, shadows_musical_typing, take_fingerprint,
+    NORMALIZE_LIMITER_ALLOWANCE_DB, NormalizeMixReport, OCTAVE_RANGE, OpenProjectJob,
+    OpenProjectResult, Played, PluginWindow, Quantize, RECOVERY_DIR_VAR, RecordingReport,
+    RecordingStatus, RecoveryCleanupJob, RecoveryJob, RecoveryQuarantineCleanupJob, RecoveryResult,
+    RecoverySnapshot, Release, SaveJob, SaveReport, SaveResult, SectionLoudness, Session,
+    SessionOptions, SingPlan, SingerFramesExportJob, SingerFramesExportResult, SingerLandingJob,
+    SingerLandingResult, SingerTakeState, SingerVoiceInfo, SingerVoiceLoadJob,
+    SingerVoiceLoadResult, Struck, SungFrames, TARGET_LUFS, TYPING_BEND, TakeReport, TrackLevel,
+    TrackLoudness, TypingRole, VELOCITY_STEP, WHEEL_STEPS, decode_audio, fader_for, faders_lift_db,
+    input_level_of, master_gain_db, quantized, read_soundfont, recovery_dir,
+    shadows_musical_typing, take_fingerprint,
 };
 pub use session::{
     AudioAnalysisJob, ChordAnalysisJob, ChordAnalysisReport, ClipAudioAnalysis,
@@ -162,6 +173,7 @@ pub use session::{
 };
 pub use session::{CheckpointJob, CheckpointOperation, CheckpointResult};
 pub use session::{CompositionPreview, CompositionTrackPreview};
+pub use session::{ENVELOPE_PITCHES, SoundEnvelope};
 pub mod workshop;
 pub use session::{
     DrumKitAnalysis, DrumProbeFont, DrumProbeRequest, DrumProbeSample, DrumScanOptions,
@@ -182,11 +194,15 @@ mod sound_icons;
 pub use session::{TrackConversion, TrackConversionJob};
 pub use settings::{
     AgentEndpoint, AgentPreferences, AudioPreferences, CONFIG_DIR_VAR, ExportPreferences,
-    PianoRollGrid, ReasoningEffort, Settings, ToolbarEntry, ToolbarItem, ToolbarPreferences,
-    WindowPlacement, config_dir,
+    InputCalibration, PianoRollGrid, ReasoningEffort, Settings, ToolbarEntry, ToolbarItem,
+    ToolbarPreferences, TypingCalibration, WindowPlacement, config_dir,
 };
-pub use singer_portrait::{SingerPortraitError, SingerPortraitSource, load_singer_portrait};
-pub use sound_character::{TimbreCharacter, TimbreTargets};
+pub use singer_portrait::{
+    SingerPortraitError, SingerPortraitSource, load_singer_icon, load_singer_portrait,
+};
+pub use sound_character::{
+    Bounds, EnvelopeTargets, MeasuredEnvelope, TimbreCharacter, TimbreTargets,
+};
 pub use sound_icons::SoundIcon;
 pub use transcription::{read_external_transcription_file, read_transcription_file};
 pub use transcription_draft::{
@@ -254,6 +270,7 @@ pub fn midi_extensions() -> &'static [&'static str] {
 /// text. Both names would compile — an explicit `use` beats a glob — but a reader would have to
 /// know that rule to tell which `Key` a line means, and one of the two would be wrong silently.
 pub mod prelude {
+    pub use crate::session::CommentHost;
     pub use crate::session::{PlaybackReadiness, PlaybackState};
     pub use crate::session::{RhythmGrid, RhythmRow};
     pub use crate::session::{TrackConversion, TrackConversionJob};
@@ -295,11 +312,13 @@ pub mod prelude {
     pub use auris_core::{
         AudioBuffer, AudioClip, AudioSource, AuxSend, ClipId, ClipPreset, ClipRecipe, Color,
         ConsonantWidths, DrumMap, DrumRole, EffectSlot, EffectSlotId, FadeCurve, Fall, GhostNotes,
-        GhostPattern, MidiClip, MixerStrip, Note, NoteTransform, Output, PluginRegistry, PresetRef,
-        Project, Scoop, SectionMap, SectionPoint, SectionSpan, SendId, SingerPitch, SingerTrack,
+        GhostPattern, LayerShape, LayerVoice, MAX_LAYER_OFFSET, MidiClip, MixerStrip, Note,
+        NoteTransform, Output, PluginRegistry, PresetRef, Project, STRUM_VALUES, SUSTAIN_MAX_TICKS,
+        Scoop, SectionMap, SectionPoint, SectionSpan, SendId, SingerPitch, SingerTrack,
         SoundFontId, SoundFontRef, SourceId, StrokeDirection, Subdivision, Track, TrackId,
         TrackKind, Vibrato, default_frame_hop, default_loop_end, loop_passes, sounding_length,
     };
+    pub use auris_core::{Comment, CommentId};
     pub use auris_core::{
         Expression, GroovePoint, GrooveTemplate, PitchPerformance, Strum, StrumClock,
         VolumeContour, VolumeContourPreset,

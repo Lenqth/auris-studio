@@ -638,6 +638,22 @@ pub enum Drag {
         /// to the pointer on the first move.
         grab_offset: Ticks,
     },
+    /// Dragging a comment along its track's lane or around the piano roll.
+    Comment {
+        /// What holds it.
+        host: CommentHost,
+        /// Which comment.
+        id: CommentId,
+        /// How far right of the comment's pin the pointer took hold.
+        grab_offset: Ticks,
+    },
+    /// Dragging the start of a lyric line along the lyrics lane.
+    LyricLine {
+        /// The change being moved, by where it currently sits.
+        at: Ticks,
+        /// How far into the line the pointer took hold.
+        grab_offset: Ticks,
+    },
     /// Sweeping along the harmony lane with the button held, hearing each chord in turn.
     ///
     /// Carries nothing: what sounds is whatever is written under the pointer, which the document
@@ -705,6 +721,17 @@ pub enum Drag {
         /// Pointer x when the drag began.
         start_x: Pixels,
     },
+    /// Moving one of a layer's shape sliders.
+    LayerDial {
+        /// The layer whose shape is being edited.
+        track: TrackId,
+        /// Which slider.
+        dial: crate::ui::layer::LayerDial,
+        /// Where the bar was when the drag began, from 0 to 1.
+        start_fraction: f32,
+        /// Pointer x when the drag began.
+        start_x: Pixels,
+    },
     /// Moving one point of a normalized long-note volume contour.
     VolumeContourPoint {
         /// Clip whose performance curve is edited.
@@ -713,6 +740,15 @@ pub enum Drag {
         index: usize,
         /// Drawable graph bounds captured when the drag begins.
         bounds: Bounds<Pixels>,
+    },
+    /// Dragging one of the video window's colour sliders.
+    VideoColour {
+        /// Which slider of the open picker.
+        channel: crate::ui::colour_picker::HsvChannel,
+        /// Slider position when the drag began, from 0 to 1.
+        start_fraction: f32,
+        /// Pointer x when the drag began.
+        start_x: Pixels,
     },
     /// Dragging the time-zoom slider.
     TimeZoom {
@@ -839,6 +875,8 @@ impl Drag {
             Drag::PerformDial { clip, .. } | Drag::VolumeContourPoint { clip, .. } => {
                 Some(Edit::SetClipTransforms(*clip))
             }
+            // One step for the sweep, as every other slider is.
+            Drag::LayerDial { .. } => Some(Edit::SetLayerShape),
             // undo stack until Write is pressed.
             Drag::Tempo { at, .. } => Some(Edit::ChangeTempo(*at)),
             // Selecting is not an edit; it changes what a later edit will act on.
@@ -847,8 +885,12 @@ impl Drag {
             Drag::AuditionHarmony => None,
             Drag::HarmonyChord { .. } => Some(Edit::MoveChord),
             Drag::SectionLabel { .. } => Some(Edit::MoveSection),
+            Drag::LyricLine { .. } => Some(Edit::MoveLyricLine),
+            Drag::Comment { .. } => Some(Edit::MoveComment),
             // How far in the view is zoomed is a property of the window, like a panel's width.
             Drag::TimeZoom { .. } => None,
+            // The video's look is an application setting, not part of the document.
+            Drag::VideoColour { .. } => None,
             // Panel and window geometry is a property of the window, not the document: resizing
             // a panel or moving the plugin editor is not an edit and must never land on the undo
             // stack.
@@ -880,6 +922,23 @@ mod tests {
     #[test]
     fn a_test_build_never_offers_persistent_recovery_entries() {
         assert!(startup_recoveries().is_empty());
+    }
+
+    #[test]
+    fn a_window_waiting_for_play_does_not_claim_there_is_no_output() {
+        let silent = auris_session::AudioStatus {
+            host: None,
+            buffer_frames: None,
+            device: "none".into(),
+            running: false,
+            sample_rate: 48_000.0,
+            channels: 2,
+            gpu: None,
+        };
+        let waiting = audio_line(&silent, true, Language::English);
+        assert!(waiting.starts_with(Key::AudioWaitsForPlay.get(Language::English)));
+        let missing = audio_line(&silent, false, Language::English);
+        assert!(missing.starts_with(Key::NoAudioOutput.get(Language::English)));
     }
 
     #[test]
@@ -1295,6 +1354,8 @@ pub struct CanvasBounds {
     pub structure: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// The chord strip between the structure lane and the clip lanes.
     pub harmony: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// The lyrics strip under the harmony.
+    pub lyrics: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// The arrangement's clip lanes.
     pub lanes: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// The piano roll's note grid.
@@ -1472,6 +1533,8 @@ pub struct AurisApp {
     pub(crate) skill_menu_generation: u64,
     /// Bounded artwork cache and the current background image request.
     pub(crate) singer_portraits: crate::ui::singer_portrait::SingerPortraits,
+    /// The library's speaker faces, keyed by shelf entry.
+    pub(crate) singer_icons: crate::ui::singer_portrait::SingerIcons,
     /// Preview notes the voice has already sung, at the engine's rate.
     ///
     /// What makes dragging a note across pitches instant the second time it passes one.
@@ -1493,9 +1556,13 @@ pub struct AurisApp {
     pub(crate) drum_analysis: crate::ui::drums::DrumAnalysisState,
     /// Whether the dedicated analysis panel is open.
     pub(crate) analysis_panel: bool,
+    /// The music linter's findings and its two schedules.
+    pub(crate) lint: crate::ui::lint::LintState,
     /// CPU music-analysis jobs and their unapplied draft.
     pub(crate) music_analysis: crate::ui::music_analysis::MusicAnalysisState,
     pub(crate) visualizer: crate::ui::visualizer::VisualizerState,
+    /// The note-roll video window: whether it is open, its preview and what ffmpeg was found.
+    pub(crate) video_export: crate::ui::video_export::VideoExportState,
     pub(crate) physical_view: crate::ui::physical_model::PhysicalView,
     pub(crate) track_grid: crate::ui::track_grid::TrackGrid,
     pub(crate) timbre_map: crate::ui::timbre_map::TimbreMapState,
@@ -1554,7 +1621,7 @@ pub struct AurisApp {
     /// The same, for the inspector's column of settings.
     pub(crate) inspector_scroll: gpui::ScrollHandle,
     /// Collapsed inspector groups, retained when the selected object changes.
-    pub(crate) inspector_collapsed: [bool; 4],
+    pub(crate) inspector_collapsed: [bool; 5],
     /// The same, for the log's lines.
     pub(crate) log_scroll: gpui::ScrollHandle,
     /// The viewport of the open custom menu-bar dropdown.
@@ -1620,7 +1687,7 @@ pub struct AurisApp {
     pub(crate) plugin_discovery_error: Option<String>,
     /// The singer voices found on this machine, scanned once and kept — the
     /// [`Self::clap_files`] arrangement, cleared when a voice folder is added or forgotten.
-    pub(crate) voices: Option<Vec<(String, std::path::PathBuf, Option<String>)>>,
+    pub(crate) voices: Option<Vec<(String, std::path::PathBuf)>>,
     /// Bounded metadata returned after an opened `.clap` file is inspected in a child process.
     /// Empty results are cached too, so a broken plugin is not retried on every repaint.
     pub(crate) clap_contents:
@@ -1910,7 +1977,7 @@ impl AurisApp {
         // start looks like. Launching used to leave a two-bar arpeggio and a bass line lying
         // around, which was useful while there was nothing else to hear and is now just
         // somebody else's music to delete before starting.
-        session.new_project();
+        session.new_project_with_track(&auris_i18n::messages::new_track_name(language, 1));
 
         // The dictionary the settings name, loaded once for the session's lifetime. A folder
         // that fails to load is logged and left in the settings — deleting the setting over a
@@ -1924,7 +1991,7 @@ impl AurisApp {
         // the course; the first voice loaded follows it.
         session.set_singer_acceleration(settings.singer_acceleration);
 
-        let status = audio_line(&session.audio_status(), language);
+        let status = audio_line(&session.audio_status(), session.audio_suspended(), language);
         log::info!("{status}");
 
         // Repaint on a timer rather than per audio block: the playhead and meters live in
@@ -1943,6 +2010,7 @@ impl AurisApp {
                         if this.session.take_output_changed() {
                             this.set_status(audio_line(
                                 &this.session.audio_status(),
+                                this.session.audio_suspended(),
                                 this.language,
                             ));
                         }
@@ -1963,6 +2031,7 @@ impl AurisApp {
                         this.watch_disk(cx);
                         this.drain_agent(cx);
                         this.poll_auto_sing(cx);
+                        this.poll_lint(cx);
                         this.poll_drum_analysis(cx);
                         this.poll_sung_preview(cx);
                         // Also here rather than in a command, because a monitor breaking up
@@ -1972,7 +2041,10 @@ impl AurisApp {
                         // The punch-out is a position the playhead crosses rather than a thing
                         // anybody does, so this is the only place that could notice it.
                         this.finish_punch();
+                        this.finish_input_calibration();
+                        this.finish_typing_calibration();
                         this.poll_singer_portrait(cx);
+                        this.poll_singer_icons(cx);
                         this.poll_spectrograms(cx);
                         this.report_graph_resource_error();
                         cx.notify();
@@ -2047,6 +2119,7 @@ impl AurisApp {
             sung_retry: BTreeSet::new(),
             voicevox_catalogs: std::collections::HashMap::new(),
             singer_portraits: Default::default(),
+            singer_icons: Default::default(),
             voicevox_menu_generation: 0,
             skill_menu_generation: 0,
             sung_previews: std::collections::HashMap::new(),
@@ -2054,8 +2127,10 @@ impl AurisApp {
             sung_preview_rendering: false,
             drum_analysis: Default::default(),
             analysis_panel: false,
+            lint: Default::default(),
             music_analysis: Default::default(),
             visualizer: Default::default(),
+            video_export: Default::default(),
             physical_view: Default::default(),
             track_grid: Default::default(),
             timbre_map: Default::default(),
@@ -2084,7 +2159,7 @@ impl AurisApp {
             mixer_connect_send: false,
             library_scroll: gpui::ScrollHandle::new(),
             inspector_scroll: gpui::ScrollHandle::new(),
-            inspector_collapsed: [false; 4],
+            inspector_collapsed: [false; 5],
             log_scroll: gpui::ScrollHandle::new(),
             menu_bar_scroll: gpui::ScrollHandle::new(),
             menu: None,
@@ -3058,6 +3133,9 @@ impl AurisApp {
     /// Window chrome owns the product name and save marker separately; keeping this value
     /// document-only lets Atelier centre the title without duplicating application branding.
     pub(crate) fn document_title(&self) -> String {
+        if self.session.is_untitled() {
+            return self.t(Key::DocumentUntitled).to_owned();
+        }
         self.session.document_title()
     }
 
@@ -3087,9 +3165,84 @@ impl AurisApp {
             log::warn!("could not save settings: {error}");
         }
 
-        let line = audio_line(&self.session.audio_status(), self.language);
+        let line = audio_line(
+            &self.session.audio_status(),
+            self.session.audio_suspended(),
+            self.language,
+        );
         self.set_status(line.clone());
         Ok(line)
+    }
+
+    /// Starts measuring the input latency, saying so in the status line.
+    pub(crate) fn start_input_calibration(&mut self) -> Result<(), SessionError> {
+        self.session.start_input_calibration()?;
+        self.set_status(Key::MeasuringInputLatency.get(self.language).to_owned());
+        Ok(())
+    }
+
+    /// Forgets the measured input latency for the devices open now, and saves that.
+    pub(crate) fn clear_input_calibration(&mut self) {
+        self.session.clear_input_calibration();
+        self.settings.audio = self.session.audio_preferences().clone();
+        if let Err(error) = self.save_settings() {
+            log::warn!("could not save settings: {error}");
+        }
+    }
+
+    /// Keeps the result of a latency measurement that has just finished, and reports it.
+    ///
+    /// Polled, because the measurement ends when its clicks have played rather than when anybody
+    /// does anything.
+    fn finish_input_calibration(&mut self) {
+        let Some(result) = self.session.take_input_calibration() else {
+            return;
+        };
+        let line = match result {
+            Ok(found) => {
+                self.settings.audio = self.session.audio_preferences().clone();
+                if let Err(error) = self.save_settings() {
+                    log::warn!("could not save settings: {error}");
+                }
+                messages::input_latency_measured(self.language, found.offset_ms, found.spread_ms)
+            }
+            Err(error) => crate::i18n::error_text(&error, self.language),
+        };
+        self.set_status(line);
+    }
+
+    /// Starts a tap-along measuring the typing keyboard, saying so in the status line.
+    pub(crate) fn start_typing_calibration(&mut self) -> Result<(), SessionError> {
+        self.session.start_typing_calibration()?;
+        self.set_status(Key::TappingAlong.get(self.language).to_owned());
+        Ok(())
+    }
+
+    /// Forgets the measured typing latency, and saves that.
+    pub(crate) fn clear_typing_calibration(&mut self) {
+        self.session.clear_typing_calibration();
+        self.settings.audio = self.session.audio_preferences().clone();
+        if let Err(error) = self.save_settings() {
+            log::warn!("could not save settings: {error}");
+        }
+    }
+
+    /// Keeps the result of a tap-along that has just finished, and reports it.
+    fn finish_typing_calibration(&mut self) {
+        let Some(result) = self.session.take_typing_calibration() else {
+            return;
+        };
+        let line = match result {
+            Ok(found) => {
+                self.settings.audio = self.session.audio_preferences().clone();
+                if let Err(error) = self.save_settings() {
+                    log::warn!("could not save settings: {error}");
+                }
+                messages::typing_latency_measured(self.language, found.offset_ms, found.spread_ms)
+            }
+            Err(error) => crate::i18n::error_text(&error, self.language),
+        };
+        self.set_status(line);
     }
 
     /// Switches the interface language and remembers the choice.
@@ -3754,7 +3907,16 @@ mod hidden_panel_input_tests {
 }
 
 /// The status line describing what the audio backend ended up doing.
-pub(crate) fn audio_line(status: &auris_session::AudioStatus, language: Language) -> String {
+///
+/// A window opens with its audio `suspended`: the device is claimed by the first explicit audio
+/// command, so a second project window does not take it from the first. Such a window has no
+/// running output yet, and saying "no audio output" there would tell somebody with working
+/// speakers that they have none.
+pub(crate) fn audio_line(
+    status: &auris_session::AudioStatus,
+    suspended: bool,
+    language: Language,
+) -> String {
     let engine = if status.running {
         messages::audio_status(
             language,
@@ -3762,6 +3924,8 @@ pub(crate) fn audio_line(status: &auris_session::AudioStatus, language: Language
             status.sample_rate,
             status.channels,
         )
+    } else if suspended {
+        Key::AudioWaitsForPlay.get(language).to_string()
     } else {
         Key::NoAudioOutput.get(language).to_string()
     };

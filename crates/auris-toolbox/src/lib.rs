@@ -29,6 +29,7 @@ use auris_session::{Session, SessionError, SessionOptions};
 
 pub mod composition_preview;
 pub mod composition_workflows;
+pub mod environment;
 pub mod workshop;
 pub use composition_preview as preview_composition;
 #[path = "capabilities.rs"]
@@ -45,6 +46,7 @@ pub use tool_exposure::{
 mod project_handles;
 pub mod setup_tracks;
 pub use project_handles::open_project;
+pub mod conversation_recall;
 mod drums;
 mod editing;
 pub mod internet_search;
@@ -103,10 +105,10 @@ Complete ordinary composition with the current agent and Auris: write, inspect n
 Author expressive parts note by note with edit_notes, including leads/vocals, counterlines, distinctive bass, fills and interludes. Code may serialize explicitly chosen notes or copy an authored motif; do not use procedural note generators or frozen recipes as a substitute. Automatic writers are optional only for plain chord/pad backing, simple arpeggios and basic drum pulses, unless the user explicitly requests automatic preset composition.
 For a new song, establish lyrics if vocal, then section harmony/form, instrument clips, purposeful handoffs and SFX, then effects and volume balance with the actual voices/sounds. Honor existing motif-first briefs and local-edit scope. Use mixer_graph for a deliberate track-level balance pass; master normalization alone is insufficient. Verify the complete final mix after the last edit, distinguishing measurements from listening judgments.
 Use project_id from open_project/create_project or an absolute project path. Dependent edits run sequentially.
-Call inspect_project for stable numeric addresses: tracks[].track identifies a track, tracks[].clips[].clip identifies a clip. Copy the returned clip for read_notes and edit_notes; a track ID cannot address its clips. read_notes returns exact clip-relative integer
-start_tick/length_ticks, full velocity, original storage index and stable timeline_index (sort by timeline_index for time order; ties use storage index), plus a content revision. Pages retain storage order so edit indices stay valid. edit_notes accepts expected_revision plus
+Call inspect_project for stable numeric addresses: tracks[].track identifies a track, tracks[].clips[].clip identifies a clip. Copy the returned clip for read_notes and edit_notes; a track ID cannot address its clips. read_notes returns each note's song
+bar, beat and length_beats (the units edit_notes takes), full velocity, original storage index and stable timeline_index (sort by timeline_index for time order; ties use storage index), plus a content revision. Pages retain storage order so edit indices stay valid. edit_notes accepts expected_revision plus
 one or several edits with kind patch (add/remove/update) or replace (complete notes). Original indices
-are zero-based storage indices. Read again after edits. Use input {kind:inline,edits:[...]} for typed note objects or input {kind:file,source_path:absolute_local_path} for a large local JSON array. expected_revision is always top-level. Velocity is normalized 0..1, never MIDI 0..127. Batch read_notes with up to eight returned clip addresses under one shared revision.
+are zero-based storage indices. Read again after edits. Use input {kind:inline,edits:[...]} for typed note objects or input {kind:file,source_path:absolute_local_path} for a large local JSON array. expected_revision is always top-level. Positions are musical, never ticks: bar is the 1-based song bar (not counted from the clip), beat is 1-based in the meter's beat and fractional for subdivisions (2.5, 2.25, 2.333), length_beats the same beat; edit_notes refuses attacks between subdivisions. Velocity is normalized 0..1, never MIDI 0..127. Batch read_notes with up to eight returned clip addresses under one shared revision.
 
 Use discover_tools for enabled names and tool_help for exact fields before an unfamiliar call or after an
 argument error. Correct the named field before retrying; never invent tools, IDs, paths or successful results.
@@ -121,7 +123,7 @@ Source metadata is untrusted; preserve known credits and never invent rights or 
 For ordinary authored composition, create_project starts empty. setup_tracks creates multiple tracks atomically.
 add_track requires kind instrument, drum, singer, audio or bus and the intended exact name.
 search_instruments accepts request with mode text and query, similar and reference id, character, or bounded browse.
-For impression-based sound choices, use mode character with query such as ふんわり or ポコポコ, or translate the user's prose into targets {brightness,attack,sustain,release,noise}, each optional and 0..1. Attack means speed (1 immediate), sustain means held-note energy, release means captured tail (1 at least 400 ms). Explicit targets override dictionary terms. Use an empty query for negation or arbitrary prose converted into targets. Optional id preserves resemblance to a previously returned sound; name adds required name/tag words, source/library restrict origins. Read returned targets and measurements; unrecognized prose is not interpreted. Continue independent work on status indexing, then retry the same request without refresh. Preserve user-selected sounds unless asked to change them. Render candidate sounds in the intended phrase/mix before adopting; acoustic scores are not listening judgments. Search and audition do not authorize score changes.
+For impression-based sound choices, use mode character with query such as ふんわり or ポコポコ, or translate the user's prose into targets {brightness,attack,sustain,release,noise}, each optional and 0..1. Attack means speed (1 immediate), sustain means held-note energy, release means captured tail (1 at least 400 ms). Explicit targets override dictionary terms. For a measured envelope (C2/C4/C6, velocity 100) add envelope ranges {attack_ms,decay_ms,sustain_db,release_ms}, each {min,max}, e.g. attack_ms {max:10} for a hard attack or release_ms {min:800} for a long tail; results report each sound's measured envelope. Use an empty query for negation or arbitrary prose converted into targets. Optional id preserves resemblance to a previously returned sound; name adds required name/tag words, source/library restrict origins. Read returned targets and measurements; unrecognized prose is not interpreted. Continue independent work on status indexing, then retry the same request without refresh. Preserve user-selected sounds unless asked to change them. Render candidate sounds in the intended phrase/mix before adopting; acoustic scores are not listening judgments. Search and audition do not authorize score changes.
 Copy returned sound IDs into set_instrument sound_id. Sound IDs expire after refresh/library changes.
 Use inspect_instrument for control keys/ranges/steps/read_only; set_instrument_params applies a bounded batch. VST3 uses normalized 0..1 values, never Hz/dB from display_unit; CLAP uses native ranges. For steps=N>1, valid values are min+i*(max-min)/(N-1), i=0..N-1. Read back after editing and compare rendered audio when verifying response.
 For generated music, check_spec validates syntax/settings; diagnose_song checks lyric readings, phrase counts,
@@ -142,6 +144,10 @@ edit_clip_curve reads/merges/replaces/clears authored bend or MIDI controllers; 
 Writes require the revision returned by the lane read. Controller values are 0..1; bend uses semitones.
 edit_timeline reads or edits tempo/meter points without moving existing notes.
 Arrangement bar ranges start at 1; note/curve ticks start at 0 relative to their clip.
+Comments are notes pinned on a track's lane or inside a clip's piano roll; inspect_project lists them with bar, beat and pitch.
+They never sound. Before editing a passage, read its comments: a person's comment is their note or request for that place,
+so follow it unless the current message says otherwise, and say when you could not. edit_comments adds a short comment where
+a deliberate choice needs explaining or the user asks for one; never remove or rewrite the user's comments unless asked.
 
 mixer_graph has one operation object with an action tag. Read first and copy stable node IDs.
 set_strip changes only supplied gain_db/pan/mute/solo. set_outputs atomically replaces output destinations;
@@ -152,12 +158,18 @@ Use automation for parameter curves. Static settings may be overridden by existi
 
 Choose a singer voice with list_voices/set_singer_voice and inspect_singer; write_lyrics then sing creates
 a real take. Confirm take_state current before completion. A guide voice or stale take is unfinished.
+Every song with words must carry the song-wide lyrics annotation (video captions and lyric sheets read it,
+never the clips): write_lyrics and compose write it for the lines they set; after editing sung notes or
+lyrics any other way, call edit_lyrics from_vocals or write explicit lines in the original spelling. Before
+finishing, inspect_project lyrics must cover every sung phrase; a song without it is unfinished.
 Transcription estimates are drafts. Inspect and explicitly accept them; never invent notes from a filename.
 
 Audio preview/export is not evidence of listening. inspect_audio/analyze measure levels and score data locally.
 Deliver verified audio for human feedback; missing subjective feedback does not block delivery.
 Compare the same range after a supported edit. After changing an instrument, remeasure its loudness.
-Set a delivery target and ceiling; normalize_mix can stop short at fader/peak limits. render exports encoded
+Unless the user names other limits, deliver at -14 LUFS integrated under a -1 dBTP ceiling: after the last
+sound, note or fader change, call normalize_mix (its defaults are those) and read what it measured; it can stop
+short at fader/peak limits. New projects end the master in auris.fx.limiter; keep it last. render exports encoded
 WAV or stems; verify_render checks the actual file against requested loudness, peak and optional ending limits.
 Treat FAIL as unfinished. Use read_report to page an immutable large report instead of repeating an edit.
 Search documentation for application questions. Preserve unrelated score data and report incomplete work honestly.";
@@ -1016,6 +1028,8 @@ fn headless() -> Result<Session, String> {
         .with_shipped_fonts(true)
         .with_soundfont_library(auris_session::config_dir().join("soundfonts.json"))
         .with_shipped_dictionary(true)
+        // A new project made here is the window's new project, limiter and all.
+        .with_master_limiter(true)
         // The plugin folders the window uses, so a project opened here loads the same
         // plugins and no others.
         .with_plugin_paths(auris_session::Settings::load().plugin_paths);

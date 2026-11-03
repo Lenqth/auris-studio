@@ -147,6 +147,9 @@ pub fn edit_key(edit: Edit) -> Key {
         Edit::AddBusTrack => Key::EditAddBusTrack,
         Edit::DeleteTrack => Key::EditDeleteTrack,
         Edit::DuplicateTrack => Key::EditDuplicateTrack,
+        Edit::AddLayerTrack => Key::EditAddLayerTrack,
+        Edit::SetLayerShape => Key::EditSetLayerShape,
+        Edit::DetachLayer => Key::EditDetachLayer,
         Edit::ConvertTrackToAudio => Key::EditConvertTrackToAudio,
         Edit::MoveTrack => Key::EditMoveTrack,
         Edit::MoveMixerNodes => Key::EditMoveMixerNodes,
@@ -201,6 +204,8 @@ pub fn edit_key(edit: Edit) -> Key {
         Edit::SetSingerVoice => Key::EditSetSingerVoice,
         Edit::SetSingerSpeaker => Key::EditSetSingerSpeaker,
         Edit::Sing => Key::EditSing,
+        Edit::LintFix => Key::EditLintFix,
+        Edit::LintSuppression => Key::EditLintSuppression,
         Edit::AddEffect => Key::EditAddEffect,
         Edit::RemoveEffect => Key::EditRemoveEffect,
         Edit::BypassEffect => Key::EditBypassEffect,
@@ -228,6 +233,10 @@ pub fn edit_key(edit: Edit) -> Key {
         Edit::ClearHarmony => Key::EditClearHarmony,
         Edit::SetSection => Key::EditSetSection,
         Edit::MoveSection => Key::EditMoveSection,
+        Edit::SetLyricLine => Key::EditSetLyricLine,
+        Edit::MoveLyricLine => Key::EditMoveLyricLine,
+        Edit::SetComment => Key::EditSetComment,
+        Edit::MoveComment => Key::EditMoveComment,
         Edit::StampProgression => Key::EditStampProgression,
         Edit::GenerateClip => Key::EditGenerateClip,
         Edit::FreezeClip => Key::EditFreezeClip,
@@ -309,6 +318,10 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
         },
         SessionError::UnknownTrack(_) => Key::ErrorUnknownTrack.get(language).to_string(),
         SessionError::UnknownClip(_) => Key::ErrorUnknownClip.get(language).to_string(),
+        SessionError::UnknownComment(_) => Key::ErrorUnknownComment.get(language).to_string(),
+        SessionError::EmptyComment => Key::ErrorEmptyComment.get(language).to_string(),
+        SessionError::NotANoteClip(_) => Key::ErrorNotANoteClip.get(language).to_string(),
+        SessionError::LintStale => Key::ErrorLintStale.get(language).to_string(),
         SessionError::UnknownNote { .. } => Key::ErrorUnknownNote.get(language).to_string(),
         // The one vocal error a person can *fix* gets the sentence naming the fix; the others
         // carry the loader's or the frontend's own words, which name the folder or the text.
@@ -320,6 +333,10 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
         }
         SessionError::Vocal(inner) => with(Key::ErrorLyric, inner.to_string()),
         SessionError::Sing(inner) => with(Key::ErrorSing, inner.to_string()),
+        SessionError::Video(auris_session::VideoError::FfmpegMissing(command)) => {
+            messages::ffmpeg_missing(language, command, auris_session::ffmpeg_install_page())
+        }
+        SessionError::Video(inner) => with(Key::ErrorVideo, inner.to_string()),
         SessionError::SingerFramesFileTooLarge { .. } | SessionError::SingerFramesLimit { .. } => {
             with(Key::ErrorSing, error.to_string())
         }
@@ -385,6 +402,14 @@ pub fn error_text(error: &SessionError, language: Language) -> String {
         SessionError::WouldReplace(path) => {
             messages::would_replace(language, &path.display().to_string())
         }
+        SessionError::CalibrationBusy => Key::ErrorCalibrationBusy.get(language).to_string(),
+        SessionError::CalibrationHeardNothing => {
+            Key::ErrorCalibrationHeardNothing.get(language).to_string()
+        }
+        SessionError::CalibrationUnsteady { spread_ms } => {
+            messages::calibration_unsteady(language, *spread_ms)
+        }
+        SessionError::CalibrationStalled => Key::ErrorCalibrationStalled.get(language).to_string(),
     }
 }
 
@@ -994,6 +1019,9 @@ mod tests {
             SessionError::UnknownPlugin("auris.fx.nope".into()),
             SessionError::UnknownTrack(1),
             SessionError::UnknownClip(2),
+            SessionError::UnknownComment(4),
+            SessionError::EmptyComment,
+            SessionError::NotANoteClip(5),
             SessionError::CannotSplit(3),
             SessionError::GenerationPositionOccupied,
             SessionError::NoPath,

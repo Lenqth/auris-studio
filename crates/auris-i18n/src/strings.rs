@@ -72,6 +72,8 @@ strings! {
     IssueNoContext { en: "No recorded context is available in this scope.", ja: "この範囲には記録された情報がありません。" }
     IssueInvitation { en: "A limitation or possible defect was found. You can prepare an Issue draft and choose what context to include.", ja: "機能の制約または不具合の可能性があります。補助情報を含めるか選んで、Issueの下書きを作れます。" }
     IssueOpenSuggestion { en: "Prepare Issue draft…", ja: "Issueの下書きを作成…" }
+    ChoicesSend { en: "Send", ja: "送信" }
+    ChoicesMultiple { en: "Choose any that apply", ja: "複数選べます" }
     WorkshopTitle { en: "AI workshop…", ja: "AIワークショップ…" }
     WorkshopChatHint { en: "Describe the music you want. Ask for one to three candidates, request more ideas, or keep developing your favourite.", ja: "作りたい曲を自由に伝えてください。候補は1〜3案で指定でき、追加の案を頼んだり、気に入った曲を育てたりできます。" }
     WorkshopMessage { en: "Message", ja: "メッセージ" }
@@ -89,6 +91,8 @@ strings! {
     PreferenceHeading { en: "Song personalization", ja: "曲作りのパーソナライズ" }
     PreferenceTab { en: "Personalization", ja: "パーソナライズ" }
     PreferenceHelp { en: "Choices from “AI workshop” are stored locally across projects. Edit the request or selected alternative below. Changes apply to your next request; current instructions take priority.", ja: "「AIワークショップ」での選択を、プロジェクト共通の好みとしてこの端末に保存しています。依頼内容や選んだ候補を修正できます。変更は次の依頼から使われ、今回の指示が優先されます。" }
+    PreferenceDigest { en: "Summary of earlier choices", ja: "以前の選択の要約" }
+    PreferenceDigestHelp { en: "Older choices are summarized automatically once the history grows, and the originals are moved to an archive file. Clearing the history removes the summary and the archive.", ja: "履歴が増えると古い選択は自動で要約され、元の記録はアーカイブファイルに退避されます。履歴を消去すると要約とアーカイブも消えます。" }
     PreferenceEmpty { en: "No choices recorded yet. Choose a song with preference recording enabled to build your history.", ja: "記録された選択はありません。好みの記録を有効にして曲を選ぶと、ここに履歴が表示されます。" }
     PreferenceRefresh { en: "Refresh history", ja: "履歴を再読み込み" }
     PreferenceEdit { en: "Edit choice", ja: "選択を編集" }
@@ -229,7 +233,7 @@ strings! {
     ChooseNew { en: "New project", ja: "新規プロジェクト" }
     ChooseRecent { en: "Recent projects", ja: "最近使った項目" }
     ChooseEmpty { en: "Empty project", ja: "空のプロジェクト" }
-    ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement.", ja: "音源トラックから、自由に曲を作り始めます。" }
+    ChooseEmptyHelp { en: "Start with an instrument track and build your arrangement", ja: "音源トラックから自由に曲を作り始める" }
     ChooseStartHelp { en: "Choose how to begin your song.", ja: "曲の始め方を選んでください。" }
     ChooseAiHelp { en: "Create music through conversation with an AI agent.", ja: "AIエージェントと話しながら曲を作る" }
     ChooseStartAi { en: "Start with AI…", ja: "AIで作り始める…" }
@@ -242,6 +246,12 @@ strings! {
     TrackGridEmpty { en: "Add a track to see its sound here.", ja: "トラックを追加すると、音源の動きや波形をここに表示します。" }
     ToolbarHeading { en: "Top toolbar", ja: "上部ツールバー" }
     ToolbarNote { en: "Show or hide items and change their order within each group.", ja: "項目の表示を切り替え、グループ内の順序を変更できます。" }
+    TopBarLayout { en: "Layout", ja: "レイアウト" }
+    TopBarLayoutNote { en: "Spacious keeps the transport in a row of its own under the title bar, with each readout captioned. Compact puts it in the title bar when the window is wide enough.", ja: "ゆったりは、タイトルバーの下に再生操作の段を設け、各表示に見出しを付けます。コンパクトは、ウィンドウの幅が十分あるとき再生操作をタイトルバーにまとめます。" }
+    TopBarSpacious { en: "Spacious", ja: "ゆったり" }
+    TopBarSpaciousNote { en: "Title bar and transport on two rows", ja: "タイトルバーと再生操作を2段に" }
+    TopBarCompact { en: "Compact", ja: "コンパクト" }
+    TopBarCompactNote { en: "One bar in a wide window", ja: "幅の広いウィンドウでは1段に" }
     ToolbarPlayback { en: "Playback controls", ja: "再生操作" }
     ToolbarEditing { en: "Editing controls", ja: "編集操作" }
     ToolbarReadouts { en: "Position and tempo", ja: "位置・テンポ表示" }
@@ -254,9 +264,6 @@ strings! {
     ToolbarVisualizer { en: "Audio visualizer", ja: "オーディオビジュアライザー" }
     ToolbarSpectrum { en: "Spectrum…", ja: "スペクトラム…" }
     PhysicalMotion { en: "Model motion", ja: "物理モデルの動き" }
-    PhysicalInstrumentView { en: "Instrument", ja: "楽器" }
-    PhysicalVoicesView { en: "Voices", ja: "声部" }
-    PhysicalDisplacement { en: "Displacement", ja: "変位" }
     PhysicalModes { en: "Resonant modes 1–8", ja: "共鳴モード 1–8" }
     PhysicalParameters { en: "Sound parameters", ja: "音色パラメーター" }
     PhysicalObserved { en: "Captured model state · amplitude enlarged", ja: "モデルの観測値 · 振幅を拡大表示" }
@@ -264,10 +271,15 @@ strings! {
     PhysicalFrozen { en: "Frozen", ja: "表示停止中" }
     PhysicalResume { en: "Resume display", ja: "表示を再開" }
     PhysicalWaiting { en: "Play a test note or start playback to see the model move", ja: "試奏または再生すると、モデルの動きを確認できます" }
-    PhysicalProjection { en: "Motion enlarged · Marker: contact · Bars: resonant modes", ja: "振動を拡大表示 · マーカー：接触位置 · 棒：共鳴モード" }
-    PhysicalStringProjection { en: "Strings: schematic fingering · Trails: recent motion", ja: "弦：推定運指 · 軌跡：直近の振動" }
-    PhysicalPianoProjection { en: "Strings: keyboard order · Trails: recent motion", ja: "弦：鍵盤の並び · 軌跡：直近の振動" }
-    PhysicalDrumProjection { en: "Kit stays visible · Mesh: membrane motion", ja: "膜・シンバルを常時表示 · 網目：振動" }
+    PhysicalTouchPluck { en: "Pull a string and let go to pluck it there · The farther you pull, the harder", ja: "弦を引っ張って放すと、その位置で弾きます · 大きく引くほど強く" }
+    PhysicalTouchStrike { en: "Press a string to strike it there · The farther from the string, the harder", ja: "弦を押すと、その位置を叩きます · 弦から離れた所ほど強く" }
+    PhysicalTouchHead { en: "Press a head to strike it there · Centre and rim sound different", ja: "面を押すと、その位置を叩きます · 中心と縁で音色が変わります" }
+    PhysicalTouchBow { en: "Hold on a string to bow it there · The farther from the string, the harder", ja: "弦を押さえている間、その位置を弓で弾きます · 弦から離れた所ほど強く" }
+    PhysicalTouchBlow { en: "Hold on the bore to blow into it · The farther from the centre line, the harder", ja: "管を押さえている間、息を吹き込みます · 中心線から離れた所ほど強く" }
+    PhysicalTouchSing { en: "Hold on the tract to sing · The farther from the centre line, the louder", ja: "声道を押さえている間、声を出します · 中心線から離れた所ほど大きく" }
+    PhysicalTract { en: "Vocal tract · glottis to lips", ja: "声道 · 声門から唇まで" }
+    PhysicalAudition { en: "Audition", ja: "試奏" }
+    PhysicalAuditionHint { en: "Choose the note a touch plays", ja: "触ったときに鳴らす音を選びます" }
     PhysicalPedal { en: "Sustain pedal", ja: "サステインペダル" }
     PhysicalHeld { en: "Held", ja: "持続中" }
     PhysicalReleased { en: "Releasing", ja: "余韻" }
@@ -311,7 +323,34 @@ strings! {
     VisualizerNegativePeak { en: "Negative peak", ja: "負側ピーク" }
     VisualizerCorrelationReset { en: "Reset correlation", ja: "相関をリセット" }
     VisualizerHint { en: "Vertical: mono · horizontal: opposite polarity. Auto gain changes the display only; recent traces fade behind the current one.", ja: "縦：モノラル · 横：逆位相。自動ゲインは表示だけを変更し、直近の軌跡は現在値の後ろに薄く残ります。" }
-    TimbreMap { en: "Timbre Map", ja: "音色マップ" }
+    TimbreMap { en: "Find Sounds", ja: "音源を探す" }
+    TimbreMapSounds { en: "Sounds", ja: "音源" }
+    TimbreMapSelected { en: "Selected sound", ja: "選んだ音" }
+    TimbreAxesEnvelope { en: "Envelope", ja: "エンベロープ" }
+    TimbreAxisAttackTime { en: "Attack (log ms)", ja: "アタック（対数ms）" }
+    TimbreAxisSustainLevel { en: "Sustain (dB)", ja: "サステイン（dB）" }
+    TimbreAxisReleaseTime { en: "Release (log ms)", ja: "リリース（対数ms）" }
+    TimbreEnvelopeGeometry { en: "Measured envelope · median of C2, C4 and C6 · times on a log scale", ja: "実測エンベロープ · C2・C4・C6の中央値 · 時間は対数目盛" }
+    TimbreEnvelopeFilter { en: "Filter by envelope", ja: "エンベロープで絞り込む" }
+    TimbreEnvelopeMeasured { en: "Measured envelope · C2, C4, C6 at velocity 100 · ≈ extrapolated", ja: "実測エンベロープ · C2・C4・C6、ベロシティ100 · ≈ は外挿値" }
+    TimbreEnvelopeMissing { en: "No envelope could be measured for this sound", ja: "この音はエンベロープを測定できませんでした" }
+    TimbreEnvelopeDecaying { en: "Never settles: decay is the time to fall 60 dB", ja: "持続しない音：ディケイは60dB下がるまでの時間" }
+    TimbreFindSimilar { en: "Find Similar Sounds", ja: "似た音を探す" }
+    TimbreRemoveCondition { en: "Remove condition", ja: "条件を外す" }
+    LibraryFindBySound { en: "Search by how it sounds…", ja: "音の性格で探す…" }
+    EnvelopeAttack { en: "Attack", ja: "アタック" }
+    EnvelopeDecay { en: "Decay", ja: "ディケイ" }
+    EnvelopeSustain { en: "Sustain", ja: "サステイン" }
+    EnvelopeRelease { en: "Release", ja: "リリース" }
+    EnvelopeAny { en: "Any", ja: "指定なし" }
+    EnvelopeFast { en: "Fast", ja: "速い" }
+    EnvelopeMedium { en: "Medium", ja: "中くらい" }
+    EnvelopeSlow { en: "Slow", ja: "遅い" }
+    EnvelopeShort { en: "Short", ja: "短い" }
+    EnvelopeLong { en: "Long", ja: "長い" }
+    EnvelopeHolds { en: "Holds", ja: "保つ" }
+    EnvelopeDips { en: "Dips", ja: "下がる" }
+    EnvelopeFades { en: "Fades", ja: "消える" }
     TimbreSearch { en: "Search…", ja: "検索…" }
     TimbreSearchClear { en: "Clear", ja: "クリア" }
     TimbreSearchPlaceholder { en: "Soft, plucky, or sound name", ja: "ふんわり、ポコポコ、音色名" }
@@ -418,6 +457,9 @@ strings! {
     MixerConnectionRejected { en: "Cannot connect these nodes. Choose a bus input or sidechain that does not create a cycle.", ja: "このノードには接続できません。循環しないバス入力かサイドチェインを選んでください。" }
     Inspector { en: "Inspector", ja: "インスペクタ" }
     InspectorClip { en: "Clip", ja: "クリップ" }
+    // The region inspector's loop switch. The value beside it says how many times the content
+    // plays, which is what a looped clip is for; the word alone would only say that it repeats.
+    InspectorLoop { en: "Loop", ja: "ループ" }
     InspectorGeneration { en: "Generation", ja: "生成" }
     InspectorSound { en: "Sound", ja: "音源" }
     InspectorUnmodified { en: "Unmodified", ja: "未調整" }
@@ -640,6 +682,10 @@ strings! {
         en: "No audio output — editing and export still work",
         ja: "オーディオ出力なし — 編集と書き出しは可能です"
     }
+    AudioWaitsForPlay {
+        en: "Audio output opens when you press Play",
+        ja: "再生すると音声出力を開きます"
+    }
 
     // ------------------------------------------------------------------ settings window
     Settings { en: "Settings", ja: "設定" }
@@ -680,6 +726,40 @@ strings! {
         ja: "要求するサイズです。デバイスが別のサイズを採用する場合があります。msはバッファ1つ分の時間で、全体の遅延ではありません。"
     }
     ActualBufferUnknown { en: "Applied buffer size: unavailable", ja: "適用されたバッファサイズ: 取得できません" }
+    InputLatency { en: "Input latency", ja: "入力遅延" }
+    InputLatencyNote {
+        en: "Measures how late recordings arrive beyond what the devices report. Connect the output to the input with a cable, or let the microphone hear the speakers (not headphones), then measure. Kept for these devices and this buffer size.",
+        ja: "デバイスが報告する遅延を超えて、録音がどれだけ遅れて届くかを測ります。出力を入力にケーブルでつなぐか、マイクにスピーカーの音を聞かせて（ヘッドホン不可）から計測してください。このデバイスとバッファサイズの組み合わせごとに保存されます。"
+    }
+    MeasureInputLatency { en: "Measure", ja: "計測" }
+    MeasuringInputLatency { en: "Measuring… keep quiet", ja: "計測中… お静かに" }
+    ResetInputLatency { en: "Reset", ja: "リセット" }
+    InputLatencyUncalibrated {
+        en: "Not measured: recordings use the devices' reported latency",
+        ja: "未計測: デバイスが報告する遅延で録音位置を補正しています"
+    }
+    TypingLatency { en: "Musical typing latency", ja: "ミュージカルタイピングの遅延" }
+    TypingLatencyNote {
+        en: "Measures how late notes played on the computer keyboard arrive. Press Measure, listen to the first bar of clicks, then tap any key on every click of the next two.",
+        ja: "PC キーボードで弾いたノートがどれだけ遅れて届くかを測ります。「計測」を押し、最初の1小節はクリックを聞き、続く2小節はクリックごとに好きなキーを叩いてください。"
+    }
+    TappingAlong { en: "Listen for one bar, then tap any key on each click…", ja: "1小節聞いてから、クリックごとにキーを叩いてください…" }
+    TypingLatencyUncalibrated {
+        en: "Not measured: notes are placed where the key reached the application",
+        ja: "未計測: キーがアプリに届いた時点の位置にノートを置きます"
+    }
+    ErrorCalibrationBusy {
+        en: "stop playback and recording before measuring the input latency",
+        ja: "入力遅延を計測する前に、再生と録音を止めてください"
+    }
+    ErrorCalibrationHeardNothing {
+        en: "no clicks reached the input; let it hear the output and measure again",
+        ja: "クリック音が入力に届きませんでした。入力に出力の音が届くようにして、もう一度計測してください"
+    }
+    ErrorCalibrationStalled {
+        en: "the audio output did not play the measurement",
+        ja: "オーディオ出力が計測音を再生しませんでした"
+    }
     InputDevice { en: "Input Device", ja: "入力デバイス" }
     InputDeviceNote {
         en: "Opened only while recording, so changing it does not interrupt playback.",
@@ -907,6 +987,61 @@ strings! {
     CmdImportSoundFont { en: "Import SoundFont", ja: "サウンドフォントを読み込む" }
     CmdImportMidi { en: "Import MIDI File…", ja: "MIDI ファイルを読み込む…" }
     CmdExportMidi { en: "Export MIDI File…", ja: "MIDI ファイルを書き出す…" }
+    CmdExportVideo { en: "Export Video…", ja: "動画を書き出す…" }
+    VideoExportTitle { en: "Export Video", ja: "動画の書き出し" }
+    DialogExportVideo { en: "Export Video", ja: "動画を書き出す" }
+    FilterMp4 { en: "MP4 video", ja: "MP4 動画" }
+    VideoSize { en: "Size", ja: "サイズ" }
+    VideoFps { en: "Frame rate", ja: "フレームレート" }
+    VideoColors { en: "Note colours", ja: "ノートの色" }
+    VideoColorTrack { en: "Track colours", ja: "トラックの色" }
+    VideoColorPalette { en: "Palette", ja: "パレット" }
+    VideoColorPitch { en: "By pitch", ja: "音の高さ" }
+    VideoColorSingle { en: "One colour", ja: "単色" }
+    VideoPaletteHint { en: "Click a colour to choose another. Tracks take them in order.", ja: "色をクリックして選び直せます。トラックの並び順に割り当てます。" }
+    VideoHue { en: "Hue", ja: "色相" }
+    VideoSaturation { en: "Saturation", ja: "彩度" }
+    VideoBrightness { en: "Brightness", ja: "明度" }
+    VideoCustomColour { en: "Custom…", ja: "カスタム…" }
+    VideoColourCode { en: "Colour code", ja: "カラーコード" }
+    VideoHueLow { en: "Low notes", ja: "低い音" }
+    VideoHueHigh { en: "High notes", ja: "高い音" }
+    VideoBackground { en: "Background", ja: "背景" }
+    VideoChooseImage { en: "Choose Image…", ja: "画像を選ぶ…" }
+    VideoClearImage { en: "Remove Image", ja: "画像を外す" }
+    VideoDim { en: "Image dimming", ja: "画像の暗さ" }
+    VideoMotion { en: "Motion", ja: "動き" }
+    VideoSpeed { en: "Seconds across", ja: "画面の秒数" }
+    VideoPlayhead { en: "Playhead position", ja: "再生位置" }
+    VideoPlayheadLine { en: "Playhead line", ja: "再生位置の線" }
+    VideoNotes { en: "Notes", ja: "ノート" }
+    VideoThickness { en: "Height", ja: "太さ" }
+    VideoRoundness { en: "Rounding", ja: "角の丸み" }
+    VideoPlayedOpacity { en: "Played notes", ja: "再生済みの濃さ" }
+    VideoFlash { en: "Flash when struck", ja: "鳴った瞬間に光らせる" }
+    VideoParticles { en: "Sparks at the playhead", ja: "再生線のパーティクル" }
+    VideoParticlesOff { en: "Off", ja: "なし" }
+    VideoSink { en: "Sink while sounding", ja: "演奏中の沈み込み" }
+    VideoDrums { en: "Include drums", ja: "ドラムも描く" }
+    VideoChordSection { en: "Chords", ja: "コード" }
+    VideoChords { en: "Show chords", ja: "コード進行を表示" }
+    VideoChordColour { en: "Caption colour", ja: "表示の色" }
+    VideoChordsHint { en: "The chord sounding now and the next one, in the top corner. Uses the chords written in the song, or reads them from the notes when none are written.", ja: "今鳴っているコードと次のコードを左上に表示します。曲に入力したコードを使い、未入力なら音符から読み取ります。" }
+    VideoLyricSection { en: "Lyrics", ja: "歌詞" }
+    VideoLyrics { en: "Show lyrics as subtitles", ja: "歌詞を字幕で表示" }
+    VideoMeterSection { en: "Tempo and beat", ja: "テンポと拍" }
+    VideoTempo { en: "Show the tempo (BPM)", ja: "テンポ（BPM）を表示" }
+    VideoBeatCounter { en: "Show the beat counter", ja: "拍子カウンターを表示" }
+    VideoMeterHint { en: "In the top right corner. The counter is a polygon with a corner for each beat of the bar: the beat sounding now lights up, and the outline is traced round as the bar goes by.", ja: "右上に表示します。拍子カウンターは1小節の拍の数だけ角を持つ正多角形で、今の拍の角が光り、小節が進むにつれて輪郭がなぞられていきます。" }
+    VideoLyricsHint { en: "The line being sung, along the bottom. Uses the song's lyrics lane, which the AI and song composition fill in as they write words.", ja: "歌っている行を画面下に表示します。曲の歌詞レーンの内容を使います（AIや自動作曲が歌詞を書くと自動で入ります）。" }
+    VideoPreviewHint { en: "The preview shows the moment under the playhead. Move the playhead to see another.", ja: "プレビューは再生位置の瞬間です。再生位置を動かすと別の場面を確認できます。" }
+    VideoFfmpegChecking { en: "Looking for ffmpeg…", ja: "ffmpeg を探しています…" }
+    VideoFfmpegCopy { en: "Copy Command", ja: "コマンドをコピー" }
+    VideoFfmpegDownload { en: "Download Page", ja: "ダウンロードページ" }
+    VideoFfmpegRecheck { en: "Check Again", ja: "もう一度探す" }
+    VideoExportButton { en: "Export…", ja: "書き出す…" }
+    ErrorVideo { en: "the video could not be made", ja: "動画を作れませんでした" }
+    VideoNoNotes { en: "This song has no notes to draw.", ja: "この曲には描くノートがありません。" }
     CmdCollectAssets { en: "Collect Assets", ja: "アセットを集める" }
     CmdExportWav { en: "Export Audio", ja: "オーディオを書き出す" }
     CmdExportCycle { en: "Export Cycle", ja: "サイクル範囲を書き出す" }
@@ -972,6 +1107,7 @@ strings! {
     // "lane" — a person hides the chords, not a lane.
     CmdShowStructureLane { en: "Song Structure", ja: "曲の構成" }
     CmdShowHarmonyLane { en: "Key and Chords", ja: "キーとコード" }
+    CmdShowLyricsLane { en: "Lyrics", ja: "歌詞" }
     CmdShowTempoMarks { en: "Tempo Changes", ja: "テンポの変化" }
     CmdZoomIn { en: "Zoom In", ja: "拡大" }
     CmdZoomOut { en: "Zoom Out", ja: "縮小" }
@@ -986,6 +1122,11 @@ strings! {
     MenuSettingsItem { en: "Settings…", ja: "設定…" }
     MenuServices { en: "Services", ja: "サービス" }
     MenuQuitApp { en: "Quit Auris Studio", ja: "Auris Studio を終了" }
+    MenuHideApp { en: "Hide Auris Studio", ja: "Auris Studio を隠す" }
+    MenuHideOthers { en: "Hide Others", ja: "ほかを隠す" }
+    MenuShowAll { en: "Show All", ja: "すべてを表示" }
+    MenuMinimize { en: "Minimize", ja: "しまう" }
+    MenuZoom { en: "Zoom", ja: "拡大/縮小" }
     MenuOpenProjectItem { en: "Open Project…", ja: "プロジェクトを開く…" }
     MenuSaveAsItem { en: "Save As…", ja: "名前を付けて保存…" }
     MenuImportAudioItem { en: "Import Audio…", ja: "オーディオを読み込む…" }
@@ -1086,6 +1227,15 @@ strings! {
     MenuSetSectionHere { en: "Name Section Here…", ja: "ここからのセクション名を…" }
     MenuRemoveSectionHere { en: "Remove Section", ja: "セクションを削除" }
     MenuEndSectionsHere { en: "End Sections Here", ja: "ここで構造を終える" }
+    MenuSetLyricLineHere { en: "Type Lyrics Here…", ja: "ここに歌詞を入力…" }
+    MenuEditLyricLine { en: "Edit Lyric Line…", ja: "歌詞の行を編集…" }
+    MenuRemoveLyricLine { en: "Remove Lyric Line", ja: "歌詞の行を削除" }
+    MenuEndLyricLineHere { en: "End Line Here", ja: "ここで行を終える" }
+    MenuAddCommentHere { en: "Add Comment Here…", ja: "ここにコメントを追加…" }
+    MenuEditComment { en: "Edit Comment…", ja: "コメントを編集…" }
+    MenuRemoveComment { en: "Remove Comment", ja: "コメントを削除" }
+    MenuComment { en: "Comment", ja: "コメント" }
+    MenuLyricsFromVocals { en: "Fill Lyrics from Vocal Tracks", ja: "ボーカルトラックから歌詞を取り込む" }
     MenuWriteProgression { en: "Write a Progression", ja: "コード進行を書き込む" }
     MenuGenerateClip { en: "Write a Part Here…", ja: "ここにパートを自動生成…" }
     MenuRerollClip { en: "Another Take", ja: "別のテイク" }
@@ -1132,6 +1282,10 @@ strings! {
     PartOctave { en: "Octave", ja: "オクターブ" }
     PartSubdivision { en: "Subdivision", ja: "音符の細かさ" }
     PartSwing { en: "Swing", ja: "スウィング" }
+    // A pianist's left hand under a chord comp: the root struck an octave or more below.
+    PartLowRoot { en: "Root below", ja: "低音でルート" }
+    // How far apart a chord's notes begin, bottom first, as a note value.
+    PartStrum { en: "Strum", ja: "ずらし（ストラム）" }
     PartHumanize { en: "Humanize", ja: "ゆらぎ" }
     PartGroove { en: "Groove", ja: "グルーヴ" }
     PartRhythm { en: "Rhythm", ja: "リズム" }
@@ -1214,6 +1368,7 @@ strings! {
     PerformMute { en: "Mute strength", ja: "ミュートの強さ" }
     PerformBrush { en: "Brush strength", ja: "ブラシの強さ" }
     PerformSlide { en: "Slide strength", ja: "スライドの強さ" }
+    PerformSustain { en: "Sustain", ja: "サステイン" }
     PerformDirection { en: "Stroke direction", ja: "ストローク方向" }
     PerformLowToHigh { en: "Low to high", ja: "低音から高音" }
     PerformHighToLow { en: "High to low", ja: "高音から低音" }
@@ -1306,6 +1461,8 @@ strings! {
     SetKeyTitle { en: "Key from here", ja: "ここからの調" }
     SetChordTitle { en: "Chord from here", ja: "ここからのコード" }
     SetSectionTitle { en: "Section from here", ja: "ここからのセクション" }
+    SetLyricLineTitle { en: "Lyrics from here", ja: "ここからの歌詞" }
+    CommentTitle { en: "Comment (never played)", ja: "コメント（演奏には影響しません）" }
     SetSeedTitle { en: "Seed for this part", ja: "このパートのシード" }
     SetTempoTitle { en: "Tempo", ja: "テンポ" }
     SetSignatureTitle { en: "Time signature", ja: "拍子" }
@@ -1338,6 +1495,10 @@ strings! {
         en: "In decibels. 0 plays the clip as recorded; negative is quieter",
         ja: "デシベル単位。0で元の音量、負の値で小さく"
     }
+    HintColour {
+        en: "Hexadecimal red, green and blue: #3D7BFF, or #38F for short",
+        ja: "赤・緑・青の16進数: #3D7BFF、短縮形なら #38F のように"
+    }
     HintPosition {
         en: "Bar, beat, hundredth: 17, or 17.3, or 17.3.050",
         ja: "小節・拍・1/100拍: 17、17.3、17.3.050 のように"
@@ -1361,6 +1522,7 @@ strings! {
     Recover { en: "Recover", ja: "復旧" }
     DiscardRecovery { en: "Discard recovery", ja: "復旧データを破棄" }
     RecoveryUntitled { en: "Unsaved project", ja: "未保存のプロジェクト" }
+    DocumentUntitled { en: "Untitled", ja: "無題" }
     RecoveryKeyboardHint {
         en: "Enter: recover · Delete: discard recovery · Esc: not now",
         ja: "Enter: 復旧 · Delete: 復旧データを破棄 · Esc: 今回はしない"
@@ -1404,6 +1566,18 @@ strings! {
     UpdateRestartNow { en: "Restart and Update", ja: "再起動して更新" }
     UpdateDownloadFailed { en: "Could not download the update. Please try again later.", ja: "更新をダウンロードできませんでした。時間をおいて再度お試しください。" }
     UpdateInstallFailed { en: "Could not install the update. Use Help → Check for Updates to try again.", ja: "更新をインストールできませんでした。ヘルプの「更新を確認」から再度お試しください。" }
+    // A copy installed with `cargo install` is not one an installer made, so it is upgraded by
+    // a terminal command rather than by the updater, and Cargo gives it no application shortcut.
+    CargoUpdateBody { en: "This copy was installed with Cargo. To upgrade it, run this in a terminal:", ja: "このコピーは Cargo でインストールされています。ターミナルで次のコマンドを実行すると更新できます。" }
+    CargoUpdateCopy { en: "Copy Command", ja: "コマンドをコピー" }
+    CargoUpdateCopied { en: "The upgrade command is on the clipboard.", ja: "更新コマンドをクリップボードにコピーしました。" }
+    CargoShortcutOffer { en: "This copy was installed with Cargo. Add it to {place} to open it like any other app.", ja: "このコピーは Cargo でインストールされています。{place}に追加すると、ほかのアプリと同じように開けます。" }
+    CargoShortcutCreate { en: "Add to {place}", ja: "{place}に追加" }
+    CargoShortcutCreated { en: "Added Auris Studio to {place}.", ja: "Auris Studio を{place}に追加しました。" }
+    CargoShortcutFailed { en: "Could not add Auris Studio to {place}: {error}", ja: "{place}に追加できませんでした: {error}" }
+    CargoShortcutPlaceMac { en: "Applications", ja: "アプリケーション" }
+    CargoShortcutPlaceWindows { en: "the Start menu", ja: "スタートメニュー" }
+    CargoShortcutPlaceLinux { en: "the application menu", ja: "アプリケーションメニュー" }
     MenuNoRecentProjects { en: "Nothing opened yet", ja: "まだ何も開いていません" }
     MenuForgetRecent { en: "Forget This List", ja: "履歴を消去" }
     DialogImportAudio { en: "Import audio", ja: "オーディオを読み込む" }
@@ -1478,6 +1652,27 @@ strings! {
         ja: "バスにクリップは置けません — 音は他のトラックからのルーティングで届きます"
     }
     DuplicatedTrack { en: "Duplicated track", ja: "トラックを複製しました" }
+    AddedLayer { en: "Added a layer", ja: "レイヤーを追加しました" }
+    DetachedLayer { en: "Detached the layer", ja: "レイヤーを切り離しました" }
+    MenuAddLayer { en: "Add Layer", ja: "レイヤーを追加" }
+    MenuDetachLayer { en: "Detach Layer", ja: "レイヤーを切り離す" }
+    InspectorLayer { en: "Layer", ja: "レイヤー" }
+    MixerNotesWire { en: "Notes", ja: "音符" }
+    LayerFollows { en: "Plays notes of", ja: "音符の参照元" }
+    LayerSourceMissing { en: "Missing track", ja: "見つからないトラック" }
+    LayerUnshaped { en: "As played", ja: "そのまま" }
+    LayerShaped { en: "Shaped", ja: "変形あり" }
+    LayerLowest { en: "Lowest Note", ja: "最低音" }
+    LayerHighest { en: "Highest Note", ja: "最高音" }
+    LayerVoice { en: "Notes Kept", ja: "残す音" }
+    LayerVoiceAll { en: "Every Note", ja: "すべての音" }
+    LayerVoiceTop { en: "Top Note Only", ja: "最高音のみ" }
+    LayerVoiceBottom { en: "Bottom Note Only", ja: "最低音のみ" }
+    LayerTranspose { en: "Transpose", ja: "トランスポーズ" }
+    LayerVelocity { en: "Velocity", ja: "ベロシティ" }
+    LayerLength { en: "Length", ja: "長さ" }
+    LayerOffset { en: "Timing", ja: "タイミング" }
+    LayerReset { en: "Reset Shape", ja: "変形をリセット" }
     DuplicatedClip { en: "Duplicated clip", ja: "クリップを複製しました" }
     SplitClipStatus { en: "Split clip", ja: "クリップを分割しました" }
     CopiedToClipboard { en: "Copied", ja: "コピーしました" }
@@ -1523,6 +1718,9 @@ strings! {
     EditAddBusTrack { en: "adding a bus", ja: "バスの追加" }
     EditDeleteTrack { en: "deleting a track", ja: "トラックの削除" }
     EditDuplicateTrack { en: "duplicating a track", ja: "トラックの複製" }
+    EditAddLayerTrack { en: "adding a layer", ja: "レイヤーの追加" }
+    EditSetLayerShape { en: "shaping a layer", ja: "レイヤーの変形" }
+    EditDetachLayer { en: "detaching a layer", ja: "レイヤーの切り離し" }
     EditMoveTrack { en: "moving a track", ja: "トラックの並べ替え" }
     EditMoveMixerNodes { en: "moving mixer nodes", ja: "ミキサーノードの移動" }
     EditArrangeMixerNodes { en: "arranging mixer nodes", ja: "ミキサーノードの自動配置" }
@@ -1571,6 +1769,8 @@ strings! {
     EditSetSingerVoice { en: "choosing a voice", ja: "声の選択" }
     EditSetSingerSpeaker { en: "choosing a speaker", ja: "話者の選択" }
     EditSing { en: "the sung take", ja: "歌唱テイク" }
+    EditLintFix { en: "fixing a problem", ja: "問題の修正" }
+    EditLintSuppression { en: "ignoring a problem", ja: "問題の無視設定" }
     EditAddEffect { en: "adding an effect", ja: "エフェクトの追加" }
     EditRemoveEffect { en: "removing an effect", ja: "エフェクトの削除" }
     EditBypassEffect { en: "bypassing an effect", ja: "エフェクトのバイパス" }
@@ -1702,6 +1902,10 @@ strings! {
     EditClearHarmony { en: "clearing the chords", ja: "コードの消去" }
     EditSetSection { en: "changing a section", ja: "セクションの変更" }
     EditMoveSection { en: "moving a section", ja: "セクションの移動" }
+    EditSetLyricLine { en: "changing the lyrics", ja: "歌詞の変更" }
+    EditMoveLyricLine { en: "moving a lyric line", ja: "歌詞の行の移動" }
+    EditSetComment { en: "changing a comment", ja: "コメントの変更" }
+    EditMoveComment { en: "moving a comment", ja: "コメントの移動" }
     EditStampProgression { en: "writing a progression", ja: "コード進行の書き込み" }
     EditGenerateClip { en: "writing a clip", ja: "クリップの自動生成" }
     EditFreezeClip { en: "keeping a clip", ja: "クリップの確定" }
@@ -1713,6 +1917,9 @@ strings! {
     // ------------------------------------------------------------------ errors
     ErrorUnknownTrack { en: "that track no longer exists", ja: "そのトラックは存在しません" }
     ErrorUnknownClip { en: "that clip no longer exists", ja: "そのクリップは存在しません" }
+    ErrorUnknownComment { en: "that comment no longer exists", ja: "そのコメントは存在しません" }
+    ErrorEmptyComment { en: "a comment needs some text", ja: "コメントに文字を入力してください" }
+    ErrorNotANoteClip { en: "comments go inside note clips; pin this one on the track instead", ja: "コメントはノートのクリップ内に置けます。トラック上に置いてください" }
     ErrorUnknownSend { en: "that send no longer exists", ja: "そのセンドは存在しません" }
     ErrorNotABus {
         en: "only a bus can be routed into",
@@ -1854,6 +2061,7 @@ COMMANDS
     analyze-audio <audio-file>    Estimate BPM and major/minor chords on the CPU
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
     render <project.auris> [opts] Render a project to a WAV file
+    video <project.auris> [opts]  Render a video of the notes flowing past, through ffmpeg
     convert-track-to-audio <project.auris> --track <name|id:number>
                                   Replace an instrument, drum or singer track with audio
     analyze-drums <project.auris> --track <name|id:number> [--apply] [--remap-clips]
@@ -1909,6 +2117,22 @@ SING-FRAMES OPTIONS
     -o, --output <file.wav>       Where to write (default: alongside the frames)
         --report <file.json>      Also write the take's facts and timings as JSON
 
+VIDEO OPTIONS (default: the look last chosen in the desktop application)
+    -o, --output <file.mp4>       Where to write (default: alongside the project)
+        --size <width>x<height>   Frame size, as in 1920x1080
+        --fps <n>                 Frames per second
+        --colors <track|palette|pitch|single>
+                                  How notes are coloured
+        --background <image>      A PNG, JPEG or WebP behind the notes
+        --seconds <n>             Seconds of music across the frame
+        --particles <amount>      Sparks where notes meet the playhead: 0 is none, 1 the usual
+        --sink <amount>           How far sounding notes sink: 0 is still, 1 the usual
+        --drums                   Draw drum tracks too
+        --no-chords               Leave out the chord names in the corner
+        --no-lyrics               Leave out the lyric subtitles
+        --no-tempo                Leave out the tempo in the corner
+        --no-beats                Leave out the beat counter in the corner
+
 NEW OPTIONS
         --bpm <tempo>             Tempo of the new project (default: 120)
         --sample-rate <hz>        Rate of the new project (default: 48000)
@@ -1932,6 +2156,7 @@ auris — コマンドラインから使う Auris Studio
     analyze-audio <audio-file>    音声のBPMとメジャー・マイナーコードをCPUで推定
     analyze-instruments <audio-file> --model <yamnet.onnx> [--threshold 0.2]
     render <project.auris> [opts] プロジェクトを WAV に書き出す
+    video <project.auris> [opts]  ノートが流れる動画を ffmpeg で書き出す
     sing <project.auris> [opts]   シンガートラックを声のモデルで歌わせる
     frames <project.auris> [opts] シンガートラックが声のモデルに渡すフレームを書き出す
     sing-frames <frames.json> [opts]
@@ -1985,19 +2210,131 @@ sing-frames のオプション
     -o, --output <file.wav>       出力先（既定: フレームファイルと同じ場所）
         --report <file.json>      テイクの情報と所要時間を JSON でも書き出す
 
+video のオプション（既定: デスクトップ版で最後に選んだ見た目）
+    -o, --output <file.mp4>       出力先（既定: プロジェクトと同じ場所）
+        --size <width>x<height>   画面サイズ（例: 1920x1080）
+        --fps <n>                 1 秒あたりのフレーム数
+        --colors <track|palette|pitch|single>
+                                  ノートの色の付け方
+        --background <image>      ノートの背後に敷く PNG・JPEG・WebP
+        --seconds <n>             画面の幅に収める曲の秒数
+        --particles <amount>      再生線でノートが散らす火花の量（0 でなし、1 が標準）
+        --sink <amount>           演奏中のノートが沈み込む深さ（0 で動かない、1 が標準）
+        --drums                   ドラムトラックも描く
+        --no-chords               左上のコード名を表示しない
+        --no-lyrics               歌詞の字幕を表示しない
+        --no-tempo                右上のテンポ（BPM）を表示しない
+        --no-beats                右上の拍子カウンターを表示しない
+
 new のオプション
         --bpm <tempo>             新規プロジェクトのテンポ（既定: 120）
         --sample-rate <hz>        新規プロジェクトのサンプルレート（既定: 48000）
         --force                   同名のプロジェクトフォルダがあっても書き出す"
     }
     LogPanel { en: "Log", ja: "ログ" }
+    ProblemsTab { en: "Problems", ja: "問題" }
+    ProblemsLogTab { en: "Log", ja: "ログ" }
+    ProblemsEmpty { en: "No problems found.", ja: "問題は見つかりませんでした。" }
+    ProblemsAnalyzeAudio { en: "Check the sound", ja: "音声も解析" }
+    ProblemsAnalyzing { en: "Checking the sound…", ja: "音声を解析中…" }
+    ProblemsBackground { en: "Check in the background", ja: "バックグラウンドで解析" }
+    ProblemsBackgroundTip { en: "After an edit, once the song has held still and nothing is playing, render it quietly and check clipping, loudness and silent tracks", ja: "編集後、曲が落ち着いて再生も書き出しもしていないときに、裏でレンダリングしてクリップ・音量・鳴っていないトラックを確認します" }
+    ProblemsHostedManual { en: "Plugins are in use, so the sound is checked only when asked.", ja: "プラグインを使っているため、音声の解析はボタンを押したときだけ行います。" }
+    ProblemsAudioPending { en: "The sound has not been checked since the last edit.", ja: "最後の編集以降、音声はまだ解析していません。" }
+    ProblemsAudioSummary { en: "Mix {lufs} LUFS · peak {peak} dBFS", ja: "ミックス {lufs} LUFS・ピーク {peak} dBFS" }
+    ProblemsAudioSilent { en: "The mix is silent", ja: "ミックスは無音です" }
+    ProblemsAudioFailed { en: "Could not check the sound: {error}", ja: "音声を解析できませんでした：{error}" }
+    ProblemsSummary { en: "{errors} errors · {warnings} warnings · {infos} notes", ja: "エラー {errors}・警告 {warnings}・情報 {infos}" }
+    ProblemsFix { en: "Fix", ja: "修正" }
+    ProblemsFixAll { en: "Fix all obvious", ja: "自明なものをまとめて修正" }
+    ProblemsAskAgent { en: "Ask the agent", ja: "エージェントに依頼" }
+    ProblemsShowInPanel { en: "Show in Problems", ja: "問題パネルで表示" }
+    ProblemsMix { en: "Mix", ja: "ミックス" }
+    ProblemsLocation { en: "bar {bar}", ja: "{bar}小節目" }
+    ProblemsFixed { en: "Fixed {count} problems", ja: "{count}件の問題を修正しました" }
+    ProblemsIgnore { en: "Ignore…", ja: "無視…" }
+    ProblemsIgnoreRuleEverywhere { en: "Ignore “{rule}” everywhere", ja: "「{rule}」を曲全体で無視" }
+    ProblemsIgnoreRuleTrack { en: "Ignore “{rule}” on {track}", ja: "「{rule}」を{track}で無視" }
+    ProblemsIgnoreRuleClip { en: "Ignore “{rule}” in {clip}", ja: "「{rule}」を{clip}で無視" }
+    ProblemsIgnoreRuleSection { en: "Ignore “{rule}” in every {section}", ja: "「{rule}」をすべての{section}で無視" }
+    ProblemsIgnoreTrack { en: "Ignore every problem on {track}", ja: "{track}の問題をすべて無視" }
+    ProblemsIgnoreClip { en: "Ignore every problem in {clip}", ja: "{clip}の問題をすべて無視" }
+    ProblemsIgnoreSection { en: "Ignore every problem in every {section}", ja: "すべての{section}の問題を無視" }
+    ProblemsIgnored { en: "{count} ignored", ja: "{count}件を無視中" }
+    ProblemsIgnoreRules { en: "Ignore rules ({count})", ja: "無視の設定（{count}）" }
+    ProblemsIgnoreRulesTip { en: "What this project has asked not to be told about. Saved with the project; removing one shows its problems again.", ja: "このプロジェクトで表示しないことにした問題です。プロジェクトに保存され、削除するとその問題が再び表示されます。" }
+    ProblemsUnignore { en: "Show again", ja: "再表示" }
+    ProblemsWriteReason { en: "Reason…", ja: "理由…" }
+    ProblemsReasonTitle { en: "Why is this ignored? Optional; Esc skips", ja: "無視する理由（任意・Escで省略）" }
+    ProblemsEveryRule { en: "Every problem", ja: "すべての問題" }
+    ProblemsScopeSong { en: "everywhere", ja: "曲全体" }
+    ProblemsScopeTrack { en: "on {track}", ja: "{track}" }
+    ProblemsScopeClip { en: "in {clip}", ja: "{clip}" }
+    ProblemsScopeSection { en: "in every {section}", ja: "すべての{section}" }
+    ProblemsDeleted { en: "(deleted)", ja: "（削除済み）" }
+    ProblemsMarkFix { en: "Fix: {fix}", ja: "修正案：{fix}" }
+    ProblemsMarkHint { en: "Click for the fix and ignore options", ja: "クリックで修正・無視のメニュー" }
+    ProblemsThisClip { en: "this clip", ja: "このクリップ" }
+    LintNameCrowdedOnset { en: "Too many notes at once", ja: "同時発音が多すぎる" }
+    LintNameDenseNotes { en: "Too dense", ja: "音符が密集しすぎ" }
+    LintNameHarshInterval { en: "Harsh interval", ja: "耳障りな音程" }
+    LintNameMuddyLowInterval { en: "Muddy low interval", ja: "低音域の濁り" }
+    LintNameOutOfKey { en: "Outside key and chord", ja: "キー・コード外の音" }
+    LintNameAvoidNote { en: "Avoid note", ja: "アボイドノート" }
+    LintNameMissingChord { en: "No chord written", ja: "コード未記入" }
+    LintNameSingerOverlap { en: "Overlapping sung notes", ja: "歌の音の重なり" }
+    LintNameMissingLyric { en: "No lyric", ja: "歌詞なし" }
+    LintNamePitchMismatch { en: "Off pitch", ja: "ピッチのずれ" }
+    LintNameUnpitched { en: "No pitch detected", ja: "ピッチ検出不可" }
+    LintNamePhaseCancellation { en: "Cancels in mono", ja: "モノラルで打ち消し" }
+    LintNameDuplicateNote { en: "Duplicate note", ja: "重複した音符" }
+    LintNameInaudibleVelocity { en: "Inaudible velocity", ja: "聞こえないベロシティ" }
+    LintNameExtremePitch { en: "Extreme pitch", ja: "極端な音高" }
+    LintNameClipping { en: "Clipping", ja: "クリッピング" }
+    LintNameTooLoud { en: "Too loud", ja: "音量が大きすぎ" }
+    LintNameTooQuiet { en: "Too quiet", ja: "音量が小さすぎ" }
+    LintNameSilentTrack { en: "Silent track", ja: "鳴っていないトラック" }
+    ProblemsAgentPrompt { en: "The music linter found this problem: \"{problem}\" ({where}; rule {rule}, id {id}, ticks {start}–{end}). Check it with lint_project, fix it in a way that keeps the song's intent, then lint again and tell me briefly what you changed.", ja: "音楽Linterが次の問題を検出しました：「{problem}」（{where}・ルール {rule}・id {id}・tick {start}〜{end}）。lint_project で確認し、曲の意図を保つ方法で修正してから、もう一度 lint で確かめて、何を変えたか簡潔に教えてください。" }
+    LintSeverityError { en: "Error", ja: "エラー" }
+    LintSeverityWarning { en: "Warning", ja: "警告" }
+    LintSeverityInfo { en: "Info", ja: "情報" }
+    LintCrowdedOnset { en: "{value} notes start at the same moment (more than {limit})", ja: "同じタイミングで{value}音が鳴り始めています（上限{limit}音）" }
+    LintDenseNotes { en: "{value} attacks per beat: too dense to hear separately (limit {limit})", ja: "1拍あたり{value}回の発音で、音符の密度が高すぎます（上限{limit}）" }
+    LintHarshInterval { en: "{pitches} are held a semitone apart and clash", ja: "{pitches}が半音でぶつかったまま伸びています" }
+    LintMuddyLowInterval { en: "{pitches} sit a second apart in the bass and sound muddy", ja: "{pitches}が低音域で2度で重なり、濁って聞こえます" }
+    LintOutOfKey { en: "{pitches} is in neither the key nor the chord", ja: "{pitches}はキーにもコードにも含まれない音です" }
+    LintAvoidNote { en: "{pitches} is an avoid note against the chord", ja: "{pitches}はコードに対するアボイドノートです" }
+    LintMissingChord { en: "{value} bar(s) play chords, but no chord is written over them", ja: "{value}小節で和音が鳴っていますが、コードが書かれていません" }
+    LintSingerOverlap { en: "{pitches} overlap on a singer track; a voice sings one note at a time", ja: "シンガートラックで{pitches}が重なっています。声は一度に一音しか歌えません" }
+    LintMissingLyric { en: "{pitches} has no lyric and is sung as a stock vowel", ja: "{pitches}に歌詞がなく、仮の母音で歌われます" }
+    LintMissingLyricClip { en: "None of this clip's {value} sung notes has a lyric", ja: "このクリップの{value}音すべてに歌詞がありません" }
+    LintPitchMismatch { en: "{pitches} sounds {value} cents off its written pitch (octaves aside)", ja: "{pitches}が楽譜の音高から{value}セントずれて鳴っています（オクターブ違いは除く）" }
+    LintUnpitched { en: "{pitches} is sung with no detectable pitch", ja: "{pitches}の歌声からピッチが検出できません" }
+    LintUnpitchedTrack { en: "{value}% of this track's single notes render with no detectable pitch", ja: "このトラックの単音の{value}%でピッチが検出できません（打楽器なら問題ありません）" }
+    LintPhaseCancellation { en: "Summed to mono the mix loses {value} dB here: left and right cancel", ja: "モノラルにすると{value} dB下がります。左右の音が打ち消し合っています" }
+    LintDuplicateNote { en: "{pitches} is written twice on top of itself", ja: "{pitches}が同じ位置に重複して書かれています" }
+    LintInaudibleVelocity { en: "{pitches} is too soft to hear (velocity {value})", ja: "{pitches}はベロシティ{value}で、小さすぎて聞こえません" }
+    LintExtremePitch { en: "{pitches} is outside any instrument's range", ja: "{pitches}は楽器や声の音域から外れています" }
+    LintClipping { en: "The mix clips ({value} dBFS)", ja: "ミックスがクリップしています（{value} dBFS）" }
+    LintTooLoud { en: "The mix is too loud ({value} LUFS, above {limit})", ja: "ミックスの音量が大きすぎます（{value} LUFS、上限 {limit} LUFS）" }
+    LintTooQuiet { en: "The mix is too quiet ({value} LUFS, below {limit})", ja: "ミックスの音量が小さすぎます（{value} LUFS、下限 {limit} LUFS）" }
+    LintSilentTrack { en: "Notes are playing but no sound comes out", ja: "演奏しているのに音が出ていません" }
+    LintFixRemove { en: "Remove the duplicate", ja: "重複を削除" }
+    LintFixTrim { en: "Shorten the earlier note", ja: "前のノートを短くする" }
+    LintFixPitch { en: "Move to {pitch}", ja: "{pitch}に移動" }
+    LintFixVelocity { en: "Raise the velocity", ja: "ベロシティを上げる" }
+    LintFixChords { en: "Write {chords}", ja: "{chords} を記入" }
+    LintFixFader { en: "Reset the fader to 0 dB", ja: "フェーダーを0 dBに戻す" }
+    LintFixNormalize { en: "Normalize the mix", ja: "ミックスをノーマライズ" }
+    ErrorLintStale { en: "the song changed since this problem was found; it has been checked again", ja: "問題を見つけた後に曲が変更されたため、もう一度確認しました" }
     LogClear { en: "Clear", ja: "消去" }
+    LogCopyAll { en: "Copy all", ja: "すべてコピー" }
     LogEmpty { en: "Nothing has been logged.", ja: "ログはまだありません。" }
     CmdShowLog { en: "Log", ja: "ログ" }
     AgentPanel { en: "Agent", ja: "エージェント" }
     CmdShowAgent { en: "Agent", ja: "エージェント" }
     AgentPlaceholder { en: "Ask about this song…", ja: "この曲について話しかける…" }
-    AgentIntro { en: "Discuss the arrangement, instruments or a change you want to make.", ja: "アレンジや音色の相談、変えたい箇所を伝えてください。" }
+    AgentIntro { en: "Discuss the arrangement, instruments or a change you want to make", ja: "アレンジや音色の相談、変えたい箇所を伝えてください" }
     AgentNotConfigured { en: "Name a model to talk to.", ja: "話しかけるモデルを設定してください。" }
     AgentConfigure { en: "Settings", ja: "設定" }
     AgentApply { en: "Apply", ja: "適用" }
@@ -2031,6 +2368,7 @@ new のオプション
     AgentCodexPathLabel { en: "Codex executable path (optional)", ja: "Codex実行ファイルのパス（任意）" }
     AgentCodexHelp { en: "Sign in with codex login. Leave the path empty to detect the installed CLI.", ja: "codex loginでログインしてください。パスが空欄ならインストール済みのCLIを探します。" }
     AgentOpenCodePathLabel { en: "OpenCode executable path (optional)", ja: "OpenCode実行ファイルのパス（任意）" }
+    AgentModelFallback { en: "The model used last is not available now, so another one has been chosen. Pick one from the model menu to keep it.", ja: "前回使ったモデルが現在利用できないため、別のモデルを選びました。使い続けるモデルはモデルメニューから選んでください。" }
     AgentOpenCodeVariantHelp { en: "Choose an OpenCode model variant in the model menu to change reasoning effort.", ja: "推論の強度を変更するには、モデルメニューでOpenCodeのモデルバリアントを選択してください。" }
     AgentOpenCodeHelp { en: "Install OpenCode and run opencode auth login. Leave the path empty to detect the CLI, then choose an OpenCode model in the Agent panel. Custom provider configuration and user plugins are not inherited.", ja: "OpenCodeをインストールし、opencode auth loginで認証してください。パスが空欄ならCLIを検出します。エージェントパネルでOpenCodeのモデルを選択してください。独自プロバイダー設定とユーザープラグインは引き継ぎません。" }
     AgentDiscoveryHelp { en: "Available Codex, Claude Code, OpenCode, Antigravity CLI, Ollama and configured API models appear together in the Agent panel.", ja: "利用可能なCodex・Claude Code・OpenCode・Antigravity CLI・Ollama・設定済みAPIのモデルを、エージェントパネルにまとめて表示します。" }
@@ -2114,6 +2452,9 @@ new のオプション
     WorkshopRenameThread { en: "Rename conversation…", ja: "名前を変更…" }
     WorkshopArchiveThread { en: "Archive", ja: "保管する" }
     WorkshopRestoreThread { en: "Restore", ja: "戻す" }
+    WorkshopDeleteThread { en: "Delete…", ja: "削除…" }
+    WorkshopDeleteThreadTitle { en: "Delete “{name}”?", ja: "「{name}」を削除しますか？" }
+    WorkshopDeleteThreadBody { en: "This conversation, its attachments and every song it produced will be permanently deleted. Songs already opened in the editor and your learned preferences will remain.", ja: "この会話と添付ファイル、制作したすべての曲を完全に削除します。エディタで開いた曲と学習した好みは残ります。" }
     WorkshopArchivedThreads { en: "Archived conversations", ja: "保管済みの会話" }
     WorkshopThreadBusy { en: "Stop production before switching conversations", ja: "制作を停止すると会話を切り替えられます" }
     WorkshopThreadNameInvalid { en: "Use 1 to 80 characters for the conversation name.", ja: "会話の名前は1〜80文字で入力してください。" }
@@ -2164,7 +2505,6 @@ new のオプション
     AgentAttachedFiles { en: "Attached files", ja: "添付ファイル" }
     AttachFiles { en: "Attach files", ja: "ファイルを添付" }
     AttachmentClosePreview { en: "Close preview", ja: "プレビューを閉じる" }
-    AttachmentLoading { en: "Loading preview…", ja: "プレビューを読み込み中…" }
     AgentOpenAttachment {
         en: "Preview attachment: {path}",
         ja: "添付ファイルをプレビュー：{path}"
@@ -2237,6 +2577,12 @@ new のオプション
     AgentInterrupting { en: "Stopping the current turn…", ja: "現在の処理を中断中…" }
     AgentQueueReattach { en: "Attach the reference files again before sending this saved message.", ja: "保存されたメッセージを送るには、参照ファイルをもう一度添付してください。" }
     AgentCopyMarkdown { en: "Copy Markdown", ja: "Markdownをコピー" }
+    AgentCopyText { en: "Copy", ja: "コピー" }
+    AgentCopyConversation { en: "Copy conversation", ja: "会話をコピー" }
+    AgentTranscriptYou { en: "You", ja: "あなた" }
+    AgentTranscriptAgent { en: "Agent", ja: "エージェント" }
+    AgentTranscriptTool { en: "Tool", ja: "ツール" }
+    AgentTranscriptError { en: "Error", ja: "エラー" }
     AgentDropFiles { en: "Drop MIDI, images, text or audio here", ja: "MIDI・画像・テキスト・音声をここにドロップ" }
     AgentComposerPlaceholder { en: "Ask about this song, or drop reference files…", ja: "この曲について相談、または参考ファイルをドロップ…" }
     AgentEffortDefaultShort { en: "Auto", ja: "既定" }

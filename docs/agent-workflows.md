@@ -64,13 +64,22 @@ preserve clip curves, performance, recipes and playback windows.
   "expected_revision":"<revision from read_notes>",
   "input":{"kind":"inline","edits":[{"kind":"patch","clip":2,
     "update":[{"index":0,"velocity":0.7}],
-    "add":[{"pitch":62,"start_tick":13,"length_ticks":997,"velocity":0.8}]}]}
+    "add":[{"pitch":62,"bar":3,"beat":2.5,"length_beats":1.5,"velocity":0.8}]}]}
 }
 ```
 
-Times are integer clip-relative ticks. `ticks_per_quarter` is returned by reads;
-there is no conversion to rounded meter beats. Notes must fit the clip, have a
-positive tick length, MIDI pitch 0..127 and velocity 0..1. All changes validate
+Positions are musical, never ticks. `bar` is the 1-based song bar, the same
+number `add_clip` and `edit_harmony` use, not one counted from the clip. `beat`
+is 1-based inside that bar, in the meter's beat (a quarter in 4/4, an eighth in
+6/8), and fractional for subdivisions: `2.5` is the offbeat, `2.25` a sixteenth,
+`2.333` a triplet. `length_beats` counts the same beat and may cross bar lines.
+An attack must sit on a straight subdivision down to an eighth of a beat or a
+triplet down to a sixth (within a hundredth of a beat, which is then snapped
+exactly); anything between is refused with the nearest choices, because feel
+belongs to swing and humanize performance rather than to offset attacks. Reads
+return the same fields, each clip's `bars` as `[first, last]`, and
+`on_grid: false` on a stored attack (recorded or imported) that an edit would
+refuse. Notes must fit the clip, have a positive length, MIDI pitch 0..127 and velocity 0..1. All changes validate
 before a single atomic edit. Stale revisions are refused without changing notes.
 Inline input allows 4096 note changes. For larger scores, choose
 `input:{"kind":"file","source_path":"/absolute/notes.json"}`: a local UTF-8 JSON
@@ -120,6 +129,16 @@ absolute ticks and note positions stay unchanged. Read reports native BPM bounds
 Meter numerator is 1..32 and denominator a power of two within 1..32. Use `set_loop`
 for a one-based bar playback range.
 
+`layer` doubles or splits a part without copying its notes. `add` places an
+instrument track below a melodic or singer source; drums and other layers cannot be
+followed. `shape` changes only the fields it names: `lowest`/`highest` choose notes
+by source key, `voice` keeps `all`, the `top` or the `bottom` note at each onset,
+then `transpose` (semitones), `velocity` and `length` (multipliers) and
+`offset_quarters` apply; `reset` restores the identity first. `read` returns the
+followed track and shape, which `inspect_project` also lists under `layer`. A layer
+has no clips of its own, so note edits go to the source. `detach` copies the shaped
+notes into the layer, and removing a source detaches its layers in the same Undo.
+
 ## Sound search, controls and mixing
 
 `search_instruments` takes one `request` object: mode `text` with query, `similar`
@@ -146,9 +165,13 @@ uses the returned send ID. `set_sidechain` replaces or clears a detector source.
 Insert actions add/remove/move/enable effects and read/set native parameters.
 All connections must form a DAG. See [Mixer signal flow](mixer-graph.md).
 
-Use numeric audio inspection for measurements, then normalize_mix if a common
-source-fader move is appropriate. It preserves relative balance and can stop short
-at fader or peak limits. Sound replacement preserves faders but can change output
+Use numeric audio inspection for measurements, then finish every song with
+normalize_mix. It defaults to -14 LUFS under a -1 dBTP ceiling, preserves relative
+balance and can stop short at fader or peak limits. New projects end their master in
+`auris.fx.limiter`; while it stays last in the chain, normalize_mix sets its ceiling to
+the requested one and lets the loudest moment go up to 6 dB into it. Without it the
+first drum hit to reach the ceiling stops the whole lift, which leaves a song written
+note by note several decibels quiet. Sound replacement preserves faders but can change output
 level substantially, so remeasure. Audio file delivery never establishes listening.
 
 `automation` selects a typed target (`track_gain`, `track_pan`, `master_gain`,

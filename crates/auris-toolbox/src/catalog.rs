@@ -380,7 +380,8 @@ pub mod tool_help {
             ]),
             "edit_clip" => serde_json::json!([
                 {"project":project,"clip":2,"operation":{"kind":"resize","end_tick":30720}},
-                {"project":project,"clip":2,"operation":{"kind":"copy","track":1,"start_tick":30720,"transpose":12}}
+                {"project":project,"clip":2,"operation":{"kind":"copy","track":1,"start_tick":30720,"transpose":12}},
+                {"project":project,"clip":2,"operation":{"kind":"loop","end_tick":61440}}
             ]),
             "preview" => serde_json::json!([
                 {"project":project,"range":{"start_bar":1,"bars":4}}
@@ -397,7 +398,7 @@ pub mod tool_help {
                 {"project":project,"clips":[{"clip":1},{"clip":2,"offset":128}]}
             ]),
             "edit_notes" => serde_json::json!([
-                {"project":project,"expected_revision":"copy-from-read_notes","input":{"kind":"inline","edits":[{"kind":"patch","clip":1,"add":[{"pitch":60,"start_tick":0,"length_ticks":960,"velocity":0.75}]}]}}
+                {"project":project,"expected_revision":"copy-from-read_notes","input":{"kind":"inline","edits":[{"kind":"patch","clip":1,"add":[{"pitch":60,"bar":1,"beat":1,"length_beats":1,"velocity":0.75}]}]}}
             ]),
             _ => serde_json::json!([]),
         };

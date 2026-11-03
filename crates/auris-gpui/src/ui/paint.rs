@@ -540,6 +540,9 @@ pub struct StructurePaint {
     pub spans: Vec<(SectionSpan, String)>,
     /// The section being dragged, by the change that starts it, drawn lit.
     pub held: Option<Ticks>,
+    /// Draw the blocks in the accent rather than the selection colour — the lyrics lane, which
+    /// is the same shape as the structure lane and must not be mistaken for it.
+    pub accent: bool,
 }
 
 /// Draws the section names across `bounds`.
@@ -575,11 +578,16 @@ pub fn structure_lane(
         };
         // The selection colour rather than the accent, so the structure reads as a different
         // kind of thing from the chords two rows down.
+        let tint = if structure.accent {
+            theme.accent
+        } else {
+            theme.selection
+        };
         rounded_rect(
             window,
             block,
             px(3.0),
-            Theme::translucent(theme.selection, if lit { 0.42 } else { 0.18 }),
+            Theme::translucent(tint, if lit { 0.42 } else { 0.18 }),
         );
         // A handle only where the change actually sits: a span clipped by the window's left
         // edge starts somewhere off to the left, and dragging its visible edge would move a
@@ -593,7 +601,7 @@ pub fn structure_lane(
                     size: size(CHORD_HANDLE.min(block.size.width), block.size.height),
                 },
                 px(3.0),
-                if lit { theme.accent } else { theme.selection },
+                if lit { theme.accent } else { tint },
             );
         }
         clipped(window, block, |window| {
@@ -623,6 +631,8 @@ pub struct HarmonyPaint {
     pub handles: Vec<Ticks>,
     /// The chord being dragged, drawn lit so it can be followed while it moves.
     pub held: Option<Ticks>,
+    /// The reader's language, which the key names are written in.
+    pub language: auris_i18n::Language,
 }
 
 /// Draws the chords, and the key changes, across `bounds`.
@@ -703,7 +713,7 @@ pub fn harmony_lane(
     // bar 40 would otherwise show no key at all everywhere except bar 40. Anything at or after
     // the left edge is drawn where it belongs by the loop below.
     if let Some(current) = harmony.keys.iter().rev().find(|change| change.tick < start) {
-        let text = current.key.to_text();
+        let text = auris_i18n::audio::key_name(&current.key.to_text(), harmony.language);
         key_badge(
             window,
             cx,
@@ -730,7 +740,7 @@ pub fn harmony_lane(
             cx,
             key_row,
             x,
-            &change.key.to_text(),
+            &auris_i18n::audio::key_name(&change.key.to_text(), harmony.language),
             theme.selection,
         );
     }
@@ -782,6 +792,46 @@ pub fn loop_region(
         view,
         region,
         Theme::translucent(theme.loop_region, 0.18),
+    );
+}
+
+/// The loop mark drawn beside a clip's loop edge while the pointer is on it.
+///
+/// `zone` is the edge's hit rectangle in window coordinates. The mark sits just past it, at the
+/// top, on a raised chip so it reads over a clip, the grid or the empty lane alike; it is the
+/// same Atelier loop glyph the transport's cycle button wears, because both say "this repeats".
+pub fn loop_handle_mark(window: &mut Window, cx: &App, zone: Bounds<Pixels>, theme: &Theme) {
+    let glyph = px(12.0);
+    let pad = px(2.0);
+    let chip = Bounds {
+        origin: point(
+            zone.origin.x + zone.size.width + px(2.0),
+            zone.origin.y + px(1.0),
+        ),
+        size: size(glyph + pad * 2.0, glyph + pad * 2.0),
+    };
+    rounded_rect(
+        window,
+        chip,
+        theme.atelier.shape.radius_sm,
+        theme.surface_raised,
+    );
+    rounded_outline(
+        window,
+        chip,
+        theme.atelier.shape.radius_sm,
+        px(1.0),
+        theme.border,
+    );
+    let _ = window.paint_svg(
+        Bounds {
+            origin: point(chip.origin.x + pad, chip.origin.y + pad),
+            size: size(glyph, glyph),
+        },
+        atelier::IconName::Loop.path().into(),
+        gpui::TransformationMatrix::unit(),
+        theme.accent,
+        cx,
     );
 }
 

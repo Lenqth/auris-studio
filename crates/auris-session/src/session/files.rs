@@ -392,10 +392,9 @@ impl SaveJob {
             path: folder.clone(),
             source,
         })?;
-        let lock = project_write_lock(&self.document)?;
-        if cancelled.load(Ordering::Relaxed) {
+        let Some(lock) = project_write_lock_until(&self.document, cancelled)? else {
             return Ok(None);
-        }
+        };
 
         if self.collect_assets {
             if self.document.exists() {
@@ -596,10 +595,23 @@ impl Session {
 
     /// Replaces the document with an empty project holding one instrument track.
     pub fn new_project(&mut self) {
+        self.new_project_with_track("Track 1");
+    }
+
+    /// [`Self::new_project`], naming its one track `track` — a frontend passes the name in its
+    /// reader's language, the way it names every track it adds afterwards.
+    pub fn new_project_with_track(&mut self, track: &str) {
         self.sound_scope = crate::transient_id::transient_id("session");
         let mut project = Project::new(Project::UNTITLED, self.project.sample_rate);
         if let Some(instrument) = self.registry.default_instrument_id() {
-            project.add_instrument_track("Track 1", instrument);
+            project.add_instrument_track(track, instrument);
+        }
+        if self.master_limiter {
+            super::levels::install_master_limiter(
+                &self.registry,
+                &mut project,
+                super::levels::NEW_DOCUMENT_CEILING_DB,
+            );
         }
         self.history.clear();
         self.path = None;
@@ -1652,11 +1664,46 @@ impl Session {
         if let Some(font) = self.font_cache.get(path) {
             return Some(Arc::clone(&font.samples));
         }
-        let font = load_soundfont(path)
-            .inspect_err(|error| log::warn!("{}: {error}", path.display()))
-            .ok()?;
+        let font = match shared_library_font(path) {
+            Ok(font) => font,
+            Err(error) => {
+                log::warn!("{}: {error}", path.display());
+                self.font_errors.insert(path.to_path_buf(), error);
+                return None;
+            }
+        };
+        self.font_errors.remove(path);
         self.cache_font(path, Arc::clone(&font), true);
         Some(font)
+    }
+
+    /// Why the font a document names has no sounds in this session, or `None` when it has them.
+    pub fn soundfont_load_error(&self, id: SoundFontId) -> Option<String> {
+        if self.fonts.contains(id) {
+            return None;
+        }
+        let reference = self.project.soundfonts.get(&id)?;
+        let Some(path) = reference.path.resolve(self.project_folder()) else {
+            return Some(format!(
+                "SoundFont \"{}\" has no file location this project can resolve",
+                reference.name
+            ));
+        };
+        let reason =
+            self.font_errors
+                .get(&path)
+                .cloned()
+                .unwrap_or_else(|| match path.try_exists() {
+                    Ok(true) => "the file exists but was not loaded".to_string(),
+                    Ok(false) => "the file does not exist".to_string(),
+                    Err(error) => error.to_string(),
+                });
+        Some(format!(
+            "SoundFont \"{}\" (font {}, {}) is not loaded, so none of its sounds can be used: {reason}",
+            reference.name,
+            id.0,
+            path.display()
+        ))
     }
 
     /// Keeps the file identity alongside an id that a different history branch may reuse.
@@ -1859,8 +1906,15 @@ fn same_font_file(left: &Path, right: &Path) -> bool {
             .is_some_and(|(left, right)| left == right)
 }
 
-/// Serialises cooperating writers across processes, including the optimistic disk check.
-pub(super) fn project_write_lock(path: &Path) -> Result<std::fs::File, SessionError> {
+/// How long a saving thread waits between attempts on another process's lock.
+///
+/// Fifty milliseconds. Short enough that a cancel is answered while the dialog that asked for it
+/// is still closing, long enough that waiting out a large save next door costs nothing anyone
+/// could measure.
+const WRITE_LOCK_POLL: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Opens the lock file beside a document, without taking the lock.
+fn open_write_lock_file(path: &Path) -> Result<(PathBuf, std::fs::File), SessionError> {
     let folder = path.parent().ok_or(SessionError::NoPath)?;
     let lock_path = folder.join(".auris-write.lock");
     let file = std::fs::OpenOptions::new()
@@ -1870,9 +1924,91 @@ pub(super) fn project_write_lock(path: &Path) -> Result<std::fs::File, SessionEr
         .write(true)
         .open(&lock_path)
         .map_err(|error| IoError::from_fs(&lock_path, error))?;
+    Ok((lock_path, file))
+}
+
+/// Serialises cooperating writers across processes, including the optimistic disk check.
+///
+/// Blocking, for a caller with nothing to cancel. A caller that can be cancelled wants
+/// [`project_write_lock_until`] instead.
+pub(super) fn project_write_lock(path: &Path) -> Result<std::fs::File, SessionError> {
+    let (lock_path, file) = open_write_lock_file(path)?;
     file.lock()
         .map_err(|error| IoError::from_fs(&lock_path, error))?;
     Ok(file)
+}
+
+/// [`project_write_lock`], but answering `cancelled` while another process holds it.
+///
+/// `None` when the flag was set before the lock could be taken.
+///
+/// Polled rather than blocking. [`SaveJob::run`] is built around cancellation and checks the flag
+/// on either side of taking this lock — but a blocking `lock()` cannot be interrupted, so a
+/// second Auris holding it left the save hanging on the worker with the flag going unread: the
+/// window stayed responsive, the save never finished, and Cancel did nothing. `try_lock` in a
+/// loop is how `autosave` and `workshop` already take theirs.
+pub(super) fn project_write_lock_until(
+    path: &Path,
+    cancelled: &AtomicBool,
+) -> Result<Option<std::fs::File>, SessionError> {
+    let (lock_path, file) = open_write_lock_file(path)?;
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
+        match file.try_lock() {
+            Ok(()) => return Ok(Some(file)),
+            Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(WRITE_LOCK_POLL),
+            Err(std::fs::TryLockError::Error(error)) => {
+                return Err(IoError::from_fs(&lock_path, error).into());
+            }
+        }
+    }
+}
+
+/// Library fonts already decoded by any session in this process, by path.
+///
+/// The song workshop runs up to three composer sessions beside the window's own, and every one
+/// of them adopts the same library. Without this each would decode its own copy of a font that can
+/// be hundreds of megabytes; with it they share one, and it is dropped when the last session
+/// holding it lets go. The file's size and modification time guard against a font replaced on
+/// disk under the same name.
+type SharedFonts = std::collections::HashMap<
+    PathBuf,
+    (
+        u64,
+        Option<std::time::SystemTime>,
+        std::sync::Weak<SoundFont>,
+    ),
+>;
+
+static SHARED_LIBRARY_FONTS: std::sync::OnceLock<std::sync::Mutex<SharedFonts>> =
+    std::sync::OnceLock::new();
+
+/// Reads a library font, or hands back the copy another session already decoded.
+fn shared_library_font(path: &Path) -> Result<Arc<SoundFont>, String> {
+    let stamp = std::fs::metadata(path)
+        .map(|metadata| (metadata.len(), metadata.modified().ok()))
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let shared = SHARED_LIBRARY_FONTS.get_or_init(Default::default);
+    if let Ok(mut fonts) = shared.lock() {
+        fonts.retain(|_, (_, _, font)| font.strong_count() > 0);
+        if let Some(font) = fonts
+            .get(path)
+            .filter(|(len, modified, _)| (*len, *modified) == stamp)
+            .and_then(|(_, _, font)| font.upgrade())
+        {
+            return Ok(font);
+        }
+    }
+    let font = load_soundfont(path).map_err(|error| error.to_string())?;
+    if let Ok(mut fonts) = shared.lock() {
+        fonts.insert(
+            path.to_path_buf(),
+            (stamp.0, stamp.1, Arc::downgrade(&font)),
+        );
+    }
+    Ok(font)
 }
 
 #[cfg(test)]
@@ -1892,6 +2028,43 @@ mod tests {
             .collect();
         entries.sort();
         entries
+    }
+
+    #[test]
+    fn a_held_lock_does_not_make_a_save_uncancellable() {
+        // The lock used to be taken with a blocking `lock()`, which cannot be interrupted: with
+        // another process holding it, `SaveJob::run` sat inside the call and never read the flag
+        // again. The window stayed responsive, the save never finished, and Cancel did nothing.
+        let scratch = Scratch::new("cancel-under-a-held-lock");
+        let chosen = scratch.join("Held.auris");
+        let document = document_in_folder(&chosen);
+        std::fs::create_dir_all(document.parent().unwrap()).unwrap();
+        let blocker = project_write_lock(&document).expect("the test holds the project lock");
+
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let waiting = Arc::new(Barrier::new(2));
+        let worker = {
+            let cancelled = Arc::clone(&cancelled);
+            let waiting = Arc::clone(&waiting);
+            let document = document.clone();
+            std::thread::spawn(move || {
+                waiting.wait();
+                project_write_lock_until(&document, &cancelled)
+            })
+        };
+
+        // Let it reach the lock and find it taken, then cancel while it is still waiting.
+        waiting.wait();
+        std::thread::sleep(WRITE_LOCK_POLL * 3);
+        cancelled.store(true, Ordering::Relaxed);
+
+        let answered = worker.join().expect("the waiting thread finishes");
+        assert!(
+            matches!(answered, Ok(None)),
+            "a cancelled wait should report cancellation, not a lock or an error"
+        );
+        // The lock was never taken from the holder, which is the other half of the contract.
+        drop(blocker);
     }
 
     #[test]

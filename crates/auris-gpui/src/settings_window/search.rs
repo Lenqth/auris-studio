@@ -153,6 +153,10 @@ impl Section {
             Self::Host => &[Key::AudioHost, Key::RefreshAudioDevices],
             Self::Toolbar => &[
                 Key::ToolbarHeading,
+                Key::TopBarLayout,
+                Key::TopBarLayoutNote,
+                Key::TopBarSpacious,
+                Key::TopBarCompact,
                 Key::ToolbarNote,
                 Key::ToolbarPlayback,
                 Key::ToolbarVisualizer,
@@ -185,7 +189,15 @@ impl Section {
                 Key::GroupHelp,
             ],
             Self::Output => &[Key::OutputDevice],
-            Self::Input => &[Key::InputDevice, Key::InputDeviceNote, Key::AsioInputNote],
+            Self::Input => &[
+                Key::InputDevice,
+                Key::InputDeviceNote,
+                Key::AsioInputNote,
+                Key::InputLatency,
+                Key::InputLatencyNote,
+                Key::TypingLatency,
+                Key::TypingLatencyNote,
+            ],
             Self::Rate => &[Key::SampleRate, Key::DeviceDefaultRate],
             Self::Buffer => &[Key::BufferSize, Key::RequestedBufferNote],
             Self::Export => &[

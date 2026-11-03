@@ -279,7 +279,15 @@ Either shape can be chosen by hand — *Fade-In Shape* and *Fade-Out Shape* on t
 which appear once that edge has a fade on it. That is for the joins made another way: a fade
 dragged out by its handle over a neighbour, or a clip trimmed back until it met one.
 
-The middle of the transport bar holds three readouts: the position, the tempo and the time
+The transport — the playback buttons, the readouts, the grid and zoom, and the meters — has two
+layouts, chosen under *Settings → Top toolbar → Layout*. *Spacious*, the default, gives it a row
+of its own under the title bar at every width: the grid and zoom at one end, playback and the
+captioned readouts in the middle, the meters at the other. *Compact* puts it in the title bar
+when the window is at least 1280 points wide, so the window has one bar as Atelier asks; a
+narrower window still gives it its own row. In the title bar each readout is one line and names
+itself in a tooltip.
+
+The transport's readouts are the position, the tempo and the time
 signature. The first two are typeable — double-click either and the number can be entered
 directly. A wheel is for finding a tempo by feel and a drag for nudging it, but neither is any
 way to reach 174 from 120, or bar 97 from bar 1. The position takes as much of
@@ -577,6 +585,10 @@ instrument that is quieter than that can reach may end up short of where it want
 status line says so. And the master fader is *after* the master's effects, so a piece driven hard
 after it was measured can push past the limiter's ceiling — the ceiling guarantees what leaves the
 effect chain, not what leaves the mixer.
+
+A new document starts with the same limiter last on its master, at -1 dBTP, so a song written by
+hand or by an agent has something to lean on when it is normalised. Take it off and the mix can
+only be made as loud as its single loudest moment allows.
 
 ## The time signature
 

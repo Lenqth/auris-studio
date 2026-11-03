@@ -158,6 +158,10 @@ pub enum SessionError {
     #[error("no clip with id {0}")]
     UnknownClip(u64),
 
+    /// A lint fix was found at another revision, or has no fix to apply; lint again.
+    #[error("the document changed since this problem was found; lint again before fixing it")]
+    LintStale,
+
     /// The clip exists but holds no note at that index.
     ///
     /// Most many-note commands quietly skip indices a stale selection no longer covers; the
@@ -170,6 +174,20 @@ pub enum SessionError {
         /// The index that named nothing.
         index: usize,
     },
+
+    /// The track or clip holds no comment with that id.
+    #[error("no comment with id {0} there")]
+    UnknownComment(u64),
+
+    /// A comment with no words was asked for; there is nothing to pin.
+    #[error("a comment needs some text")]
+    EmptyComment,
+
+    /// Comments are pinned inside note clips only; an audio clip has no piano roll to hold one.
+    #[error(
+        "clip {0} is not a note clip, so it cannot hold comments; pin the comment on its track"
+    )]
+    NotANoteClip(u64),
 
     /// The requested send does not exist on that track.
     #[error("track {track} has no send with id {send}")]
@@ -240,6 +258,10 @@ pub enum SessionError {
     /// A voice model could not be loaded, or refused to sing.
     #[error(transparent)]
     Sing(#[from] auris_singer::SingError),
+
+    /// A note-roll video could not be drawn or encoded, or no ffmpeg was found to encode it.
+    #[error(transparent)]
+    Video(#[from] auris_video::VideoError),
 
     /// A singer-frame JSON file exceeds the bounded source-buffer size.
     #[error(
@@ -399,6 +421,32 @@ pub enum SessionError {
     /// [`Session::save_as_replacing`](crate::Session::save_as_replacing) to go ahead.
     #[error("{} is already a project", .0.display())]
     WouldReplace(PathBuf),
+
+    /// A latency measurement was asked for while one, a take, or playback was already running.
+    #[error("stop playback and recording before measuring the input latency")]
+    CalibrationBusy,
+
+    /// The measurement's clicks never reached the input.
+    ///
+    /// The input is somewhere the output cannot reach: headphones, a muted speaker, a cable in
+    /// the wrong socket, or the wrong input device chosen.
+    #[error("no clicks reached the input; let it hear the output and measure again")]
+    CalibrationHeardNothing,
+
+    /// The clicks arrived, but not at a steady distance from where they were played.
+    ///
+    /// Noise in the room, or an input that was also hearing something else.
+    #[error(
+        "the clicks arrived {spread_ms:.1} ms apart from one another; measure again somewhere quieter"
+    )]
+    CalibrationUnsteady {
+        /// How far the clicks strayed from their median, in milliseconds.
+        spread_ms: f64,
+    },
+
+    /// The output never played the clicks, so there was nothing to measure.
+    #[error("the audio output did not play the measurement")]
+    CalibrationStalled,
 }
 
 impl SessionError {
@@ -414,6 +462,7 @@ impl SessionError {
             SessionError::Engine(auris_engine::EngineError::RenderCancelled)
                 | SessionError::Sing(auris_singer::SingError::Cancelled)
                 | SessionError::Io(auris_io::IoError::ExportCancelled)
+                | SessionError::Video(auris_video::VideoError::Cancelled)
         )
     }
 }

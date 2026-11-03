@@ -518,6 +518,7 @@ impl AurisApp {
             Ok(id) => {
                 self.select_clip(Some(id));
                 self.selected_notes.clear();
+                self.center_roll_on_selection();
             }
             // Which of the two kinds refused says which sentence is true: an audio track has
             // clips and they arrive by import, and a bus has none at all.
@@ -752,7 +753,8 @@ impl AurisApp {
         self.cancel_disk_watch();
         self.reset_drum_analysis();
         self.agent_reset_conversation();
-        self.session.new_project();
+        self.session
+            .new_project_with_track(&messages::new_track_name(self.language(), 1));
         self.resync_selection();
         self.reset_view();
         self.set_status(self.t(Key::NewProjectStatus));
@@ -1667,24 +1669,22 @@ impl AurisApp {
     ///
     /// The browser interface a voice shares with the instruments: one row, one click. Like the
     /// picker, this prepares the model on a cancellable worker before the short document edit.
-    pub(crate) fn set_track_voice(
-        &mut self,
-        path: PathBuf,
-        speaker: Option<String>,
-        cx: &mut Context<Self>,
-    ) {
+    pub(crate) fn set_track_voice(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let Some(track) = self.singer_target() else {
             self.set_failed_status(self.t(Key::ErrorNoSingerTrack).to_string());
             return;
         };
-        self.apply_singer_voice_selection(track, path, speaker, cx);
+        self.apply_singer_voice_selection(track, path, None, cx);
     }
 
     /// Drops cached and pending auditions when the voice behind them changes.
+    ///
+    /// Artwork is not among them: it is keyed by voice file and speaker, so choosing another
+    /// voice or style simply asks for another key, and switching back is free. Only a change to
+    /// the files themselves can make a cached image wrong, which is [`Self::forget_voice_shelf`].
     pub(crate) fn invalidate_sung_previews(&mut self) {
         self.stop_audition();
         self.voicevox_catalogs.clear();
-        self.singer_portraits.invalidate();
         self.sung_previews.clear();
         self.sung_preview_generation = self.sung_preview_generation.wrapping_add(1);
     }
@@ -1695,9 +1695,16 @@ impl AurisApp {
         self.sung_preview_generation = self.sung_preview_generation.wrapping_add(1);
     }
 
+    /// Rescans the voice shelf and forgets artwork, because a voice file may have changed.
+    pub(crate) fn forget_voice_shelf(&mut self) {
+        self.voices = None;
+        self.singer_portraits.invalidate();
+        self.singer_icons.invalidate();
+    }
+
     /// Refreshes the shelf and re-sings tracks using a connection that was just saved.
     pub(crate) fn singer_configuration_changed(&mut self, path: &Path, cx: &mut Context<Self>) {
-        self.voices = None;
+        self.forget_voice_shelf();
         self.invalidate_sung_previews();
         let tracks: Vec<_> = self
             .project()
@@ -1781,7 +1788,7 @@ impl AurisApp {
 
     /// Writes the voice folders out and makes the shelf look again.
     fn save_voice_paths(&mut self) {
-        self.voices = None;
+        self.forget_voice_shelf();
         if let Err(error) = self.save_settings() {
             log::warn!("could not save settings: {error}");
         }
@@ -3657,13 +3664,14 @@ impl AurisApp {
         if self.editing_a_drum_clip() {
             return;
         }
-        let Some(range) = self
-            .selected_midi_clip()
-            .and_then(|clip| clip.pitch_range())
-        else {
+        let Some(clip) = self.selected_midi_clip() else {
             return;
         };
-        let middle = ((range.0 as u16 + range.1 as u16) / 2) as u8;
+        // A clip with nothing in it yet opens on middle C, where most parts begin. It used to
+        // keep the roll wherever it was parked, which for a new clip was the octave above C6.
+        let middle = clip
+            .pitch_range()
+            .map_or(60, |range| ((range.0 as u16 + range.1 as u16) / 2) as u8);
         let body_height =
             crate::theme::Metrics::BOTTOM_DOCK_HEIGHT - crate::theme::Metrics::PANEL_HEADER_HEIGHT;
         self.pitch.center_on(middle, body_height);

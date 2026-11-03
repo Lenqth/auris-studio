@@ -11,6 +11,16 @@ actions!(
     [
         /// Quit the application.
         Quit,
+        /// Hide the application's windows (macOS's ⌘H).
+        HideApplication,
+        /// Hide every other application's windows.
+        HideOtherApplications,
+        /// Show every application's windows again.
+        ShowAllApplications,
+        /// Minimise the window in front (macOS's ⌘M).
+        MinimizeWindow,
+        /// Zoom the window in front to fill the screen, or back.
+        ZoomWindow,
         /// Create a new empty project.
         NewProject,
         /// Open a project file.
@@ -45,6 +55,8 @@ actions!(
         ExportStems,
         /// Write the selected singer track's frame features to a JSON file.
         ExportSingerFrames,
+        /// Open the window that previews and exports a note-roll video.
+        ExportVideo,
         /// Show the list of projects opened lately, to open one again.
         OpenRecent,
         /// Show what this build is.
@@ -194,6 +206,8 @@ actions!(
         ToggleStructureLane,
         /// Show or hide the key and chord strip above the arrangement.
         ToggleHarmonyLane,
+        /// Show or hide the song-wide lyrics strip under the chords.
+        ToggleLyricsLane,
         /// Show or hide the tempo changes marked along the ruler.
         ToggleTempoMarks,
         /// Show or hide the pitch bend strip under the piano roll.
@@ -471,17 +485,19 @@ bindable! {
         "file.save_as",         GroupFile,      CmdSaveAs,             "secondary-shift-s" => SaveProjectAs;
         "file.import",          GroupFile,      CmdImportAudio,        "secondary-i" => ImportAudio;
         "file.import_soundfont", GroupFile,     CmdImportSoundFont,    "secondary-shift-i" => ImportSoundFont;
-        // M for MIDI, in and out. The table wants a keystroke per command rather than an empty
-        // one, and these are the letters left that mean anything — the I and E pairs both went to
-        // audio, which is imported and exported far more often.
-        "file.import_midi",     GroupFile,      CmdImportMidi,         "secondary-m" => ImportMidi;
-        "file.export_midi",     GroupFile,      CmdExportMidi,         "secondary-alt-m" => ExportMidi;
+        // No keystrokes. They were ⌘M and ⌥⌘M, which on a Mac are Minimise and Minimise All —
+        // the two a hand reaches for without looking — and the I and E pairs went to audio,
+        // which is imported and exported far more often. Both are on the File menu.
+        "file.import_midi",     GroupFile,      CmdImportMidi,         ""            => ImportMidi;
+        "file.export_midi",     GroupFile,      CmdExportMidi,         ""            => ExportMidi;
         "file.collect",         GroupFile,      CmdCollectAssets,      "secondary-shift-a" => CollectAssets;
         "file.export",          GroupFile,      CmdExportWav,          "secondary-e" => ExportAudio;
         "file.export_cycle",    GroupFile,      CmdExportCycle,        "secondary-shift-e" => ExportCycle;
         "file.export_stems",    GroupFile,      CmdExportStems,        "secondary-alt-e" => ExportStems;
         // No keystroke: an export somebody runs a handful of times per song, from the menu.
         "file.export_frames",   GroupFile,      CmdExportSingerFrames, ""            => ExportSingerFrames;
+        // No keystroke, for the reason the frames export has none: it opens a window of choices.
+        "file.export_video",    GroupFile,      CmdExportVideo,        ""            => ExportVideo;
         // No keystroke: the list it opens is the point, and every letter worth spending is
         // already spent. It is on the File menu, which is where anybody looks for it.
         "file.recent",          GroupFile,      CmdOpenRecent,         "" => OpenRecent;
@@ -557,6 +573,7 @@ bindable! {
         // shifted forms of these letters are all spoken for.
         "view.structure_lane",  GroupView,      CmdShowStructureLane,  "secondary-alt-s" => ToggleStructureLane;
         "view.harmony_lane",    GroupView,      CmdShowHarmonyLane,    "secondary-alt-h" => ToggleHarmonyLane;
+        "view.lyrics_lane",     GroupView,      CmdShowLyricsLane,     "secondary-alt-y" => ToggleLyricsLane;
         "view.tempo_marks",     GroupView,      CmdShowTempoMarks,     "secondary-alt-t" => ToggleTempoMarks;
         "view.bend_lane",       GroupView,      CmdShowBendLane,       "secondary-alt-b" => ToggleBendLane;
         "view.modulation_lane", GroupView,      CmdShowModulationLane, "secondary-alt-w" => ToggleModulationLane;
@@ -890,6 +907,15 @@ pub fn install_bindings(cx: &mut App, bindings: impl IntoIterator<Item = KeyBind
             Some(atelier::SELECTABLE_CONTEXT),
         ),
     ]);
+    // The two keystrokes every Mac application answers to, and which the system menu would give
+    // any application built from a nib. Not rebindable: they belong to the platform rather than
+    // to Auris, which is also why the table above leaves ⌘M alone.
+    if cfg!(target_os = "macos") {
+        cx.bind_keys([
+            KeyBinding::new(&normalise_keystroke("secondary-h"), HideApplication, None),
+            KeyBinding::new(&normalise_keystroke("secondary-m"), MinimizeWindow, None),
+        ]);
+    }
     // The global reset also removes gpui-component's text-selection shortcut.
     cx.bind_keys([KeyBinding::new(
         "secondary-c",
