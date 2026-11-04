@@ -1,4 +1,4 @@
-use crate::PixelsExt;
+use crate::ModifiersExt;
 use std::collections::HashMap;
 use std::{rc::Rc, time::Duration};
 
@@ -329,7 +329,7 @@ impl FlowGraph {
                 let node_id = node_id.clone();
                 let state = state.clone();
                 move |event, _window, cx| {
-                    let multi = event.modifiers.secondary();
+                    let multi = event.modifiers.is_secondary();
                     let mouse_pos = event.position;
 
                     state.update(cx, |state, _cx| {
@@ -893,18 +893,18 @@ impl Render for FlowGraph {
                             .when(edge.selectable, |element| {
                                 element
                                     .on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                                        window.focus(&select_focus);
+                                        window.focus(&select_focus, cx);
                                         select_state.update(cx, |state, _| {
                                             state.select_edge(
                                                 &select_id,
-                                                event.modifiers.secondary(),
+                                                event.modifiers.is_secondary(),
                                             )
                                         });
                                         cx.notify(entity_id);
                                         cx.stop_propagation();
                                     })
                                     .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                                        window.focus(&menu_focus);
+                                        window.focus(&menu_focus, cx);
                                         menu_state.update(cx, |state, cx| {
                                             if !state
                                                 .edges
@@ -1085,7 +1085,7 @@ impl Render for FlowGraph {
                         });
                         window.on_mouse_event({
                             let graph = hover_graph.clone();
-                            move |_: &ScrollWheelEvent, phase, _, cx| {
+                            move |_: &ScrollEvent, phase, _, cx| {
                                 if phase == DispatchPhase::Capture {
                                     let _ =
                                         graph.update(cx, |graph, cx| graph.hover_edge(None, cx));
@@ -1124,7 +1124,7 @@ impl Render for FlowGraph {
             .on_mouse_down(MouseButton::Left, {
                 let entity_id = entity_id;
                 move |event, window, cx| {
-                    window.focus(&canvas_focus);
+                    window.focus(&canvas_focus, cx);
                     let mouse_pos = event.position;
                     state_for_mouse_down.update(cx, |state, _cx| {
                         // If a node drag or connection was already started, skip
@@ -1136,7 +1136,7 @@ impl Render for FlowGraph {
                         let mx = mouse_pos.x.as_f32();
                         let my = mouse_pos.y.as_f32();
                         if let Some(edge_id) = edges::hit_test_edges(state, mx, my, 5.0) {
-                            if !event.modifiers.secondary() {
+                            if !event.modifiers.is_secondary() {
                                 for n in &mut state.nodes {
                                     n.selected = false;
                                 }
@@ -1152,7 +1152,7 @@ impl Render for FlowGraph {
 
                         // Shift+drag → start box selection
                         if event.modifiers.shift {
-                            if !event.modifiers.secondary() {
+                            if !event.modifiers.is_secondary() {
                                 for n in &mut state.nodes {
                                     n.selected = false;
                                 }
@@ -1168,7 +1168,7 @@ impl Render for FlowGraph {
                         }
 
                         // Deselect all nodes and edges
-                        if !event.modifiers.secondary() {
+                        if !event.modifiers.is_secondary() {
                             for n in &mut state.nodes {
                                 n.selected = false;
                             }
@@ -1194,7 +1194,7 @@ impl Render for FlowGraph {
                     6.0,
                 );
                 if let Some(id) = edge {
-                    window.focus(&context_focus);
+                    window.focus(&context_focus, cx);
                     state_for_context.update(cx, |state, cx| {
                         if !state
                             .edges
@@ -1397,7 +1397,7 @@ impl Render for FlowGraph {
                     // Undo: Cmd+Z (always allowed)
                     if !state_for_key.read(cx).externally_managed
                         && key == "z"
-                        && event.keystroke.modifiers.secondary()
+                        && event.keystroke.modifiers.is_secondary()
                         && !event.keystroke.modifiers.shift
                     {
                         state_for_key.update(cx, |state, _cx| {
@@ -1409,7 +1409,7 @@ impl Render for FlowGraph {
                     // Redo: Cmd+Shift+Z
                     if !state_for_key.read(cx).externally_managed
                         && key == "z"
-                        && event.keystroke.modifiers.secondary()
+                        && event.keystroke.modifiers.is_secondary()
                         && event.keystroke.modifiers.shift
                     {
                         state_for_key.update(cx, |state, _cx| {
@@ -1420,7 +1420,7 @@ impl Render for FlowGraph {
                     }
 
                     // Select all: Cmd+A
-                    if key == "a" && event.keystroke.modifiers.secondary() && graph_focused {
+                    if key == "a" && event.keystroke.modifiers.is_secondary() && graph_focused {
                         state_for_key.update(cx, |state, _cx| {
                             state.select_all();
                         });
@@ -1461,12 +1461,12 @@ impl Render for FlowGraph {
                 }
             })
             // Scroll to zoom / pan
-            .on_scroll_wheel({
+            .on_scroll({
                 move |event, _window, cx| {
                     let delta = event.delta.pixel_delta(px(20.0));
                     let mouse_pos = event.position;
 
-                    if event.modifiers.secondary() || event.modifiers.control {
+                    if event.modifiers.is_secondary() || event.modifiers.control {
                         // Zoom towards mouse
                         let factor = (delta.y.as_f32() * 0.01).clamp(-4.0, 4.0).exp();
                         state_for_scroll.update(cx, |state, cx| {

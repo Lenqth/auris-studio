@@ -1681,7 +1681,7 @@ mod tests {
                 if index == 0 {
                     gpui::Modifiers::none()
                 } else {
-                    gpui::Modifiers::secondary_key()
+                    crate::actions::secondary_key()
                 },
             );
             paint(&app, cx);

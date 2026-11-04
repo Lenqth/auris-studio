@@ -213,7 +213,7 @@ impl AurisApp {
                     this.request_workshop_thread(Command::OpenThread(id.clone()), cx);
                     if let Some(state) = &mut this.song_workshop {
                         state.active_field = Some(0);
-                        state.foci[0].focus(window);
+                        state.foci[0].focus(window, cx);
                     }
                 }));
                 list = list.child(if archived {
@@ -240,7 +240,7 @@ impl AurisApp {
                         this.request_workshop_thread(Command::NewThread, cx);
                         if let Some(state) = &mut this.song_workshop {
                             state.active_field = Some(0);
-                            state.foci[0].focus(window);
+                            state.foci[0].focus(window, cx);
                         }
                     })),
             )

@@ -133,7 +133,7 @@ impl AurisApp {
                     "Shift+Wheel",
                     &self.theme,
                 ))
-                .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+                .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                     let delta = event.delta.pixel_delta(px(24.0));
                     this.timeline.scroll_by(-delta.x - delta.y);
                     cx.stop_propagation();
@@ -200,12 +200,12 @@ impl AurisApp {
         match panel.axis() {
             Axis::Horizontal => ScrollView {
                 offset: f32::from(handle.offset().x),
-                max_offset: f32::from(handle.max_offset().width),
+                max_offset: f32::from(handle.max_offset().x),
                 viewport: f32::from(handle.bounds().size.width),
             },
             Axis::Vertical => ScrollView {
                 offset: f32::from(handle.offset().y),
-                max_offset: f32::from(handle.max_offset().height),
+                max_offset: f32::from(handle.max_offset().y),
                 viewport: f32::from(handle.bounds().size.height),
             },
         }
@@ -428,7 +428,7 @@ mod tests {
         paint(&app, cx);
         let at = app.read_with(cx, |this, _| this.canvas.lanes.get().unwrap().center());
         let previous = app.read_with(cx, |this, _| this.timeline.scroll_ticks);
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: at,
             delta: gpui::ScrollDelta::Lines(gpui::point(0.0, -3.0)),
             modifiers: gpui::Modifiers {

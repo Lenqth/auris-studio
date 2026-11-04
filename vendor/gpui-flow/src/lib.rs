@@ -12,12 +12,17 @@ pub use minimap::Minimap;
 pub use store::FlowState;
 pub use types::*;
 
-// Compatibility with released GPUI, whose Pixels converts through From.
-trait PixelsExt {
-    fn as_f32(self) -> f32;
+/// gpui-pre asks the app for the host OS to resolve its secondary modifier. The host is known at
+/// compile time, and asking would borrow `cx` inside closures that already hold it.
+trait ModifiersExt {
+    fn is_secondary(&self) -> bool;
 }
-impl PixelsExt for gpui::Pixels {
-    fn as_f32(self) -> f32 {
-        self.into()
+impl ModifiersExt for gpui::Modifiers {
+    fn is_secondary(&self) -> bool {
+        if cfg!(target_os = "macos") {
+            self.platform
+        } else {
+            self.control
+        }
     }
 }

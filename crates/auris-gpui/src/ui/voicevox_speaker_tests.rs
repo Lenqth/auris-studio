@@ -499,7 +499,7 @@ fn a_long_engine_singer_list_scrolls_and_its_last_voice_can_be_clicked(cx: &mut 
     assert!(panel.top() >= px(0.0) && panel.bottom() <= viewport.height);
     assert!(panel.left() >= px(0.0) && panel.right() <= viewport.width);
     let rows = cx.debug_bounds("context-menu-rows").unwrap();
-    cx.simulate_event(gpui::ScrollWheelEvent {
+    cx.simulate_event(gpui::ScrollEvent {
         position: rows.center(),
         delta: gpui::ScrollDelta::Pixels(point(px(0.0), px(-10000.0))),
         ..Default::default()

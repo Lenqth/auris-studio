@@ -187,7 +187,7 @@ impl AurisApp {
                                     ..super::menu_bar::OpenMenu::at(index)
                                 }));
                                 if !close {
-                                    window.focus(&this.menu_focus);
+                                    window.focus(&this.menu_focus, cx);
                                 }
                                 cx.notify();
                             })),

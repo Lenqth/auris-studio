@@ -150,7 +150,7 @@ impl Completions {
                                     Scope::Agent => this.accept_agent_completion(&candidate.fill),
                                     Scope::Workshop => {
                                         this.accept_workshop_completion(&candidate.fill);
-                                        this.focus_workshop_input(window);
+                                        this.focus_workshop_input(window, cx);
                                     }
                                 }
                                 cx.stop_propagation();

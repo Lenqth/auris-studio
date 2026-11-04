@@ -85,7 +85,7 @@ fn closing_a_menu_preserves_an_explicit_move_to_another_pane(cx: &mut TestAppCon
     cx.update(|window, cx| {
         app.update(cx, |this, cx| {
             this.close_menu();
-            this.focus_pane(crate::app::Pane::Arrangement, window);
+            this.focus_pane(crate::app::Pane::Arrangement, window, cx);
             cx.notify();
         });
     });

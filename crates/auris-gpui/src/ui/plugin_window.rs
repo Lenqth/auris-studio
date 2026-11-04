@@ -690,7 +690,7 @@ mod tests {
     fn large_parameter_editor_scrolls_to_the_last_parameter(cx: &mut gpui::TestAppContext) {
         let (app, cx) = large_parameter_editor(cx);
         let body = cx.debug_bounds("pw-body").unwrap();
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: body.center(),
             delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-1_000_000.))),
             ..Default::default()
@@ -703,8 +703,9 @@ mod tests {
     fn large_parameter_editor_tabs_across_unrendered_rows(cx: &mut gpui::TestAppContext) {
         let (app, cx) = large_parameter_editor(cx);
         cx.update(|window, cx| {
-            window.focus(&app.read(cx).parameter_list.rows[0]);
-            window.focus_next();
+            let first = app.read(cx).parameter_list.rows[0].clone();
+            window.focus(&first, cx);
+            window.focus_next(cx);
         });
         for _ in 0..60 {
             cx.simulate_keystrokes("tab");

@@ -812,7 +812,7 @@ impl AurisApp {
                     .min_w_0()
                     .child(
                         div()
-                            .flex_shrink()
+                            .flex_shrink_1()
                             .min_w_0()
                             .truncate()
                             .child(format!("{} — {name}", self.t(Key::DrumEditor))),
@@ -901,7 +901,7 @@ impl AurisApp {
                                 MouseButton::Left,
                                 cx.listener(|this, _, _, _| this.stop_audition()),
                             )
-                            .on_scroll_wheel(cx.listener(Self::scroll_drums)),
+                            .on_scroll(cx.listener(Self::scroll_drums)),
                     )
                     .child(
                         div()
@@ -1066,7 +1066,7 @@ impl AurisApp {
                             .children(empty_state)
                             .on_mouse_down(MouseButton::Left, cx.listener(Self::press_drum_grid))
                             .on_mouse_down(MouseButton::Right, cx.listener(Self::open_drum_menu))
-                            .on_scroll_wheel(cx.listener(Self::scroll_drums)),
+                            .on_scroll(cx.listener(Self::scroll_drums)),
                     ),
             )
             .child(
@@ -1294,7 +1294,7 @@ impl AurisApp {
 
     fn scroll_drums(
         &mut self,
-        event: &gpui::ScrollWheelEvent,
+        event: &gpui::ScrollEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -1935,7 +1935,7 @@ mod window_tests {
             } else {
                 -120.0
             };
-            cx.simulate_event(gpui::ScrollWheelEvent {
+            cx.simulate_event(gpui::ScrollEvent {
                 position: viewport.center(),
                 delta: gpui::ScrollDelta::Pixels(point(px(0.0), px(dy))),
                 ..Default::default()

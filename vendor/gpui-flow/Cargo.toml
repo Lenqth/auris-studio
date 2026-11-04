@@ -11,7 +11,7 @@ keywords = ["gpui", "flow", "graph", "node-editor", "react-flow"]
 categories = ["gui", "graphics"]
 
 [dependencies]
-gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
+gpui = { package = "gpui-pre", version = "=0.3.10" }
 
 [profile.dev]
 debug = "limited"
@@ -19,7 +19,6 @@ split-debuginfo = "unpacked"
 opt-level = 1
 
 [profile.dev.package]
-gpui = { opt-level = 3 }
 taffy = { opt-level = 3 }
 
 [lints.clippy]

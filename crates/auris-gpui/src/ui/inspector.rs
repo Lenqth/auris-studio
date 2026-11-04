@@ -838,9 +838,9 @@ impl AurisApp {
                     let focus = rows[next].clone();
                     // Defer until this render pass has installed the destination in tab order.
                     // Its row anchor is not a tab stop; advance to the actual control inside it.
-                    window.defer(cx, move |window, _| {
-                        window.focus(&focus);
-                        window.focus_next();
+                    window.defer(cx, move |window, cx| {
+                        window.focus(&focus, cx);
+                        window.focus_next(cx);
                     });
                 }
                 let controls =
@@ -869,7 +869,7 @@ impl AurisApp {
                     .collect()
             }),
         )
-        .track_scroll(self.parameter_list.scroll.clone())
+        .track_scroll(&self.parameter_list.scroll)
         .debug_selector(|| "pw-body".into())
         .flex_1()
         .min_h_0()
@@ -1446,7 +1446,7 @@ mod tests {
         for (key, collapsed) in [("enter", false), ("space", true)] {
             cx.simulate_keystrokes(key);
             cx.simulate_event(gpui::KeyUpEvent {
-                keystroke: gpui::Keystroke::parse(key).unwrap(),
+                keystroke: crate::actions::parse_keystroke(key).unwrap(),
             });
             paint(&app, cx);
             app.read_with(cx, |this, _| {
@@ -1534,24 +1534,18 @@ mod tests {
             assert!(!this.inspector_collapsed[InspectorSection::Sound as usize])
         });
         // The disclosure keeps keyboard focus after the pointer opens it.
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse("enter").unwrap(),
-        });
+        crate::harness::tap_key("enter", cx);
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert!(this.inspector_collapsed[InspectorSection::Sound as usize])
         });
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse("space").unwrap(),
-        });
+        crate::harness::tap_key("space", cx);
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert!(!this.inspector_collapsed[InspectorSection::Sound as usize])
         });
         cx.simulate_keystrokes("shift-tab");
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse("enter").unwrap(),
-        });
+        crate::harness::tap_key("enter", cx);
         paint(&app, cx);
         app.read_with(cx, |this, _| {
             assert!(!this.inspector_collapsed[InspectorSection::Performance as usize])

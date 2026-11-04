@@ -825,14 +825,16 @@ pub fn model(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
 /// Rebuilt when its state changes rather than re-rendered: the menu bar belongs to the operating
 /// system, so nothing about a window redraw would touch it.
 ///
-/// gpui's [`MenuItem`] has no checked field, so a checked command receives the conventional
-/// leading tick in its label. A disabled command carries an action with no handler; gpui's native
-/// menu validation therefore dims it and refuses to dispatch it.
+/// A checked command receives the conventional leading tick in its label. A disabled command
+/// carries an action with no handler; gpui's native menu validation therefore dims it and refuses
+/// to dispatch it. gpui-pre's own `checked` and `disabled` flags are left clear: these two
+/// conventions predate them and are what the tests and the Windows menu bar read.
 pub fn menus(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<Menu> {
     model(language, panels, state)
         .into_iter()
         .map(|section| Menu {
             name: section.name,
+            disabled: false,
             items: section
                 .rows
                 .into_iter()
@@ -854,6 +856,8 @@ pub fn menus(language: Language, panels: &PanelLayout, state: MenuState) -> Vec<
                             Box::new(Unavailable)
                         },
                         os_action: None,
+                        checked: false,
+                        disabled: false,
                     },
                     MenuRow::System { label, menu } => MenuItem::os_submenu(label, menu),
                 })

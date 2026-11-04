@@ -4,6 +4,7 @@
 //! project and should not compete with it for space. It holds a weak handle to the main view
 //! and applies every change through that, so there is still exactly one owner of the session.
 
+use crate::actions::SecondaryModifier as _;
 use atelier::{
     Button, ControlSize, Edge, FormField, FormGroup, IconName, ListItem, SectionHeader, Sidebar,
     StatusBar, Switch,
@@ -634,7 +635,7 @@ impl SettingsWindow {
         self.editing_search = true;
         self.search = TextField::new(String::new());
         self.text_changed();
-        window.focus(&self.search_focus);
+        window.focus(&self.search_focus, cx);
         cx.notify();
     }
 
@@ -1709,7 +1710,7 @@ impl SettingsWindow {
                     this.capturing = None;
                     this.dropdown_menu = None;
                     this.editing_search = true;
-                    window.focus(&this.search_focus);
+                    window.focus(&this.search_focus, cx);
                     cx.notify();
                 }),
             )
@@ -1933,7 +1934,7 @@ impl SettingsWindow {
     ) {
         self.capturing = Some(Capture { command, slot });
         // The capture reads key events, so the window must hold focus.
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
@@ -1980,7 +1981,7 @@ impl SettingsWindow {
             if self.agent.active == Some(agent::AgentSettings::PREFERENCE_FIELD)
                 && self.personalization.busy
             {
-                window.focus(&self.search_focus);
+                window.focus(&self.search_focus, cx);
             }
             return true;
         }
@@ -1996,9 +1997,9 @@ impl SettingsWindow {
         }
         if event.keystroke.key == "tab" {
             if event.keystroke.modifiers.shift {
-                window.focus_prev();
+                window.focus_prev(cx);
             } else {
-                window.focus_next();
+                window.focus_next(cx);
             }
             cx.notify();
             return true;
@@ -2025,7 +2026,8 @@ impl SettingsWindow {
 
         // Stored the way the file spells things, not the way this keyboard reported them, so a
         // keymap.json carried to the other platform still binds the modifier a user means.
-        let keystroke = crate::actions::portable_keystroke(&event.keystroke.unparse());
+        let keystroke =
+            crate::actions::portable_keystroke(&event.keystroke.unparse(crate::actions::HOST_OS));
         self.capturing = None;
         // Appending goes through `add`, which refuses a key the command already answers to:
         // pressing ＋ and then the key that is already there would otherwise list it twice.
@@ -2052,7 +2054,7 @@ impl SettingsWindow {
     /// The keys the search box claims: the ones the platform does not deliver as text.
     fn search_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
         let shift = event.keystroke.modifiers.shift;
-        let secondary = event.keystroke.modifiers.secondary();
+        let secondary = event.keystroke.modifiers.is_secondary();
         let key = event.keystroke.key.as_str();
         let claimed = match key {
             // Escape clears the filter rather than closing the window: the list under a query is
@@ -2164,7 +2166,7 @@ impl Render for SettingsWindow {
         // and text input available when the window first opens.
         if !editor_focused && !self.focus.contains_focused(window, cx) {
             self.editing_search = true;
-            window.focus(&self.search_focus);
+            window.focus(&self.search_focus, cx);
         }
 
         let theme = self.theme.clone();

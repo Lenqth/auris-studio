@@ -151,11 +151,9 @@ impl AurisApp {
                             // The ruler scrolls the same timeline the lanes below it do. Without this the
                             // wheel was dead over the top twenty pixels of the arrangement and worked two
                             // centimetres lower, which is the kind of thing a user finds by accident.
-                            .on_scroll_wheel(cx.listener(
-                                |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                                    this.scroll_timeline(event, cx);
-                                },
-                            )),
+                            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
+                                this.scroll_timeline(event, cx);
+                            })),
                     )
                     .when(self.panels.lanes.structure, |this| {
                         this.child(self.render_structure_lane(cx))
@@ -385,11 +383,9 @@ impl AurisApp {
                                 this.open_lane_menu(event, cx);
                             }),
                         )
-                        .on_scroll_wheel(cx.listener(
-                            |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                                this.scroll_timeline(event, cx);
-                            },
-                        )),
+                        .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
+                            this.scroll_timeline(event, cx);
+                        })),
                     cx,
                 ),
             )

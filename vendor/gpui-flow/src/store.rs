@@ -1,4 +1,3 @@
-use crate::PixelsExt;
 use std::collections::{HashMap, HashSet};
 
 use gpui::{Bounds, Pixels, SharedString};

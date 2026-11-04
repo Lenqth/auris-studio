@@ -1,5 +1,6 @@
 //! Library timbre exploration with a background session job and explicit adoption.
 
+use crate::actions::SecondaryModifier as _;
 use crate::app::AurisApp;
 use atelier::plot::{LinePlot, Plot3d, PlotPoint, Series};
 use atelier::{
@@ -213,7 +214,7 @@ impl AurisApp {
                         this.agent_chat.focused = None;
                         this.library_search_focused = false;
                         this.timbre_map.search_focused = true;
-                        window.focus(&this.focus);
+                        window.focus(&this.focus, cx);
                         cx.notify();
                     })),
             )
@@ -241,7 +242,7 @@ impl AurisApp {
                             this.agent_chat.focused = None;
                             this.library_search_focused = false;
                             this.timbre_map.search_focused = true;
-                            window.focus(&this.focus);
+                            window.focus(&this.focus, cx);
                             cx.notify();
                         }),
                     ),
@@ -275,7 +276,7 @@ impl AurisApp {
         self.timbre_map.search.apply_key_with_clipboard(
             key,
             event.keystroke.modifiers.shift,
-            event.keystroke.modifiers.secondary(),
+            event.keystroke.modifiers.is_secondary(),
             false,
             cx,
         ) != super::text_field::KeyEffect::Ignored
@@ -1912,7 +1913,7 @@ mod tests {
         });
         paint(&app, &mut utility);
         let inspector = utility.debug_bounds("timbre-inspector").unwrap();
-        utility.simulate_event(gpui::ScrollWheelEvent {
+        utility.simulate_event(gpui::ScrollEvent {
             position: gpui::point(
                 inspector.right() - gpui::px(4.),
                 inspector.top() + gpui::px(4.),
@@ -2188,7 +2189,10 @@ mod tests {
             });
             paint(&app, &mut utility);
             let azimuth = app.read_with(&utility, |this, _| this.timbre_map.camera.azimuth);
-            utility.update(|window, cx| window.focus(&app.read(cx).focus));
+            utility.update(|window, cx| {
+                let focus = app.read(cx).focus.clone();
+                window.focus(&focus, cx)
+            });
             if crate::app::AurisApp::wants_menu_bar() {
                 utility.simulate_keystrokes("tab");
             }

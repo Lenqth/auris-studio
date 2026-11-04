@@ -45,7 +45,7 @@ mod ui;
 use std::path::PathBuf;
 
 use auris_session::{Settings, WindowPlacement};
-use gpui::{App, Application, Bounds, Pixels, WindowBounds, px, size};
+use gpui::{App, Bounds, Pixels, WindowBounds, px, size};
 
 use dock::PanelLayout;
 use menu::{MenuState, menus};
@@ -73,7 +73,7 @@ fn main() {
     // open-document event rather than an argument. The handler has no window to talk to, so it
     // posts the URLs here and the window collects them once it exists.
     let (handed_over, open_requests) = std::sync::mpsc::channel::<Vec<String>>();
-    let application = Application::new().with_assets(atelier::Assets::with_fallback(
+    let application = gpui_platform::application().with_assets(atelier::Assets::with_fallback(
         ui::provider_logo::ProviderAssets,
     ));
     application.on_open_urls(move |urls| {
@@ -144,11 +144,11 @@ fn main() {
         cx.spawn(async move |cx| {
             loop {
                 if termination::take_request() {
-                    let _ = cx.update(project_windows::request_quit);
+                    cx.update(project_windows::request_quit);
                 }
                 while let Ok(urls) = open_requests.try_recv() {
                     for path in urls.iter().filter_map(|url| handed_over_project(url)) {
-                        let _ = cx.update(|cx| project_windows::open(Some(path), cx));
+                        cx.update(|cx| project_windows::open(Some(path), cx));
                     }
                 }
                 cx.background_executor()

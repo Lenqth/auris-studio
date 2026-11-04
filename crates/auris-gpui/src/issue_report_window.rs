@@ -1,5 +1,6 @@
 //! Local report preparation, exact-excerpt consent and isolated optional AI diagnosis.
 
+use crate::actions::SecondaryModifier as _;
 use std::{cell::RefCell, rc::Rc, sync::mpsc};
 
 use auris_i18n::{Key, Language};
@@ -346,22 +347,20 @@ impl IssueReportWindow {
                         this.fields[index].place_caret(offset, event.modifiers.shift);
                     }
                     this.active = Some(index);
-                    window.focus(&pointer_focus);
+                    window.focus(&pointer_focus, cx);
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(
-                cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                    this.viewports[index].borrow_mut().scroll_by(
-                        event
-                            .delta
-                            .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
-                            .y,
-                    );
-                    cx.stop_propagation();
-                    cx.notify();
-                }),
-            )
+            .on_scroll(cx.listener(move |this, event: &gpui::ScrollEvent, _, cx| {
+                this.viewports[index].borrow_mut().scroll_by(
+                    event
+                        .delta
+                        .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
+                        .y,
+                );
+                cx.stop_propagation();
+                cx.notify();
+            }))
             .into_any_element()
     }
 
@@ -461,9 +460,9 @@ impl IssueReportWindow {
         }
         if key == "tab" {
             if event.keystroke.modifiers.shift {
-                window.focus_prev();
+                window.focus_prev(cx);
             } else {
-                window.focus_next();
+                window.focus_next(cx);
             }
             cx.stop_propagation();
             cx.notify();
@@ -496,7 +495,7 @@ impl IssueReportWindow {
                 _ => self.fields[index].apply_key_with_clipboard(
                     key,
                     modifiers.shift,
-                    modifiers.secondary(),
+                    modifiers.is_secondary(),
                     index != 0,
                     cx,
                 ),
@@ -538,7 +537,7 @@ impl Render for IssueReportWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.theme = cx.global::<Theme>().clone();
         if !self.focus.contains_focused(window, cx) {
-            window.focus(&self.foci[0]);
+            window.focus(&self.foci[0], cx);
         }
         self.active = self.foci.iter().position(|f| f.is_focused(window));
         self.sync_draft();

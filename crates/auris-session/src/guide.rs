@@ -3041,9 +3041,10 @@ pub mod platforms {
     //! # Never name a platform key
     //!
     //! gpui's `Modifiers::platform` is ⌘ on macOS and the *Windows key* on Windows, which the
-    //! shell claims first. Read `Modifiers::secondary()`, and write `secondary-` in a keystroke,
-    //! never `cmd-`. A default written as `cmd-s` binds the Windows key from a Mac and the command
-    //! silently stops existing.
+    //! shell claims first. Read the desktop's `is_secondary()`, which decides at compile time
+    //! because gpui's own `secondary` has to ask a running `App`, and write `secondary-` in a
+    //! keystroke, never `cmd-`. A default written as `cmd-s` binds the Windows key from a Mac
+    //! and the command silently stops existing.
     //!
     //! # The keystroke a user sees is not the keystroke that is stored
     //!

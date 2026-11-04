@@ -351,7 +351,7 @@ impl AurisApp {
             .h(PROJECT_SPECTROGRAM_HEIGHT)
             .flex_shrink_0()
             .overflow_hidden()
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                 this.scroll_timeline(event, cx);
             }))
             .child(
@@ -534,6 +534,7 @@ pub(crate) fn paint_spectrogram(
         return;
     };
     if let Err(error) = window.paint_image(
+        bounds,
         image_bounds,
         Corners::default(),
         Arc::clone(&spectrum.image),

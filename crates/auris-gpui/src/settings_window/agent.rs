@@ -425,7 +425,7 @@ impl SettingsWindow {
             }
             let key = event.keystroke.key.as_str();
             let shift = event.keystroke.modifiers.shift;
-            let secondary = event.keystroke.modifiers.secondary();
+            let secondary = event.keystroke.modifiers.is_secondary();
             if self.agent.fields[index].marked().is_some() {
                 return false;
             }
@@ -465,7 +465,7 @@ impl SettingsWindow {
         self.agent.fields[index].apply_key_with_clipboard(
             &event.keystroke.key,
             event.keystroke.modifiers.shift,
-            event.keystroke.modifiers.secondary(),
+            event.keystroke.modifiers.is_secondary(),
             false,
             cx,
         ) != KeyEffect::Ignored
@@ -527,7 +527,7 @@ impl SettingsWindow {
                     );
                     this.agent.active = Some(index);
                     this.editing_search = false;
-                    window.focus(&focus);
+                    window.focus(&focus, cx);
                     cx.notify();
                 }),
             )
@@ -595,27 +595,25 @@ impl SettingsWindow {
                     }
                     this.agent.active = Some(index);
                     this.editing_search = false;
-                    window.focus(&pointer_focus);
+                    window.focus(&pointer_focus, cx);
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(
-                cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                    let viewport = if index == AgentSettings::PREFERENCE_FIELD {
-                        &this.personalization.viewport
-                    } else {
-                        &this.agent.prompt_viewport
-                    };
-                    viewport.borrow_mut().scroll_by(
-                        event
-                            .delta
-                            .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
-                            .y,
-                    );
-                    cx.stop_propagation();
-                    cx.notify();
-                }),
-            )
+            .on_scroll(cx.listener(move |this, event: &gpui::ScrollEvent, _, cx| {
+                let viewport = if index == AgentSettings::PREFERENCE_FIELD {
+                    &this.personalization.viewport
+                } else {
+                    &this.agent.prompt_viewport
+                };
+                viewport.borrow_mut().scroll_by(
+                    event
+                        .delta
+                        .pixel_delta(crate::ui::text_area::AREA_LINE_HEIGHT)
+                        .y,
+                );
+                cx.stop_propagation();
+                cx.notify();
+            }))
             .into_any_element()
     }
 
@@ -815,7 +813,7 @@ impl SettingsWindow {
                         cx.listener(|this, _, window, cx| {
                             this.agent.active = None;
                             this.editing_search = false;
-                            window.focus(&this.agent.provider_check_focus);
+                            window.focus(&this.agent.provider_check_focus, cx);
                             this.check_agent_providers(cx);
                         }),
                     )
@@ -1241,9 +1239,7 @@ mod tests {
         handle
             .read_with(cx, |this, _| assert!(!this.agent.expanded_providers[0]))
             .unwrap();
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse("enter").unwrap(),
-        });
+        crate::harness::tap_key("enter", cx);
         cx.run_until_parked();
         handle
             .read_with(cx, |this, _| assert!(this.agent.expanded_providers[0]))
@@ -1261,7 +1257,7 @@ mod tests {
         // Additional settings can move a control below the initial viewport.
         // Scroll as a user would before testing their pointer and caret behavior.
         if field.top() < body.top() || field.bottom() > body.bottom() {
-            cx.simulate_event(gpui::ScrollWheelEvent {
+            cx.simulate_event(gpui::ScrollEvent {
                 position: body.center(),
                 delta: gpui::ScrollDelta::Pixels(gpui::point(
                     px(0.0),
@@ -1345,7 +1341,7 @@ mod tests {
                 this.agent.fields[AgentSettings::PROMPT_FIELD].selection()
             })
             .unwrap();
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position,
             delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), px(-300.0))),
             ..Default::default()

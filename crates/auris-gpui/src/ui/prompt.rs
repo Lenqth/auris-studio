@@ -5,6 +5,7 @@
 //! [`TextField`]. Registering happens inside the field's paint, which is the only place gpui
 //! allows it and conveniently also the only time a prompt is on screen.
 
+use crate::actions::SecondaryModifier as _;
 use std::ops::Range;
 
 use auris_i18n::{Key, Language, messages};
@@ -1615,7 +1616,7 @@ impl AurisApp {
         let shift = event.keystroke.modifiers.shift;
         // ⌘ on macOS, Ctrl elsewhere. Reading `platform` directly would put select-all on the
         // Windows key, which opens the shell's own menu long before the application sees it.
-        let command = event.keystroke.modifiers.secondary();
+        let command = event.keystroke.modifiers.is_secondary();
 
         if let Some(foci) = self
             .prompt
@@ -1649,7 +1650,7 @@ impl AurisApp {
                         } else {
                             (focused + 1) % handles.len()
                         };
-                        window.focus(&handles[next]);
+                        window.focus(&handles[next], cx);
                         return true;
                     }
                     "enter" if command => {
@@ -1714,7 +1715,7 @@ impl AurisApp {
                     } else {
                         (current + 1) % handles.len()
                     };
-                    window.focus(handles[next]);
+                    window.focus(handles[next], cx);
                 }
                 "enter" | "space" | " " => self.activate_focused_prompt_button(window, cx),
                 "delete" if recovery_question => self.deny_prompt(window, cx),
@@ -2108,7 +2109,7 @@ impl AurisApp {
                                     field.caret_to_end();
                                 }
                             }
-                            this.focus.focus(window);
+                            this.focus.focus(window, cx);
                             cx.notify();
                         }),
                     )

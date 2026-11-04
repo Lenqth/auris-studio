@@ -151,7 +151,9 @@ pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<AurisApp>, &mut VisualTes
     // the keyboard: without this, every binding scoped to a pane would be off the dispatch path
     // and the test would be checking a window nobody had clicked into yet.
     cx.update(|window, cx| {
-        app.update(cx, |this, _| this.focus_pane(Pane::Arrangement, window));
+        app.update(cx, |this, cx| {
+            this.focus_pane(Pane::Arrangement, window, cx)
+        });
     });
     cx.run_until_parked();
     (app, cx)
@@ -275,6 +277,17 @@ pub(crate) fn select_text(
     paint(app, cx);
     release(cx, to);
     paint(app, cx);
+}
+
+/// Presses `key` and lets it go, which is how a focused control is pressed from the keyboard.
+///
+/// Both halves, because gpui presses a control on the release only when it also saw the press:
+/// a release on its own presses nothing, as with a real keyboard whose key went down elsewhere.
+pub(crate) fn tap_key(key: &'static str, cx: &mut VisualTestContext) {
+    cx.simulate_keystrokes(key);
+    cx.simulate_event(gpui::KeyUpEvent {
+        keystroke: crate::actions::parse_keystroke(key).unwrap(),
+    });
 }
 
 /// Puts the left button down at `at`, and leaves it down.
@@ -449,9 +462,9 @@ pub(crate) fn show_pitch(app: &Entity<AurisApp>, cx: &mut VisualTestContext, pit
 /// Holds the platform's command modifier down for one gesture.
 ///
 /// What the default create gesture is bound to, in the roll and on the lanes alike — ⌘ on macOS
-/// and Ctrl elsewhere, which is [`Modifiers::secondary_key`]'s whole job. Never spell out either.
+/// and Ctrl elsewhere, which is [`crate::actions::secondary_key`]'s whole job. Never spell out either.
 pub(crate) fn creating() -> Modifiers {
-    Modifiers::secondary_key()
+    crate::actions::secondary_key()
 }
 
 /// Holds the option key down for one gesture, which is what the default delete is bound to.

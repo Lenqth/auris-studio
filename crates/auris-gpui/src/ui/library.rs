@@ -309,7 +309,7 @@ fn cluster_line(
         // One line: without `whitespace_nowrap` a shrinking name wraps a letter to a line and
         // the row grows as tall as the name is long.
         .whitespace_nowrap()
-        .child(div().flex_shrink().min_w_0().overflow_hidden().child(
+        .child(div().flex_shrink_1().min_w_0().overflow_hidden().child(
             crate::ui::timbre_map::cluster_label(tag.name.clone(), tag.by_ai),
         ))
         .when(!rest.is_empty(), |line| {

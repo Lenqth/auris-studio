@@ -568,7 +568,7 @@ impl AurisApp {
                         .frame
                         .is_none_or(|frame| frame.active == 0)
                     {
-                        window.focus(&this.focus);
+                        window.focus(&this.focus, cx);
                     }
                     cx.notify();
                 })),

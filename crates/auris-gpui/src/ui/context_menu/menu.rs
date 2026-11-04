@@ -13,7 +13,7 @@ use gpui::{
     AnyElement, Context, IntoElement, MouseButton, MouseDownEvent, Pixels, Point, ScrollHandle,
     SharedString, Size, Window, div, point, prelude::*, px, size,
 };
-use gpui_component::scroll::{Scrollbar, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 
 use crate::app::AurisApp;
 use crate::theme::Metrics;
@@ -466,7 +466,7 @@ impl AurisApp {
                     // The menu owns keyboard activation while it is open. Move focus to its
                     // dedicated target now, before the next render, so Atelier's control
                     // interceptor cannot press the trigger underneath the overlay.
-                    window.focus(&this.menu_focus);
+                    window.focus(&this.menu_focus, cx);
                 }
                 this.open_menu(menu);
                 if opened {
@@ -669,8 +669,7 @@ impl AurisApp {
                                         .children(rows),
                                 )
                                 .child(
-                                    Scrollbar::vertical(&menu.scroll)
-                                        .scrollbar_show(ScrollbarShow::Always),
+                                    Scrollbar::vertical(&menu.scroll).mode(ScrollbarMode::Always),
                                 ),
                         ),
                 )

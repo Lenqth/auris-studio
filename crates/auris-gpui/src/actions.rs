@@ -308,7 +308,7 @@ pub fn reachable_from(context: &str, keystroke: &str) -> String {
     }
     // Bare shortcuts yield to focused controls. Traversal and dismissal still belong to the
     // containing surface, including when a control holds focus.
-    if gpui::Keystroke::parse(&normalise_keystroke(keystroke)).is_ok_and(|stroke| {
+    if parse_keystroke(&normalise_keystroke(keystroke)).is_ok_and(|stroke| {
         !stroke.modifiers.modified() && !matches!(stroke.key.as_str(), "tab" | "escape")
     }) {
         predicate.push_str(" && !AtelierControl");
@@ -428,7 +428,7 @@ macro_rules! bindable {
                     $(let alternate = Some($alternate);)?
                     alternate
                 },
-                bind: |keys, context| KeyBinding::new(keys, $action, Some(context)),
+                bind: |keys, context| KeyBinding::new(binding_keystroke(keys), $action, Some(context)),
                 make: || Box::new($action),
             },)*)*
         ];
@@ -698,6 +698,70 @@ pub fn context_label(context: &str) -> Option<Key> {
     }
 }
 
+/// The system this build runs on, as gpui's keystroke parser names it.
+///
+/// gpui-pre resolves `secondary-` only against a named system, and otherwise asks the running
+/// `App`. The answer is fixed when this is compiled, and a keystroke from a settings file is read
+/// long before, and far from, any `App`.
+pub(crate) const HOST_OS: gpui::OperatingSystem = if cfg!(target_os = "macos") {
+    gpui::OperatingSystem::Mac
+} else if cfg!(target_os = "windows") {
+    gpui::OperatingSystem::Windows
+} else {
+    gpui::OperatingSystem::Linux
+};
+
+/// Parses one keystroke, `secondary-` included, for this platform.
+pub(crate) fn parse_keystroke(chunk: &str) -> Result<gpui::Keystroke, gpui::InvalidKeystrokeError> {
+    gpui::Keystroke::parse_with_os(chunk, HOST_OS)
+}
+
+/// The platform's command modifier: ⌘ on macOS, Ctrl everywhere else.
+///
+/// gpui's own `Modifiers::secondary` takes the `App` to ask which system it is on, and so cannot
+/// be read inside a closure that already holds it mutably. The system is known at compile time.
+pub(crate) trait SecondaryModifier {
+    /// Whether the command modifier is held.
+    fn is_secondary(&self) -> bool;
+}
+
+impl SecondaryModifier for gpui::Modifiers {
+    fn is_secondary(&self) -> bool {
+        if cfg!(target_os = "macos") {
+            self.platform
+        } else {
+            self.control
+        }
+    }
+}
+
+/// [`Modifiers`](gpui::Modifiers) with only the platform's command modifier held.
+#[cfg(test)]
+pub(crate) fn secondary_key() -> gpui::Modifiers {
+    if cfg!(target_os = "macos") {
+        gpui::Modifiers::command()
+    } else {
+        gpui::Modifiers::control()
+    }
+}
+
+/// `keystroke` as `KeyBinding::new` takes it: modifiers spelt out, and `'static`.
+///
+/// gpui-pre's static constructor resolves no `secondary-`, and its dynamic one wants an `App`
+/// the keymap is often built without. Each distinct keystroke is leaked once and kept: there are
+/// as many as the user has ever bound, not one per rebinding.
+pub(crate) fn binding_keystroke(keystroke: &str) -> &'static str {
+    static INTERNED: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+    let normalised = normalise_keystroke(keystroke);
+    let mut interned = INTERNED.lock().unwrap_or_else(|poison| poison.into_inner());
+    if let Some(found) = interned.iter().find(|known| **known == normalised) {
+        return found;
+    }
+    let leaked: &'static str = Box::leak(normalised.into_boxed_str());
+    interned.push(leaked);
+    leaked
+}
+
 /// `keystroke` written the way this platform writes it.
 ///
 /// The defaults above say `secondary-`, which gpui resolves to ⌘ on macOS and to Ctrl
@@ -713,8 +777,8 @@ pub fn normalise_keystroke(keystroke: &str) -> String {
     keystroke
         .split_whitespace()
         .map(|chunk| {
-            gpui::Keystroke::parse(chunk)
-                .map(|parsed| parsed.unparse())
+            parse_keystroke(chunk)
+                .map(|parsed| parsed.unparse(HOST_OS))
                 .unwrap_or_else(|_| chunk.to_string())
         })
         .collect::<Vec<_>>()
@@ -751,7 +815,7 @@ pub fn portable_keystroke(keystroke: &str) -> String {
 
 /// One keystroke of a binding, with the platform's command modifier written as `secondary-`.
 fn portable_chunk(chunk: &str) -> String {
-    let Ok(parsed) = gpui::Keystroke::parse(chunk) else {
+    let Ok(parsed) = parse_keystroke(chunk) else {
         return chunk.to_string();
     };
     let modifiers = parsed.modifiers;
@@ -763,7 +827,7 @@ fn portable_chunk(chunk: &str) -> String {
     if modifiers.function {
         out.push_str("fn-");
     }
-    if modifiers.secondary() {
+    if modifiers.is_secondary() {
         out.push_str("secondary-");
     }
     // Control and the platform key are one pair seen from two sides: on macOS `secondary` is ⌘,
@@ -796,7 +860,7 @@ fn portable_chunk(chunk: &str) -> String {
 
 /// One keystroke of a possibly multi-stroke binding, prettified.
 fn pretty_chunk(chunk: &str) -> String {
-    let Ok(parsed) = gpui::Keystroke::parse(chunk) else {
+    let Ok(parsed) = parse_keystroke(chunk) else {
         return chunk.to_string();
     };
     let modifiers = parsed.modifiers;
@@ -880,8 +944,7 @@ pub fn is_valid_keystroke(keystroke: &str) -> bool {
     if chunks.peek().is_none() {
         return false;
     }
-    chunks
-        .all(|chunk| gpui::Keystroke::parse(chunk).is_ok_and(|keystroke| !keystroke.key.is_empty()))
+    chunks.all(|chunk| parse_keystroke(chunk).is_ok_and(|keystroke| !keystroke.key.is_empty()))
 }
 
 /// Installs `bindings`, replacing whatever was bound before.
@@ -897,12 +960,12 @@ pub fn install_bindings(cx: &mut App, bindings: impl IntoIterator<Item = KeyBind
     // Keymap replacement must retain the native read-only text editing commands.
     cx.bind_keys([
         KeyBinding::new(
-            &normalise_keystroke("secondary-c"),
+            binding_keystroke("secondary-c"),
             atelier::CopySelection,
             Some(atelier::SELECTABLE_CONTEXT),
         ),
         KeyBinding::new(
-            &normalise_keystroke("secondary-a"),
+            binding_keystroke("secondary-a"),
             atelier::SelectAll,
             Some(atelier::SELECTABLE_CONTEXT),
         ),
@@ -912,13 +975,13 @@ pub fn install_bindings(cx: &mut App, bindings: impl IntoIterator<Item = KeyBind
     // to Auris, which is also why the table above leaves ⌘M alone.
     if cfg!(target_os = "macos") {
         cx.bind_keys([
-            KeyBinding::new(&normalise_keystroke("secondary-h"), HideApplication, None),
-            KeyBinding::new(&normalise_keystroke("secondary-m"), MinimizeWindow, None),
+            KeyBinding::new(binding_keystroke("secondary-h"), HideApplication, None),
+            KeyBinding::new(binding_keystroke("secondary-m"), MinimizeWindow, None),
         ]);
     }
     // The global reset also removes gpui-component's text-selection shortcut.
     cx.bind_keys([KeyBinding::new(
-        "secondary-c",
+        binding_keystroke("secondary-c"),
         gpui_component::input::Copy,
         Some("TextView"),
     )]);
@@ -1139,7 +1202,7 @@ mod tests {
                 "`{id}` is on `{default}`, which the keyboard plays"
             );
             // And it still parses, which is the half a formatted string can get wrong.
-            gpui::KeyBinding::new(default, PanicStop, Some(&predicate));
+            gpui::KeyBinding::new(binding_keystroke(default), PanicStop, Some(&predicate));
         }
     }
 

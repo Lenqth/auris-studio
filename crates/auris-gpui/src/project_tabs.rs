@@ -33,11 +33,11 @@ impl ProjectTabs {
         });
         let project = cx.new(AurisApp::new);
         let owner = cx.entity().downgrade();
-        project.update(cx, |view, _| {
+        project.update(cx, |view, cx| {
             view.project_tabs = Some(owner);
             view.project_window = Some(window.window_handle().window_id());
             let _ = view.session.set_audio_suspended(true);
-            view.focus_pane(Pane::Arrangement, window);
+            view.focus_pane(Pane::Arrangement, window, cx);
         });
         Self {
             projects: vec![project],
@@ -77,9 +77,9 @@ impl ProjectTabs {
             view.main_was_active = false;
             view.titled.clear();
             if view.project_chooser.is_some() {
-                window.focus(&view.focus);
+                window.focus(&view.focus, cx);
             } else {
-                view.focus_pane(view.last_pane, window);
+                view.focus_pane(view.last_pane, window, cx);
             }
             cx.notify();
         });

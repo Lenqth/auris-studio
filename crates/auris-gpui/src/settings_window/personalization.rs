@@ -20,7 +20,7 @@ impl SettingsWindow {
         self.personalization.error = None;
         self.agent.active = None;
         self.editing_search = true;
-        window.focus(&self.search_focus);
+        window.focus(&self.search_focus, cx);
         cx.notify();
     }
     fn preference_operation(
@@ -292,7 +292,7 @@ impl SettingsWindow {
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.save_preference(cx);
                                 if this.personalization.busy {
-                                    window.focus(&this.search_focus);
+                                    window.focus(&this.search_focus, cx);
                                 }
                             })),
                     ),
@@ -382,6 +382,7 @@ impl SettingsWindow {
                                     this.personalization.viewport.borrow_mut().follow_caret();
                                     window.focus(
                                         &this.agent.focus[agent::AgentSettings::PREFERENCE_FIELD],
+                                        cx,
                                     );
                                     cx.notify();
                                 })),

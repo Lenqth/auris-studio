@@ -64,7 +64,7 @@ impl ReasoningPicker {
 
     fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = false;
-        self.focus.focus(window);
+        self.focus.focus(window, cx);
         cx.notify();
     }
 }
@@ -136,9 +136,9 @@ impl Render for ReasoningPicker {
                         this.open = !was_open;
                         if this.open {
                             cx.emit(Change::Opened);
-                            this.slider_focus.focus(window);
+                            this.slider_focus.focus(window, cx);
                         } else {
-                            this.focus.focus(window);
+                            this.focus.focus(window, cx);
                         }
                         cx.notify();
                     }),
@@ -164,7 +164,7 @@ impl Render for ReasoningPicker {
                 root.child(gpui::deferred(
                     div().absolute().bottom_full().right_0().pb_2().child(
                         gpui::anchored()
-                            .anchor(gpui::Corner::BottomRight)
+                            .anchor(gpui::Anchor::BottomRight)
                             .snap_to_window_with_margin(theme.atelier.spacing.sm)
                             .child(self.card(index, language, cx)),
                     ),

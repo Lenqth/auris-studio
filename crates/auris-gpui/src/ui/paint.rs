@@ -212,7 +212,14 @@ pub fn label(
         .shape_line(text, font_size, &[run], None);
     let width = line.width;
     // Ignore paint failures: a missing glyph must not take down the frame.
-    let _ = line.paint(origin, font_size * LINE_HEIGHT, window, cx);
+    let _ = line.paint(
+        origin,
+        font_size * LINE_HEIGHT,
+        gpui::TextAlign::Left,
+        None,
+        window,
+        cx,
+    );
     width
 }
 
@@ -262,7 +269,14 @@ pub fn label_right(
         .shape_line(text, font_size, &[run], None);
     let width = line.width;
     let origin = point(right.x - width, right.y);
-    let _ = line.paint(origin, font_size * LINE_HEIGHT, window, cx);
+    let _ = line.paint(
+        origin,
+        font_size * LINE_HEIGHT,
+        gpui::TextAlign::Left,
+        None,
+        window,
+        cx,
+    );
     width
 }
 
@@ -829,6 +843,7 @@ pub fn loop_handle_mark(window: &mut Window, cx: &App, zone: Bounds<Pixels>, the
             size: size(glyph, glyph),
         },
         atelier::IconName::Loop.path().into(),
+        None,
         gpui::TransformationMatrix::unit(),
         theme.accent,
         cx,

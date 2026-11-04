@@ -1,7 +1,7 @@
 use super::*;
 use crate::dock::{Dock, Panel};
 use crate::harness::{drag, open, paint};
-use gpui::{Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, point};
+use gpui::{Modifiers, ScrollDelta, ScrollEvent, TestAppContext, point};
 
 #[gpui::test]
 fn routing_edits_preserve_untouched_card_positions_across_reopening(cx: &mut TestAppContext) {
@@ -84,7 +84,7 @@ fn gestures_save_and_reopen_restore_each_node_and_the_canvas_camera(cx: &mut Tes
         (true, point(px(0.), px(25.))),
         (false, point(px(55.), px(-33.))),
     ] {
-        cx.simulate_event(ScrollWheelEvent {
+        cx.simulate_event(ScrollEvent {
             position: at,
             delta: ScrollDelta::Pixels(delta),
             modifiers: Modifiers {

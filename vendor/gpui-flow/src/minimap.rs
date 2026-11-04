@@ -1,4 +1,3 @@
-use crate::PixelsExt;
 use gpui::*;
 
 use crate::store::FlowState;

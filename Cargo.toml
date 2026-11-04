@@ -147,7 +147,7 @@ debug = 1
 opt-level = 0
 
 # Trade optimization for compilation time in these large UI/model dependencies.
-[profile.dev.package.gpui]
+[profile.dev.package.gpui-pre]
 opt-level = 1
 
 [profile.dev.package.gpui-component]

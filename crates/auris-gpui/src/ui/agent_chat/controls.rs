@@ -1328,8 +1328,8 @@ mod tests {
         });
 
         cx.update(|window, cx| {
-            app.update(cx, |this, _| {
-                this.focus_pane(crate::app::Pane::Arrangement, window)
+            app.update(cx, |this, cx| {
+                this.focus_pane(crate::app::Pane::Arrangement, window, cx)
             });
         });
         crate::harness::paint(&app, cx);

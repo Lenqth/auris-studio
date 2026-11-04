@@ -21,8 +21,11 @@ Development happens on macOS, so the Windows-only paths are the ones that rot; t
 keep them alive:
 
 * **Never name a platform key.** gpui's `Modifiers::platform` is ⌘ on macOS and the *Windows
-  key* on Windows, which the shell claims first. Read `Modifiers::secondary()`, and write
-  `secondary-` in a keystroke, never `cmd-`.
+  key* on Windows, which the shell claims first. Read `is_secondary()` (the
+  `actions::SecondaryModifier` trait; gpui's own `secondary` wants an `App`), and write
+  `secondary-` in a keystroke, never `cmd-`. gpui-pre resolves `secondary-` only against a named
+  system, so a keystroke from a string goes through `actions::parse_keystroke` and a binding
+  through `actions::binding_keystroke`.
 * **Decide with `cfg!`, not `#[cfg]`,** wherever it is a choice rather than an API that only
   exists on one platform. Both arms then compile and their tests run everywhere, which is the
   only reason the Windows menu bar can be checked from a Mac.

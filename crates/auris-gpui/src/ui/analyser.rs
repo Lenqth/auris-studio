@@ -366,13 +366,11 @@ impl AurisApp {
                     cx.notify();
                 }),
             )
-            .on_scroll_wheel(
-                cx.listener(move |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                    let notches = f32::from(event.delta.pixel_delta(px(16.0)).y) / 16.0;
-                    this.scroll_eq_node(subject, event.position, notches);
-                    cx.notify();
-                }),
-            )
+            .on_scroll(cx.listener(move |this, event: &gpui::ScrollEvent, _, cx| {
+                let notches = f32::from(event.delta.pixel_delta(px(16.0)).y) / 16.0;
+                this.scroll_eq_node(subject, event.position, notches);
+                cx.notify();
+            }))
             .into_any_element()
     }
 

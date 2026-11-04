@@ -141,8 +141,8 @@ including the ⌘-click that places a note; the settings window shows whichever 
 front of it has. And the menu bar is drawn inside the window rather than by the system, because
 Windows has no system menu bar to draw it.
 
-`auris-gpu` runs on Vulkan on Windows. The plugin hosts use Windows 0.62 bindings;
-released GPUI uses Windows 0.61. GPU analysis is optional and falls back to the CPU
+`auris-gpu` runs on Vulkan on Windows. The plugin hosts and GPUI (the gpui-pre snapshot) both
+use Windows 0.62 bindings. GPU analysis is optional and falls back to the CPU
 when no adapter is available.
 
 ### macOS without a full Xcode install

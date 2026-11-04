@@ -20,7 +20,7 @@ pub fn activity_indicator(id: impl Into<ElementId>, color: Hsla) -> gpui::AnyEle
     let selector = id.clone();
     div()
         .id(ElementId::NamedChild(
-            Box::new(id.clone()),
+            std::sync::Arc::new(id.clone()),
             "activity".into(),
         ))
         .debug_selector(move || selector.to_string())
@@ -166,7 +166,10 @@ where
 // The native button owns all painting, focus, activation and its original test selector.
 fn command_frame(id: ElementId, command: atelier::Button) -> gpui::Stateful<gpui::Div> {
     div()
-        .id(ElementId::NamedChild(Box::new(id), "layout".into()))
+        .id(ElementId::NamedChild(
+            std::sync::Arc::new(id),
+            "layout".into(),
+        ))
         .flex()
         .flex_none()
         .child(command)
@@ -570,7 +573,8 @@ pub fn bounded_picker_label(value: impl Into<SharedString>) -> gpui::Div {
                         bounds.left(),
                         bounds.top() + (bounds.size.height - line_height) / 2.0,
                     );
-                    let _ = line.paint(origin, line_height, window, cx);
+                    let _ =
+                        line.paint(origin, line_height, gpui::TextAlign::Left, None, window, cx);
                 },
             )
             .absolute()
@@ -589,14 +593,19 @@ fn shape_picker_label(
     let line_height = style
         .line_height
         .to_pixels(font_size.into(), window.rem_size());
-    // GPUI's measured text reuses runs after truncating them. Measuring a Japanese value
-    // first narrowly and then widely can leave a run ending inside a UTF-8 character. Each
-    // canvas layout starts from the complete value and fresh runs instead.
-    let mut runs = vec![style.to_run(value.len())];
-    let shown = window
+    // A run reused after truncation can end inside a UTF-8 character of a Japanese value. Each
+    // canvas layout starts from the complete value, and the shown text gets a fresh run.
+    let runs = [style.to_run(value.len())];
+    let (shown, _) = window
         .text_system()
         .line_wrapper(style.font(), font_size)
-        .truncate_line(value, width.max(px(0.0)), "…", &mut runs);
+        .truncate_line(
+            value,
+            width.max(px(0.0)),
+            "…",
+            &runs,
+            gpui::TruncateFrom::End,
+        );
     let run = style.to_run(shown.len());
     let line = window
         .text_system()
@@ -1435,9 +1444,9 @@ mod tests {
                 .on_key_down(cx.listener(|_, event: &gpui::KeyDownEvent, window, cx| {
                     if event.keystroke.key == "tab" {
                         if event.keystroke.modifiers.shift {
-                            window.focus_prev();
+                            window.focus_prev(cx);
                         } else {
-                            window.focus_next();
+                            window.focus_next(cx);
                         }
                         cx.stop_propagation();
                     }
@@ -1468,9 +1477,9 @@ mod tests {
                 .on_key_down(cx.listener(|_, event: &gpui::KeyDownEvent, window, cx| {
                     if event.keystroke.key == "tab" {
                         if event.keystroke.modifiers.shift {
-                            window.focus_prev();
+                            window.focus_prev(cx);
                         } else {
-                            window.focus_next();
+                            window.focus_next(cx);
                         }
                         cx.stop_propagation();
                     }
@@ -1505,12 +1514,6 @@ mod tests {
         }
     }
 
-    fn release(key: &str, cx: &mut gpui::VisualTestContext) {
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse(key).unwrap(),
-        });
-    }
-
     #[gpui::test]
     fn shared_buttons_tab_both_ways_activate_and_skip_disabled(cx: &mut TestAppContext) {
         cx.update(|cx| Theme::dark().install(cx));
@@ -1521,20 +1524,20 @@ mod tests {
             disabled: 0,
         });
         cx.update(|window, cx| {
-            view.update(cx, |view, _| window.focus(&view.focus));
+            view.update(cx, |view, cx| window.focus(&view.focus, cx));
         });
         cx.run_until_parked();
 
         cx.simulate_keystrokes("tab");
-        release("enter", cx);
+        crate::harness::tap_key("enter", cx);
         cx.simulate_keystrokes("tab");
-        release("space", cx);
+        crate::harness::tap_key("space", cx);
         // The disabled third control is not a tab stop, so forward traversal wraps to Primary.
         cx.simulate_keystrokes("tab");
-        release("enter", cx);
+        crate::harness::tap_key("enter", cx);
         // Reverse traversal reaches Secondary again.
         cx.simulate_keystrokes("shift-tab");
-        release("space", cx);
+        crate::harness::tap_key("space", cx);
         crate::harness::click("keyboard-disabled", cx);
 
         view.read_with(cx, |view, _| {
@@ -1553,7 +1556,7 @@ mod tests {
             fraction: 0.5,
         });
         cx.update(|window, cx| {
-            view.update(cx, |view, _| window.focus(&view.focus));
+            view.update(cx, |view, cx| window.focus(&view.focus, cx));
         });
         cx.run_until_parked();
 

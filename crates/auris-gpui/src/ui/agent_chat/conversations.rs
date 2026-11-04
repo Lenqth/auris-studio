@@ -896,7 +896,7 @@ impl AurisApp {
             } else if self.agent_chat.focused == Some(AgentField::ConversationSearch)
                 && self.pane_focused(Pane::Agent, window, cx)
             {
-                window.focus(&focus);
+                window.focus(&focus, cx);
             }
             let search = self.panel_field(
                 "agent-conversation-search",

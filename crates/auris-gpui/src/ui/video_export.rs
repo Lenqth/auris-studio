@@ -786,7 +786,7 @@ impl AurisApp {
     ) -> gpui::Div {
         let side = |name: &'static str, caption: &'static str, direction: f32| {
             button(
-                ElementId::NamedChild(Box::new(id.into()), name.into()),
+                ElementId::NamedChild(std::sync::Arc::new(id.into()), name.into()),
                 caption,
                 ButtonStyle::Normal,
                 false,

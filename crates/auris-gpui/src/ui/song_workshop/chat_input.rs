@@ -1,5 +1,6 @@
 //! One natural-language composer and provider controls.
 use super::*;
+use crate::actions::SecondaryModifier as _;
 use crate::ui::chat_commands::{self, CompletionKey, Scope};
 use crate::ui::context_menu::{ContextMenu, MenuCommand};
 impl AurisApp {
@@ -250,7 +251,7 @@ impl AurisApp {
                         )
                         .debug_selector(move || format!("song-draft-attachment-{index}"))
                         .flex_1()
-                        .flex_shrink(),
+                        .flex_shrink_1(),
                     )
                     .child(
                         crate::ui::widgets::button_enabled(
@@ -310,7 +311,7 @@ impl AurisApp {
                             .size(atelier::ControlSize::Small)
                             .tooltip(suffix.to_owned())
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.focus_workshop_input(window);
+                                this.focus_workshop_input(window, cx);
                                 this.accept_workshop_suggestion();
                                 cx.notify();
                             })),
@@ -333,7 +334,7 @@ impl AurisApp {
                     .on_click(cx.listener(|this, _, window, cx| {
                         if let Some(s) = &mut this.song_workshop {
                             s.input_assist.dismiss();
-                            s.foci[0].focus(window);
+                            s.foci[0].focus(window, cx);
                         }
                         cx.notify();
                     })),
@@ -459,9 +460,9 @@ impl AurisApp {
             if event.keystroke.key == "tab" {
                 s.active_field = None;
                 if event.keystroke.modifiers.shift {
-                    window.focus_prev();
+                    window.focus_prev(cx);
                 } else {
-                    window.focus_next();
+                    window.focus_next(cx);
                 }
                 cx.stop_propagation();
                 cx.notify();
@@ -469,7 +470,7 @@ impl AurisApp {
             }
             if event.keystroke.key == "enter" {
                 let modifiers = &event.keystroke.modifiers;
-                if !modifiers.secondary() {
+                if !modifiers.is_secondary() {
                     // A bare Enter only breaks the line, as in the agent's composer.
                     s.brief.insert("\n");
                 } else if modifiers.shift && (s.busy() || !s.queued.is_empty()) {
@@ -484,7 +485,7 @@ impl AurisApp {
             let effect = s.brief.apply_key_with_clipboard(
                 &event.keystroke.key,
                 event.keystroke.modifiers.shift,
-                event.keystroke.modifiers.secondary(),
+                event.keystroke.modifiers.is_secondary(),
                 true,
                 cx,
             );
@@ -502,7 +503,7 @@ impl AurisApp {
             if let Some(s) = &mut self.song_workshop {
                 s.active_field = None;
             }
-            self.focus.focus(window);
+            self.focus.focus(window, cx);
             cx.stop_propagation();
             cx.notify();
         }
@@ -523,10 +524,10 @@ impl AurisApp {
         }
     }
 
-    pub(in crate::ui) fn focus_workshop_input(&mut self, window: &mut Window) {
+    pub(in crate::ui) fn focus_workshop_input(&mut self, window: &mut Window, cx: &mut gpui::App) {
         if let Some(s) = &mut self.song_workshop {
             s.active_field = Some(0);
-            s.foci[0].focus(window);
+            s.foci[0].focus(window, cx);
         }
     }
 
@@ -726,7 +727,7 @@ impl AurisApp {
                                 event,
                             );
                         }
-                        focus.focus(window);
+                        focus.focus(window, cx);
                         cx.notify();
                     }
                 }),

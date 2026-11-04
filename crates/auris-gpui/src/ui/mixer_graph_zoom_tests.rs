@@ -1,7 +1,7 @@
 use super::*;
 use crate::dock::{Dock, Panel};
 use crate::harness::{click, drag, open, paint};
-use gpui::{Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, point};
+use gpui::{Modifiers, ScrollDelta, ScrollEvent, TestAppContext, point};
 
 #[test]
 fn fit_frames_distant_nodes_with_pixel_padding_and_extends_the_zoom_range() {
@@ -322,7 +322,7 @@ fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing_audi
             f32::from(at.y) - state.origin.1,
         )
     });
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: at,
         delta: ScrollDelta::Pixels(point(px(0.), px(30.))),
         modifiers: Modifiers {
@@ -354,7 +354,7 @@ fn control_wheel_scales_nodes_handles_and_controls_and_pans_without_editing_audi
         document
     );
     // Ordinary wheel input pans, including over a fader, without changing the gain or zoom.
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: gain_after.center(),
         delta: ScrollDelta::Pixels(point(px(12.), px(-24.))),
         ..Default::default()

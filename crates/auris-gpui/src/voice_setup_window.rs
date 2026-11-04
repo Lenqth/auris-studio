@@ -3,6 +3,7 @@
 //! It edits small connection/deployment files, never a project. The actual validation, process
 //! launch and file writing live in `auris-session`; this window only gathers and presents values.
 
+use crate::actions::SecondaryModifier as _;
 use std::path::PathBuf;
 use std::process::Child;
 
@@ -394,7 +395,7 @@ impl VoiceSetupWindow {
                             }
                             this.active = field;
                             this.field_for_mut(field).select_all();
-                            window.focus(&this.focus);
+                            window.focus(&this.focus, cx);
                             cx.stop_propagation();
                             cx.notify();
                         }),
@@ -1400,16 +1401,16 @@ impl VoiceSetupWindow {
             if self.focus.is_focused(window) {
                 if !self.move_active_field(backwards) {
                     if backwards {
-                        window.focus_prev();
+                        window.focus_prev(cx);
                     } else {
-                        window.focus_next();
+                        window.focus_next(cx);
                     }
                 }
             } else {
                 if backwards {
-                    window.focus_prev();
+                    window.focus_prev(cx);
                 } else {
-                    window.focus_next();
+                    window.focus_next(cx);
                 }
                 if self.focus.is_focused(window) {
                     self.select_edge_field(backwards);
@@ -1421,7 +1422,7 @@ impl VoiceSetupWindow {
         let effect = self.field_for_mut(self.active).apply_key_with_clipboard(
             key,
             event.keystroke.modifiers.shift,
-            event.keystroke.modifiers.secondary(),
+            event.keystroke.modifiers.is_secondary(),
             false,
             cx,
         );
@@ -1469,7 +1470,7 @@ crate::entity_input_handler!(VoiceSetupWindow);
 impl Render for VoiceSetupWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.focus.contains_focused(window, cx) {
-            window.focus(&self.focus);
+            window.focus(&self.focus, cx);
         }
         let theme = self.theme.clone();
         let titlebar = titlebar::bar(
@@ -1758,10 +1759,10 @@ mod tests {
         crate::harness::click("leap-variant-0", cx);
         crate::harness::click("leap-hop-512", cx);
         handle
-            .update(cx, |this, window, _| {
+            .update(cx, |this, window, cx| {
                 assert_eq!(this.leapsinger_setup().manifest.hop_size, 256);
                 this.active = Field::LeapEntry;
-                window.focus(&this.focus);
+                window.focus(&this.focus, cx);
             })
             .unwrap();
         cx.simulate_keystrokes("tab");
@@ -2082,9 +2083,9 @@ mod tests {
         cx.run_until_parked();
         crate::harness::click("voicevox-advanced", cx);
         handle
-            .update(cx, |this, window, _| {
+            .update(cx, |this, window, cx| {
                 this.active = Field::VoicevoxName;
-                window.focus(&this.focus);
+                window.focus(&this.focus, cx);
             })
             .unwrap();
         cx.simulate_keystrokes("tab");
@@ -2120,8 +2121,8 @@ mod tests {
         cx.run_until_parked();
         handle
             .update(cx, |this, window, cx| {
-                window.focus(&this.focus);
-                window.focus_next();
+                window.focus(&this.focus, cx);
+                window.focus_next(cx);
                 assert!(this.focus.contains_focused(window, cx));
                 assert!(!this.focus.is_focused(window));
                 cx.notify();
@@ -2150,9 +2151,9 @@ mod tests {
         let cx = &mut gpui::VisualTestContext::from_window(handle.into(), cx);
         cx.run_until_parked();
         handle
-            .update(cx, |this, window, _| {
+            .update(cx, |this, window, cx| {
                 this.active = Field::VoicevoxUrl;
-                window.focus(&this.focus);
+                window.focus(&this.focus, cx);
             })
             .unwrap();
 

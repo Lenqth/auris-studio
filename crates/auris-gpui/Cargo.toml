@@ -24,17 +24,25 @@ auris-session.workspace = true
 env_logger.workspace = true
 log.workspace = true
 
+# gpui-pre is the Zed snapshot gpui-component's author publishes; the crate is still `gpui`. The
+# released gpui 0.2.2 left Windows IME composition broken, and crates.io has nothing later.
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+# The platforms live in their own crate since that snapshot.
 # `runtime_shaders` makes gpui compile its Metal shaders through the Metal framework at startup.
 # The build-time path shells out to `xcrun metal`, which lives inside Xcode and is unreachable
 # while `xcode-select -p` points at the Command Line Tools.
-gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
-# Atelier's adopted Glass language, pinned to the reviewed main revision.
-atelier = { git = "https://github.com/uthree/design-language", rev = "331aa75561264716729b587d1f6c90a3d0f286b8" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["runtime_shaders"] }
+# Atelier's adopted Glass language, for now from the fork that carries it onto gpui-pre
+# (uthree/design-language#31). Return to the upstream repository once that is merged.
+atelier = { git = "https://github.com/Lenqth/ut-design-language", rev = "adb9164c4c8a2671d1713adb7e473b5390fdd647" }
 gpui-flow = { path = "../../vendor/gpui-flow" }
 # The agent transcript uses selectable Markdown without language-specific highlighting.
 # It shares gpui's version and stays wholly inside this presentation crate.
-# Later component releases require GPUI snapshots; 0.5.1 is the latest compatible release.
-gpui-component = "=0.5.1"
+# Each component release pins one gpui-pre snapshot; 0.8.1 is the one built on 0.3.10.
+gpui-component = "=0.8.1"
+# Its own base crate, for the one root element the component crate does not re-export: the
+# layer that makes Markdown selectable in a window.
+gpui-base = "=0.8.1"
 # Share the renderer's GFM parser; the transcript owns block and list layout.
 markdown = "1"
 # Decode voice artwork on a worker, with bounded dimensions before GPUI sees the pixels.
@@ -73,5 +81,6 @@ embed-resource = "3.0"
 # no-op into the hook `VisualTestContext::debug_bounds` reads.
 [dev-dependencies]
 hound.workspace = true
-gpui = { version = "=0.2.2", features = ["runtime_shaders", "test-support"] }
+gpui = { package = "gpui-pre", version = "=0.3.10", features = ["test-support"] }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["runtime_shaders", "test-support"] }
 tempfile.workspace = true

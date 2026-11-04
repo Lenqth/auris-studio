@@ -6,6 +6,7 @@
 //! Editing commands execute against the window's current session. They do not save or
 //! reload a project; successful edits appear on repaint and use ordinary undo history.
 
+use crate::actions::SecondaryModifier as _;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
@@ -196,7 +197,7 @@ pub(crate) fn model_key_bindings() -> [gpui::KeyBinding; 10] {
             Some("AurisReasoningPicker"),
         ),
         gpui::KeyBinding::new(
-            "secondary-r",
+            crate::actions::binding_keystroke("secondary-r"),
             NavigateAgentModel { key: "refresh" },
             Some("AurisAgentModel"),
         ),
@@ -1546,8 +1547,7 @@ impl AgentChat {
 
     /// Whether the transcript is at, or close enough to resume following, its tail.
     fn is_near_tail(&self) -> bool {
-        let remaining =
-            f32::from(self.scroll.max_offset().height) + f32::from(self.scroll.offset().y);
+        let remaining = f32::from(self.scroll.max_offset().y) + f32::from(self.scroll.offset().y);
         remaining <= f32::from(Metrics::CONTROL_HEIGHT) * 2.0
     }
 
@@ -2545,7 +2545,7 @@ impl AurisApp {
         }
         self.focus_agent_field(AgentField::Chat);
         if let Some(focus) = self.agent_chat.input_focus.as_ref() {
-            window.focus(focus);
+            window.focus(focus, cx);
         }
         cx.notify();
     }
@@ -3667,7 +3667,7 @@ impl AurisApp {
                 self.agent_approval(controls::Approval::Deny);
                 return true;
             }
-            if key == "enter" && event.keystroke.modifiers.secondary() {
+            if key == "enter" && event.keystroke.modifiers.is_secondary() {
                 self.agent_approval(if event.keystroke.modifiers.shift {
                     controls::Approval::Always
                 } else {
@@ -3716,9 +3716,9 @@ impl AurisApp {
             }
             self.agent_chat.focused = None;
             if event.keystroke.modifiers.shift {
-                window.focus_prev();
+                window.focus_prev(cx);
             } else {
-                window.focus_next();
+                window.focus_next(cx);
             }
             return true;
         }
@@ -3729,12 +3729,12 @@ impl AurisApp {
                         field.unmark();
                     }
                     self.agent_chat.focused = None;
-                    window.focus(self.panes.handle(Pane::Agent));
+                    window.focus(self.panes.handle(Pane::Agent), cx);
                     return true;
                 }
                 ("enter", AgentField::Chat) => {
                     let modifiers = &event.keystroke.modifiers;
-                    if !modifiers.secondary() {
+                    if !modifiers.is_secondary() {
                         // A bare Enter only breaks the line, so a stray keystroke cannot send a
                         // half-written request.
                         self.agent_chat.input.insert("\n");
@@ -3752,7 +3752,7 @@ impl AurisApp {
             }
         }
         let shift = event.keystroke.modifiers.shift;
-        let secondary = event.keystroke.modifiers.secondary();
+        let secondary = event.keystroke.modifiers.is_secondary();
         let effect = self
             .agent_chat
             .field_mut()
@@ -3771,7 +3771,7 @@ impl AurisApp {
     }
 
     /// The send button and Enter share validation before editing the live session.
-    fn agent_submit(&mut self, window: &mut Window, _cx: &mut gpui::Context<Self>) {
+    fn agent_submit(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         if self.agent_chat.input.marked().is_some() {
             return;
         }
@@ -3779,7 +3779,7 @@ impl AurisApp {
         if self.agent_chat.pending_send.is_some() {
             self.agent_chat.focused = None;
             if let Some(focus) = self.agent_chat.stop_focus.as_ref() {
-                window.focus(focus);
+                window.focus(focus, cx);
                 self.agent_chat.return_to_composer = true;
             }
         }
@@ -3836,7 +3836,7 @@ impl AurisApp {
         {
             // Several controls express "return to the composer" without receiving a Window.
             // Move that logical request onto the real input target on the following frame.
-            window.focus(&input_focus);
+            window.focus(&input_focus, cx);
         } else if !composer_locked
             && self.agent_chat.return_to_composer
             && stop_focus.is_focused(window)
@@ -3845,7 +3845,7 @@ impl AurisApp {
             // attachments saved, an error. Nothing else would bring the keyboard back from
             // Stop, and the next message would be typed into the window's bindings instead.
             self.focus_agent_field(AgentField::Chat);
-            window.focus(&input_focus);
+            window.focus(&input_focus, cx);
         }
         if !composer_locked {
             self.agent_chat.return_to_composer = false;
@@ -3857,7 +3857,7 @@ impl AurisApp {
         if self.agent_chat.restore_pending_focus && self.agent_chat.controls.pending.is_some() {
             self.agent_chat.restore_pending_focus = false;
             self.focus_agent_field(AgentField::Chat);
-            window.focus(&input_focus);
+            window.focus(&input_focus, cx);
         }
         // The persistent model picker uses the saved provider even before settings opens.
         self.agent_chat
@@ -3958,7 +3958,7 @@ impl AurisApp {
                     .flex()
                     .flex_col()
                     .relative()
-                    .flex_shrink()
+                    .flex_shrink_1()
                     .min_h_0()
                     .max_h(px(180.0))
                     .overflow_y_scroll()
@@ -5062,7 +5062,7 @@ impl AurisApp {
                 this.on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                        window.focus(&pointer_focus);
+                        window.focus(&pointer_focus, cx);
                         if this.agent_chat.model_menu {
                             this.agent_chat.model_menu = false;
                         } else {
@@ -5133,7 +5133,7 @@ impl AurisApp {
                     cx.listener(|this, _, window, cx| {
                         this.agent_refresh_models();
                         if let Some(focus) = &this.agent_chat.model_focus {
-                            window.focus(focus);
+                            window.focus(focus, cx);
                         }
                         cx.notify();
                     }),
@@ -5307,7 +5307,7 @@ impl AurisApp {
                     field.unmark();
                 }
                 this.agent_chat.focused = None;
-                window.focus(&focus);
+                window.focus(&focus, cx);
                 cx.stop_propagation();
             }),
         )
@@ -5370,7 +5370,7 @@ impl AurisApp {
                     cx.listener(move |this, _, window, cx| {
                         pick(this, index, cx);
                         if permissions && let Some(focus) = &this.agent_chat.controls.mode_focus {
-                            window.focus(focus);
+                            window.focus(focus, cx);
                         }
                         cx.notify();
                     }),
@@ -5442,7 +5442,7 @@ impl AurisApp {
         let bypass = controls::mode_warns(self.settings.agent.policy.mode);
         agent_components::composer_frame("agent-composer", &theme, focused && !locked, bypass)
             .when(self.agent_chat.references.midi_draft.is_some(), |frame| {
-                frame.flex_shrink().min_h_0()
+                frame.flex_shrink_1().min_h_0()
             })
             .debug_selector(|| "agent-composer".to_owned())
             .when(!self.agent_chat.queued.is_empty(), |this| {
@@ -5509,7 +5509,7 @@ impl AurisApp {
                                     SendBlocker::NoModel => {
                                         this.open_agent_model_menu();
                                         if let Some(focus) = &this.agent_chat.model_focus {
-                                            window.focus(focus);
+                                            window.focus(focus, cx);
                                         }
                                     }
                                 }
@@ -5889,7 +5889,7 @@ impl AurisApp {
                             }
                         }
                         this.focus_agent_field(field);
-                        window.focus(&pointer_focus);
+                        window.focus(&pointer_focus, cx);
                         cx.notify();
                     }),
                 )
@@ -6034,12 +6034,6 @@ mod tests {
             this.settings.agent.policy.mode = Mode::ReadOnly;
             assert!(this.agent_edit(serde_json::json!({"action":"write_lyrics","clip":clip.0,"text":"い"})).is_err());
             assert_eq!(this.project(),&before);
-        });
-    }
-
-    fn release_key(key: &str, cx: &mut gpui::VisualTestContext) {
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse(key).unwrap(),
         });
     }
 
@@ -6799,11 +6793,11 @@ mod tests {
         crate::harness::click("agent-tool-result-0", cx);
         app.read_with(cx, |this, _| assert!(this.agent_chat.expanded.contains(&0)));
         cx.simulate_keystrokes("shift-tab tab");
-        release_key("space", cx);
+        crate::harness::tap_key("space", cx);
         app.read_with(cx, |this, _| {
             assert!(!this.agent_chat.expanded.contains(&0))
         });
-        release_key("enter", cx);
+        crate::harness::tap_key("enter", cx);
         app.read_with(cx, |this, _| assert!(this.agent_chat.expanded.contains(&0)));
     }
 
@@ -7830,11 +7824,11 @@ mod tests {
         });
 
         crate::harness::click("agent-tool-group-toggle-0", cx);
-        release_key("space", cx);
+        crate::harness::tap_key("space", cx);
         app.read_with(cx, |this, _| {
             assert!(this.agent_chat.expanded_tool_groups.contains(&0))
         });
-        release_key("enter", cx);
+        crate::harness::tap_key("enter", cx);
         app.read_with(cx, |this, _| {
             assert!(!this.agent_chat.expanded_tool_groups.contains(&0))
         });
@@ -8477,7 +8471,7 @@ mod tests {
             ("antigravity", false),
             ("rig", false),
         ] {
-            // GPUI 0.2 retains debug bounds for removed elements; use a fresh window per route.
+            // A fresh window per route, so nothing drawn for one backend answers for the next.
             let (app, cx) = crate::harness::open(cx);
             app.update(cx, |this, _| {
                 this.panels.show(crate::dock::Panel::Agent);
@@ -8504,10 +8498,9 @@ mod tests {
             );
             app.update(cx, |this, _| this.agent_chat.busy = true);
             crate::harness::paint(&app, cx);
-            if supported {
-                crate::harness::click("agent-effort-menu-picker-fast", cx);
-                app.read_with(cx, |this, _| assert!(this.agent_chat.fast_mode));
-            }
+            // A running turn takes the picker away, so the toggle cannot be reached mid-turn.
+            assert!(cx.debug_bounds("agent-effort-menu-picker-fast").is_none());
+            app.read_with(cx, |this, _| assert!(this.agent_chat.fast_mode));
         }
         let (app, cx) = crate::harness::open(cx);
         app.update(cx, |this, _| {
@@ -9093,9 +9086,7 @@ mod tests {
 
         // Pointer focus stays on the first file; Tab reaches the next file's button.
         cx.simulate_keystrokes("tab");
-        cx.simulate_event(gpui::KeyUpEvent {
-            keystroke: gpui::Keystroke::parse("enter").unwrap(),
-        });
+        crate::harness::tap_key("enter", cx);
         cx.run_until_parked();
         app.read_with(cx, |this, _| {
             assert_eq!(this.attachment_preview.as_ref().unwrap().path, paths[1])

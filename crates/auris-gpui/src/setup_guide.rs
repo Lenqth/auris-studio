@@ -485,7 +485,7 @@ mod tests {
         });
         // A long installation page must not leave the next backend's setup controls offscreen.
         let position = cx.debug_bounds("chooser-content").unwrap().center();
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position,
             delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.0), gpui::px(-10000.0))),
             ..Default::default()

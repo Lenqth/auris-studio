@@ -416,7 +416,7 @@ fn physical_editor_supports_preview_freeze_parameter_undo_and_escape(
     harness::click("physical-freeze", &mut utility);
     app.read_with(&utility, |app, _| assert!(!app.physical_view.frozen));
     let body = utility.debug_bounds("pw-body").unwrap();
-    utility.simulate_event(gpui::ScrollWheelEvent {
+    utility.simulate_event(gpui::ScrollEvent {
         position: body.center(),
         delta: gpui::ScrollDelta::Pixels(point(px(0.), px(-10000.))),
         ..Default::default()

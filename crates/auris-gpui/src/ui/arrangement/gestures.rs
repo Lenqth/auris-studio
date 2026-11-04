@@ -454,7 +454,7 @@ impl AurisApp {
     /// Wheel handling: plain moves down the tracks, Shift moves along the song, Ctrl or Alt zooms.
     pub(crate) fn scroll_timeline(
         &mut self,
-        event: &gpui::ScrollWheelEvent,
+        event: &gpui::ScrollEvent,
         cx: &mut gpui::Context<Self>,
     ) {
         let delta = event.delta.pixel_delta(px(24.0));

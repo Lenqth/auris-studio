@@ -131,14 +131,14 @@ impl AurisApp {
 
     fn resume_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.project_chooser = None;
-        self.focus_pane(self.last_pane, window);
+        self.focus_pane(self.last_pane, window, cx);
         cx.notify();
     }
 
     pub(crate) fn show_project_chooser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.project_chooser = Some(ProjectChooser::default());
         self.set_status("");
-        self.focus.focus(window);
+        self.focus.focus(window, cx);
         cx.notify();
     }
 
@@ -287,7 +287,7 @@ impl AurisApp {
             ChooserPage::New => {
                 let return_to_editor = chooser.return_to_editor;
                 self.project_chooser = None;
-                self.focus_pane(Pane::Arrangement, window);
+                self.focus_pane(Pane::Arrangement, window, cx);
                 if return_to_editor {
                     self.new_project_asking();
                 }
@@ -471,6 +471,7 @@ impl AurisApp {
                             offset: point(px(0.), px(0.)),
                             blur_radius: px(1.),
                             spread_radius: px(3.),
+                            inset: false,
                         }])
                     })
                     .when(!selected, |card| {
@@ -669,7 +670,7 @@ impl AurisApp {
             self.render_prompt(cx)
         } else {
             if self.modal_focus.prompt_contains_focused(window) {
-                window.focus(&self.focus);
+                window.focus(&self.focus, cx);
             }
             None
         };
@@ -768,6 +769,8 @@ impl AurisApp {
         div()
             .id("project-chooser")
             .debug_selector(|| "project-chooser".into())
+            // The workshop's conversation is Markdown, selected through this zero-sized layer.
+            .child(gpui_base::TextSelectionLayer)
             .relative()
             .size_full()
             .flex()
@@ -779,11 +782,13 @@ impl AurisApp {
             .track_focus(&self.focus)
             .key_context(crate::actions::KEY_CONTEXT)
             .on_action(
-                cx.listener(|_, _: &crate::actions::FocusNextPane, window, _| window.focus_next()),
+                cx.listener(|_, _: &crate::actions::FocusNextPane, window, cx| {
+                    window.focus_next(cx)
+                }),
             )
             .on_action(
-                cx.listener(|_, _: &crate::actions::FocusPreviousPane, window, _| {
-                    window.focus_prev()
+                cx.listener(|_, _: &crate::actions::FocusPreviousPane, window, cx| {
+                    window.focus_prev(cx)
                 }),
             )
             .on_key_down(cx.listener(Self::chooser_key))
@@ -916,7 +921,8 @@ mod tests {
         crate::harness::click("chooser-empty", cx);
         crate::harness::paint(&app, cx);
         cx.update(|window, cx| {
-            app.read_with(cx, |app, _| window.focus(&app.focus));
+            let focus = app.read(cx).focus.clone();
+            window.focus(&focus, cx);
         });
         cx.simulate_keystrokes("enter");
         cx.simulate_event(gpui::KeyUpEvent {
@@ -969,7 +975,8 @@ mod tests {
         });
         crate::harness::paint(&app, cx);
         cx.update(|window, cx| {
-            app.read_with(cx, |app, _| window.focus(&app.focus));
+            let focus = app.read_with(cx, |app, _| app.focus.clone());
+            window.focus(&focus, cx);
         });
         cx.simulate_keystrokes("secondary-,");
         app.read_with(cx, |app, _| {

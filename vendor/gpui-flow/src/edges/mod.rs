@@ -1,4 +1,3 @@
-use crate::PixelsExt;
 pub mod bezier;
 mod flow;
 mod geometry;

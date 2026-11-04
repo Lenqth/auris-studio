@@ -108,7 +108,7 @@ impl AurisApp {
                     .overflow_hidden()
                     // Ctrl-wheel changes the whole list's density while an ordinary wheel keeps
                     // moving the same column it moves over the clips.
-                    .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+                    .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                         let delta = event.delta.pixel_delta(px(24.0));
                         if event.modifiers.control {
                             let step = if delta.y > px(0.0) {
@@ -958,7 +958,7 @@ mod tests {
             cx.debug_bounds("track-height-control").is_none(),
             "the old toolbar slider is no longer present"
         );
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: at,
             delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), px(-120.0))),
             modifiers: gpui::Modifiers {
@@ -986,7 +986,7 @@ mod tests {
             );
         });
 
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: at,
             delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), px(120.0))),
             modifiers: gpui::Modifiers {
@@ -1026,7 +1026,7 @@ mod tests {
             )
         });
 
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: at,
             delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.0), px(-120.0))),
             ..Default::default()

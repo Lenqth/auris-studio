@@ -371,7 +371,7 @@ impl AurisApp {
             .flex()
             .flex_col()
             .min_w_0()
-            .flex_shrink()
+            .flex_shrink_1()
             .h(max_height)
             .min_h(gpui::rems(6.0))
             .border_1()
@@ -401,7 +401,7 @@ impl AurisApp {
                         theme.accent,
                         &theme,
                         cx.listener(|this, _, window, cx| {
-                            this.close_midi_editor(window);
+                            this.close_midi_editor(window, cx);
                             cx.notify();
                         }),
                     ))
@@ -414,7 +414,7 @@ impl AurisApp {
                         &theme,
                         cx.listener(|this, _, window, cx| {
                             if this.commit_midi_draft() {
-                                this.close_midi_editor(window);
+                                this.close_midi_editor(window, cx);
                             }
                             cx.notify();
                         }),
@@ -490,7 +490,7 @@ impl AurisApp {
                         app.selected_track = app.project().track_of_clip(clip);
                         app.selected_clips = [clip].into_iter().collect();
                         app.selected_notes.clear();
-                        app.focus_pane(crate::app::Pane::PianoRoll, window);
+                        app.focus_pane(crate::app::Pane::PianoRoll, window, cx);
                         cx.notify();
                     });
                     draft.track = track;
@@ -501,15 +501,15 @@ impl AurisApp {
         .into_any_element()
     }
 
-    pub(crate) fn close_midi_editor(&mut self, window: &mut Window) {
+    pub(crate) fn close_midi_editor(&mut self, window: &mut Window, cx: &mut gpui::App) {
         self.music_references_mut().midi_draft = None;
         if let Some(s) = &mut self.song_workshop {
             s.active_field = Some(0);
-            window.focus(&s.foci[0]);
+            window.focus(&s.foci[0], cx);
         } else {
             self.focus_agent_field(AgentField::Chat);
             if let Some(focus) = &self.agent_chat.input_focus {
-                window.focus(focus);
+                window.focus(focus, cx);
             }
         }
     }

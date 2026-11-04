@@ -6,9 +6,10 @@
 //!
 //! The names are Logic's, and so is the vocabulary a DAW user arrives with, but the *keys* are
 //! whatever the platform calls them: ⌘ on macOS is Ctrl on Windows and Linux. Everything here
-//! goes through [`gpui::Modifiers::secondary`] rather than naming a key directly, because
+//! goes through [`crate::actions::SecondaryModifier`] rather than naming a key directly, because
 //! gpui's `platform` modifier is the Windows key off a Mac and no application gets to use it.
 
+use crate::actions::SecondaryModifier as _;
 use auris_i18n::Key;
 use gpui::{Modifiers, MouseDownEvent, Pixels, Point, px};
 
@@ -46,7 +47,7 @@ pub enum Wheel {
 /// Ctrl zooms because that is what a wheel does in every application on every platform, and Alt
 /// keeps zooming because that is what it does in Logic. The two do not collide, and dropping
 /// either would be picking a fight with somebody's hands. Read as `control` rather than through
-/// [`gpui::Modifiers::secondary`] deliberately: this is the *zoom* modifier, which is ⌃ on a Mac
+/// [`crate::actions::SecondaryModifier`] deliberately: this is the *zoom* modifier, which is ⌃ on a Mac
 /// as well, and not the command one.
 ///
 /// Free rather than decided in the handler because it is the one gesture where being wrong is
@@ -129,17 +130,17 @@ impl PointerGesture {
             // that also claimed ⇧-click would leave no way at all to sweep a rubber band.
             PointerGesture::Click => {
                 event.click_count == 1
-                    && !event.modifiers.secondary()
+                    && !event.modifiers.is_secondary()
                     && !event.modifiers.alt
                     && !event.modifiers.shift
             }
-            PointerGesture::CommandClick => event.modifiers.secondary() && !event.modifiers.alt,
-            PointerGesture::OptionClick => event.modifiers.alt && !event.modifiers.secondary(),
+            PointerGesture::CommandClick => event.modifiers.is_secondary() && !event.modifiers.alt,
+            PointerGesture::OptionClick => event.modifiers.alt && !event.modifiers.is_secondary(),
             // A modified double-click belongs to whichever modifier gesture claims it, so that a
             // ⌘-double-click on empty space creates once rather than also deleting.
             PointerGesture::DoubleClick => {
                 event.click_count >= 2
-                    && !event.modifiers.secondary()
+                    && !event.modifiers.is_secondary()
                     && !event.modifiers.alt
                     && !event.modifiers.shift
             }
@@ -338,7 +339,7 @@ mod tests {
     #[test]
     fn each_gesture_recognises_only_itself() {
         let plain = click(Modifiers::none(), 1);
-        let command = click(Modifiers::secondary_key(), 1);
+        let command = click(crate::actions::secondary_key(), 1);
         let option = click(Modifiers::alt(), 1);
         let double = click(Modifiers::none(), 2);
 
@@ -356,7 +357,7 @@ mod tests {
 
     #[test]
     fn command_and_option_together_are_not_either_gesture() {
-        let mut both = Modifiers::secondary_key();
+        let mut both = crate::actions::secondary_key();
         both.alt = true;
         let press = click(both, 1);
         assert!(!PointerGesture::CommandClick.matches(&press));
@@ -390,7 +391,7 @@ mod tests {
         shifted.shift = true;
         assert!(!PointerGesture::Click.matches(&click(shifted, 1)));
         assert!(!PointerGesture::Click.matches(&click(Modifiers::alt(), 1)));
-        assert!(!PointerGesture::Click.matches(&click(Modifiers::secondary_key(), 1)));
+        assert!(!PointerGesture::Click.matches(&click(crate::actions::secondary_key(), 1)));
         // And the second press of a double-click is not a third bare click on top of it.
         assert!(!PointerGesture::Click.matches(&click(Modifiers::none(), 2)));
     }
@@ -454,14 +455,14 @@ mod tests {
             EmptyPress::Band { extend: false }
         );
         assert_eq!(
-            empty_press(defaults, &click(Modifiers::secondary_key(), 1)),
+            empty_press(defaults, &click(crate::actions::secondary_key(), 1)),
             EmptyPress::Create
         );
     }
 
     #[test]
     fn a_modified_double_click_belongs_to_the_modifier() {
-        let command_twice = click(Modifiers::secondary_key(), 2);
+        let command_twice = click(crate::actions::secondary_key(), 2);
         assert!(PointerGesture::CommandClick.matches(&command_twice));
         assert!(
             !PointerGesture::DoubleClick.matches(&command_twice),
@@ -474,7 +475,7 @@ mod tests {
         // gpui's `platform` modifier is ⌘ on macOS but the *Windows key* on Windows, which the
         // shell claims before an application sees it. Reading it directly would leave note
         // editing dead off a Mac, with nothing in the log to say why.
-        assert!(PointerGesture::CommandClick.matches(&click(Modifiers::secondary_key(), 1)));
+        assert!(PointerGesture::CommandClick.matches(&click(crate::actions::secondary_key(), 1)));
         if !cfg!(target_os = "macos") {
             assert!(PointerGesture::CommandClick.matches(&click(Modifiers::control(), 1)));
             assert!(!PointerGesture::CommandClick.matches(&click(Modifiers::windows(), 1)));

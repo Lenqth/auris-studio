@@ -3,8 +3,11 @@
 MIT-licensed source from [pacifio/gpui-flow](https://github.com/pacifio/gpui-flow),
 commit `cfa578758ee251657f15f281d893a08b85aedbff`.
 
-The dependency uses Auris's released GPUI 0.2.2. `PixelsExt` bridges the pixel
-conversion API. The application supplies its theme and custom node renderer.
+The dependency uses the gpui-pre snapshot Auris builds against (0.3.10), under the
+crate name `gpui`. `ModifiersExt::is_secondary` reads the platform's command modifier at
+compile time, since gpui-pre's own `Modifiers::secondary` asks the running `App` and the
+graph reads it inside closures that already hold it. The application supplies its theme
+and custom node renderer.
 
 An externally managed flow queues completed connection gestures for the session.
 Only a successful session command changes the displayed edges. The session owns

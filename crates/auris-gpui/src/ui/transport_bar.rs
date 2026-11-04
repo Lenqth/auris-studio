@@ -877,7 +877,7 @@ impl AurisApp {
                 });
             }),
         )
-        .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+        .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
             let notches = f32::from(event.delta.pixel_delta(px(16.0)).y) / 16.0;
             let at = this.playhead_ticks();
             let bpm = this.project().tempo_map.bpm_at(at) + f64::from(notches);
@@ -919,7 +919,7 @@ impl AurisApp {
             gpui::MouseButton::Right,
             cx.listener(Self::open_signature_menu),
         )
-        .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+        .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
             let notches = f32::from(event.delta.pixel_delta(px(16.0)).y) / 16.0;
             let steps = accumulated_scroll_steps(&mut this.signature_scroll_remainder, notches);
             if steps == 0 {
@@ -1379,7 +1379,7 @@ mod tests {
     #[gpui::test]
     fn narrow_transport_keeps_readouts_clear_and_zoom_reachable(cx: &mut gpui::TestAppContext) {
         use crate::harness::{open, paint, press, resize};
-        use gpui::{ScrollDelta, ScrollWheelEvent, point, size};
+        use gpui::{ScrollDelta, ScrollEvent, point, size};
 
         let (app, cx) = open(cx);
         for (width, language) in [
@@ -1399,7 +1399,7 @@ mod tests {
             assert!(master.left() >= meters.left() && master.right() <= meters.right());
 
             // A horizontal trackpad gesture reveals the zoom slider without moving the LCD.
-            cx.simulate_event(ScrollWheelEvent {
+            cx.simulate_event(ScrollEvent {
                 position: editing.center(),
                 delta: ScrollDelta::Pixels(point(px(-1000.0), px(0.0))),
                 ..Default::default()

@@ -785,7 +785,7 @@ impl AurisApp {
                     // it has lost nothing it needs.
                     .child(
                         div()
-                            .flex_shrink()
+                            .flex_shrink_1()
                             .min_w_0()
                             .truncate()
                             .child(if !editable {
@@ -888,11 +888,9 @@ impl AurisApp {
                             // The keyboard scrolls with the rows beside it. It is the strip a
                             // user reaches for when they want to see a different octave, and the
                             // wheel did nothing there while working on the grid an inch away.
-                            .on_scroll_wheel(cx.listener(
-                                |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                                    this.scroll_roll(event, cx);
-                                },
-                            )),
+                            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
+                                this.scroll_roll(event, cx);
+                            })),
                     )
                     .child(
                         div()
@@ -1098,11 +1096,9 @@ impl AurisApp {
                                     this.open_roll_menu(event, cx);
                                 }),
                             )
-                            .on_scroll_wheel(cx.listener(
-                                |this, event: &gpui::ScrollWheelEvent, _, cx| {
-                                    this.scroll_roll(event, cx);
-                                },
-                            ))
+                            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
+                                this.scroll_roll(event, cx);
+                            }))
                             // Over the canvas, so a squiggle's hover is the squiggle's.
                             .children(lint_strips),
                     ),
@@ -1270,7 +1266,7 @@ impl AurisApp {
                             }),
                         )
                     })
-                    .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+                    .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                         this.scroll_roll(event, cx);
                     })),
             )
@@ -2150,7 +2146,7 @@ impl AurisApp {
 
     /// Wheel handling: plain scrolls pitch, shift scrolls time, alt zooms time,
     /// control zooms the pitch axis.
-    fn scroll_roll(&mut self, event: &gpui::ScrollWheelEvent, cx: &mut gpui::Context<Self>) {
+    fn scroll_roll(&mut self, event: &gpui::ScrollEvent, cx: &mut gpui::Context<Self>) {
         let delta = event.delta.pixel_delta(px(24.0));
         if event.modifiers.control {
             let anchor = event.position.y - self.roll_origin().y;

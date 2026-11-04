@@ -11,7 +11,7 @@ use gpui::{
     Context, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Window, deferred,
     div, point, prelude::*, px,
 };
-use gpui_component::scroll::{Scrollbar, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 
 use crate::app::AurisApp;
 use crate::menu::{MenuRow, MenuSection, model};
@@ -223,7 +223,7 @@ impl AurisApp {
             return Some(
                 deferred(
                     gpui::anchored()
-                        .anchor(gpui::Corner::TopLeft)
+                        .anchor(gpui::Anchor::TopLeft)
                         .position(gpui::point(bounds.left(), crate::titlebar::HEIGHT))
                         .snap_to_window_with_margin(theme.atelier.spacing.sm)
                         .child(
@@ -285,7 +285,7 @@ impl AurisApp {
                                         .selected(is_open)
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             this.set_menu_bar(Some(OpenMenu::at(index)));
-                                            window.focus(&this.menu_focus);
+                                            window.focus(&this.menu_focus, cx);
                                             cx.notify();
                                         })),
                                 )
@@ -465,9 +465,7 @@ impl AurisApp {
                             .children(rows),
                     )
                     .when(needs_scroll, |this| {
-                        this.child(
-                            Scrollbar::vertical(&scroll).scrollbar_show(ScrollbarShow::Always),
-                        )
+                        this.child(Scrollbar::vertical(&scroll).mode(ScrollbarMode::Always))
                     }),
             )
     }

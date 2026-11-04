@@ -1,5 +1,6 @@
 //! Piano-roll grid policy shared by note creation, movement, resizing and painting.
 
+use crate::actions::SecondaryModifier as _;
 use auris_i18n::{Key, Language};
 use auris_session::PianoRollGrid;
 use auris_session::prelude::*;
@@ -195,7 +196,7 @@ impl AurisApp {
     ) {
         let at = self.roll_origin();
         self.open_menu(self.note_snap_menu(at));
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
@@ -213,7 +214,7 @@ impl AurisApp {
             self.settings.piano_roll_grid,
             self.project().grid,
         );
-        if (modifiers.control && modifiers.shift) || (!drawing && modifiers.secondary()) {
+        if (modifiers.control && modifiers.shift) || (!drawing && modifiers.is_secondary()) {
             grid = Ticks(1);
         } else if modifiers.control && (!drawing || cfg!(target_os = "macos")) {
             grid = self.project().grid.min(grid).max(Ticks(1));

@@ -398,7 +398,7 @@ impl AurisApp {
             show_archived_threads: false,
             pending_thread_name: None,
         });
-        focus.focus(window);
+        focus.focus(window, cx);
         cx.notify();
     }
 
@@ -591,7 +591,7 @@ impl AurisApp {
             s.brief.replace(0..0, &prefix);
         }
         s.active_field = Some(0);
-        s.foci[0].focus(window);
+        s.foci[0].focus(window, cx);
         cx.notify();
     }
 
@@ -606,7 +606,7 @@ impl AurisApp {
     ) -> AnyElement {
         let focus = window
             .use_keyed_state(
-                gpui::ElementId::NamedChild(Box::new(id.into()), "copy-focus".into()),
+                gpui::ElementId::NamedChild(std::sync::Arc::new(id.into()), "copy-focus".into()),
                 cx,
                 |_, cx| cx.focus_handle(),
             )
@@ -697,7 +697,7 @@ impl AurisApp {
                 s.switching = false;
             }
             let follow_tail =
-                f32::from(s.scroll.max_offset().height) + f32::from(s.scroll.offset().y) < 64.0;
+                f32::from(s.scroll.max_offset().y) + f32::from(s.scroll.offset().y) < 64.0;
             let initial = s.snapshot.is_none() || changed_thread;
             let added = s
                 .snapshot
@@ -872,7 +872,7 @@ impl AurisApp {
                             this.open_workshop_conversation(store, id);
                             this.resync_selection();
                             this.reset_view();
-                            this.focus_pane(Pane::Arrangement, window);
+                            this.focus_pane(Pane::Arrangement, window, cx);
                         }
                     }
                     cx.notify();
@@ -1003,7 +1003,7 @@ impl AurisApp {
         if let Some(s) = &mut self.song_workshop {
             if s.chord_prompt_open && !chord_prompt {
                 s.active_field = Some(0);
-                window.focus(&s.foci[0]);
+                window.focus(&s.foci[0], cx);
             }
             s.chord_prompt_open = chord_prompt;
         }
@@ -1220,7 +1220,7 @@ impl AurisApp {
             .track_scroll(&s.scroll)
             // The veil follows the scroll position, which the view reads while drawing; a wheel
             // that moves the transcript has to ask for the next drawing.
-            .on_scroll_wheel(cx.listener(|_, _, _, cx| cx.notify()))
+            .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
             .px(spacing.xxl)
             .py(spacing.xl)
             .flex()
@@ -1306,7 +1306,7 @@ impl AurisApp {
                 this.attachment_preview = None;
                 this.session.stop_output_preview();
                 this.begin_welcome_transition(false, veil, cx);
-                this.focus.focus(window);
+                this.focus.focus(window, cx);
                 cx.notify();
             }));
         let title = crate::titlebar::Parts::new(
@@ -1340,11 +1340,13 @@ impl AurisApp {
                 this.attach_music_files(paths.paths(), cx);
             }))
             .on_action(
-                cx.listener(|_, _: &crate::actions::FocusNextPane, window, _| window.focus_next()),
+                cx.listener(|_, _: &crate::actions::FocusNextPane, window, cx| {
+                    window.focus_next(cx)
+                }),
             )
             .on_action(
-                cx.listener(|_, _: &crate::actions::FocusPreviousPane, window, _| {
-                    window.focus_prev()
+                cx.listener(|_, _: &crate::actions::FocusPreviousPane, window, cx| {
+                    window.focus_prev(cx)
                 }),
             )
             .on_action(cx.listener(|this, _: &crate::actions::Quit, window, cx| {
@@ -1778,7 +1780,7 @@ impl AurisApp {
                     .disabled(!candidate.ready || running || s.switching)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open_workshop_feedback(id, cx);
-                        this.focus.focus(window);
+                        this.focus.focus(window, cx);
                         cx.notify();
                     })),
                 )

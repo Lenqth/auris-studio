@@ -1,5 +1,6 @@
 //! The player's step buttons and the drummer's instrument-by-time grid.
 
+use crate::actions::SecondaryModifier as _;
 use crate::app::AurisApp;
 use crate::ui::widgets::{ButtonStyle, button};
 use auris_i18n::Key;
@@ -9,7 +10,7 @@ use gpui::{
     Bounds, Context, FocusHandle, Render, ScrollHandle, Subscription, WeakEntity, Window,
     WindowBounds, WindowOptions, px, size,
 };
-use gpui_component::scroll::{Scrollbar, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 
 /// A resizable editor for one generated clip, sharing the main window's session.
 pub(crate) struct RhythmWindow {
@@ -55,7 +56,7 @@ impl Render for RhythmWindow {
         });
         window.set_window_title(&title);
         if !self.focus.contains_focused(window, cx) {
-            window.focus(&self.focus);
+            window.focus(&self.focus, cx);
         }
         let bar = crate::titlebar::bar(
             window,
@@ -81,7 +82,7 @@ impl Render for RhythmWindow {
                 if key.key == "escape" {
                     window.remove_window();
                     cx.stop_propagation();
-                } else if key.modifiers.secondary() && key.key == "z" {
+                } else if key.modifiers.is_secondary() && key.key == "z" {
                     let _ = this.app.update(cx, |app, cx| {
                         if key.modifiers.shift {
                             app.redo()
@@ -362,9 +363,11 @@ impl AurisApp {
                                 .track_scroll(horizontal)
                                 .child(matrix),
                         )
-                        .child(div().absolute().inset_0().child(
-                            Scrollbar::horizontal(horizontal).scrollbar_show(ScrollbarShow::Always),
-                        )),
+                        .child(
+                            div().absolute().inset_0().child(
+                                Scrollbar::horizontal(horizontal).mode(ScrollbarMode::Always),
+                            ),
+                        ),
                 ),
             )
             .child(
@@ -542,7 +545,7 @@ mod tests {
             app.session.clip_rhythm_grid(clip).unwrap().rows[1].steps[15]
         });
         let viewport = cx.debug_bounds("rhythm-grid-scroll").unwrap();
-        cx.simulate_event(gpui::ScrollWheelEvent {
+        cx.simulate_event(gpui::ScrollEvent {
             position: viewport.center(),
             delta: gpui::ScrollDelta::Pixels(gpui::point(px(-10000.0), px(0.0))),
             ..Default::default()

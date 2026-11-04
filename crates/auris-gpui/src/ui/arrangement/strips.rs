@@ -91,7 +91,7 @@ impl AurisApp {
                     this.structure_menu(at, tick)
                 }),
             )
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                 this.scroll_timeline(event, cx);
             }))
     }
@@ -201,7 +201,7 @@ impl AurisApp {
                     this.lyrics_menu(at, placed)
                 }),
             )
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                 this.scroll_timeline(event, cx);
             }))
     }
@@ -308,7 +308,7 @@ impl AurisApp {
             )
             // The chords sit above the clips they belong to and share their horizontal scale, so
             // the wheel has to move both together or the two rows disagree about where bar 9 is.
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, _, cx| {
                 this.scroll_timeline(event, cx);
             }))
     }

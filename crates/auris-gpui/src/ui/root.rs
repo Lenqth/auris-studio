@@ -1,5 +1,6 @@
 //! The window's root layout, global pointer handling and action dispatch.
 
+use crate::actions::SecondaryModifier as _;
 use auris_i18n::{Key, messages};
 use auris_session::prelude::*;
 
@@ -218,7 +219,7 @@ impl Render for AurisApp {
         if Panel::ALL.into_iter().any(|panel| {
             self.panels.is_detached(panel) && self.pane_focused(panel.pane(), window, cx)
         }) {
-            self.focus_pane(Pane::Arrangement, window);
+            self.focus_pane(Pane::Arrangement, window, cx);
         }
 
         // What the docks may actually have of this window. The stored widths are the ones their
@@ -325,12 +326,12 @@ impl AurisApp {
         let menu_open = self.menu.is_some() || self.menu_bar.is_some();
         if menu_open && self.menu_focus_return.is_none() {
             self.menu_focus_return = Some(window.focused(cx).unwrap_or_else(|| self.focus.clone()));
-            window.focus(&self.menu_focus);
+            window.focus(&self.menu_focus, cx);
         } else if !menu_open
             && let Some(trigger) = self.menu_focus_return.take()
             && self.menu_focus.contains_focused(window, cx)
         {
-            window.focus(&trigger);
+            window.focus(&trigger, cx);
         }
         let export_overlay = self.render_export_overlay(cx);
         let export_dialog = self.render_export_dialog(cx);
@@ -422,6 +423,8 @@ impl AurisApp {
     pub(crate) fn input_root(&self, cx: &mut Context<Self>) -> gpui::Div {
         let modal_blocks_document_actions = self.modal_blocks_document_actions();
         div()
+            // Zero-sized; it is what lets the transcript's Markdown be selected with the pointer.
+            .child(gpui_base::TextSelectionLayer)
             .capture_any_mouse_down(cx.listener(|this, _, window, cx| {
                 this.claim_event_window(window);
                 atelier::set_focus_visible(false, cx);
@@ -524,7 +527,7 @@ impl AurisApp {
                         cx,
                         |this, _: &actions::ToggleTrackGrid, window, cx| {
                             this.set_track_grid(!this.track_grid.open);
-                            this.focus_pane(Pane::Arrangement, window);
+                            this.focus_pane(Pane::Arrangement, window, cx);
                             cx.notify();
                         },
                     ))
@@ -748,7 +751,7 @@ impl AurisApp {
             // phase would ever reach here.
             .capture_any_mouse_down(cx.listener(
                 move |this, _: &gpui::MouseDownEvent, window, cx| {
-                    this.focus_pane(pane, window);
+                    this.focus_pane(pane, window, cx);
                     cx.notify();
                 },
             ))
@@ -894,7 +897,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.focus_next();
+        window.focus_next(cx);
         cx.notify();
     }
 
@@ -904,7 +907,7 @@ impl AurisApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.focus_prev();
+        window.focus_prev(cx);
         cx.notify();
     }
 
@@ -1761,7 +1764,7 @@ impl AurisApp {
                 };
                 let travel = tick - clip_start - origin_tick;
                 if self.editing_a_drum_clip() {
-                    let delta_ticks = if event.modifiers.secondary() {
+                    let delta_ticks = if event.modifiers.is_secondary() {
                         travel
                     } else {
                         self.snap(tick - clip_start) - self.snap(origin_tick)
@@ -2163,7 +2166,7 @@ impl AurisApp {
                 {
                     self.export = None;
                 }
-                "tab" => window.focus(self.modal_focus.export_cancel()),
+                "tab" => window.focus(self.modal_focus.export_cancel(), cx),
                 "enter" | "space" | " " => {
                     if self
                         .export
@@ -2231,7 +2234,7 @@ impl AurisApp {
                 } else {
                     (current + 1) % handles.len()
                 };
-                window.focus(handles[next]);
+                window.focus(handles[next], cx);
             }
             "enter" | "space" | " " => self.activate_focused_export_dialog_control(window, cx),
             _ => {}
@@ -2323,7 +2326,7 @@ impl AurisApp {
         self.library_search.apply_key_with_clipboard(
             key,
             event.keystroke.modifiers.shift,
-            event.keystroke.modifiers.secondary(),
+            event.keystroke.modifiers.is_secondary(),
             false,
             cx,
         ) != crate::ui::text_field::KeyEffect::Ignored
@@ -3775,11 +3778,12 @@ mod window_tests {
             )
         });
         for horizontal in [0.0, 24.0] {
-            cx.simulate_event(gpui::ScrollWheelEvent {
+            cx.simulate_event(gpui::ScrollEvent {
                 position,
                 delta: gpui::ScrollDelta::Pixels(gpui::point(px(horizontal), px(0.0))),
                 touch_phase: gpui::TouchPhase::Ended,
                 modifiers: gpui::Modifiers::alt(),
+                source: gpui::ScrollSource::Pointer,
             });
             paint(&app, cx);
             app.read_with(cx, |this, _| {
@@ -3839,7 +3843,7 @@ mod window_tests {
         for (key, enabled) in [("space", false), ("enter", true)] {
             cx.simulate_keystrokes(key);
             cx.simulate_event(gpui::KeyUpEvent {
-                keystroke: gpui::Keystroke::parse(key).unwrap(),
+                keystroke: crate::actions::parse_keystroke(key).unwrap(),
             });
             paint(&app, cx);
             assert_eq!(
@@ -3851,7 +3855,8 @@ mod window_tests {
 
         // Returning focus to the application canvas restores the transport shortcut path.
         cx.update(|window, cx| {
-            app.read_with(cx, |this, _| this.focus.focus(window));
+            let focus = app.read(cx).focus.clone();
+            focus.focus(window, cx);
         });
         cx.simulate_keystrokes("space");
         cx.simulate_event(gpui::KeyUpEvent {
@@ -3876,7 +3881,7 @@ mod window_tests {
         for (key, enabled) in [("space", false), ("enter", true)] {
             cx.simulate_keystrokes(key);
             cx.simulate_event(gpui::KeyUpEvent {
-                keystroke: gpui::Keystroke::parse(key).unwrap(),
+                keystroke: crate::actions::parse_keystroke(key).unwrap(),
             });
             paint(&app, cx);
             assert_eq!(

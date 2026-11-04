@@ -11,6 +11,7 @@
 //! The matching and the row arithmetic are free functions, so what a query finds and what the
 //! arrow keys land on can be checked without a window.
 
+use crate::actions::SecondaryModifier as _;
 use std::ops::Range;
 
 use auris_i18n::{Key, Language};
@@ -411,7 +412,7 @@ impl AurisApp {
         }
 
         let shift = event.keystroke.modifiers.shift;
-        let secondary = event.keystroke.modifiers.secondary();
+        let secondary = event.keystroke.modifiers.is_secondary();
         let Some(palette) = self.palette.as_mut() else {
             return false;
         };

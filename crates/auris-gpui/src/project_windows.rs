@@ -76,7 +76,7 @@ fn activate(project: &Entity<AurisApp>, cx: &mut App) {
 
 pub(crate) fn install(cx: &mut App) {
     cx.set_global(ProjectWindows::default());
-    cx.on_window_closed(|cx| {
+    cx.on_window_closed(|cx, _| {
         if projects(cx).is_empty() {
             crate::termination::quit(cx);
         }
